@@ -10,6 +10,15 @@
 		A10000000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* AppDelegate.swift */; };
 		A10000000000000000000002 /* RootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* RootViewController.swift */; };
 		A10000000000000000000003 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* LaunchScreen.storyboard */; };
+		A10000000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* Models.swift */; };
+		A10000000000000000000005 /* CoreDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* CoreDiagnostics.swift */; };
+		A10000000000000000000006 /* SQLiteDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SQLiteDatabase.swift */; };
+		A10000000000000000000007 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* HTTPClient.swift */; };
+		A10000000000000000000008 /* SourceManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SourceManifest.swift */; };
+		A10000000000000000000009 /* SourceStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* SourceStorage.swift */; };
+		A1000000000000000000000A /* JavaScriptSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* JavaScriptSourceRuntime.swift */; };
+		A1000000000000000000000B /* JavaScriptCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* JavaScriptCore.framework */; };
+		A1000000000000000000000C /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* libsqlite3.tbd */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -18,6 +27,15 @@
 		A20000000000000000000002 /* RootViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000004 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A20000000000000000000005 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* CoreDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDiagnostics.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* SQLiteDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLiteDatabase.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClient.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* SourceManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManifest.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* SourceStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceStorage.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* JavaScriptSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptSourceRuntime.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000D /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -25,6 +43,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000000000000000000000B /* JavaScriptCore.framework in Frameworks */,
+				A1000000000000000000000C /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -35,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000001 /* MangaReader12 */,
+				A40000000000000000000008 /* Frameworks */,
 				A40000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -44,6 +65,11 @@
 			children = (
 				A20000000000000000000001 /* AppDelegate.swift */,
 				A20000000000000000000002 /* RootViewController.swift */,
+				A40000000000000000000003 /* Core */,
+				A40000000000000000000004 /* Database */,
+				A40000000000000000000005 /* Networking */,
+				A40000000000000000000006 /* Sources */,
+				A40000000000000000000007 /* SourceRuntime */,
 				A20000000000000000000003 /* Info.plist */,
 				A20000000000000000000004 /* LaunchScreen.storyboard */,
 			);
@@ -58,12 +84,63 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		A40000000000000000000003 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000005 /* Models.swift */,
+				A20000000000000000000006 /* CoreDiagnostics.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000004 /* Database */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000007 /* SQLiteDatabase.swift */,
+			);
+			path = Database;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000005 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000008 /* HTTPClient.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000006 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000009 /* SourceManifest.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000007 /* SourceRuntime */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000000A /* SourceStorage.swift */,
+				A2000000000000000000000B /* JavaScriptSourceRuntime.swift */,
+			);
+			path = SourceRuntime;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000008 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000000C /* JavaScriptCore.framework */,
+				A2000000000000000000000D /* libsqlite3.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		A50000000000000000000001 /* MangaReader12 */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A60000000000000000000001 /* Build configuration list for PBXNativeTarget \"MangaReader12\" */;
+			buildConfigurationList = A60000000000000000000001 /* Build configuration list for PBXNativeTarget "MangaReader12" */;
 			buildPhases = (
 				A30000000000000000000002 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
@@ -93,7 +170,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A60000000000000000000000 /* Build configuration list for PBXProject \"MangaReader12\" */;
+			buildConfigurationList = A60000000000000000000000 /* Build configuration list for PBXProject "MangaReader12" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -129,6 +206,13 @@
 			files = (
 				A10000000000000000000001 /* AppDelegate.swift in Sources */,
 				A10000000000000000000002 /* RootViewController.swift in Sources */,
+				A10000000000000000000004 /* Models.swift in Sources */,
+				A10000000000000000000005 /* CoreDiagnostics.swift in Sources */,
+				A10000000000000000000006 /* SQLiteDatabase.swift in Sources */,
+				A10000000000000000000007 /* HTTPClient.swift in Sources */,
+				A10000000000000000000008 /* SourceManifest.swift in Sources */,
+				A10000000000000000000009 /* SourceStorage.swift in Sources */,
+				A1000000000000000000000A /* JavaScriptSourceRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -174,7 +258,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -183,7 +267,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.MangaReader12;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -196,7 +280,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -205,7 +289,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.MangaReader12;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -217,7 +301,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A60000000000000000000000 /* Build configuration list for PBXProject \"MangaReader12\" */ = {
+		A60000000000000000000000 /* Build configuration list for PBXProject "MangaReader12" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A80000000000000000000001 /* Debug */,
@@ -226,7 +310,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A60000000000000000000001 /* Build configuration list for PBXNativeTarget \"MangaReader12\" */ = {
+		A60000000000000000000001 /* Build configuration list for PBXNativeTarget "MangaReader12" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A80000000000000000000003 /* Debug */,

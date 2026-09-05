@@ -2,29 +2,51 @@
 
 ## Current verdict
 
-**Feasible, with a time-sensitive CI constraint.**
+**Proven on physical iOS 12 hardware for Milestone 0.**
 
-The canonical build path is Xcode 15.4 on macOS 14. This is the path whose Apple-documented deployment target range includes iOS 12. Newer Xcode 16.x toolchains are not the canonical fallback because Apple documents their deployment target floor as iOS 15.
+The canonical build path is Xcode 15.4 on macOS 14. GitHub Actions successfully produced an arm64 Release binary whose Mach-O minimum OS is iOS 12.0, and that IPA was re-signed with Sideloadly, installed and launched on a physical iOS 12 device.
 
 ## Toolchain
 
-| Item | Decision |
+| Item | Decision / status |
 |---|---|
-| Deployment target | iOS 12.0 |
+| Deployment target | iOS 12.0 — locked |
 | Xcode | 15.4 |
 | Compiler | Swift 5.10 |
 | Swift language mode | Swift 5 |
+| SDK in validated M0 build | iOS 17.5 |
 | CI host | GitHub Actions macos-14 while available |
-| Device build architecture | arm64 expected; verified in CI with `lipo` |
-| Simulator | Do not claim iOS 12 runtime testing; Xcode 15.4 simulator support starts later than iOS 12 |
+| Device architecture | arm64 — validated |
+| Physical iOS 12 launch | validated |
+| Simulator | No claim of iOS 12 simulator testing |
 
-## Framework policy
+## Milestone 1 framework audit
 
-Baseline frameworks selected for later milestones are compatible in principle with the iOS 12 target: UIKit, Foundation/URLSession, JavaScriptCore, WebKit/WKWebView, GCD/OperationQueue, FileManager, Codable, NSCache, and SQLite through the system library. Every concrete API call still requires an availability review when implemented.
+| Framework/API | Use | iOS 12 policy |
+|---|---|---|
+| UIKit | UI | baseline |
+| Foundation / URLSession | native networking | baseline |
+| JavaScriptCore | extension runtime | baseline |
+| SQLite3 system library | persistence | baseline |
+| DispatchQueue | concurrency | baseline |
+| UserDefaults | temporary source-key storage foundation | baseline |
+| HTTPCookieStorage | initial cookie bridge | baseline; isolation hardening pending |
+
+No SwiftUI, Combine, required Swift Concurrency, SceneDelegate, or iOS-13-only UI APIs are introduced by M1A.
 
 ## WebView/cookie warning
 
-WKWebView does not share the same cookie store as Foundation's shared `HTTPCookieStorage`. Cookie synchronization between WKWebView and URLSession must therefore be explicit rather than assumed.
+WKWebView does not automatically share Foundation's cookie storage. M1A does not yet introduce WKWebView fallback. When it is added, cookie synchronization must be explicit and tested specifically on iOS 12.
+
+## Current M1A security posture
+
+- HTTPS required by default.
+- Requests are restricted to manifest-declared domains and their subdomains.
+- Request timeout is bounded.
+- Redirect count is bounded and redirect destinations are rechecked against policy.
+- Response size has an initial post-receive cap; streaming cancellation is still required before hardening is considered complete.
+- Source storage is namespaced by source ID.
+- Arbitrary filesystem access is not exposed to JavaScript.
 
 ## APIs deliberately avoided
 
@@ -33,14 +55,8 @@ WKWebView does not share the same cookie store as Foundation's shared `HTTPCooki
 - iOS 13 scene lifecycle as a requirement
 - required Swift Concurrency (`async`/`await`)
 - modern-only document-picker initializers
-- system dynamic colors such as `UIColor.systemBackground` unless availability-gated with an iOS 12 fallback
+- system dynamic colors such as `UIColor.systemBackground` unless availability-gated
 
 ## CI retirement risk
 
-GitHub will retire the hosted macOS 14 image on 2026-11-02. Before that date, choose one of:
-
-1. a self-hosted GitHub Actions macOS 14 runner with Xcode 15.4;
-2. a cloud Mac provider exposing macOS 14 + Xcode 15.4, attached as a self-hosted Actions runner;
-3. an explicitly experimental newer-Xcode path, never promoted to canonical until a physical iOS 12 install/launch matrix proves it reliable.
-
-The project must not silently raise the deployment target to keep CI alive.
+GitHub's hosted macOS 14 image remains a time-sensitive dependency. The project must not silently raise the deployment target to keep CI alive. A preserved Xcode 15.4 runner path must be selected before the hosted image is unavailable.
