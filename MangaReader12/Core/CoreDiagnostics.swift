@@ -16,6 +16,7 @@ enum CoreDiagnostics {
         results.append(runJavaScriptCoreDiagnostic())
         results.append(runSourceContractDiagnostic())
         results.append(runRepositoryCatalogDiagnostic())
+        results.append(runRepositoryTransportDiagnostic())
         return results
     }
 
@@ -383,6 +384,155 @@ enum CoreDiagnostics {
         } catch {
             return CoreDiagnosticItem(
                 name: "Repository catalog",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private static func runRepositoryTransportDiagnostic() -> CoreDiagnosticItem {
+        let repositoryURL = "https://example.com/mangareader12-diagnostic-repository.json"
+
+        do {
+            let knownHash = SHA256Digest.hex(Data("abc".utf8))
+            guard knownHash == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" else {
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "SHA-256 known-vector mismatch"
+                )
+            }
+
+            let policy = try RepositoryTransportPolicy.httpPolicy(
+                for: repositoryURL,
+                maxResponseBytes: 1024 * 1024
+            )
+            _ = try policy.validatedURL(repositoryURL)
+
+            do {
+                _ = try RepositoryTransportPolicy.httpPolicy(
+                    for: "http://example.com/repository.json",
+                    maxResponseBytes: 1024
+                )
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "Insecure repository URL was not rejected"
+                )
+            } catch RepositoryTransportError.invalidRepositoryURL {
+                // Expected.
+            }
+
+            let scriptData = Data("var source = {};".utf8)
+            let digest = SHA256Digest.hex(scriptData)
+            let manifest = SourceManifest(
+                id: "diagnostic-integrity",
+                name: "Diagnostic Integrity",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: digest
+            )
+
+            guard try SourceScriptIntegrity.verify(
+                data: scriptData,
+                manifest: manifest
+            ) == .verified else {
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "Matching source hash was not verified"
+                )
+            }
+
+            let catalogFixture = """
+            {
+              "name": "Transport Diagnostic",
+              "apiVersion": 1,
+              "sources": [
+                {
+                  "id": "diagnostic-integrity",
+                  "name": "Diagnostic Integrity",
+                  "version": "1.0.0",
+                  "lang": "en",
+                  "author": "MangaReader12",
+                  "script": "https://example.com/source.js",
+                  "icon": null,
+                  "apiVersion": 1,
+                  "minAppVersion": "0.1.0",
+                  "domains": ["example.com"],
+                  "nsfw": false,
+                  "sha256": "\(digest)"
+                }
+              ]
+            }
+            """
+
+            let decoded = try RepositoryRemoteClient.decodeCatalog(
+                Data(catalogFixture.utf8)
+            )
+
+            guard decoded.sources.count == 1,
+                  decoded.sources[0].sha256 == digest else {
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "Repository transport catalog decode mismatch"
+                )
+            }
+
+            let database = try SQLiteDatabase.defaultDatabase()
+            defer { database.close() }
+
+            let repositoryStore = RepositoryRepository(database: database)
+            defer { try? repositoryStore.remove(url: repositoryURL) }
+
+            try repositoryStore.save(
+                name: "Diagnostic Repository",
+                url: repositoryURL,
+                enabled: true,
+                lastRefresh: nil
+            )
+
+            guard let stored = try repositoryStore.fetch(url: repositoryURL),
+                  stored.enabled,
+                  stored.lastRefresh == nil else {
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "Repository persistence round-trip mismatch"
+                )
+            }
+
+            let refreshTimestamp: TimeInterval = 12345
+            try repositoryStore.markRefreshed(
+                url: repositoryURL,
+                at: refreshTimestamp
+            )
+
+            guard let refreshed = try repositoryStore.fetch(url: repositoryURL),
+                  refreshed.lastRefresh == refreshTimestamp else {
+                return CoreDiagnosticItem(
+                    name: "Repository transport",
+                    passed: false,
+                    detail: "Repository refresh timestamp mismatch"
+                )
+            }
+
+            return CoreDiagnosticItem(
+                name: "Repository transport",
+                passed: true,
+                detail: "HTTPS policy + SHA-256 + refresh persistence OK"
+            )
+        } catch {
+            return CoreDiagnosticItem(
+                name: "Repository transport",
                 passed: false,
                 detail: error.localizedDescription
             )

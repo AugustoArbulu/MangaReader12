@@ -433,6 +433,184 @@ enum SourceRepositoryError: Error, LocalizedError {
     }
 }
 
+// MARK: - Repository persistence
+
+struct RepositoryRecord: Equatable {
+    let internalID: Int64
+    let name: String
+    let url: String
+    let enabled: Bool
+    let lastRefresh: TimeInterval?
+}
+
+final class RepositoryRepository {
+    private let database: SQLiteDatabase
+
+    init(database: SQLiteDatabase) {
+        self.database = database
+    }
+
+    func save(
+        name: String,
+        url: String,
+        enabled: Bool = true,
+        lastRefresh: TimeInterval? = nil
+    ) throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let parsedURL = URL(string: url),
+              parsedURL.scheme?.lowercased() == "https",
+              parsedURL.host != nil else {
+            throw RepositoryRepositoryError.invalidRecord
+        }
+
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let update = try prepareStatement(
+                """
+                UPDATE repositories
+                SET name = ?, enabled = ?, last_refresh = ?
+                WHERE url = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(update) }
+
+            try bindText(name, index: 1, statement: update)
+            guard sqlite3_bind_int(update, 2, enabled ? 1 : 0) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindOptionalDouble(lastRefresh, index: 3, statement: update)
+            try bindText(url, index: 4, statement: update)
+
+            guard sqlite3_step(update) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            if sqlite3_changes(handle) == 0 {
+                let insert = try prepareStatement(
+                    """
+                    INSERT INTO repositories
+                    (name, url, enabled, last_refresh)
+                    VALUES (?, ?, ?, ?);
+                    """,
+                    handle: handle
+                )
+                defer { sqlite3_finalize(insert) }
+
+                try bindText(name, index: 1, statement: insert)
+                try bindText(url, index: 2, statement: insert)
+                guard sqlite3_bind_int(insert, 3, enabled ? 1 : 0) == SQLITE_OK else {
+                    throw sqliteError(handle)
+                }
+                try bindOptionalDouble(lastRefresh, index: 4, statement: insert)
+
+                guard sqlite3_step(insert) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+            }
+        }
+    }
+
+    func fetch(url: String) throws -> RepositoryRecord? {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT internal_id, name, url, enabled, last_refresh
+                FROM repositories
+                WHERE url = ?
+                LIMIT 1;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(url, index: 1, statement: statement)
+
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE {
+                return nil
+            }
+
+            guard result == SQLITE_ROW,
+                  let name = columnText(statement, index: 1),
+                  let storedURL = columnText(statement, index: 2) else {
+                throw sqliteError(handle)
+            }
+
+            let lastRefresh: TimeInterval?
+            if sqlite3_column_type(statement, 4) == SQLITE_NULL {
+                lastRefresh = nil
+            } else {
+                lastRefresh = sqlite3_column_double(statement, 4)
+            }
+
+            return RepositoryRecord(
+                internalID: sqlite3_column_int64(statement, 0),
+                name: name,
+                url: storedURL,
+                enabled: sqlite3_column_int(statement, 3) != 0,
+                lastRefresh: lastRefresh
+            )
+        }
+    }
+
+    func markRefreshed(
+        url: String,
+        at timestamp: TimeInterval = Date().timeIntervalSince1970
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                "UPDATE repositories SET last_refresh = ? WHERE url = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_double(statement, 1, timestamp) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindText(url, index: 2, statement: statement)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    func remove(url: String) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                "DELETE FROM repositories WHERE url = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(url, index: 1, statement: statement)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+}
+
+enum RepositoryRepositoryError: Error, LocalizedError {
+    case invalidRecord
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRecord:
+            return "Repository record must have a name and HTTPS URL."
+        }
+    }
+}
+
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 private func prepareStatement(_ sql: String, handle: OpaquePointer) throws -> OpaquePointer {
@@ -451,6 +629,26 @@ private func prepareStatement(_ sql: String, handle: OpaquePointer) throws -> Op
 private func bindText(_ value: String, index: Int32, statement: OpaquePointer) throws {
     let result = value.withCString {
         sqlite3_bind_text(statement, index, $0, -1, sqliteTransient)
+    }
+
+    guard result == SQLITE_OK else {
+        if let handle = sqlite3_db_handle(statement) {
+            throw sqliteError(handle)
+        }
+        throw SQLiteDatabaseError.connectionUnavailable
+    }
+}
+
+private func bindOptionalDouble(
+    _ value: Double?,
+    index: Int32,
+    statement: OpaquePointer
+) throws {
+    let result: Int32
+    if let value = value {
+        result = sqlite3_bind_double(statement, index, value)
+    } else {
+        result = sqlite3_bind_null(statement, index)
     }
 
     guard result == SQLITE_OK else {
