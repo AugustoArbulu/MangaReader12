@@ -1,0 +1,75 @@
+name: iOS 12 Milestone 0
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Canonical only while GitHub keeps macOS 14 hosted runners available.
+    # Do NOT change to macos-latest: newer Xcode versions officially require iOS 15+.
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pin Xcode 15.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          swiftc --version
+
+      - name: Audit iOS 12 compatibility guardrails
+        run: ./ci/audit_ios12.sh
+
+      - name: Build Debug for generic iOS device
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Debug" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+      - name: Build Release for generic iOS device
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Release" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+      - name: Verify Release binary
+        run: ./ci/verify_binary.sh "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app"
+
+      - name: Package unsigned IPA for Sideloadly re-signing
+        run: |
+          ./ci/package_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            MangaReader12-iOS12-unsigned.ipa
+
+      - name: Upload app and IPA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaReader12-iOS12-M0
+          if-no-files-found: error
+          path: |
+            MangaReader12-iOS12-unsigned.ipa
+            MangaReader12-iOS12-unsigned.ipa.sha256
+            ${{ runner.temp }}/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app
