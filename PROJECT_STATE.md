@@ -3,11 +3,11 @@
 ## Checkpoint
 
 - Project: MangaReader12 (provisional name)
-- Phase: **Milestone 1 — Core / Batch M1A**
+- Phase: **Milestone 1 — Core / Batch M1B**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version prepared by this patch: **0.1.0 (2)**
+- App version: **0.1.0 (2)**
 
 ## Milestone 0 validation — COMPLETE
 
@@ -19,47 +19,59 @@ Milestone 0 passed end-to-end on 2026-09-05:
 - Release architecture: arm64
 - Release Mach-O minimum OS: iOS 12.0
 - Release SDK: iOS 17.5
-- Unsigned IPA SHA-256: `dee30c6024156ed740dff9a358f0804f768d6a8a41f024009e0d398e2e5fa10b`
 - Sideloadly re-sign/install: success
 - Physical iOS 12 device launch: success
 - Exact iOS 12.x point release: not yet recorded
 
-## Implemented in M1A source
+## Milestone 1A validation — ACCEPTED
 
-- Core `Manga`, `Chapter`, `Page` models
-- Source manifest Codable model + validation
-- Native URLSession networking foundation
-- HTTPS/domain allowlist policy
-- request timeout, redirect guard and response-size guard
-- JavaScriptCore source runtime
-- `Native` JavaScript bridge foundation:
-  - log
-  - namespaced source storage
-  - cookie get/set
-  - URL resolution
-  - GET/POST
-  - generic JSON HTTP request
-- SQLite database bootstrap and schema v1
-- Initial tables for library, manga, chapters, categories, history, downloads, sources, repositories, source settings and migration map
-- On-device M1A diagnostics for manifest, SQLite, network policy and JavaScriptCore bridge
+M1A was accepted on 2026-09-05 after:
 
-## Validation status for M1A
+- Pull request #1 CI: green
+- Post-merge `main` run `33967662348`: green
+- Debug device build: success
+- Release device build: success
+- Release binary verification: success
+- IPA packaging: success
+- Physical iOS 12 launch: success
+- On-device diagnostics: **4/4 green**
+  - Manifest
+  - SQLite
+  - Networking
+  - JavaScriptCore
 
-- Swift syntax parse: passed locally for every new/changed Swift source
-- `SourceManifest` type-check on available non-Apple host compiler: passed
-- plist syntax: passed locally
-- pbxproj plist syntax: passed locally
-- Xcode 15.4 compile: **pending GitHub Actions after patch upload**
+## Implemented in M1B source
+
+- Formal Source API v1 required function list:
+  - `metadata`
+  - `popular`
+  - `search`
+  - `details`
+  - `chapters`
+  - `pages`
+- Typed DTOs for source metadata and paged manga results
+- JavaScriptCore contract validation
+- Typed JSON decoding for JavaScript source results
+- Local fixture exercising all six source functions
+- Installed-source persistence repository over the existing SQLite schema
+- Save/fetch/remove round-trip for source manifests
+- Expanded on-device diagnostics to **5 checks**, adding `Source contract`
+- M1A diagnostics remain in place as regression checks
+
+## Validation status for M1B
+
+- Local source syntax parse: pending before upload package publication
+- Xcode 15.4 compile: **pending GitHub Actions**
 - Physical iOS 12 diagnostics: **pending after green CI build**
 
 ## Known limitations / intentionally deferred
 
-- Response-size cap is currently enforced after URLSession returns the response body; streaming cancellation is deferred to hardening.
-- Cookie storage currently uses Foundation's shared cookie store. Per-source cookie isolation and WKWebView cookie synchronization are later work.
+- Response-size cap is still enforced after URLSession returns the response body; streaming cancellation remains a hardening task.
+- Cookie storage still uses Foundation's shared cookie store.
 - JavaScript execution timeout/cancellation is not yet hardened.
-- Repository install/update/rollback flow is Milestone 2 work.
+- Repository URL install/update/rollback flow is Milestone 2 work.
 - No real external source is enabled yet.
 
 ## Next gate
 
-Upload M1A, obtain a green Xcode 15.4 Actions build, sideload the generated IPA and verify that all four on-device diagnostics display green check marks.
+Upload M1B, obtain a green Xcode 15.4 Actions build, sideload the generated IPA and verify that all five on-device diagnostics display green check marks.

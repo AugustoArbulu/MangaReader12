@@ -13,6 +13,7 @@ enum CoreDiagnostics {
         results.append(runDatabaseDiagnostic())
         results.append(runNetworkingPolicyDiagnostic())
         results.append(runJavaScriptCoreDiagnostic())
+        results.append(runSourceContractDiagnostic())
         return results
     }
 
@@ -38,26 +39,94 @@ enum CoreDiagnostics {
             let data = Data(fixture.utf8)
             let manifest = try JSONDecoder().decode(SourceManifest.self, from: data)
             try manifest.validate()
-            return CoreDiagnosticItem(name: "Manifest", passed: true, detail: "Decode + validation OK")
+
+            guard SourceContractFunction.requiredNames == [
+                "metadata",
+                "popular",
+                "search",
+                "details",
+                "chapters",
+                "pages"
+            ] else {
+                return CoreDiagnosticItem(
+                    name: "Manifest",
+                    passed: false,
+                    detail: "Source API v1 function list drifted"
+                )
+            }
+
+            return CoreDiagnosticItem(
+                name: "Manifest",
+                passed: true,
+                detail: "Decode + API v1 validation OK"
+            )
         } catch {
-            return CoreDiagnosticItem(name: "Manifest", passed: false, detail: error.localizedDescription)
+            return CoreDiagnosticItem(
+                name: "Manifest",
+                passed: false,
+                detail: error.localizedDescription
+            )
         }
     }
 
     private static func runDatabaseDiagnostic() -> CoreDiagnosticItem {
         do {
             let database = try SQLiteDatabase.defaultDatabase()
+            defer { database.close() }
+
             try database.openAndMigrate()
             let version = try database.userVersion()
-            database.close()
 
             guard version == 1 else {
-                return CoreDiagnosticItem(name: "SQLite", passed: false, detail: "Unexpected schema version \(version)")
+                return CoreDiagnosticItem(
+                    name: "SQLite",
+                    passed: false,
+                    detail: "Unexpected schema version \(version)"
+                )
             }
 
-            return CoreDiagnosticItem(name: "SQLite", passed: true, detail: "Schema v1 + WAL OK")
+            let sourceID = "diagnostic-persistence"
+            let repository = SourceRepository(database: database)
+            defer { try? repository.remove(sourceID: sourceID) }
+
+            let manifest = SourceManifest(
+                id: sourceID,
+                name: "Diagnostic Persistence Source",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: nil
+            )
+
+            try repository.save(manifest: manifest, enabled: true)
+
+            guard let stored = try repository.fetch(sourceID: sourceID),
+                  stored.manifest == manifest,
+                  stored.enabled else {
+                return CoreDiagnosticItem(
+                    name: "SQLite",
+                    passed: false,
+                    detail: "Source repository round-trip mismatch"
+                )
+            }
+
+            return CoreDiagnosticItem(
+                name: "SQLite",
+                passed: true,
+                detail: "Schema v1 + source persistence OK"
+            )
         } catch {
-            return CoreDiagnosticItem(name: "SQLite", passed: false, detail: error.localizedDescription)
+            return CoreDiagnosticItem(
+                name: "SQLite",
+                passed: false,
+                detail: error.localizedDescription
+            )
         }
     }
 
@@ -69,19 +138,35 @@ enum CoreDiagnostics {
 
             do {
                 _ = try policy.validatedURL("http://example.com/path")
-                return CoreDiagnosticItem(name: "Networking", passed: false, detail: "Insecure HTTP was not blocked")
+                return CoreDiagnosticItem(
+                    name: "Networking",
+                    passed: false,
+                    detail: "Insecure HTTP was not blocked"
+                )
             } catch HTTPClientError.blockedScheme {
-                return CoreDiagnosticItem(name: "Networking", passed: true, detail: "HTTPS allowlist OK: \(accepted.host ?? "example.com")")
+                return CoreDiagnosticItem(
+                    name: "Networking",
+                    passed: true,
+                    detail: "HTTPS allowlist OK: \(accepted.host ?? "example.com")"
+                )
             } catch {
-                return CoreDiagnosticItem(name: "Networking", passed: false, detail: error.localizedDescription)
+                return CoreDiagnosticItem(
+                    name: "Networking",
+                    passed: false,
+                    detail: error.localizedDescription
+                )
             }
         } catch {
-            return CoreDiagnosticItem(name: "Networking", passed: false, detail: error.localizedDescription)
+            return CoreDiagnosticItem(
+                name: "Networking",
+                passed: false,
+                detail: error.localizedDescription
+            )
         }
     }
 
-    private static func runJavaScriptCoreDiagnostic() -> CoreDiagnosticItem {
-        let manifest = SourceManifest(
+    private static func diagnosticManifest() -> SourceManifest {
+        return SourceManifest(
             id: "diagnostic-source",
             name: "Diagnostic Source",
             version: "1.0.0",
@@ -95,13 +180,43 @@ enum CoreDiagnostics {
             nsfw: false,
             sha256: nil
         )
+    }
 
-        let runtime = JavaScriptSourceRuntime(manifest: manifest)
+    private static func runJavaScriptCoreDiagnostic() -> CoreDiagnosticItem {
+        let runtime = JavaScriptSourceRuntime(manifest: diagnosticManifest())
+
         switch runtime.diagnosticBridgeCheck() {
         case .success(let value):
-            return CoreDiagnosticItem(name: "JavaScriptCore", passed: true, detail: "Native bridge OK: \(value)")
+            return CoreDiagnosticItem(
+                name: "JavaScriptCore",
+                passed: true,
+                detail: "Native bridge OK: \(value)"
+            )
         case .failure(let error):
-            return CoreDiagnosticItem(name: "JavaScriptCore", passed: false, detail: error.localizedDescription)
+            return CoreDiagnosticItem(
+                name: "JavaScriptCore",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private static func runSourceContractDiagnostic() -> CoreDiagnosticItem {
+        let runtime = JavaScriptSourceRuntime(manifest: diagnosticManifest())
+
+        switch runtime.diagnosticSourceContractCheck() {
+        case .success(let detail):
+            return CoreDiagnosticItem(
+                name: "Source contract",
+                passed: true,
+                detail: detail
+            )
+        case .failure(let error):
+            return CoreDiagnosticItem(
+                name: "Source contract",
+                passed: false,
+                detail: error.localizedDescription
+            )
         }
     }
 }
