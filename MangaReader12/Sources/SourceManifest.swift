@@ -130,3 +130,165 @@ struct SourcePagedMangaResult: Codable, Equatable {
     let items: [SourceMangaSummary]
     let hasNextPage: Bool
 }
+
+// MARK: - Repository catalog v1
+
+struct RepositoryCatalog: Codable, Equatable {
+    let name: String
+    let apiVersion: Int
+    let sources: [SourceManifest]
+
+    func validate() throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw RepositoryCatalogError.missingName
+        }
+
+        guard apiVersion == 1 else {
+            throw RepositoryCatalogError.unsupportedAPIVersion(apiVersion)
+        }
+
+        guard !sources.isEmpty else {
+            throw RepositoryCatalogError.emptySources
+        }
+
+        var sourceIDs = Set<String>()
+
+        for source in sources {
+            try source.validate()
+
+            guard sourceIDs.insert(source.id).inserted else {
+                throw RepositoryCatalogError.duplicateSourceID(source.id)
+            }
+        }
+    }
+}
+
+enum RepositoryCatalogError: Error, LocalizedError {
+    case missingName
+    case unsupportedAPIVersion(Int)
+    case emptySources
+    case duplicateSourceID(String)
+    case invalidAppVersion(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingName:
+            return "Repository name is empty."
+        case .unsupportedAPIVersion(let version):
+            return "Unsupported repository API version: \(version)."
+        case .emptySources:
+            return "Repository catalog contains no sources."
+        case .duplicateSourceID(let sourceID):
+            return "Repository catalog contains duplicate source ID: \(sourceID)."
+        case .invalidAppVersion(let version):
+            return "App version format is invalid: \(version)."
+        }
+    }
+}
+
+enum RepositorySourceAction: String, Codable, Equatable {
+    case install
+    case update
+    case unchanged
+    case incompatible
+}
+
+struct RepositorySourcePlan: Equatable {
+    let sourceID: String
+    let currentVersion: String?
+    let availableVersion: String
+    let action: RepositorySourceAction
+}
+
+enum NumericVersionComparator {
+    static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult? {
+        guard let left = components(lhs), let right = components(rhs) else {
+            return nil
+        }
+
+        let count = max(left.count, right.count)
+
+        for index in 0..<count {
+            let leftValue = index < left.count ? left[index] : 0
+            let rightValue = index < right.count ? right[index] : 0
+
+            if leftValue < rightValue {
+                return .orderedAscending
+            }
+
+            if leftValue > rightValue {
+                return .orderedDescending
+            }
+        }
+
+        return .orderedSame
+    }
+
+    private static func components(_ value: String) -> [Int]? {
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.count <= 4 else {
+            return nil
+        }
+
+        var values: [Int] = []
+
+        for part in parts {
+            guard !part.isEmpty,
+                  part.allSatisfy({ $0 >= "0" && $0 <= "9" }),
+                  let number = Int(part) else {
+                return nil
+            }
+
+            values.append(number)
+        }
+
+        return values
+    }
+}
+
+enum RepositoryCatalogPlanner {
+    static func plan(
+        catalog: RepositoryCatalog,
+        installed: [String: SourceManifest],
+        appVersion: String
+    ) throws -> [RepositorySourcePlan] {
+        try catalog.validate()
+
+        guard NumericVersionComparator.compare(appVersion, appVersion) != nil else {
+            throw RepositoryCatalogError.invalidAppVersion(appVersion)
+        }
+
+        return catalog.sources.map { source in
+            let current = installed[source.id]
+
+            let compatibility = NumericVersionComparator.compare(
+                appVersion,
+                source.minAppVersion
+            )
+
+            let action: RepositorySourceAction
+
+            if compatibility == .orderedAscending {
+                action = .incompatible
+            } else if let current = current {
+                let versionComparison = NumericVersionComparator.compare(
+                    source.version,
+                    current.version
+                )
+
+                action = versionComparison == .orderedDescending
+                    ? .update
+                    : .unchanged
+            } else {
+                action = .install
+            }
+
+            return RepositorySourcePlan(
+                sourceID: source.id,
+                currentVersion: current?.version,
+                availableVersion: source.version,
+                action: action
+            )
+        }
+    }
+}
