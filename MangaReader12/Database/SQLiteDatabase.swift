@@ -54,6 +54,16 @@ final class SQLiteDatabase {
         }
     }
 
+    func withConnection<T>(_ block: (OpaquePointer) throws -> T) throws -> T {
+        return try queue.sync {
+            try openIfNeeded()
+            guard let handle = handle else {
+                throw SQLiteDatabaseError.connectionUnavailable
+            }
+            return try block(handle)
+        }
+    }
+
     func close() {
         queue.sync {
             if let handle = handle {
@@ -252,6 +262,7 @@ final class SQLiteDatabase {
 
 enum SQLiteDatabaseError: Error, LocalizedError {
     case applicationSupportUnavailable
+    case connectionUnavailable
     case openFailed(code: Int32)
     case executionFailed(code: Int32, message: String)
 
@@ -259,10 +270,216 @@ enum SQLiteDatabaseError: Error, LocalizedError {
         switch self {
         case .applicationSupportUnavailable:
             return "Application Support directory is unavailable."
+        case .connectionUnavailable:
+            return "SQLite connection is unavailable."
         case .openFailed(let code):
             return "Could not open SQLite database (code \(code))."
         case .executionFailed(let code, let message):
             return "SQLite error \(code): \(message)"
         }
     }
+}
+
+// MARK: - Installed source persistence
+
+struct InstalledSourceRecord: Equatable {
+    let manifest: SourceManifest
+    let enabled: Bool
+    let installedAt: TimeInterval
+    let updatedAt: TimeInterval
+}
+
+final class SourceRepository {
+    private let database: SQLiteDatabase
+
+    init(database: SQLiteDatabase) {
+        self.database = database
+    }
+
+    func save(manifest: SourceManifest, enabled: Bool = true) throws {
+        try manifest.validate()
+        try database.openAndMigrate()
+
+        let manifestData = try JSONEncoder().encode(manifest)
+        guard let manifestJSON = String(data: manifestData, encoding: .utf8) else {
+            throw SourceRepositoryError.manifestEncodingFailed
+        }
+
+        let now = Date().timeIntervalSince1970
+
+        try database.withConnection { handle in
+            let updateSQL = """
+            UPDATE sources
+            SET name = ?, version = ?, lang = ?, enabled = ?, manifest_json = ?, updated_at = ?
+            WHERE source_id = ?;
+            """
+
+            let update = try prepareStatement(updateSQL, handle: handle)
+            defer { sqlite3_finalize(update) }
+
+            try bindText(manifest.name, index: 1, statement: update)
+            try bindText(manifest.version, index: 2, statement: update)
+            try bindText(manifest.lang, index: 3, statement: update)
+            guard sqlite3_bind_int(update, 4, enabled ? 1 : 0) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindText(manifestJSON, index: 5, statement: update)
+            guard sqlite3_bind_double(update, 6, now) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindText(manifest.id, index: 7, statement: update)
+
+            guard sqlite3_step(update) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            if sqlite3_changes(handle) == 0 {
+                let insertSQL = """
+                INSERT INTO sources
+                (source_id, name, version, lang, enabled, manifest_json, installed_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """
+
+                let insert = try prepareStatement(insertSQL, handle: handle)
+                defer { sqlite3_finalize(insert) }
+
+                try bindText(manifest.id, index: 1, statement: insert)
+                try bindText(manifest.name, index: 2, statement: insert)
+                try bindText(manifest.version, index: 3, statement: insert)
+                try bindText(manifest.lang, index: 4, statement: insert)
+                guard sqlite3_bind_int(insert, 5, enabled ? 1 : 0) == SQLITE_OK else {
+                    throw sqliteError(handle)
+                }
+                try bindText(manifestJSON, index: 6, statement: insert)
+                guard sqlite3_bind_double(insert, 7, now) == SQLITE_OK,
+                      sqlite3_bind_double(insert, 8, now) == SQLITE_OK else {
+                    throw sqliteError(handle)
+                }
+
+                guard sqlite3_step(insert) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+            }
+        }
+    }
+
+    func fetch(sourceID: String) throws -> InstalledSourceRecord? {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let sql = """
+            SELECT manifest_json, enabled, installed_at, updated_at
+            FROM sources
+            WHERE source_id = ?
+            LIMIT 1;
+            """
+
+            let statement = try prepareStatement(sql, handle: handle)
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE {
+                return nil
+            }
+
+            guard result == SQLITE_ROW,
+                  let manifestJSON = columnText(statement, index: 0),
+                  let data = manifestJSON.data(using: .utf8) else {
+                throw sqliteError(handle)
+            }
+
+            let manifest = try JSONDecoder().decode(SourceManifest.self, from: data)
+            let enabled = sqlite3_column_int(statement, 1) != 0
+            let installedAt = sqlite3_column_double(statement, 2)
+            let updatedAt = sqlite3_column_double(statement, 3)
+
+            return InstalledSourceRecord(
+                manifest: manifest,
+                enabled: enabled,
+                installedAt: installedAt,
+                updatedAt: updatedAt
+            )
+        }
+    }
+
+    func remove(sourceID: String) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                "DELETE FROM sources WHERE source_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+}
+
+enum SourceRepositoryError: Error, LocalizedError {
+    case manifestEncodingFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .manifestEncodingFailed:
+            return "Could not encode source manifest for persistence."
+        }
+    }
+}
+
+private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private func prepareStatement(_ sql: String, handle: OpaquePointer) throws -> OpaquePointer {
+    var statement: OpaquePointer?
+    let result = sql.withCString {
+        sqlite3_prepare_v2(handle, $0, -1, &statement, nil)
+    }
+
+    guard result == SQLITE_OK, let prepared = statement else {
+        throw sqliteError(handle)
+    }
+
+    return prepared
+}
+
+private func bindText(_ value: String, index: Int32, statement: OpaquePointer) throws {
+    let result = value.withCString {
+        sqlite3_bind_text(statement, index, $0, -1, sqliteTransient)
+    }
+
+    guard result == SQLITE_OK else {
+        if let handle = sqlite3_db_handle(statement) {
+            throw sqliteError(handle)
+        }
+        throw SQLiteDatabaseError.connectionUnavailable
+    }
+}
+
+private func columnText(_ statement: OpaquePointer, index: Int32) -> String? {
+    guard let bytes = sqlite3_column_text(statement, index) else {
+        return nil
+    }
+
+    let length = Int(sqlite3_column_bytes(statement, index))
+    let data = Data(bytes: bytes, count: length)
+    return String(data: data, encoding: .utf8)
+}
+
+private func sqliteError(_ handle: OpaquePointer) -> SQLiteDatabaseError {
+    let code = sqlite3_errcode(handle)
+    let message: String
+
+    if let cString = sqlite3_errmsg(handle) {
+        message = String(cString: cString)
+    } else {
+        message = "Unknown SQLite error"
+    }
+
+    return .executionFailed(code: code, message: message)
 }

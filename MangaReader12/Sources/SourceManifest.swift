@@ -96,3 +96,37 @@ enum ManifestValidationError: Error, LocalizedError {
         }
     }
 }
+
+// MARK: - Source API v1 contract
+
+enum SourceContractFunction: String, CaseIterable {
+    case metadata
+    case popular
+    case search
+    case details
+    case chapters
+    case pages
+
+    static var requiredNames: [String] {
+        return allCases.map { $0.rawValue }
+    }
+}
+
+struct SourceMetadata: Codable, Equatable {
+    let id: String
+    let name: String
+    let lang: String
+    let version: String
+}
+
+struct SourceMangaSummary: Codable, Equatable {
+    let id: String
+    let title: String
+    let cover: String?
+    let url: String?
+}
+
+struct SourcePagedMangaResult: Codable, Equatable {
+    let items: [SourceMangaSummary]
+    let hasNextPage: Bool
+}

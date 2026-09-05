@@ -1,20 +1,13 @@
-# Upload instructions
+# Upload instructions — M1B
 
-This ZIP contains only files added or changed by Milestone 1A.
+This ZIP contains only files added or changed by Milestone 1B.
 
 On GitHub, open the repository root, choose **Add file → Upload files**, then drag the **contents inside this extracted patch folder** into the upload area.
 
-The upload must preserve these paths, especially:
-
-- `MangaReader12.xcodeproj/project.pbxproj`
-- `MangaReader12/Core/...`
-- `MangaReader12/Database/...`
-- `MangaReader12/Networking/...`
-- `MangaReader12/Sources/...`
-- `MangaReader12/SourceRuntime/...`
-
 Suggested commit message:
 
-`Milestone 1A - core foundation`
+`Milestone 1B - source contract and persistence`
 
-The existing `.github/workflows/build.yml` does not need to be replaced. A push to `main` will start the existing GitHub Actions workflow automatically.
+Because direct GitHub write access from ChatGPT is still blocked by the repository integration, use the same branch + pull-request flow that worked for M1A.
+
+Do not merge until the GitHub Actions checks are green.

@@ -213,51 +213,51 @@ final class JavaScriptSourceRuntime {
 
     func load(script: String, completion: @escaping (Result<Void, Error>) -> Void) {
         queue.async {
-            self.lastException = nil
-            self.context?.evaluateScript(script)
-
-            if let message = self.lastException {
-                completion(.failure(SourceRuntimeError.javaScriptException(message)))
-                return
+            do {
+                try self.loadUnlocked(script: script)
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
             }
+        }
+    }
 
-            guard let source = self.context?.objectForKeyedSubscript("source"),
-                  !source.isUndefined,
-                  !source.isNull else {
-                completion(.failure(SourceRuntimeError.missingSourceObject))
-                return
+    func validateContract(completion: @escaping (Result<Void, Error>) -> Void) {
+        queue.async {
+            do {
+                _ = try self.sourceObjectUnlocked(validatingContract: true)
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
             }
-
-            completion(.success(()))
         }
     }
 
     func call(_ functionName: String, arguments: [Any] = [], completion: @escaping (Result<Any?, Error>) -> Void) {
         queue.async {
-            self.lastException = nil
-
-            guard let source = self.context?.objectForKeyedSubscript("source"),
-                  !source.isUndefined,
-                  !source.isNull else {
-                completion(.failure(SourceRuntimeError.missingSourceObject))
-                return
+            do {
+                let value = try self.invokeUnlocked(functionName, arguments: arguments)
+                completion(.success(value?.toObject()))
+            } catch {
+                completion(.failure(error))
             }
+        }
+    }
 
-            guard let function = source.objectForKeyedSubscript(functionName),
-                  !function.isUndefined,
-                  !function.isNull else {
-                completion(.failure(SourceRuntimeError.missingFunction(functionName)))
-                return
+    func callDecoded<T: Decodable>(
+        _ functionName: String,
+        arguments: [Any] = [],
+        as type: T.Type,
+        completion: @escaping (Result<T, Error>) -> Void
+    ) {
+        queue.async {
+            do {
+                let value = try self.invokeUnlocked(functionName, arguments: arguments)
+                let decoded = try self.decodeUnlocked(type, from: value)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(error))
             }
-
-            let value = source.invokeMethod(functionName, withArguments: arguments)
-
-            if let message = self.lastException {
-                completion(.failure(SourceRuntimeError.javaScriptException(message)))
-                return
-            }
-
-            completion(.success(value?.toObject()))
         }
     }
 
@@ -279,12 +279,213 @@ final class JavaScriptSourceRuntime {
             return .success(resolved)
         }
     }
+
+    func diagnosticSourceContractCheck() -> Result<String, Error> {
+        return queue.sync {
+            do {
+                try self.loadUnlocked(script: Self.contractFixtureScript)
+                _ = try self.sourceObjectUnlocked(validatingContract: true)
+
+                let metadata: SourceMetadata = try self.decodeUnlocked(
+                    SourceMetadata.self,
+                    from: try self.invokeUnlocked("metadata", arguments: [])
+                )
+                let popular: SourcePagedMangaResult = try self.decodeUnlocked(
+                    SourcePagedMangaResult.self,
+                    from: try self.invokeUnlocked("popular", arguments: [1])
+                )
+                let search: SourcePagedMangaResult = try self.decodeUnlocked(
+                    SourcePagedMangaResult.self,
+                    from: try self.invokeUnlocked("search", arguments: ["fixture", 1, []])
+                )
+                let details: Manga = try self.decodeUnlocked(
+                    Manga.self,
+                    from: try self.invokeUnlocked("details", arguments: ["m1"])
+                )
+                let chapters: [Chapter] = try self.decodeUnlocked(
+                    [Chapter].self,
+                    from: try self.invokeUnlocked("chapters", arguments: ["m1"])
+                )
+                let pages: [Page] = try self.decodeUnlocked(
+                    [Page].self,
+                    from: try self.invokeUnlocked("pages", arguments: ["c1"])
+                )
+
+                guard metadata.id == manifest.id,
+                      popular.items.count == 1,
+                      search.items.count == 1,
+                      details.id == "m1",
+                      chapters.count == 1,
+                      pages.count == 1 else {
+                    throw SourceRuntimeError.invalidDiagnosticResult
+                }
+
+                return .success("6 methods + typed DTO decoding OK")
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    private func loadUnlocked(script: String) throws {
+        self.lastException = nil
+        self.context?.evaluateScript(script)
+
+        if let message = self.lastException {
+            throw SourceRuntimeError.javaScriptException(message)
+        }
+
+        _ = try sourceObjectUnlocked(validatingContract: false)
+    }
+
+    private func sourceObjectUnlocked(validatingContract: Bool) throws -> JSValue {
+        guard let source = self.context?.objectForKeyedSubscript("source"),
+              !source.isUndefined,
+              !source.isNull else {
+            throw SourceRuntimeError.missingSourceObject
+        }
+
+        if validatingContract {
+            for functionName in SourceContractFunction.requiredNames {
+                guard let function = source.objectForKeyedSubscript(functionName),
+                      !function.isUndefined,
+                      !function.isNull else {
+                    throw SourceRuntimeError.missingFunction(functionName)
+                }
+            }
+        }
+
+        return source
+    }
+
+    private func invokeUnlocked(_ functionName: String, arguments: [Any]) throws -> JSValue? {
+        self.lastException = nil
+        let source = try sourceObjectUnlocked(validatingContract: false)
+
+        guard let function = source.objectForKeyedSubscript(functionName),
+              !function.isUndefined,
+              !function.isNull else {
+            throw SourceRuntimeError.missingFunction(functionName)
+        }
+
+        let value = source.invokeMethod(functionName, withArguments: arguments)
+
+        if let message = self.lastException {
+            throw SourceRuntimeError.javaScriptException(message)
+        }
+
+        guard let result = value, !result.isUndefined, !result.isNull else {
+            throw SourceRuntimeError.invalidFunctionResult(functionName)
+        }
+
+        return result
+    }
+
+    private func decodeUnlocked<T: Decodable>(_ type: T.Type, from value: JSValue?) throws -> T {
+        guard let object = value?.toObject(),
+              JSONSerialization.isValidJSONObject(object) else {
+            throw SourceRuntimeError.nonJSONResult
+        }
+
+        do {
+            let data = try JSONSerialization.data(withJSONObject: object, options: [])
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw SourceRuntimeError.decodeFailed(error.localizedDescription)
+        }
+    }
+
+    private static let contractFixtureScript = """
+    var source = {
+      metadata: function() {
+        return {
+          id: "diagnostic-source",
+          name: "Diagnostic Source",
+          lang: "en",
+          version: "1.0.0"
+        };
+      },
+
+      popular: function(page) {
+        return {
+          items: [
+            {
+              id: "m1",
+              title: "Fixture Manga",
+              cover: "https://example.com/cover.jpg",
+              url: "https://example.com/manga/m1"
+            }
+          ],
+          hasNextPage: false
+        };
+      },
+
+      search: function(query, page, filters) {
+        return {
+          items: [
+            {
+              id: "m1",
+              title: "Fixture Manga",
+              cover: null,
+              url: "https://example.com/manga/m1"
+            }
+          ],
+          hasNextPage: false
+        };
+      },
+
+      details: function(mangaId) {
+        return {
+          id: mangaId,
+          title: "Fixture Manga",
+          altTitles: ["Fixture Alt"],
+          cover: "https://example.com/cover.jpg",
+          author: "Fixture Author",
+          artist: "Fixture Artist",
+          description: "Local source contract fixture.",
+          status: "ongoing",
+          genres: ["Test"],
+          url: "https://example.com/manga/" + mangaId
+        };
+      },
+
+      chapters: function(mangaId) {
+        return [
+          {
+            id: "c1",
+            name: "Chapter 1",
+            number: 1,
+            volume: 1,
+            date: "2026-09-05",
+            scanlator: "Fixture",
+            language: "en",
+            url: "https://example.com/chapter/c1"
+          }
+        ];
+      },
+
+      pages: function(chapterId) {
+        return [
+          {
+            index: 0,
+            imageUrl: "https://example.com/page/1.jpg",
+            headers: {
+              Referer: "https://example.com/"
+            }
+          }
+        ];
+      }
+    };
+    """
 }
 
 enum SourceRuntimeError: Error, LocalizedError {
     case missingSourceObject
     case missingFunction(String)
     case javaScriptException(String)
+    case invalidFunctionResult(String)
+    case nonJSONResult
+    case decodeFailed(String)
     case invalidDiagnosticResult
 
     var errorDescription: String? {
@@ -295,8 +496,14 @@ enum SourceRuntimeError: Error, LocalizedError {
             return "The source function '\(name)' is missing."
         case .javaScriptException(let message):
             return "JavaScript exception: \(message)"
+        case .invalidFunctionResult(let name):
+            return "The source function '\(name)' returned no usable value."
+        case .nonJSONResult:
+            return "The source returned a value that cannot be represented as JSON."
+        case .decodeFailed(let message):
+            return "Could not decode source result: \(message)"
         case .invalidDiagnosticResult:
-            return "JavaScriptCore bridge diagnostic returned an invalid result."
+            return "JavaScriptCore source contract diagnostic returned an invalid result."
         }
     }
 }
