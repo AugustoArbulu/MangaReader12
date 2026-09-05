@@ -10,14 +10,15 @@ permissions:
 
 jobs:
   build:
-    # Canonical only while GitHub keeps macOS 14 hosted runners available.
-    # Do NOT change to macos-latest: newer Xcode versions officially require iOS 15+.
     runs-on: macos-14
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Make CI scripts executable
+        run: chmod +x ci/*.sh
 
       - name: Pin Xcode 15.4
         run: |
@@ -56,7 +57,9 @@ jobs:
             clean build
 
       - name: Verify Release binary
-        run: ./ci/verify_binary.sh "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app"
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app"
 
       - name: Package unsigned IPA for Sideloadly re-signing
         run: |
