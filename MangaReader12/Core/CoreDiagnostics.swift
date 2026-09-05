@@ -15,6 +15,7 @@ enum CoreDiagnostics {
         results.append(runResponseLimitDiagnostic())
         results.append(runJavaScriptCoreDiagnostic())
         results.append(runSourceContractDiagnostic())
+        results.append(runRepositoryCatalogDiagnostic())
         return results
     }
 
@@ -268,6 +269,120 @@ enum CoreDiagnostics {
         case .failure(let error):
             return CoreDiagnosticItem(
                 name: "Source contract",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private static func runRepositoryCatalogDiagnostic() -> CoreDiagnosticItem {
+        let fixture = """
+        {
+          "name": "Diagnostic Repository",
+          "apiVersion": 1,
+          "sources": [
+            {
+              "id": "fixture.alpha",
+              "name": "Fixture Alpha",
+              "version": "2.0.0",
+              "lang": "en",
+              "author": "MangaReader12",
+              "script": "https://example.com/alpha.js",
+              "icon": null,
+              "apiVersion": 1,
+              "minAppVersion": "0.1.0",
+              "domains": ["example.com"],
+              "nsfw": false,
+              "sha256": null
+            },
+            {
+              "id": "fixture.beta",
+              "name": "Fixture Beta",
+              "version": "1.0.0",
+              "lang": "en",
+              "author": "MangaReader12",
+              "script": "https://example.com/beta.js",
+              "icon": null,
+              "apiVersion": 1,
+              "minAppVersion": "0.1.0",
+              "domains": ["example.com"],
+              "nsfw": false,
+              "sha256": null
+            }
+          ]
+        }
+        """
+
+        do {
+            let catalog = try JSONDecoder().decode(
+                RepositoryCatalog.self,
+                from: Data(fixture.utf8)
+            )
+
+            try catalog.validate()
+
+            let installedAlpha = SourceManifest(
+                id: "fixture.alpha",
+                name: "Fixture Alpha",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/alpha.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: nil
+            )
+
+            let plan = try RepositoryCatalogPlanner.plan(
+                catalog: catalog,
+                installed: ["fixture.alpha": installedAlpha],
+                appVersion: "0.1.0"
+            )
+
+            guard plan.count == 2,
+                  plan[0].sourceID == "fixture.alpha",
+                  plan[0].action == .update,
+                  plan[1].sourceID == "fixture.beta",
+                  plan[1].action == .install else {
+                return CoreDiagnosticItem(
+                    name: "Repository catalog",
+                    passed: false,
+                    detail: "Install/update planning mismatch"
+                )
+            }
+
+            let duplicateCatalog = RepositoryCatalog(
+                name: "Duplicate Check",
+                apiVersion: 1,
+                sources: [catalog.sources[0], catalog.sources[0]]
+            )
+
+            do {
+                try duplicateCatalog.validate()
+                return CoreDiagnosticItem(
+                    name: "Repository catalog",
+                    passed: false,
+                    detail: "Duplicate source IDs were not rejected"
+                )
+            } catch RepositoryCatalogError.duplicateSourceID {
+                return CoreDiagnosticItem(
+                    name: "Repository catalog",
+                    passed: true,
+                    detail: "Catalog validation + install/update planning OK"
+                )
+            } catch {
+                return CoreDiagnosticItem(
+                    name: "Repository catalog",
+                    passed: false,
+                    detail: error.localizedDescription
+                )
+            }
+        } catch {
+            return CoreDiagnosticItem(
+                name: "Repository catalog",
                 passed: false,
                 detail: error.localizedDescription
             )

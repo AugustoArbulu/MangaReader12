@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.0-m2a-repository-catalog — 2026-09-05
+
+- Accepted M1C after green CI and 6/6 green diagnostics on a physical iOS 12 device.
+- Added Repository Catalog API v1 decoding and validation.
+- Added duplicate-source detection.
+- Added numeric dotted-version comparison.
+- Added install/update/unchanged/incompatible planning.
+- Added app minimum-version compatibility handling for repository sources.
+- Added a seventh on-device diagnostic for repository catalog planning.
+
 ## 0.1.0-m1c-networking — 2026-09-05
 
 - Accepted M1B after green CI and 5/5 green diagnostics on a physical iOS 12 device.
