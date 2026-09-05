@@ -12,6 +12,7 @@ enum CoreDiagnostics {
         results.append(runManifestDiagnostic())
         results.append(runDatabaseDiagnostic())
         results.append(runNetworkingPolicyDiagnostic())
+        results.append(runResponseLimitDiagnostic())
         results.append(runJavaScriptCoreDiagnostic())
         results.append(runSourceContractDiagnostic())
         return results
@@ -144,10 +145,19 @@ enum CoreDiagnostics {
                     detail: "Insecure HTTP was not blocked"
                 )
             } catch HTTPClientError.blockedScheme {
+                let timeoutError = HTTPClient.classifyTransportError(URLError(.timedOut))
+                guard case HTTPClientError.timedOut = timeoutError else {
+                    return CoreDiagnosticItem(
+                        name: "Networking",
+                        passed: false,
+                        detail: "Timeout classification failed"
+                    )
+                }
+
                 return CoreDiagnosticItem(
                     name: "Networking",
                     passed: true,
-                    detail: "HTTPS allowlist OK: \(accepted.host ?? "example.com")"
+                    detail: "HTTPS allowlist + timeout classification OK: \(accepted.host ?? "example.com")"
                 )
             } catch {
                 return CoreDiagnosticItem(
@@ -159,6 +169,50 @@ enum CoreDiagnostics {
         } catch {
             return CoreDiagnosticItem(
                 name: "Networking",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private static func runResponseLimitDiagnostic() -> CoreDiagnosticItem {
+        do {
+            var buffer = HTTPResponseBuffer(maxBytes: 8)
+            try buffer.validateExpectedContentLength(8)
+            try buffer.append(Data(repeating: 0x41, count: 4))
+            try buffer.append(Data(repeating: 0x42, count: 4))
+
+            guard buffer.data.count == 8 else {
+                return CoreDiagnosticItem(
+                    name: "Response limit",
+                    passed: false,
+                    detail: "Streaming buffer did not retain expected bytes"
+                )
+            }
+
+            do {
+                try buffer.append(Data([0x43]))
+                return CoreDiagnosticItem(
+                    name: "Response limit",
+                    passed: false,
+                    detail: "Oversized chunk was not rejected"
+                )
+            } catch HTTPClientError.responseTooLarge {
+                return CoreDiagnosticItem(
+                    name: "Response limit",
+                    passed: true,
+                    detail: "Streaming response cap cancels before overrun"
+                )
+            } catch {
+                return CoreDiagnosticItem(
+                    name: "Response limit",
+                    passed: false,
+                    detail: error.localizedDescription
+                )
+            }
+        } catch {
+            return CoreDiagnosticItem(
+                name: "Response limit",
                 passed: false,
                 detail: error.localizedDescription
             )
