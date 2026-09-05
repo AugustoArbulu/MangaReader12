@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-m2b-repository-transport — 2026-09-05
+
+- Accepted M2A after green CI and 7/7 green diagnostics on a physical iOS 12 device.
+- Added HTTPS remote repository catalog transport.
+- Added remote source-script transport using the hardened HTTP client.
+- Added pure Swift SHA-256 for iOS 12.
+- Added optional source-script SHA-256 verification and mismatch rejection.
+- Added repository record + last-refresh persistence over SQLite.
+- Added an eighth on-device diagnostic for repository transport/integrity.
+- Advanced app build number to 3.
+
 ## 0.1.0-m2a-repository-catalog — 2026-09-05
 
 - Accepted M1C after green CI and 6/6 green diagnostics on a physical iOS 12 device.
