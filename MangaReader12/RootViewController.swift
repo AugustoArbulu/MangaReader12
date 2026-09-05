@@ -20,13 +20,13 @@ final class RootViewController: UIViewController {
 
     private func configureViews() {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Milestone 1B"
+        titleLabel.text = "Milestone 1C"
         titleLabel.font = UIFont.boldSystemFont(ofSize: 28)
         titleLabel.textAlignment = .center
         titleLabel.textColor = .black
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.text = "Source contract + persistence — iOS 12.0"
+        subtitleLabel.text = "Networking hardening — iOS 12.0"
         subtitleLabel.font = UIFont.systemFont(ofSize: 16)
         subtitleLabel.textAlignment = .center
         subtitleLabel.textColor = .darkGray
@@ -43,7 +43,7 @@ final class RootViewController: UIViewController {
         diagnosticsStack.axis = .vertical
         diagnosticsStack.alignment = .fill
         diagnosticsStack.distribution = .fill
-        diagnosticsStack.spacing = 8
+        diagnosticsStack.spacing = 7
 
         activityIndicator.translatesAutoresizingMaskIntoConstraints = false
         activityIndicator.hidesWhenStopped = true
@@ -58,7 +58,7 @@ final class RootViewController: UIViewController {
 
     private func configureLayout() {
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 28),
+            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
             titleLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             titleLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
 
@@ -66,17 +66,17 @@ final class RootViewController: UIViewController {
             subtitleLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             subtitleLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
 
-            activityIndicator.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 20),
+            activityIndicator.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 18),
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
-            statusLabel.topAnchor.constraint(equalTo: activityIndicator.bottomAnchor, constant: 10),
+            statusLabel.topAnchor.constraint(equalTo: activityIndicator.bottomAnchor, constant: 9),
             statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
 
-            diagnosticsStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 18),
+            diagnosticsStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 16),
             diagnosticsStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 28),
             diagnosticsStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -28),
-            diagnosticsStack.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+            diagnosticsStack.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18)
         ])
     }
 
@@ -100,7 +100,7 @@ final class RootViewController: UIViewController {
         for result in results {
             let label = UILabel()
             label.numberOfLines = 0
-            label.font = UIFont.systemFont(ofSize: 15)
+            label.font = UIFont.systemFont(ofSize: 14)
             label.textColor = result.passed
                 ? UIColor(red: 0.08, green: 0.45, blue: 0.18, alpha: 1)
                 : .red
