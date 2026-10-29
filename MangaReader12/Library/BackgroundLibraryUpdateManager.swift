@@ -26,7 +26,7 @@ final class BackgroundLibraryUpdateManager {
     func applyScheduling() {
         let interval: TimeInterval = isEnabled
             ? 6 * 60 * 60
-            : UIApplicationBackgroundFetchIntervalNever
+            : UIApplication.backgroundFetchIntervalNever
 
         UIApplication.shared.setMinimumBackgroundFetchInterval(interval)
     }
