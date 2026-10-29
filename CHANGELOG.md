@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 0.1.0-m5c-m6b-progress-history-downloads — 2026-10-29
+
+- Accepted M5B after successful physical iOS 12 dark-mode switching and persistence validation.
+- Added reading progress persistence using the existing chapter state columns.
+- Added automatic read completion when the final page is reached.
+- Added functional Histórico tab backed by SQLite.
+- Added swipe actions to mark chapters read/unread.
+- Added chapter progress and offline indicators in manga details.
+- Added reader brightness control.
+- Added adjacent-page prefetch with memory + disk image cache.
+- Added initial chapter download manager with progress persistence and offline page files.
+- Added swipe actions to download/remove a chapter for offline reading.
+- Offline chapters now open from local files before asking the source runtime for page URLs.
+- Advanced app build number to 9.
+
 ## 0.1.0-m5b-dark-mode — 2026-10-29
 
 - Accepted M4B–M5A after successful physical iOS 12 validation of the real reader, zoom, Webtoon mode and persistent Library.
