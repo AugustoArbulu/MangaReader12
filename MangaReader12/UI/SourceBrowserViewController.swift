@@ -306,7 +306,17 @@ final class MangaDetailsViewController: UITableViewController {
             target: self,
             action: #selector(libraryTapped)
         )
-        navigationItem.rightBarButtonItems = [refreshButton, libraryButton]
+        let migrateButton = UIBarButtonItem(
+            title: "Migrar",
+            style: .plain,
+            target: self,
+            action: #selector(migrationTapped)
+        )
+        navigationItem.rightBarButtonItems = [
+            refreshButton,
+            libraryButton,
+            migrateButton
+        ]
 
         do {
             libraryRepository = try LibraryRepository.defaultRepository()
@@ -334,6 +344,26 @@ final class MangaDetailsViewController: UITableViewController {
         loadDetailsAndChapters()
     }
 
+
+    @objc private func migrationTapped() {
+        guard isInLibrary,
+              let manga = manga else {
+            showMessage(
+                title: "Migração",
+                message: "Adicione esta obra à Biblioteca antes de migrar."
+            )
+            return
+        }
+
+        navigationController?.pushViewController(
+            MigrationViewController(
+                originalSource: sourceRecord,
+                originalManga: manga,
+                originalChapters: chapters
+            ),
+            animated: true
+        )
+    }
 
     @objc private func libraryTapped() {
         guard let manga = manga,
@@ -377,11 +407,12 @@ final class MangaDetailsViewController: UITableViewController {
 
     private func updateLibraryButton() {
         guard let items = navigationItem.rightBarButtonItems,
-              items.count > 1 else {
+              items.count > 2 else {
             return
         }
 
         items[1].title = isInLibrary ? "Remover" : "Biblioteca"
+        items[2].isEnabled = isInLibrary
     }
 
     private func loadDetailsAndChapters() {
