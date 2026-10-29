@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.1.0-m4b-m5a-reader-library — 2026-10-29
+
+- Accepted M3B–M4A after complete physical iOS 12 browse/details/chapter validation.
+- Added actual image reader backed by source page URLs and per-page headers.
+- Added page mode with horizontal paging and pinch zoom.
+- Added basic vertical/Webtoon mode.
+- Added source-domain enforcement and image response-size limits through the hardened HTTP client.
+- Added persistent SQLite-backed Library.
+- Added add/remove Library action from manga details.
+- Added reopening library entries through their installed source runtime.
+- Updated the controlled demo source to 1.1.0 with two real PNG reader fixtures hosted in the repository.
+- Advanced app build number to 7.
+
 ## 0.1.0-m3b-m4a-source-browse — 2026-10-29
 
 - Accepted the M2D–M3A batch after green Xcode 15.4 CI and full physical iOS 12 validation: 11/11 diagnostics, demo repository install, Runtime OK, enable/disable, and expected no-previous-version rollback handling.

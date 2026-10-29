@@ -1,5 +1,7 @@
 # Batch M3B–M4A Report
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Goal
@@ -43,3 +45,10 @@ Everything remains UIKit/callback based and compatible with the locked iOS 12 de
 Build 6 must preserve 11/11 diagnostics and complete the demo flow:
 
 source → Popular → manga → details → Chapter 1 → page resolution.
+
+## Acceptance evidence
+
+- PR #8 merged
+- Merge commit: `ece765472bffca0ebfc2e75a117d2580b6d35db7`
+- Post-merge run `40817968324`: success
+- Physical iOS 12: all requested browse/search/details/chapter/page-resolution checks passed
