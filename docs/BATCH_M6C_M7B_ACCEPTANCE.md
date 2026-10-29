@@ -1,10 +1,10 @@
 # Batch M6C–M7B Acceptance
 
-- [ ] Xcode 15.4 guardrail audit passes.
-- [ ] Debug generic-device build succeeds.
-- [ ] Release generic-device build succeeds.
-- [ ] arm64 / minimum iOS 12 binary verification succeeds.
-- [ ] IPA packages successfully.
+- [x] Xcode 15.4 guardrail audit passes.
+- [x] Debug generic-device build succeeds.
+- [x] Release generic-device build succeeds.
+- [x] arm64 / minimum iOS 12 binary verification succeeds.
+- [x] IPA packages successfully.
 - [ ] Build 10 installs on physical iOS 12.
 - [ ] Existing diagnostics remain **11/11**.
 - [ ] Demo source updates to **1.2.0**.
@@ -22,3 +22,10 @@
 - [ ] History/Library regression remains good.
 
 Do not mark accepted from CI alone; source refresh, UI persistence and reader direction/resume require physical-device validation.
+
+
+CI evidence:
+- PR #12 merged.
+- Merge commit: `792fc8852da836da5aaf99bb39e3a29d8b9b8991`.
+- Post-merge run `40823779755`: success.
+- Physical acceptance remains pending and is intentionally carried into the build-11 checkpoint.
