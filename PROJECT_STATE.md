@@ -7,7 +7,7 @@
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (13)**
+- App version: **0.1.0 (14)**
 
 ## Accepted physical checkpoints
 
@@ -120,3 +120,13 @@ One consolidated test should validate:
 - Fix: validate `PRAGMA quick_check`, accept non-future schema versions, and require the full MangaReader12 table set.
 - Existing backups remain format-version 1 and should restore without regeneration.
 - Do not mark M7C–M9A fully accepted until the build-13 restore retest passes.
+
+
+## Build 14 hotfix — iOS 12 SQLite validator syntax
+
+- Build 13 physical restore reached the new validator but failed at the integrity query with:
+  `The backup database failed validation: could not execute validation query`.
+- This isolates the issue to `PRAGMA quick_check(1);`, not the backup envelope or Base64/SQLite extraction.
+- Build 14 uses the legacy-compatible `PRAGMA quick_check;` syntax.
+- Validation-query errors now expose the actual SQLite prepare/step code and message.
+- The same previously exported `.mr12backup` remains the required retest file.
