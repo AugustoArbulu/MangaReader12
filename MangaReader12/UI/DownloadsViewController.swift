@@ -102,7 +102,7 @@ final class DownloadsViewController: UITableViewController {
         cell.configure(
             title: record.mangaTitle,
             subtitle: "\(record.chapterName) • \(stateText(record.state)) • \(percent)%",
-            coverURL: nil,
+            coverURL: record.cover,
             allowedDomains: [],
             badge: record.state == "completed" ? "Offline" : nil
         )
