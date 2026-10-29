@@ -3,7 +3,13 @@ import UIKit
 final class MainTabBarController: UITabBarController {
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeDidChange),
+            name: .appThemeDidChange,
+            object: nil
+        )
 
         viewControllers = [
             makeNavigation(
@@ -33,6 +39,16 @@ final class MainTabBarController: UITabBarController {
                 root: SettingsViewController()
             )
         ]
+
+        ThemeManager.shared.apply(to: self)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func themeDidChange() {
+        ThemeManager.shared.apply(to: self)
     }
 
     private func makeNavigation(
@@ -52,6 +68,7 @@ final class MainTabBarController: UITabBarController {
 final class PlaceholderViewController: UIViewController {
     private let titleText: String
     private let message: String
+    private let messageLabel = UILabel()
 
     init(titleText: String, message: String) {
         self.titleText = titleText
@@ -66,22 +83,21 @@ final class PlaceholderViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = titleText
-        view.backgroundColor = .white
 
-        let label = UILabel()
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.text = message
-        label.textColor = .darkGray
-        label.textAlignment = .center
-        label.numberOfLines = 0
-        label.font = UIFont.systemFont(ofSize: 16)
-        view.addSubview(label)
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        messageLabel.text = message
+        messageLabel.textAlignment = .center
+        messageLabel.numberOfLines = 0
+        messageLabel.font = UIFont.systemFont(ofSize: 16)
+        view.addSubview(messageLabel)
 
         NSLayoutConstraint.activate([
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            label.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 28),
-            label.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -28)
+            messageLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            messageLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 28),
+            messageLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -28)
         ])
+
+        applyTheme()
     }
 }
 
@@ -117,6 +133,7 @@ final class ExploreViewController: UITableViewController {
         }
 
         reloadStoredState()
+        applyTheme()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -266,6 +283,7 @@ final class ExploreViewController: UITableViewController {
         let identifier = "ExploreCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         if let error = startupError {
             cell.textLabel?.text = "Não foi possível abrir o gerenciador"
@@ -475,6 +493,7 @@ final class RepositoryCatalogViewController: UITableViewController {
         super.viewDidLoad()
         title = "Sources"
         tableView.tableFooterView = UIView()
+        applyTheme()
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .refresh,
             target: self,
@@ -527,6 +546,7 @@ final class RepositoryCatalogViewController: UITableViewController {
         let identifier = "RepositorySourceCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         guard let refreshResult = refreshResult else { return cell }
         let manifest = refreshResult.catalog.sources[indexPath.row]
@@ -642,13 +662,14 @@ final class SettingsViewController: UITableViewController {
         super.viewDidLoad()
         title = "Ajustes"
         tableView.tableFooterView = UIView()
+        applyTheme()
     }
 
     override func tableView(
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 2
+        return 3
     }
 
     override func tableView(
@@ -658,18 +679,44 @@ final class SettingsViewController: UITableViewController {
         let identifier = "SettingsCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
-        if indexPath.row == 0 {
+        switch indexPath.row {
+        case 0:
+            cell.textLabel?.text = "Modo escuro"
+            cell.detailTextLabel?.text = "Tema manual compatível com iOS 12"
+            cell.accessoryType = .none
+
+            let toggle = UISwitch()
+            toggle.isOn = ThemeManager.shared.isDark
+            toggle.addTarget(
+                self,
+                action: #selector(darkModeChanged(_:)),
+                for: .valueChanged
+            )
+            cell.accessoryView = toggle
+            cell.selectionStyle = .none
+
+        case 1:
             cell.textLabel?.text = "Diagnósticos"
             cell.detailTextLabel?.text = "Compatibilidade iOS 12 e subsistemas internos"
             cell.accessoryType = .disclosureIndicator
-        } else {
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+
+        default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M4B–M5A • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M5B • iOS 12.0"
             cell.accessoryType = .none
+            cell.accessoryView = nil
+            cell.selectionStyle = .none
         }
 
         return cell
+    }
+
+    @objc private func darkModeChanged(_ sender: UISwitch) {
+        ThemeManager.shared.setTheme(sender.isOn ? .dark : .light)
     }
 
     override func tableView(
@@ -678,11 +725,49 @@ final class SettingsViewController: UITableViewController {
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        if indexPath.row == 0 {
+        if indexPath.row == 1 {
             navigationController?.pushViewController(
                 RootViewController(),
                 animated: true
             )
         }
+    }
+}
+
+extension MainTabBarController: ThemeApplicable {
+    func applyTheme() {
+        let colors = ThemeManager.shared.palette
+        view.backgroundColor = colors.background
+        tabBar.barTintColor = colors.barBackground
+        tabBar.tintColor = colors.accent
+    }
+}
+
+extension PlaceholderViewController: ThemeApplicable {
+    func applyTheme() {
+        let colors = ThemeManager.shared.palette
+        view.backgroundColor = colors.background
+        messageLabel.textColor = colors.secondaryText
+    }
+}
+
+extension ExploreViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
+    }
+}
+
+extension RepositoryCatalogViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
+    }
+}
+
+extension SettingsViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
     }
 }
