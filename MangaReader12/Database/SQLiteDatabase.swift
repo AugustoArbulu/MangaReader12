@@ -1434,6 +1434,7 @@ struct DownloadListRecord: Equatable {
     let sourceID: String
     let sourceMangaID: String
     let mangaTitle: String
+    let cover: String?
     let sourceChapterID: String
     let chapterName: String
     let state: String
@@ -1865,6 +1866,7 @@ final class DownloadRepository {
                     m.source_id,
                     m.source_manga_id,
                     m.title,
+                    m.cover,
                     c.source_chapter_id,
                     c.name,
                     d.state,
@@ -1890,9 +1892,9 @@ final class DownloadRepository {
                       let sourceID = columnText(statement, index: 0),
                       let sourceMangaID = columnText(statement, index: 1),
                       let mangaTitle = columnText(statement, index: 2),
-                      let sourceChapterID = columnText(statement, index: 3),
-                      let chapterName = columnText(statement, index: 4),
-                      let state = columnText(statement, index: 5) else {
+                      let sourceChapterID = columnText(statement, index: 4),
+                      let chapterName = columnText(statement, index: 5),
+                      let state = columnText(statement, index: 6) else {
                     throw sqliteError(handle)
                 }
 
@@ -1901,12 +1903,13 @@ final class DownloadRepository {
                         sourceID: sourceID,
                         sourceMangaID: sourceMangaID,
                         mangaTitle: mangaTitle,
+                        cover: columnText(statement, index: 3),
                         sourceChapterID: sourceChapterID,
                         chapterName: chapterName,
                         state: state,
-                        progress: sqlite3_column_double(statement, 6),
-                        localPath: columnText(statement, index: 7),
-                        updatedAt: sqlite3_column_double(statement, 8)
+                        progress: sqlite3_column_double(statement, 7),
+                        localPath: columnText(statement, index: 8),
+                        updatedAt: sqlite3_column_double(statement, 9)
                     )
                 )
             }
