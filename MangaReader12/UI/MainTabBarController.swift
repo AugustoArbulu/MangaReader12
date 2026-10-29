@@ -8,10 +8,7 @@ final class MainTabBarController: UITabBarController {
         viewControllers = [
             makeNavigation(
                 title: "Biblioteca",
-                root: PlaceholderViewController(
-                    titleText: "Biblioteca",
-                    message: "Seus mangás adicionados à biblioteca aparecerão aqui."
-                )
+                root: LibraryViewController()
             ),
             makeNavigation(
                 title: "Atualizações",
@@ -668,7 +665,7 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryType = .disclosureIndicator
         } else {
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M3B–M4A • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M4B–M5A • iOS 12.0"
             cell.accessoryType = .none
         }
 
