@@ -4,7 +4,7 @@ var source = {
       id: "fixture.localdemo",
       name: "MangaReader12 Demo",
       lang: "en",
-      version: "1.0.0"
+      version: "1.1.0"
     };
   },
 
@@ -44,9 +44,9 @@ var source = {
       cover: null,
       author: "MangaReader12",
       artist: "MangaReader12",
-      description: "Local repository/runtime fixture for iOS 12 validation.",
+      description: "Reader + library fixture for iOS 12 validation.",
       status: "ongoing",
-      genres: ["Demo"],
+      genres: ["Demo", "Reader"],
       url: "https://example.com/manga/" + mangaId
     };
   },
@@ -70,7 +70,12 @@ var source = {
     return [
       {
         index: 0,
-        imageUrl: "https://example.com/page/demo-1.jpg",
+        imageUrl: "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/page1.png",
+        headers: {}
+      },
+      {
+        index: 1,
+        imageUrl: "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/page2.png",
         headers: {}
       }
     ];
