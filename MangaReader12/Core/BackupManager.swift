@@ -140,6 +140,7 @@ final class BackupManager {
         "reader.keepScreenOn",
         "reader.tapZones",
         "reader.webtoonGap",
+        "reader.doubleTapZoom",
         "updates.feed.v1",
         "backgroundUpdates.enabled"
     ]
