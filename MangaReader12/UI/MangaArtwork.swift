@@ -209,6 +209,7 @@ final class MangaCoverCell: UITableViewCell {
         titleView.text = title
         subtitleView.text = subtitle
         representedURL = coverURL
+        coverView.image = nil
 
         if let badge = badge, !badge.isEmpty {
             badgeView.text = "  \(badge)  "
@@ -337,6 +338,7 @@ final class MangaDetailsHeaderCell: UITableViewCell {
 
         titleView.text = valueTitle
         representedURL = coverURL
+        coverView.image = nil
 
         if let manga = manga {
             var meta: [String] = []
