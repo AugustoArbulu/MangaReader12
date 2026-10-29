@@ -4,7 +4,7 @@ var source = {
       id: "fixture.altdemo",
       name: "MangaReader12 Alt Demo",
       lang: "en",
-      version: "1.0.0"
+      version: "1.0.1"
     };
   },
 
