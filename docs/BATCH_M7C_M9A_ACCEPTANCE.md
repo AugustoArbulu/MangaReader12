@@ -79,3 +79,17 @@ Remaining physical gate:
 - [ ] Restore the existing backup successfully on build 13.
 - [ ] Confirm restored Library/category/progress/reader-settings state.
 - [ ] Confirm installed source scripts on the same device remain usable after restore.
+
+
+## Build 13 physical result
+
+Restore still failed, now with the more specific message:
+
+`The backup database failed validation: could not execute validation query.`
+
+This confirms the backup reaches SQLite validation successfully. Build 14 replaces the iOS-12-incompatible `PRAGMA quick_check(1)` syntax with `PRAGMA quick_check`.
+
+Remaining physical gate:
+- [ ] Restore the same existing `.mr12backup` successfully on build 14.
+- [ ] Confirm restored Library/category/progress/reader-settings state.
+- [ ] Confirm installed source scripts on the same device remain usable after restore.
