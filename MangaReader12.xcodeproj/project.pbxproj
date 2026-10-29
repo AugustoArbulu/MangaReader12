@@ -23,6 +23,8 @@
 		A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* InstalledSourceRuntime.swift */; };
 		A1000000000000000000000F /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* MainTabBarController.swift */; };
 		A10000000000000000000010 /* SourceBrowserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* SourceBrowserViewController.swift */; };
+		A10000000000000000000011 /* ReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* ReaderViewController.swift */; };
+		A10000000000000000000012 /* LibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* LibraryViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +46,8 @@
 		A2000000000000000000000F /* InstalledSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledSourceRuntime.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* MainTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabBarController.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* SourceBrowserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBrowserViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* ReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* LibraryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +146,8 @@
 			children = (
 				A20000000000000000000010 /* MainTabBarController.swift */,
 				A20000000000000000000011 /* SourceBrowserViewController.swift */,
+				A20000000000000000000012 /* ReaderViewController.swift */,
+				A20000000000000000000013 /* LibraryViewController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -237,6 +243,8 @@
 				A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */,
 				A1000000000000000000000F /* MainTabBarController.swift in Sources */,
 				A10000000000000000000010 /* SourceBrowserViewController.swift in Sources */,
+				A10000000000000000000011 /* ReaderViewController.swift in Sources */,
+				A10000000000000000000012 /* LibraryViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,7 +290,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -304,7 +312,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
