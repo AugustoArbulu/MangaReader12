@@ -19,4 +19,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         ThemeManager.shared.apply(to: window.rootViewController)
         return true
     }
+
+    func resetRootViewController() {
+        guard let window = window else { return }
+
+        let root = MainTabBarController()
+        window.rootViewController = root
+        window.backgroundColor = ThemeManager.shared.palette.background
+        ThemeManager.shared.applyGlobalAppearance()
+        ThemeManager.shared.apply(to: root)
+        window.makeKeyAndVisible()
+    }
 }
