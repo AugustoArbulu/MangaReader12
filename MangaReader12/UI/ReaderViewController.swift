@@ -389,6 +389,7 @@ final class ReaderViewController: UIViewController,
     private var scaleMode: ReaderScaleMode = ReaderPreferences.shared.scaleMode
     private var isChangingChapter = false
     private var prefetchingChapterID: String?
+    private var attemptedPreloadChapterID: String?
     private var prefetchedChapterID: String?
     private var prefetchedChapterPages: [Page] = []
 
@@ -731,6 +732,7 @@ final class ReaderViewController: UIViewController,
         prefetchedChapterID = nil
         prefetchedChapterPages.removeAll()
         prefetchingChapterID = nil
+        attemptedPreloadChapterID = nil
         loadInitialProgress()
 
         collectionView.setContentOffset(.zero, animated: false)
@@ -758,11 +760,13 @@ final class ReaderViewController: UIViewController,
               (index ?? currentPageIndex()) >= max(0, pages.count - 2),
               let next = adjacentChapter(forward: true),
               prefetchedChapterID != next.id,
-              prefetchingChapterID != next.id else {
+              prefetchingChapterID != next.id,
+              attemptedPreloadChapterID != next.id else {
             return
         }
         let originChapterID = chapter.id
         prefetchingChapterID = next.id
+        attemptedPreloadChapterID = next.id
         resolve(next) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
