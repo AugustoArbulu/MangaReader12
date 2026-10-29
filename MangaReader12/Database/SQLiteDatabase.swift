@@ -2059,6 +2059,43 @@ final class DownloadRepository {
         }
     }
 
+    func clearAll() throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+            do {
+                try executeSQLite("DELETE FROM downloads;", handle: handle)
+                try executeSQLite("UPDATE chapters SET downloaded = 0;", handle: handle)
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
+            }
+        }
+    }
+
+    func removeMissingFiles(fileManager: FileManager = .default) throws -> Int {
+        let records = try listDownloads()
+        var removed = 0
+
+        for record in records {
+            guard let path = record.localPath,
+                  !fileManager.fileExists(atPath: path) else {
+                continue
+            }
+
+            try remove(
+                sourceID: record.sourceID,
+                sourceMangaID: record.sourceMangaID,
+                sourceChapterID: record.sourceChapterID
+            )
+            removed += 1
+        }
+
+        return removed
+    }
+
     func remove(
         sourceID: String,
         sourceMangaID: String,
