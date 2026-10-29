@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.1.0-build13-backup-validation — 2026-10-29
+
+- Fixed restore rejecting a valid MangaReader12 backup because validation required an exact SQLite `user_version == 1`.
+- Backup validation now checks SQLite `quick_check`, supported schema version range and the complete required MangaReader12 table set.
+- Existing `.mr12backup` files remain compatible; users do not need to recreate the backup.
+- Validation errors now include the specific reason when a backup is genuinely invalid.
+- Advanced app build number to 13.
+
 ## 0.1.0-m7c-m9a-hardening — 2026-10-29
 
 - Preserves locally installed/enabled sources across same-device backup restore when their active source scripts still exist on disk.
