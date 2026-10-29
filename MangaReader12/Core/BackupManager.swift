@@ -282,7 +282,7 @@ final class BackupManager {
 
         guard result == SQLITE_OK, let opened = handle else {
             if let handle = handle { sqlite3_close(handle) }
-            throw BackupManagerError.databaseOpenFailed(result)
+            throw BackupManagerError.databaseOpenFailed(Int(result))
         }
         defer { sqlite3_close(opened) }
 
@@ -300,7 +300,7 @@ final class BackupManager {
         guard executeResult == SQLITE_OK else {
             let text = message.map { String(cString: $0) } ?? "Unknown SQLite error"
             if let message = message { sqlite3_free(message) }
-            throw BackupManagerError.databaseCopyFailed(executeResult, text)
+            throw BackupManagerError.databaseCopyFailed(Int(executeResult), text)
         }
 
         if let message = message { sqlite3_free(message) }
@@ -316,7 +316,7 @@ final class BackupManager {
         )
         guard result == SQLITE_OK, let opened = handle else {
             if let handle = handle { sqlite3_close(handle) }
-            throw BackupManagerError.databaseOpenFailed(result)
+            throw BackupManagerError.databaseOpenFailed(Int(result))
         }
         defer { sqlite3_close(opened) }
 
@@ -348,7 +348,7 @@ final class BackupManager {
         )
         guard sourceResult == SQLITE_OK, let sourceHandle = source else {
             if let source = source { sqlite3_close(source) }
-            throw BackupManagerError.databaseOpenFailed(sourceResult)
+            throw BackupManagerError.databaseOpenFailed(Int(sourceResult))
         }
         defer { sqlite3_close(sourceHandle) }
 
@@ -360,7 +360,7 @@ final class BackupManager {
         )
         guard destinationResult == SQLITE_OK, let destinationHandle = destination else {
             if let destination = destination { sqlite3_close(destination) }
-            throw BackupManagerError.databaseOpenFailed(destinationResult)
+            throw BackupManagerError.databaseOpenFailed(Int(destinationResult))
         }
         defer { sqlite3_close(destinationHandle) }
 
@@ -374,7 +374,7 @@ final class BackupManager {
             let message = sqlite3_errmsg(destinationHandle).map {
                 String(cString: $0)
             } ?? "Unknown SQLite error"
-            throw BackupManagerError.databaseCopyFailed(code, message)
+            throw BackupManagerError.databaseCopyFailed(Int(code), message)
         }
 
         let stepResult = sqlite3_backup_step(backup, -1)
@@ -386,7 +386,7 @@ final class BackupManager {
             let message = sqlite3_errmsg(destinationHandle).map {
                 String(cString: $0)
             } ?? "Unknown SQLite error"
-            throw BackupManagerError.databaseCopyFailed(code, message)
+            throw BackupManagerError.databaseCopyFailed(Int(code), message)
         }
     }
 }
