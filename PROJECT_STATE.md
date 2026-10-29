@@ -3,11 +3,11 @@
 ## Checkpoint
 
 - Project: MangaReader12
-- Phase: **Batch M5C–M6B — progress, history, reader controls/cache and offline chapters**
+- Phase: **Batch M6C–M7B — updates, categories, persistent reader settings and Downloads UI**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (9)**
+- App version: **0.1.0 (10)**
 
 ## Accepted checkpoints
 
@@ -21,67 +21,71 @@
 - Batch M2D–M3A — ACCEPTED (11/11 + repository/runtime flow)
 - Batch M3B–M4A — ACCEPTED (browse/details/chapters)
 - Batch M4B–M5A — ACCEPTED (reader + persistent Library)
-- Batch M5B — **ACCEPTED on physical iOS 12**
-  - PR #10 merged
-  - Merge commit `157aacb0593b717d0186ddc993ac18259aa18456`
-  - Post-merge run `40820967384`: green
-  - Immediate dark/light switching: passed
-  - Main screens + source/details dark rendering: passed
-  - Reader regression: passed
-  - Theme persistence across relaunch: passed
+- Batch M5B — ACCEPTED (custom iOS 12 Dark Mode)
+- Batch M5C–M6B — **ACCEPTED on physical iOS 12**
+  - PR #11 merged
+  - Merge commit `e5a3f2bea37c59864598f4255b4ba7d5d0321eee`
+  - Post-merge run `40822171633`: green
+  - Read state + Histórico: passed
+  - Brightness control + restore: passed
+  - Offline chapter download/relaunch/reopen/removal: passed
+  - Dark Mode + Library regression: passed
 
 ## Implemented in this batch
 
-### M5C — reading progress
-- Reader records the current page into `chapters.last_page_read`
-- Reaching the final page automatically sets `is_read = 1`
-- Manga detail rows display **Lido** or the last page reached
-- Swipe action can manually mark a chapter read/unread
-- No schema migration required; existing M1A fields are used
+### M6C — Library updates
+- Atualizações tab is now functional
+- Manual refresh checks every manga currently in Biblioteca
+- Installed/enabled source runtime is used for chapter refresh
+- Existing persisted chapter IDs are compared with the source chapter list
+- New chapters are synchronized into SQLite
+- `library.last_checked` is updated after successful checks
+- New discoveries are kept in a bounded persistent update feed
+- Tapping an update reopens manga details
+- Controlled demo source 1.2.0 adds **Chapter 2** for deterministic testing
 
-### M5D — history
-- Reader updates the existing `history` table
-- Histórico tab is now functional
-- History is ordered by most recent reading
-- Selecting a history item reloads its installed source and opens manga details
-- Swipe-to-delete removes a history item
+### M7A — categories
+- Uses existing `categories` and `manga_categories` tables
+- Create/delete categories
+- Assign multiple categories to a Library manga
+- Manga rows show category names
+- Filter Biblioteca by category or show all
 
-### M6A — reader controls + cache
-- Existing Páginas/Webtoon selector remains
-- Added brightness slider in reader controls
-- Added UICollectionView page prefetch
-- Memory image cache expanded
-- Added deterministic on-disk reader image cache under Caches
-- Reader can load local `file://` pages for offline chapters
-- Cache currently trims by file count; more sophisticated size/LRU policy remains future work
+### M7B — reader settings
+- Reader mode Páginas/Webtoon persists in UserDefaults
+- Page direction LTR/RTL persists in UserDefaults
+- Direction can be changed in reader controls
+- Ajustes → Leitor exposes mode and direction preferences
+- Reader restores the saved `last_page_read` when reopening a chapter
 
-### M6B — initial offline downloads
-- Chapter download manager stores pages under Application Support
-- Per-page headers and source-domain allowlist are preserved during downloads
-- Download state/progress/local path use the existing `downloads` table
-- Completed download sets `chapters.downloaded = 1`
-- Manga details show **Offline**
-- Swipe action downloads or removes the offline chapter
-- Opening a completed download prefers local files before invoking `source.pages`
+### M7B — Downloads UI
+- Ajustes → Downloads lists persisted download records
+- Shows manga, chapter, state and progress
+- Completed entries can reopen manga details
+- Swipe delete removes local files and persisted download state
 
 ## Regression
 
-Existing **11/11 diagnostics** remain the core regression suite.
+Existing **11/11 diagnostics** remain the core regression suite. Deployment target remains 12.0.
 
 ## Acceptance gate
 
-After green CI, sideload build 9 and validate:
+After green CI, sideload build 10 and validate:
 
-1. Existing 11/11 remains green.
-2. Open Demo Manga → Chapter 1 and move to page 2; return to details.
-3. Chapter 1 should show **Lido** after reaching the final page.
-4. Histórico tab should show Demo Manga / Chapter 1.
-5. Swipe Chapter 1 and toggle **Não lido/Lido**; the row state should change.
-6. Reader brightness slider should visibly change screen brightness and restore after leaving reader.
-7. Swipe Chapter 1 → **Download**; progress should complete and row should show **Offline**.
-8. Close/reopen app; **Offline** should remain.
-9. With the chapter downloaded, open Chapter 1 again; it should load from local files.
-10. Swipe Chapter 1 → **Remover offline**; Offline marker should disappear.
-11. Dark mode and Library should remain functional.
+1. Confirm existing 11/11 remains green.
+2. Explorar → demo repository → update MangaReader12 Demo to **1.2.0**.
+3. Confirm Demo Manga is still in Biblioteca and Chapter 2 is not yet persisted as an update.
+4. Open **Atualizações** and tap refresh.
+5. Result should report **1 capítulo novo** and show Demo Manga → Chapter 2 in the feed.
+6. Open that update and confirm Chapter 2 appears in manga details.
+7. Biblioteca → Categorias → create **Teste**.
+8. Swipe Demo Manga → Categorias → assign **Teste** → Salvar.
+9. Biblioteca → Filtrar → Teste should show Demo Manga; Todos should restore all.
+10. Ajustes → Leitor: set Webtoon, reopen Chapter 1 and confirm Webtoon is selected by default.
+11. Set Páginas + Direita → Esquerda, reopen reader and confirm the saved direction.
+12. Read only to page 2, leave and reopen; reader should resume at the saved page.
+13. Download Chapter 1 and confirm Ajustes → Downloads shows it as Offline.
+14. Remove it from Downloads and confirm the Offline marker disappears in manga details.
+15. Dark Mode and existing History/Library flows remain functional.
 
-If this passes, the next larger block can focus on Updates/new-chapter checks, category management, reader direction/settings persistence and a dedicated Downloads screen.
+If this passes, the next large block can focus on richer Updates scheduling/automation inside iOS limits, backup/restore, migration between sources and reader quality-of-life controls.
