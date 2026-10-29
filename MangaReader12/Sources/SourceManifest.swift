@@ -38,6 +38,15 @@ struct SourceManifest: Codable, Equatable {
             throw ManifestValidationError.invalidScriptURL
         }
 
+        if let icon = icon?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !icon.isEmpty {
+            guard let iconURL = URL(string: icon),
+                  iconURL.scheme?.lowercased() == "https",
+                  iconURL.host != nil else {
+                throw ManifestValidationError.invalidIconURL
+            }
+        }
+
         guard !domains.isEmpty else {
             throw ManifestValidationError.emptyDomains
         }
@@ -74,6 +83,7 @@ enum ManifestValidationError: Error, LocalizedError {
     case unsupportedAPIVersion(Int)
     case invalidVersion
     case invalidScriptURL
+    case invalidIconURL
     case emptyDomains
     case invalidDomain(String)
     case invalidSHA256
@@ -90,6 +100,8 @@ enum ManifestValidationError: Error, LocalizedError {
             return "Source version format is invalid."
         case .invalidScriptURL:
             return "Source script URL must be HTTPS."
+        case .invalidIconURL:
+            return "Source icon URL must be HTTPS."
         case .emptyDomains:
             return "Source manifest has no allowed domains."
         case .invalidDomain(let domain):

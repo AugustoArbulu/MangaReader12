@@ -93,3 +93,15 @@ Remaining physical gate:
 - [ ] Restore the same existing `.mr12backup` successfully on build 14.
 - [ ] Confirm restored Library/category/progress/reader-settings state.
 - [ ] Confirm installed source scripts on the same device remain usable after restore.
+
+
+## Build 15 UI additions
+
+- [ ] Reuse the same existing `.mr12backup` and confirm restore succeeds.
+- [ ] Reader center tap hides the navigation bar, reader controls **and main bottom tab bar**.
+- [ ] Second center tap restores all reader/app chrome.
+- [ ] Leaving reader while chrome is hidden restores the tab bar for the rest of the app.
+- [ ] Refresh demo repository; source icons appear in the repository catalog.
+- [ ] Update MangaReader12 Demo to **1.3.1** and Alt Demo to **1.0.1**.
+- [ ] Installed-source list shows the repository-provided icons after update.
+- [ ] Sources without an icon still show a readable initials fallback.

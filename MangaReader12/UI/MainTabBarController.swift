@@ -114,6 +114,12 @@ final class ExploreViewController: UITableViewController {
 
         title = "Explorar"
         tableView.tableFooterView = UIView()
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 66
+        tableView.register(
+            SourceIconCell.self,
+            forCellReuseIdentifier: SourceIconCell.reuseIdentifier
+        )
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .add,
             target: self,
@@ -274,12 +280,10 @@ final class ExploreViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "ExploreCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
-
         if let error = startupError {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "ExploreError")
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ExploreError")
+            ThemeManager.shared.style(cell: cell)
             cell.textLabel?.text = "Não foi possível abrir o gerenciador"
             cell.detailTextLabel?.text = error.localizedDescription
             cell.detailTextLabel?.numberOfLines = 0
@@ -288,18 +292,32 @@ final class ExploreViewController: UITableViewController {
         }
 
         if indexPath.section == 0 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "RepositoryCell")
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: "RepositoryCell")
+            ThemeManager.shared.style(cell: cell)
+
             let repository = repositories[indexPath.row]
             cell.textLabel?.text = repository.name
             cell.detailTextLabel?.text = repository.url
             cell.detailTextLabel?.numberOfLines = 2
             cell.accessoryType = .disclosureIndicator
-        } else {
-            let source = sources[indexPath.row]
-            cell.textLabel?.text = source.manifest.name
-            cell.detailTextLabel?.text = "v\(source.manifest.version) • \(source.manifest.lang) • \(source.enabled ? "ativada" : "desativada")"
-            cell.accessoryType = source.enabled ? .disclosureIndicator : .none
+            return cell
         }
 
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: SourceIconCell.reuseIdentifier,
+            for: indexPath
+        ) as? SourceIconCell else {
+            return UITableViewCell()
+        }
+
+        let source = sources[indexPath.row]
+        cell.configure(
+            title: source.manifest.name,
+            subtitle: "v\(source.manifest.version) • \(source.manifest.lang) • \(source.enabled ? "ativada" : "desativada")",
+            iconURL: source.manifest.icon
+        )
+        cell.accessoryType = source.enabled ? .disclosureIndicator : .none
         return cell
     }
 
@@ -487,6 +505,12 @@ final class RepositoryCatalogViewController: UITableViewController {
         super.viewDidLoad()
         title = "Sources"
         tableView.tableFooterView = UIView()
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 66
+        tableView.register(
+            SourceIconCell.self,
+            forCellReuseIdentifier: SourceIconCell.reuseIdentifier
+        )
         applyTheme()
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .refresh,
@@ -537,17 +561,22 @@ final class RepositoryCatalogViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "RepositorySourceCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: SourceIconCell.reuseIdentifier,
+            for: indexPath
+        ) as? SourceIconCell else {
+            return UITableViewCell()
+        }
 
         guard let refreshResult = refreshResult else { return cell }
         let manifest = refreshResult.catalog.sources[indexPath.row]
         let plan = refreshResult.plans.first { $0.sourceID == manifest.id }
 
-        cell.textLabel?.text = manifest.name
-        cell.detailTextLabel?.text = "v\(manifest.version) • \(manifest.lang) • \(actionText(plan?.action))"
+        cell.configure(
+            title: manifest.name,
+            subtitle: "v\(manifest.version) • \(manifest.lang) • \(actionText(plan?.action))",
+            iconURL: manifest.icon
+        )
 
         if let action = plan?.action, action == .install || action == .update {
             cell.accessoryType = .disclosureIndicator

@@ -7,7 +7,7 @@
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (14)**
+- App version: **0.1.0 (15)**
 
 ## Accepted physical checkpoints
 
@@ -130,3 +130,23 @@ One consolidated test should validate:
 - Build 14 uses the legacy-compatible `PRAGMA quick_check;` syntax.
 - Validation-query errors now expose the actual SQLite prepare/step code and message.
 - The same previously exported `.mr12backup` remains the required retest file.
+
+
+## Build 15 UI hotfix — reader chrome + source icons
+
+- Carries the build-14 backup restore validation compatibility fix.
+- Reader center tap now hides:
+  - navigation bar,
+  - reader bottom controls,
+  - main app tab bar.
+- All chrome is restored when toggled back on or when leaving the reader.
+- Repository source manifests now validate optional icon URLs as HTTPS.
+- Repository catalog and installed-source lists display source icons with cached loading and initials fallback.
+- Demo repository publishes icons and bumps demo manifests to 1.3.1 / 1.0.1 so existing installs can persist the new icon metadata.
+
+### Build-15 physical gate
+1. Reuse the same `.mr12backup` and confirm restore succeeds.
+2. In reader, center tap must hide both top and bottom app chrome; second tap restores them.
+3. Refresh demo repository and update Demo/Alt Demo to 1.3.1 / 1.0.1.
+4. Confirm extension/source icons appear in repository catalog and installed-source list.
+5. Confirm 11/11, Dark Mode and existing reading flows remain functional.
