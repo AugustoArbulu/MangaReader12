@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build16-backup-wal-reader-immersive — 2026-10-29
+
+- Physical iOS 12 restore exposed `SQLite 14: unable to open database file` while validating the portable snapshot.
+- Root cause is consistent with a portable SQLite snapshot retaining WAL journal mode while being reopened read-only without companion WAL/SHM files.
+- Restore now verifies the SQLite header, reopens the temporary snapshot read-write, forces `PRAGMA temp_store=MEMORY` and `PRAGMA journal_mode=DELETE`, then validates supported schema/tables.
+- Removed `quick_check` from the restore gate so validation no longer depends on read-only WAL/temp-file behavior on iOS 12.
+- Reader now uses native `hidesBottomBarWhenPushed` so the main Biblioteca/Atualizações/Histórico/Explorar/Ajustes tab bar is fully removed during reading and the content extends into that area.
+- Center tap continues to hide/show the reader navigation bar and reader controls.
+- Extension/source icons from build 15 remain unchanged.
+- Advanced app build number to 16.
+
 ## 0.1.0-build15-reader-chrome-source-icons — 2026-10-29
 
 - Reader center tap now hides the bottom tab bar together with the navigation bar and reader controls.

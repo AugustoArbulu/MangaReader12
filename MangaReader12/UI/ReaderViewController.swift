@@ -447,8 +447,6 @@ final class ReaderViewController: UIViewController,
             UIScreen.main.brightness = originalBrightness
             UIApplication.shared.isIdleTimerDisabled = originalIdleTimerDisabled
             navigationController?.setNavigationBarHidden(false, animated: false)
-            tabBarController?.tabBar.isHidden = false
-            tabBarController?.tabBar.alpha = 1
         }
     }
 
@@ -541,26 +539,6 @@ final class ReaderViewController: UIViewController,
             controlsHidden,
             animated: true
         )
-
-        if let tabBar = tabBarController?.tabBar {
-            if controlsHidden {
-                UIView.animate(
-                    withDuration: 0.2,
-                    animations: {
-                        tabBar.alpha = 0
-                    },
-                    completion: { _ in
-                        tabBar.isHidden = true
-                    }
-                )
-            } else {
-                tabBar.isHidden = false
-                tabBar.alpha = 0
-                UIView.animate(withDuration: 0.2) {
-                    tabBar.alpha = 1
-                }
-            }
-        }
     }
 
     private func configureControls() {
