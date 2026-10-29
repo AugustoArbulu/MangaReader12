@@ -255,6 +255,9 @@ final class MangaDetailsViewController: UITableViewController {
     private var chapters: [Chapter] = []
     private var pendingRequests = 0
     private var libraryRepository: LibraryRepository?
+    private var readingRepository: ReadingProgressRepository?
+    private var downloadManager: ChapterDownloadManager?
+    private var chapterStates: [String: ChapterReadingState] = [:]
     private var isInLibrary = false
 
     init(
@@ -304,7 +307,15 @@ final class MangaDetailsViewController: UITableViewController {
             libraryRepository = nil
         }
 
+        readingRepository = try? ReadingProgressRepository.defaultRepository()
+        downloadManager = try? ChapterDownloadManager.defaultManager()
+
         loadDetailsAndChapters()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        reloadReadingStates()
     }
 
     @objc private func refreshTapped() {
@@ -404,6 +415,7 @@ final class MangaDetailsViewController: UITableViewController {
                 switch result {
                 case .success(let chapters):
                     self.chapters = chapters
+                    self.reloadReadingStates()
                     self.tableView.reloadSections(
                         IndexSet(integer: 1),
                         with: .automatic
@@ -518,8 +530,23 @@ final class MangaDetailsViewController: UITableViewController {
             detailParts.append(scanlator)
         }
 
+        if let state = chapterStates[chapter.id] {
+            if state.isRead {
+                detailParts.append("Lido")
+            } else if state.lastPageRead > 0 {
+                detailParts.append("Página (state.lastPageRead + 1)")
+            }
+
+            if state.downloaded {
+                detailParts.append("Offline")
+            }
+
+            cell.accessoryType = state.isRead ? .checkmark : .disclosureIndicator
+        } else {
+            cell.accessoryType = .disclosureIndicator
+        }
+
         cell.detailTextLabel?.text = detailParts.joined(separator: " • ")
-        cell.accessoryType = .disclosureIndicator
         return cell
     }
 
@@ -534,6 +561,30 @@ final class MangaDetailsViewController: UITableViewController {
     }
 
     private func loadPages(for chapter: Chapter) {
+        guard let manga = manga else {
+            showMessage(
+                title: "Leitor",
+                message: "Aguarde os detalhes do mangá terminarem de carregar."
+            )
+            return
+        }
+
+        if let manager = downloadManager,
+           let localPages = try? manager.localPages(
+                sourceID: sourceRecord.manifest.id,
+                mangaID: manga.id,
+                chapterID: chapter.id
+           ),
+           let localPages = localPages,
+           !localPages.isEmpty {
+            openReader(
+                manga: manga,
+                chapter: chapter,
+                pages: localPages
+            )
+            return
+        }
+
         navigationItem.prompt = "Resolvendo páginas…"
 
         runtime.callDecoded(
@@ -552,13 +603,10 @@ final class MangaDetailsViewController: UITableViewController {
                         return
                     }
 
-                    self.navigationController?.pushViewController(
-                        ReaderViewController(
-                            chapter: chapter,
-                            pages: pages,
-                            manifest: self.sourceRecord.manifest
-                        ),
-                        animated: true
+                    self.openReader(
+                        manga: manga,
+                        chapter: chapter,
+                        pages: pages
                     )
 
                 case .failure(let error):
@@ -566,6 +614,181 @@ final class MangaDetailsViewController: UITableViewController {
                 }
             }
         }
+    }
+
+    private func openReader(
+        manga: Manga,
+        chapter: Chapter,
+        pages: [Page]
+    ) {
+        navigationController?.pushViewController(
+            ReaderViewController(
+                sourceID: sourceRecord.manifest.id,
+                manga: manga,
+                chapter: chapter,
+                pages: pages,
+                manifest: sourceRecord.manifest
+            ),
+            animated: true
+        )
+    }
+
+    private func reloadReadingStates() {
+        guard let repository = readingRepository else { return }
+
+        do {
+            chapterStates = try repository.chapterStates(
+                sourceID: sourceRecord.manifest.id,
+                sourceMangaID: summary.id
+            )
+            if isViewLoaded {
+                tableView.reloadData()
+            }
+        } catch {
+            chapterStates = [:]
+        }
+    }
+
+    private func downloadChapter(_ chapter: Chapter) {
+        guard let manga = manga,
+              let manager = downloadManager else {
+            showMessage(
+                title: "Download",
+                message: "O gerenciador de downloads ainda não está disponível."
+            )
+            return
+        }
+
+        navigationItem.prompt = "Preparando download…"
+
+        runtime.callDecoded(
+            "pages",
+            arguments: [chapter.id],
+            as: [Page].self
+        ) { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .success(let pages):
+                guard !pages.isEmpty else {
+                    DispatchQueue.main.async {
+                        self.navigationItem.prompt = nil
+                        self.showError(ReaderError.noPages)
+                    }
+                    return
+                }
+
+                manager.download(
+                    sourceID: self.sourceRecord.manifest.id,
+                    manga: manga,
+                    chapter: chapter,
+                    pages: pages,
+                    manifest: self.sourceRecord.manifest,
+                    progress: { [weak self] value in
+                        self?.navigationItem.prompt = String(
+                            format: "Baixando… %.0f%%",
+                            value * 100
+                        )
+                    },
+                    completion: { [weak self] downloadResult in
+                        DispatchQueue.main.async {
+                            guard let self = self else { return }
+                            self.navigationItem.prompt = nil
+
+                            switch downloadResult {
+                            case .success:
+                                self.reloadReadingStates()
+                                self.showMessage(
+                                    title: "Download concluído",
+                                    message: "\(chapter.name) está disponível offline."
+                                )
+
+                            case .failure(let error):
+                                self.showError(error)
+                            }
+                        }
+                    }
+                )
+
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.navigationItem.prompt = nil
+                    self.showError(error)
+                }
+            }
+        }
+    }
+
+    private func removeDownload(_ chapter: Chapter) {
+        guard let manga = manga,
+              let manager = downloadManager else {
+            return
+        }
+
+        do {
+            try manager.remove(
+                sourceID: sourceRecord.manifest.id,
+                mangaID: manga.id,
+                chapterID: chapter.id
+            )
+            reloadReadingStates()
+            showMessage(
+                title: "Download removido",
+                message: "\(chapter.name) foi removido do armazenamento offline."
+            )
+        } catch {
+            showError(error)
+        }
+    }
+
+    override func tableView(
+        _ tableView: UITableView,
+        editActionsForRowAt indexPath: IndexPath
+    ) -> [UITableViewRowAction]? {
+        guard indexPath.section == 1,
+              let manga = manga else {
+            return nil
+        }
+
+        let chapter = chapters[indexPath.row]
+        let state = chapterStates[chapter.id]
+        let read = state?.isRead ?? false
+
+        let readAction = UITableViewRowAction(
+            style: .normal,
+            title: read ? "Não lido" : "Lido"
+        ) { [weak self] _, _ in
+            guard let self = self,
+                  let repository = self.readingRepository else {
+                return
+            }
+
+            do {
+                try repository.markRead(
+                    sourceID: self.sourceRecord.manifest.id,
+                    manga: manga,
+                    chapter: chapter,
+                    isRead: !read
+                )
+                self.reloadReadingStates()
+            } catch {
+                self.showError(error)
+            }
+        }
+
+        let downloaded = state?.downloaded ?? false
+        let downloadAction = UITableViewRowAction(
+            style: downloaded ? .destructive : .normal,
+            title: downloaded ? "Remover offline" : "Download"
+        ) { [weak self] _, _ in
+            if downloaded {
+                self?.removeDownload(chapter)
+            } else {
+                self?.downloadChapter(chapter)
+            }
+        }
+
+        return [downloadAction, readAction]
     }
 
     private func format(_ number: Double) -> String {
