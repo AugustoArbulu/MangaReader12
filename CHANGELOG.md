@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.1.0-m7c-m9a-hardening — 2026-10-29
+
+- Preserves locally installed/enabled sources across same-device backup restore when their active source scripts still exist on disk.
+- Clears excluded offline chapter files during restore so the post-restore download database and filesystem do not disagree.
+- Automatically refreshes persisted Library cover/metadata after manga details + chapters finish loading.
+- Advanced app build number to 12.
+
 ## 0.1.0-m7c-m9a-visual-backup-migration-qol — 2026-10-29
 
 - Added cover images from extension-provided `cover` URLs across source browse, Library, History, Updates, Downloads and manga details.
