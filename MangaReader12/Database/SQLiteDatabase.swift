@@ -2,6 +2,8 @@ import Foundation
 import SQLite3
 
 final class SQLiteDatabase {
+    static let currentSchemaVersion = 1
+
     private let queue = DispatchQueue(label: "com.mangareader12.database")
     private let path: String
     private var handle: OpaquePointer?
@@ -92,12 +94,12 @@ final class SQLiteDatabase {
 
     private func migrateUnlocked() throws {
         let version = try userVersionUnlocked()
-        guard version < 1 else { return }
+        guard version < Self.currentSchemaVersion else { return }
 
         try executeUnlocked("BEGIN IMMEDIATE TRANSACTION;")
         do {
             try executeUnlocked(Self.schemaV1)
-            try executeUnlocked("PRAGMA user_version = 1;")
+            try executeUnlocked("PRAGMA user_version = \(Self.currentSchemaVersion);")
             try executeUnlocked("COMMIT;")
         } catch {
             try? executeUnlocked("ROLLBACK;")
