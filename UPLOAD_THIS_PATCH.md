@@ -1,26 +1,23 @@
-# Upload this patch — M2B
+# Upload this patch — M2C
 
-This ZIP is an overlay patch for `main` after accepted M2A.
+This checkpoint is now being applied directly through the connected GitHub integration.
 
-Upload the extracted contents to the repository root with GitHub's web upload flow.
+Manual fallback PR title:
 
-Recommended pull request title:
+`Milestone 2C - atomic source install and rollback`
 
-`Milestone 2B - repository transport and integrity`
-
-Expected changed/new paths:
+Expected M2C changes include:
 
 - `MangaReader12/Sources/SourceManifest.swift`
-- `MangaReader12/Networking/HTTPClient.swift`
-- `MangaReader12/Database/SQLiteDatabase.swift`
 - `MangaReader12/Core/CoreDiagnostics.swift`
 - `MangaReader12/RootViewController.swift`
 - `MangaReader12/Info.plist`
+- `MangaReader12.xcodeproj/project.pbxproj`
 - `PROJECT_STATE.md`
 - `CHANGELOG.md`
 - `MILESTONE_2B_REPORT.md`
+- `MILESTONE_2C_REPORT.md`
 - `docs/MILESTONE_2B_ACCEPTANCE.md`
-- `UPLOAD_THIS_PATCH.md`
-- `SHA256SUMS_M2B.txt`
+- `docs/MILESTONE_2C_ACCEPTANCE.md`
 
 Do not merge until the PR CI is green.

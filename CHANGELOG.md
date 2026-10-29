@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-m2c-atomic-source-install — 2026-10-29
+
+- Accepted M2B after green post-merge CI and 8/8 diagnostics on a physical iOS 12 device.
+- Added staged on-disk source installation.
+- Added active/previous version preservation for source updates.
+- Added rollback support that swaps current and previous source versions.
+- Added integrity verification before installed source files are touched.
+- Added failure restoration so a promotion error does not destroy the prior working version.
+- Added a ninth on-device diagnostic for source install/update/rollback.
+- Advanced app build number to 4.
+
 ## 0.1.0-m2b-repository-transport — 2026-09-05
 
 - Accepted M2A after green CI and 7/7 green diagnostics on a physical iOS 12 device.

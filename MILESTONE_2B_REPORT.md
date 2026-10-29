@@ -1,5 +1,7 @@
 # Milestone 2B Report — Repository Transport + Integrity
 
+**Status: ACCEPTED — CI + PHYSICAL iOS 12 VALIDATED**
+
 Date: 2026-09-05
 
 ## Goal
@@ -50,3 +52,12 @@ No SwiftUI, Combine, required async/await, SceneDelegate, or CryptoKit dependenc
 4. IPA packaging succeeds.
 5. Physical iOS 12 device launches build 3.
 6. All 8/8 diagnostics are green.
+
+
+## Acceptance evidence — 2026-10-29
+
+- PR #5 merged to `main`
+- Merge commit: `0b8d85ca6600e7018e68d649ee70ae308839ba2c`
+- Post-merge workflow run: `33971320506` — success
+- Physical iOS 12 launch: success
+- On-device diagnostics: **8/8 green**
