@@ -20,6 +20,7 @@ final class LibraryViewController: UITableViewController {
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 64
+        applyTheme()
 
         do {
             repository = try LibraryRepository.defaultRepository()
@@ -57,7 +58,7 @@ final class LibraryViewController: UITableViewController {
     private func emptyLabel() -> UIView {
         let label = UILabel()
         label.text = "Sua biblioteca está vazia.\nAdicione um mangá pela tela de detalhes."
-        label.textColor = .darkGray
+        label.textColor = ThemeManager.shared.palette.secondaryText
         label.textAlignment = .center
         label.numberOfLines = 0
         return label
@@ -77,6 +78,7 @@ final class LibraryViewController: UITableViewController {
         let identifier = "LibraryCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         if let error = startupError {
             cell.textLabel?.text = "Erro ao abrir Biblioteca"
@@ -195,5 +197,14 @@ final class LibraryViewController: UITableViewController {
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+
+extension LibraryViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.backgroundView?.backgroundColor = ThemeManager.shared.palette.background
+        tableView.reloadData()
     }
 }
