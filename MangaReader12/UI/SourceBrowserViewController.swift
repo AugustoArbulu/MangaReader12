@@ -534,7 +534,7 @@ final class MangaDetailsViewController: UITableViewController {
             if state.isRead {
                 detailParts.append("Lido")
             } else if state.lastPageRead > 0 {
-                detailParts.append("Página (state.lastPageRead + 1)")
+                detailParts.append("Página \(state.lastPageRead + 1)")
             }
 
             if state.downloaded {
@@ -575,7 +575,6 @@ final class MangaDetailsViewController: UITableViewController {
                 mangaID: manga.id,
                 chapterID: chapter.id
            ),
-           let localPages = localPages,
            !localPages.isEmpty {
             openReader(
                 manga: manga,
