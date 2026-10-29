@@ -228,10 +228,15 @@ final class BackupManager {
         try databaseData.write(to: temporaryDatabase, options: .atomic)
         try validateDatabase(at: temporaryDatabase)
 
+        let preservedSources = try installedSourcesThatStillHaveScripts()
+        let liveURL = try liveDatabaseURL()
+
         try copyDatabase(
             from: temporaryDatabase,
-            to: try liveDatabaseURL()
+            to: liveURL
         )
+        try restorePreservedSources(preservedSources)
+        try clearExcludedDownloadFiles()
 
         var restoredCount = 0
         for (key, value) in envelope.preferences {
@@ -248,6 +253,64 @@ final class BackupManager {
         return BackupRestoreReport(
             createdAt: envelope.createdAt,
             restoredPreferenceCount: restoredCount
+        )
+    }
+
+    private func installedSourcesThatStillHaveScripts() throws -> [InstalledSourceRecord] {
+        let database = try SQLiteDatabase.defaultDatabase()
+        defer { database.close() }
+
+        try database.openAndMigrate()
+        let repository = SourceRepository(database: database)
+        let records = try repository.list()
+        let installer = try SourceScriptInstaller.defaultInstaller()
+
+        return records.filter { record in
+            return (try? installer.active(
+                sourceID: record.manifest.id
+            )) != nil
+        }
+    }
+
+    private func restorePreservedSources(
+        _ records: [InstalledSourceRecord]
+    ) throws {
+        guard !records.isEmpty else { return }
+
+        let database = try SQLiteDatabase.defaultDatabase()
+        defer { database.close() }
+
+        try database.openAndMigrate()
+        let repository = SourceRepository(database: database)
+
+        for record in records {
+            try repository.save(
+                manifest: record.manifest,
+                enabled: record.enabled
+            )
+        }
+    }
+
+    private func clearExcludedDownloadFiles() throws {
+        guard let base = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw BackupManagerError.applicationSupportUnavailable
+        }
+
+        let downloads = base
+            .appendingPathComponent("MangaReader12", isDirectory: true)
+            .appendingPathComponent("Downloads", isDirectory: true)
+
+        if fileManager.fileExists(atPath: downloads.path) {
+            try fileManager.removeItem(at: downloads)
+        }
+
+        try fileManager.createDirectory(
+            at: downloads,
+            withIntermediateDirectories: true,
+            attributes: nil
         )
     }
 
