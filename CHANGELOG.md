@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-m3b-m4a-source-browse — 2026-10-29
+
+- Accepted the M2D–M3A batch after green Xcode 15.4 CI and full physical iOS 12 validation: 11/11 diagnostics, demo repository install, Runtime OK, enable/disable, and expected no-previous-version rollback handling.
+- Added installed-source browsing UI.
+- Added popular manga loading with pagination support.
+- Added per-source search.
+- Added manga details screen backed by Source API v1.
+- Added chapter listing.
+- Added chapter page resolution preview as the bridge into the future reader.
+- Advanced app build number to 6.
+
 ## 0.1.0-m2d-m3a-batch — 2026-10-29
 
 - Accepted M2C after green post-merge Xcode 15.4 CI and 9/9 diagnostics on physical iOS 12.

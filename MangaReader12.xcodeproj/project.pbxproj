@@ -22,6 +22,7 @@
 		A1000000000000000000000D /* RepositoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* RepositoryManager.swift */; };
 		A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* InstalledSourceRuntime.swift */; };
 		A1000000000000000000000F /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* MainTabBarController.swift */; };
+		A10000000000000000000010 /* SourceBrowserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* SourceBrowserViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		A2000000000000000000000E /* RepositoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryManager.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* InstalledSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledSourceRuntime.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* MainTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabBarController.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* SourceBrowserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBrowserViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +141,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000010 /* MainTabBarController.swift */,
+				A20000000000000000000011 /* SourceBrowserViewController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -233,6 +236,7 @@
 				A1000000000000000000000D /* RepositoryManager.swift in Sources */,
 				A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */,
 				A1000000000000000000000F /* MainTabBarController.swift in Sources */,
+				A10000000000000000000010 /* SourceBrowserViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,7 +282,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -300,7 +304,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;

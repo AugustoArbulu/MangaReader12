@@ -1,5 +1,7 @@
 # Batch M2D–M3A Report
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Why this is a larger batch
@@ -56,3 +58,16 @@ No SwiftUI, Combine, SceneDelegate, CryptoKit, or required async/await was intro
 ## Next physical checkpoint
 
 Build 5 should be tested for both diagnostics and actual UI behavior. A passing checkpoint requires 11/11 plus successful installation/runtime loading of the controlled demo source.
+
+
+## Acceptance evidence
+
+- PR #7 merged
+- Merge commit: `b2d06e38cedfe90286a3f37a9b85a62ece373558`
+- Post-merge run `40816795777`: success
+- Physical iOS 12: **11/11**
+- Demo repository loaded successfully
+- Demo source installed successfully
+- Installed runtime reported **Runtime OK**
+- Enable/disable worked
+- Rollback without a previous version produced the expected warning
