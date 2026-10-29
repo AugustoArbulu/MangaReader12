@@ -219,6 +219,15 @@ final class DownloadsViewController: UITableViewController {
 
     private func removeDownload(_ record: DownloadListRecord) {
         guard let manager = manager else { return }
+        let key = [record.sourceID, record.sourceMangaID, record.sourceChapterID]
+            .joined(separator: "\u{1F}")
+        guard !retryInFlight.contains(key) else {
+            showMessage(
+                title: "Nova tentativa em andamento",
+                message: "Espere a nova tentativa terminar antes de remover o capítulo."
+            )
+            return
+        }
         do {
             // Re-read current state because a download might have started
             // after the table was rendered.
