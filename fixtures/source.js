@@ -4,7 +4,7 @@ var source = {
       id: "fixture.localdemo",
       name: "MangaReader12 Demo",
       lang: "en",
-      version: "1.1.0"
+      version: "1.2.0"
     };
   },
 
@@ -44,7 +44,7 @@ var source = {
       cover: null,
       author: "MangaReader12",
       artist: "MangaReader12",
-      description: "Reader + library fixture for iOS 12 validation.",
+      description: "Updates + categories + reader settings fixture for iOS 12 validation.",
       status: "ongoing",
       genres: ["Demo", "Reader"],
       url: "https://example.com/manga/" + mangaId
@@ -53,6 +53,16 @@ var source = {
 
   chapters: function(mangaId) {
     return [
+      {
+        id: "demo-c2",
+        name: "Chapter 2",
+        number: 2,
+        volume: 1,
+        date: "2026-10-29",
+        scanlator: "MangaReader12",
+        language: "en",
+        url: "https://example.com/chapter/demo-c2"
+      },
       {
         id: "demo-c1",
         name: "Chapter 1",
