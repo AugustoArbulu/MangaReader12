@@ -7,7 +7,7 @@
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (12)**
+- App version: **0.1.0 (13)**
 
 ## Accepted physical checkpoints
 
@@ -110,3 +110,13 @@ One consolidated test should validate:
 8. Data & Storage: size rows load; reader/cover cache cleanup works; reindex downloads completes; delete-all-downloads clears Offline state without deleting Library/history.
 9. Automatic updates toggle can be enabled/disabled. Actual background execution cannot be deterministically forced because iOS 12 schedules Background Fetch.
 10. Dark Mode, History, Library, reader and 11/11 diagnostics remain functional.
+
+
+## Build 13 hotfix — backup validation
+
+- Physical build 12 report: everything worked except backup restore.
+- Failure: generated `.mr12backup` was rejected by the restore validator.
+- Root cause: restore validation required exact `PRAGMA user_version == 1`, which is unnecessarily brittle for a structurally valid MangaReader12 SQLite snapshot.
+- Fix: validate `PRAGMA quick_check`, accept non-future schema versions, and require the full MangaReader12 table set.
+- Existing backups remain format-version 1 and should restore without regeneration.
+- Do not mark M7C–M9A fully accepted until the build-13 restore retest passes.

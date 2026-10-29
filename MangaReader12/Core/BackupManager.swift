@@ -105,7 +105,7 @@ enum BackupManagerError: Error, LocalizedError {
     case unsupportedVersion(Int)
     case databaseOpenFailed(Int)
     case databaseCopyFailed(Int, String)
-    case databaseValidationFailed
+    case databaseValidationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -119,8 +119,8 @@ enum BackupManagerError: Error, LocalizedError {
             return "Could not open the backup database (SQLite \(code))."
         case .databaseCopyFailed(let code, let message):
             return "Could not copy the backup database (SQLite \(code)): \(message)"
-        case .databaseValidationFailed:
-            return "The backup database failed validation."
+        case .databaseValidationFailed(let reason):
+            return "The backup database failed validation: \(reason)"
         }
     }
 }
@@ -383,20 +383,131 @@ final class BackupManager {
         }
         defer { sqlite3_close(opened) }
 
+        let quickCheck = try singleTextValue(
+            sql: "PRAGMA quick_check(1);",
+            handle: opened
+        )
+
+        guard quickCheck.lowercased() == "ok" else {
+            throw BackupManagerError.databaseValidationFailed(
+                "SQLite quick_check returned '\(quickCheck)'."
+            )
+        }
+
+        let version = try singleIntegerValue(
+            sql: "PRAGMA user_version;",
+            handle: opened
+        )
+
+        guard version >= 0,
+              version <= SQLiteDatabase.currentSchemaVersion else {
+            throw BackupManagerError.databaseValidationFailed(
+                "schema version \(version) is newer than supported version \(SQLiteDatabase.currentSchemaVersion)."
+            )
+        }
+
+        let requiredTables: Set<String> = [
+            "manga",
+            "library",
+            "chapters",
+            "categories",
+            "manga_categories",
+            "history",
+            "downloads",
+            "sources",
+            "repositories",
+            "source_settings",
+            "migration_map"
+        ]
+
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
 
         guard sqlite3_prepare_v2(
             opened,
-            "PRAGMA user_version;",
+            "SELECT name FROM sqlite_master WHERE type = 'table';",
+            -1,
+            &statement,
+            nil
+        ) == SQLITE_OK else {
+            throw BackupManagerError.databaseValidationFailed(
+                "could not inspect the SQLite schema."
+            )
+        }
+
+        var tables = Set<String>()
+
+        while true {
+            let step = sqlite3_step(statement)
+
+            if step == SQLITE_DONE {
+                break
+            }
+
+            guard step == SQLITE_ROW,
+                  let rawName = sqlite3_column_text(statement, 0) else {
+                throw BackupManagerError.databaseValidationFailed(
+                    "could not read the SQLite table list."
+                )
+            }
+
+            tables.insert(String(cString: rawName))
+        }
+
+        let missing = requiredTables.subtracting(tables).sorted()
+
+        guard missing.isEmpty else {
+            throw BackupManagerError.databaseValidationFailed(
+                "missing required table(s): \(missing.joined(separator: ", "))."
+            )
+        }
+    }
+
+    private func singleTextValue(
+        sql: String,
+        handle: OpaquePointer
+    ) throws -> String {
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(
+            handle,
+            sql,
             -1,
             &statement,
             nil
         ) == SQLITE_OK,
         sqlite3_step(statement) == SQLITE_ROW,
-        sqlite3_column_int(statement, 0) == 1 else {
-            throw BackupManagerError.databaseValidationFailed
+        let rawValue = sqlite3_column_text(statement, 0) else {
+            throw BackupManagerError.databaseValidationFailed(
+                "could not execute validation query."
+            )
         }
+
+        return String(cString: rawValue)
+    }
+
+    private func singleIntegerValue(
+        sql: String,
+        handle: OpaquePointer
+    ) throws -> Int {
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(
+            handle,
+            sql,
+            -1,
+            &statement,
+            nil
+        ) == SQLITE_OK,
+        sqlite3_step(statement) == SQLITE_ROW else {
+            throw BackupManagerError.databaseValidationFailed(
+                "could not read the database schema version."
+            )
+        }
+
+        return Int(sqlite3_column_int(statement, 0))
     }
 
     private func copyDatabase(from sourceURL: URL, to destinationURL: URL) throws {
