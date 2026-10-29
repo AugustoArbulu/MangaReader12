@@ -5,7 +5,7 @@
     {
       "id": "fixture.localdemo",
       "name": "MangaReader12 Demo",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "lang": "en",
       "author": "MangaReader12",
       "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/source.js",
@@ -14,7 +14,7 @@
       "minAppVersion": "0.1.0",
       "domains": ["example.com", "raw.githubusercontent.com"],
       "nsfw": false,
-      "sha256": "1256a35e9db02a95b57a3a9826247df6054a6088dfa1ee2bcbd2845f2ef71645"
+      "sha256": "d41185866e2422a5152ab5cbb8c6ca54eec7177238b54776b0a957aabae756fe"
     }
   ]
 }

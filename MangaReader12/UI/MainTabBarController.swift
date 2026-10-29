@@ -18,10 +18,7 @@ final class MainTabBarController: UITabBarController {
             ),
             makeNavigation(
                 title: "Atualizações",
-                root: PlaceholderViewController(
-                    titleText: "Atualizações",
-                    message: "Novos capítulos e atualizações da biblioteca aparecerão aqui."
-                )
+                root: UpdatesViewController()
             ),
             makeNavigation(
                 title: "Histórico",
@@ -666,7 +663,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 3
+        return 5
     }
 
     override func tableView(
@@ -695,6 +692,20 @@ final class SettingsViewController: UITableViewController {
             cell.selectionStyle = .none
 
         case 1:
+            cell.textLabel?.text = "Leitor"
+            cell.detailTextLabel?.text = "Modo padrão e direção das páginas"
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+
+        case 2:
+            cell.textLabel?.text = "Downloads"
+            cell.detailTextLabel?.text = "Capítulos salvos para leitura offline"
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+
+        case 3:
             cell.textLabel?.text = "Diagnósticos"
             cell.detailTextLabel?.text = "Compatibilidade iOS 12 e subsistemas internos"
             cell.accessoryType = .disclosureIndicator
@@ -703,7 +714,7 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M5C–M6B • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M6C–M7B • iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
@@ -722,11 +733,27 @@ final class SettingsViewController: UITableViewController {
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        if indexPath.row == 1 {
+        switch indexPath.row {
+        case 1:
+            navigationController?.pushViewController(
+                ReaderSettingsViewController(),
+                animated: true
+            )
+
+        case 2:
+            navigationController?.pushViewController(
+                DownloadsViewController(),
+                animated: true
+            )
+
+        case 3:
             navigationController?.pushViewController(
                 RootViewController(),
                 animated: true
             )
+
+        default:
+            break
         }
     }
 }

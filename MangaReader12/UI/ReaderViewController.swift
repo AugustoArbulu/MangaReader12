@@ -301,10 +301,14 @@ final class ReaderViewController: UIViewController,
     private let controlsView = UIView()
     private let brightnessSlider = UISlider()
     private let brightnessLabel = UILabel()
+    private let directionButton = UIButton(type: .system)
 
-    private var displayMode: ReaderDisplayMode = .pages
+    private var displayMode: ReaderDisplayMode = ReaderPreferences.shared.displayMode
+    private var pageDirection: ReaderPageDirection = ReaderPreferences.shared.pageDirection
     private var aspectRatios: [Int: CGFloat] = [:]
     private var lastPersistedIndex = -1
+    private var initialPageIndex = 0
+    private var didRestoreInitialPage = false
 
     init(
         sourceID: String,
@@ -335,14 +339,14 @@ final class ReaderViewController: UIViewController,
 
         layout.minimumLineSpacing = 0
         layout.minimumInteritemSpacing = 0
-        layout.scrollDirection = .horizontal
+        layout.scrollDirection = displayMode == .pages ? .horizontal : .vertical
 
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .black
         collectionView.dataSource = self
         collectionView.prefetchDataSource = self
         collectionView.delegate = self
-        collectionView.isPagingEnabled = true
+        collectionView.isPagingEnabled = displayMode == .pages
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
         collectionView.register(
@@ -369,11 +373,15 @@ final class ReaderViewController: UIViewController,
             brightnessLabel.widthAnchor.constraint(equalToConstant: 58),
 
             brightnessSlider.leadingAnchor.constraint(equalTo: brightnessLabel.trailingAnchor, constant: 8),
-            brightnessSlider.trailingAnchor.constraint(equalTo: controlsView.trailingAnchor, constant: -16),
-            brightnessSlider.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor)
+            brightnessSlider.trailingAnchor.constraint(equalTo: directionButton.leadingAnchor, constant: -10),
+            brightnessSlider.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor),
+
+            directionButton.trailingAnchor.constraint(equalTo: controlsView.trailingAnchor, constant: -12),
+            directionButton.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor),
+            directionButton.widthAnchor.constraint(equalToConstant: 66)
         ])
 
-        modeControl.selectedSegmentIndex = ReaderDisplayMode.pages.rawValue
+        modeControl.selectedSegmentIndex = displayMode.rawValue
         modeControl.addTarget(
             self,
             action: #selector(modeChanged),
@@ -381,13 +389,35 @@ final class ReaderViewController: UIViewController,
         )
         navigationItem.titleView = modeControl
 
+        applyPageDirection()
+        loadInitialProgress()
         updatePagePrompt()
-        persistProgress(index: 0)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         layout.invalidateLayout()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        guard !didRestoreInitialPage,
+              !pages.isEmpty else {
+            return
+        }
+
+        didRestoreInitialPage = true
+        let index = min(max(0, initialPageIndex), pages.count - 1)
+
+        collectionView.layoutIfNeeded()
+        collectionView.scrollToItem(
+            at: IndexPath(item: index, section: 0),
+            at: displayMode == .pages ? .centeredHorizontally : .top,
+            animated: false
+        )
+        updatePagePrompt()
+        persistProgress(index: index)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -419,6 +449,16 @@ final class ReaderViewController: UIViewController,
             for: .valueChanged
         )
         controlsView.addSubview(brightnessSlider)
+
+        directionButton.translatesAutoresizingMaskIntoConstraints = false
+        directionButton.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        directionButton.addTarget(
+            self,
+            action: #selector(directionTapped),
+            for: .touchUpInside
+        )
+        controlsView.addSubview(directionButton)
+        updateDirectionButton()
     }
 
     @objc private func brightnessChanged() {
@@ -426,15 +466,89 @@ final class ReaderViewController: UIViewController,
     }
 
     @objc private func modeChanged() {
+        let current = currentPageIndex()
         displayMode = ReaderDisplayMode(rawValue: modeControl.selectedSegmentIndex) ?? .pages
+        ReaderPreferences.shared.displayMode = displayMode
 
         layout.scrollDirection = displayMode == .pages ? .horizontal : .vertical
         collectionView.isPagingEnabled = displayMode == .pages
-        collectionView.setContentOffset(.zero, animated: false)
+        applyPageDirection()
         collectionView.reloadData()
         layout.invalidateLayout()
-        updatePagePrompt()
-        persistProgress(index: 0)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  current < self.pages.count else {
+                return
+            }
+
+            self.collectionView.scrollToItem(
+                at: IndexPath(item: current, section: 0),
+                at: self.displayMode == .pages ? .centeredHorizontally : .top,
+                animated: false
+            )
+            self.updatePagePrompt()
+        }
+    }
+
+    @objc private func directionTapped() {
+        guard displayMode == .pages else { return }
+
+        let current = currentPageIndex()
+        pageDirection = pageDirection == .leftToRight
+            ? .rightToLeft
+            : .leftToRight
+        ReaderPreferences.shared.pageDirection = pageDirection
+
+        applyPageDirection()
+        collectionView.reloadData()
+        layout.invalidateLayout()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  current < self.pages.count else {
+                return
+            }
+
+            self.collectionView.scrollToItem(
+                at: IndexPath(item: current, section: 0),
+                at: .centeredHorizontally,
+                animated: false
+            )
+            self.updatePagePrompt()
+        }
+    }
+
+    private func applyPageDirection() {
+        collectionView.semanticContentAttribute = pageDirection == .rightToLeft
+            ? .forceRightToLeft
+            : .forceLeftToRight
+        directionButton.isEnabled = displayMode == .pages
+        directionButton.alpha = displayMode == .pages ? 1 : 0.45
+        updateDirectionButton()
+    }
+
+    private func updateDirectionButton() {
+        directionButton.setTitle(
+            pageDirection == .rightToLeft ? "← RTL" : "LTR →",
+            for: .normal
+        )
+    }
+
+    private func loadInitialProgress() {
+        guard let repository = progressRepository else { return }
+
+        do {
+            if let state = try repository.chapterState(
+                sourceID: sourceID,
+                sourceMangaID: manga.id,
+                sourceChapterID: chapter.id
+            ) {
+                initialPageIndex = state.lastPageRead
+            }
+        } catch {
+            initialPageIndex = 0
+        }
     }
 
     func collectionView(
@@ -531,11 +645,16 @@ final class ReaderViewController: UIViewController,
         guard !pages.isEmpty else { return 0 }
 
         if displayMode == .pages {
-            let width = max(1, collectionView.bounds.width)
-            return min(
-                pages.count - 1,
-                max(0, Int(round(collectionView.contentOffset.x / width)))
+            let center = CGPoint(
+                x: collectionView.contentOffset.x + collectionView.bounds.width / 2,
+                y: collectionView.contentOffset.y + collectionView.bounds.height / 2
             )
+
+            if let indexPath = collectionView.indexPathForItem(at: center) {
+                return indexPath.item
+            }
+
+            return 0
         }
 
         let visible = collectionView.indexPathsForVisibleItems
