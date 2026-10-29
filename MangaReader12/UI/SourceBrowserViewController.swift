@@ -656,14 +656,18 @@ final class MangaDetailsViewController: UITableViewController {
         chapter: Chapter,
         pages: [Page]
     ) {
+        let reader = ReaderViewController(
+            sourceID: sourceRecord.manifest.id,
+            manga: manga,
+            chapter: chapter,
+            pages: pages,
+            manifest: sourceRecord.manifest
+        )
+
+        reader.hidesBottomBarWhenPushed = true
+
         navigationController?.pushViewController(
-            ReaderViewController(
-                sourceID: sourceRecord.manifest.id,
-                manga: manga,
-                chapter: chapter,
-                pages: pages,
-                manifest: sourceRecord.manifest
-            ),
+            reader,
             animated: true
         )
     }
