@@ -1,5 +1,7 @@
 # Batch M4B–M5A Report
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Goal
@@ -40,3 +42,10 @@ UIKit, URLSession/Foundation, SQLite and callbacks only. Deployment target remai
 ## Next physical checkpoint
 
 Build 7 should validate reader page mode, zoom, Webtoon mode and Library persistence in one pass.
+
+## Acceptance evidence
+
+- PR #9 merged
+- Merge commit: `eb029f628ce5947709b5f448a602c926976a49ff`
+- Post-merge run `40819659824`: success
+- Physical iOS 12: all requested reader and persistent Library checks passed
