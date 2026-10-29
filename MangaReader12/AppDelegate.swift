@@ -9,9 +9,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         let window = UIWindow(frame: UIScreen.main.bounds)
-        let root = RootViewController()
-        let navigation = UINavigationController(rootViewController: root)
-        window.rootViewController = navigation
+        window.rootViewController = MainTabBarController()
         window.makeKeyAndVisible()
         self.window = window
         return true

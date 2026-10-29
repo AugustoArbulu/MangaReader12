@@ -3,81 +3,89 @@
 ## Checkpoint
 
 - Project: MangaReader12 (provisional name)
-- Phase: **Milestone 2 — Repositories / Batch M2C**
+- Phase: **Batch M2D–M3A — repository lifecycle + first Mihon-style UI**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (4)**
+- App version: **0.1.0 (5)**
 
-## Milestone 0 validation — COMPLETE
+## Accepted checkpoints
 
-Milestone 0 passed end-to-end on 2026-09-05.
+- Milestone 0 — COMPLETE
+- Milestone 1A — ACCEPTED (4/4 physical iOS 12)
+- Milestone 1B — ACCEPTED (5/5 physical iOS 12)
+- Milestone 1C — ACCEPTED (6/6 physical iOS 12)
+- Milestone 2A — ACCEPTED (7/7 physical iOS 12)
+- Milestone 2B — ACCEPTED (8/8 physical iOS 12)
+- Milestone 2C — **ACCEPTED on 2026-10-29**
+  - PR #6 merged
+  - Merge commit `a32fa264d4dfae868880773a7bf30ac078972910`
+  - Post-merge run `40815165763`: green
+  - Physical iOS 12 diagnostics: **9/9 green**
 
-## Milestone 1A validation — ACCEPTED
+## Implemented in this larger batch
 
-- PR #1 CI: green
-- Post-merge `main` run `33967662348`: green
-- Physical iOS 12 diagnostics: **4/4 green**
+### M2D — repository lifecycle coordination
+- Catalog refresh → install/update planning
+- Script download → SHA-256 verification → atomic installer
+- SQLite source metadata save after filesystem promotion
+- Rollback/cleanup path when persistence fails
+- Enable/disable installed source state
+- Remove source with best-effort database restoration on filesystem failure
+- Repository/source listing APIs
 
-## Milestone 1B validation — ACCEPTED
+### M2E — installed source runtime
+- Reads `active/manifest.json` + `active/source.js`
+- Creates JavaScriptCore runtime from the installed manifest
+- Loads the installed script
+- Validates all six Source API v1 methods before exposing the runtime
 
-- PR #2 CI: green
-- Post-merge `main` run `33968911048`: green
-- Physical iOS 12 diagnostics: **5/5 green**
+### M2F — installed source management foundation
+- Installed-source listing
+- Enable/disable
+- Rollback
+- Remove
+- Repository refresh and install/update actions
 
-## Milestone 1C validation — ACCEPTED
+### M3A — first real UIKit app shell
+- Tab bar: Biblioteca / Atualizações / Histórico / Explorar / Ajustes
+- Explorar lists repositories and installed sources
+- Add custom HTTPS repository URL
+- Built-in controlled MangaReader12 demo repository option
+- Repository catalog screen with install/update state
+- Installed-source action sheet with enable/disable, rollback, remove and runtime test
+- Diagnostics moved into Ajustes and rendered as a scrollable table
 
-- PR #3 CI: green
-- Post-merge `main` run `33969638301`: green
-- Physical iOS 12 diagnostics: **6/6 green**
+## Diagnostics
 
-## Milestone 2A validation — ACCEPTED
+The batch expands the on-device suite from **9 to 11 checks**:
 
-- PR #4 CI: green
-- Post-merge `main` run `33970456712`: green
-- Physical iOS 12 diagnostics: **7/7 green**
+10. Source lifecycle — coordinated DB + disk install/update/toggle/rollback/remove
+11. Installed runtime — installed `source.js` loads through JavaScriptCore and passes the source contract
 
-## Milestone 2B validation — ACCEPTED
+## Controlled end-to-end fixture
 
-M2B was accepted on 2026-10-29 after:
+The repository contains:
 
-- PR #5 merged to `main`
-- Merge commit `0b8d85ca6600e7018e68d649ee70ae308839ba2c`
-- Post-merge `main` run `33971320506`: green
-- Debug and Release generic-device builds: success
-- Release binary verification: success
-- IPA packaging: success
-- Physical iOS 12 launch: success
-- On-device diagnostics: **8/8 green**
+- `fixtures/repository.json`
+- `fixtures/source.js`
 
-## Implemented in M2C source
+The UI exposes a one-tap option to add this demo repository after the batch is merged to `main`. It is only a controlled validation source and does not enable third-party sources by default.
 
-- Transaction-like source script staging in Application Support
-- Integrity verification before modifying an installed source
-- `active` and `previous` source-version directories
-- Safe update flow that preserves the prior working version
-- Automatic restoration if staged promotion fails
-- Explicit rollback that swaps `active` and `previous`
-- Installed source manifest/script readback validation
-- Rejected corrupt update leaves the active source unchanged
-- Expanded on-device diagnostics to **9 checks**, adding `Source installer`
-- Build number advanced to **4**
+## Validation status for this batch
 
-## Validation status for M2C
+- Swift parser checks for new backend/UI files: passed locally
+- Info.plist validation: passed locally
+- Linux full typecheck: unavailable for SQLite-backed files because the local Linux environment lacks the `SQLite3` module
+- Xcode 15.4 Debug/Release build: **pending GitHub Actions**
+- Physical iOS 12 validation: **pending after green CI**
 
-- Local Swift parsing/type checks: performed before publication
-- Local install/update/rollback integration harness: passed
-- Xcode 15.4 compile: **pending GitHub Actions**
-- Physical iOS 12 diagnostics: **pending after green CI build**
+## Acceptance gate
 
-## Known limitations / intentionally deferred
+After green CI, sideload build 5 and verify:
 
-- Source file installation is rollback-safe, but catalog refresh is not yet wired to a user-facing repository manager UI.
-- Repository trust/signatures are not implemented; SHA-256 verifies bytes, not publisher identity.
-- Cookie storage still uses Foundation's shared cookie store.
-- JavaScript execution timeout/cancellation is not yet hardened.
-- No real external source is enabled by default.
-
-## Next gate
-
-Get M2C green in GitHub Actions, sideload build 4 and verify **9/9** diagnostics on physical iOS 12.
+- App opens into the five-tab UIKit shell.
+- Ajustes → Diagnósticos reports **11/11**.
+- Explorar → + → MangaReader12 demo repository loads.
+- Demo source installs successfully.
+- Selecting the installed demo source → “Testar runtime instalado” reports **Runtime OK**.

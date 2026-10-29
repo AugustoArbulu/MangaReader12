@@ -1,122 +1,85 @@
 import UIKit
 
-final class RootViewController: UIViewController {
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let statusLabel = UILabel()
-    private let diagnosticsStack = UIStackView()
-    private let activityIndicator = UIActivityIndicatorView(style: .gray)
+final class RootViewController: UITableViewController {
+    private var results: [CoreDiagnosticItem] = []
+    private var running = false
+
+    init() {
+        super.init(style: .plain)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        title = "MangaReader12"
-        view.backgroundColor = .white
+        title = "Diagnósticos"
+        tableView.tableFooterView = UIView()
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 64
 
-        configureViews()
-        configureLayout()
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .refresh,
+            target: self,
+            action: #selector(refreshTapped)
+        )
+
         runDiagnostics()
     }
 
-    private func configureViews() {
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Milestone 2C"
-        titleLabel.font = UIFont.boldSystemFont(ofSize: 28)
-        titleLabel.textAlignment = .center
-        titleLabel.textColor = .black
-
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.text = "Atomic source install + rollback — iOS 12.0"
-        subtitleLabel.font = UIFont.systemFont(ofSize: 16)
-        subtitleLabel.textAlignment = .center
-        subtitleLabel.textColor = .darkGray
-        subtitleLabel.numberOfLines = 0
-
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "Running on-device core diagnostics…"
-        statusLabel.font = UIFont.systemFont(ofSize: 14)
-        statusLabel.textAlignment = .center
-        statusLabel.textColor = .darkGray
-        statusLabel.numberOfLines = 0
-
-        diagnosticsStack.translatesAutoresizingMaskIntoConstraints = false
-        diagnosticsStack.axis = .vertical
-        diagnosticsStack.alignment = .fill
-        diagnosticsStack.distribution = .fill
-        diagnosticsStack.spacing = 4
-
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-        activityIndicator.hidesWhenStopped = true
-        activityIndicator.startAnimating()
-
-        view.addSubview(titleLabel)
-        view.addSubview(subtitleLabel)
-        view.addSubview(activityIndicator)
-        view.addSubview(statusLabel)
-        view.addSubview(diagnosticsStack)
-    }
-
-    private func configureLayout() {
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18),
-            titleLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            titleLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
-            subtitleLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            subtitleLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-
-            activityIndicator.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 13),
-            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-
-            statusLabel.topAnchor.constraint(equalTo: activityIndicator.bottomAnchor, constant: 7),
-            statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-
-            diagnosticsStack.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 12),
-            diagnosticsStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            diagnosticsStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-            diagnosticsStack.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -14)
-        ])
+    @objc private func refreshTapped() {
+        runDiagnostics()
     }
 
     private func runDiagnostics() {
+        guard !running else { return }
+        running = true
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        navigationItem.prompt = "Executando diagnósticos…"
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let results = CoreDiagnostics.run()
             DispatchQueue.main.async {
-                self?.display(results: results)
+                guard let self = self else { return }
+                self.results = results
+                self.running = false
+                self.navigationItem.rightBarButtonItem?.isEnabled = true
+
+                let passed = results.filter { $0.passed }.count
+                self.navigationItem.prompt = passed == results.count
+                    ? "Core diagnostics passed (\(passed)/\(results.count))"
+                    : "Core diagnostics failed (\(passed)/\(results.count))"
+
+                self.tableView.reloadData()
             }
         }
     }
 
-    private func display(results: [CoreDiagnosticItem]) {
-        activityIndicator.stopAnimating()
+    override func tableView(
+        _ tableView: UITableView,
+        numberOfRowsInSection section: Int
+    ) -> Int {
+        return results.count
+    }
 
-        diagnosticsStack.arrangedSubviews.forEach { view in
-            diagnosticsStack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
+    override func tableView(
+        _ tableView: UITableView,
+        cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let identifier = "DiagnosticCell"
+        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
 
-        for result in results {
-            let label = UILabel()
-            label.numberOfLines = 0
-            label.font = UIFont.systemFont(ofSize: 12.0)
-            label.textColor = result.passed
-                ? UIColor(red: 0.08, green: 0.45, blue: 0.18, alpha: 1)
-                : .red
-            label.text = "\(result.passed ? "✓" : "✗") \(result.name): \(result.detail)"
-            diagnosticsStack.addArrangedSubview(label)
-        }
-
-        let passedCount = results.filter { $0.passed }.count
-        let allPassed = passedCount == results.count
-
-        statusLabel.text = allPassed
-            ? "Core diagnostics passed (\(passedCount)/\(results.count))."
-            : "Core diagnostics failed (\(passedCount)/\(results.count))."
-
-        statusLabel.textColor = allPassed
+        let result = results[indexPath.row]
+        cell.textLabel?.text = "\(result.passed ? "✓" : "✗") \(result.name)"
+        cell.textLabel?.textColor = result.passed
             ? UIColor(red: 0.08, green: 0.45, blue: 0.18, alpha: 1)
             : .red
+        cell.detailTextLabel?.text = result.detail
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.selectionStyle = .none
+        return cell
     }
 }
