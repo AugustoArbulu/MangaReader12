@@ -36,6 +36,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         navigationItem.searchController = sourceSearchController
         navigationItem.hidesSearchBarWhenScrolling = false
         definesPresentationContext = true
+        applyTheme()
 
         refreshControl = UIRefreshControl()
         refreshControl?.addTarget(
@@ -187,6 +188,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let identifier = "SourceMangaCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         let item = items[indexPath.row]
         cell.textLabel?.text = item.title
@@ -276,6 +278,7 @@ final class MangaDetailsViewController: UITableViewController {
         title = summary.title
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 74
+        applyTheme()
 
         let refreshButton = UIBarButtonItem(
             barButtonSystemItem: .refresh,
@@ -454,6 +457,7 @@ final class MangaDetailsViewController: UITableViewController {
             let identifier = "MangaInfoCell"
             let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
                 ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+            ThemeManager.shared.style(cell: cell)
 
             cell.textLabel?.numberOfLines = 0
             cell.detailTextLabel?.numberOfLines = 0
@@ -491,6 +495,7 @@ final class MangaDetailsViewController: UITableViewController {
         let identifier = "ChapterCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         let chapter = chapters[indexPath.row]
         cell.textLabel?.text = chapter.name
@@ -582,5 +587,22 @@ final class MangaDetailsViewController: UITableViewController {
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+
+extension SourceBrowserViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        ThemeManager.shared.style(searchBar: sourceSearchController.searchBar)
+        refreshControl?.tintColor = ThemeManager.shared.palette.secondaryText
+        tableView.reloadData()
+    }
+}
+
+extension MangaDetailsViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
     }
 }
