@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build15-reader-chrome-source-icons — 2026-10-29
+
+- Reader center tap now hides the bottom tab bar together with the navigation bar and reader controls.
+- Bottom tab bar is restored when controls return or when leaving the reader.
+- Added visual source/extension icons from the repository manifest `icon` field.
+- Source icons render in repository catalogs and installed-source lists with cached network loading and initials fallback.
+- Source icon URLs are required to be HTTPS when present.
+- Demo sources advance to 1.3.1 / 1.0.1 so already-installed demo sources can update and persist their repository-provided icons.
+- Build 15 includes the build-14 iOS 12 backup validator compatibility hotfix.
+- Advanced app build number to 15.
+
 ## 0.1.0-build14-ios12-backup-validation — 2026-10-29
 
 - Physical iOS 12 restore reached the improved validator and exposed the exact failing query.
