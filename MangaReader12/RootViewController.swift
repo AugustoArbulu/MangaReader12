@@ -19,6 +19,7 @@ final class RootViewController: UITableViewController {
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 64
+        applyTheme()
 
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .refresh,
@@ -71,6 +72,7 @@ final class RootViewController: UITableViewController {
         let identifier = "DiagnosticCell"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+        ThemeManager.shared.style(cell: cell)
 
         let result = results[indexPath.row]
         cell.textLabel?.text = "\(result.passed ? "✓" : "✗") \(result.name)"
@@ -81,5 +83,13 @@ final class RootViewController: UITableViewController {
         cell.detailTextLabel?.numberOfLines = 0
         cell.selectionStyle = .none
         return cell
+    }
+}
+
+
+extension RootViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
     }
 }
