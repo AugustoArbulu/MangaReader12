@@ -238,3 +238,20 @@ Physical build-15 feedback:
 - Branch: hotfix-build19-reader-overlay-gesture. The full build-17 M9B suite still has no complete physical acceptance report.
 - Physical gate: open scale panel and alternate Tela/Largura/Altura/Original repeatedly, confirm panel stays open, and verify center tap on the manga image still toggles controls as before.
 - iOS 12.0 deployment target and UIKit remain locked.
+
+
+## Build 19 physically accepted (2026-10-29)
+
+- User reports **"esta funcionando agora"** following Build 19 bug fix on physical iOS 12.
+- Build 18's centered Largura/Altura touches no longer hide the reader UI.
+- Closes the scale-controls gesture-collision hotfix gate, build 19.
+- Does not independently assert that every Build 17 navigation/preload test was repeated.
+
+## Build 20 — M10A download management, partial first increment (physical gate pending)
+
+- Downloads refreshes live state while onscreen (1.5s polling) and supports pull-to-refresh.
+- Failed downloads can be retried directly from their row; source loader retrieves the latest available manga, chapter and page data before restarting.
+- Disable removal of chapters actively being downloaded because current HTTP downloader lacks cancellation.
+- Keeps source-domain policy and native storage paths; no SQLite migration.
+- Build 20 is not yet complete download queue management: **pause, resume, persistent ordered queue and reorder are future stages**.
+- Physical gate: verify failed row's swipe-to-retry where possible; progress refresh and pull-to-refresh; completed offline chapter opens; no mid-write deletion; 11/11 diagnostics and reader scale remain intact.

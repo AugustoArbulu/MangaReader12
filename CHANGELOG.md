@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build20-m10a-downloads-retry-refresh — 2026-10-29
+
+- Accepted build 19 physical iOS 12 report: scale changes no longer hide interface when tapping Largura/Altura.
+- M10A first download-management increment: Downloads auto-refreshes its rows while visible, plus pull-to-refresh.
+- Failed download rows expose "Tentar novamente" directly in Downloads. Retry reloads the installed/active JS source, resolves current details, matches chapter ID, resolves pages and re-downloads with existing source-domain policies.
+- Retry is guarded against duplicate same-chapter retries while in progress; progress and errors are shown in the Downloads UI.
+- Avoid removing "downloading" rows mid-write because the existing downloader cannot safely cancel in-flight HTTP requests.
+- Future queue orchestration, pause/resume, persistent queue and reordering are still deferred. Do not imply these are implemented.
+- UIKit/iOS12 deployment 12.0, schema v1 and source API remain unchanged.
+- Advanced build number to 20; physical gate pending.
+
 ## 0.1.0-build19-reader-gesture-overlay-hotfix — 2026-10-29
 
 - Physical build-18 report: tapping Largura or Altura in the center of the live scale selector also triggered the reader's center-tap action and hid the reader controls.
