@@ -161,3 +161,19 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Build 19: center tap on manga **image** still toggles the reader chrome.
 - [ ] Build 19: side tap-zones still navigate in LTR/RTL; brightness/direction controls do not turn pages.
 - [ ] Build 19: page, progress, Webtoon, back navigation and immersive bottom-tab-bar behavior remain intact.
+
+
+## Build 19 — physical acceptance
+
+- [x] User confirms live reader scale controls work after the gesture fix in Build 19.
+- [x] The specifically reported center tap / Largura/Altura collision is resolved.
+- [ ] Remaining independent M9B regression checks are not all explicitly reconfirmed.
+
+## Build 20 — Downloads M10A (physical gate pending)
+
+- [ ] Downloads progress/state updates automatically while view is onscreen.
+- [ ] Pull-to-refresh updates the list.
+- [ ] A failed download can be retried by swiping and selecting Tentar novamente.
+- [ ] Retry uses original source and chapter, and downloads become usable offline.
+- [ ] A currently downloading row cannot be removed mid-write.
+- [ ] No regression to reader gestures, backups, source icons, iOS 12 diagnostics.
