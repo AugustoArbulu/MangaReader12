@@ -180,3 +180,33 @@ Physical build-15 feedback:
 3. Open reader and confirm the main app tab bar/band is absent entirely.
 4. Center tap must hide/show reader chrome without leaving a bottom app band.
 5. Reconfirm extension icons remain visible.
+
+
+## Build 16 physical acceptance — 2026-10-29
+
+- Physical iOS 12 retest: **backup restore PASS** using the existing backup.
+- Physical iOS 12 retest: **immersive reader PASS**, including the main bottom tab bar/band.
+- Build 16 was merged by PR #18; merge SHA \`c983091a73506d1c079c24223f8fb38c21925ca3\`.
+- Post-merge run \`40833175316\`: green.
+- Source icons were already physically approved in build 15.
+- The two outstanding build-16 blocking defects are now closed.
+
+## Build 17 — M9B reader chapter lifecycle and scale (physical gate pending)
+
+- Source chapter list is ordered by numeric chapter number when all are numbered; otherwise it follows reverse source listing.
+- Reader options expose previous/next chapter without building up a reader navigation stack.
+- Chapter page resolution keeps local offline download priority, then the installed JS source runtime.
+- Optional next-chapter preload starts near the end of the current chapter and caches up to two upcoming images.
+- Reader page scaling: fit screen, fit width, fit height, original image point size.
+- Scale mode and preloading preference are persisted and included in future backups; existing backups keep default values.
+- The last-page progress write snapshots the chapter identity before asynchronous SQLite persistence.
+- iOS 12 / UIKit / Swift 5 / Xcode 15.4 guardrails remain unchanged.
+
+### Build 17 consolidated physical gate
+
+1. Open Demo Manga's chapter 1, use Opções → Próximo to go to chapter 2; then Anterior back to chapter 1.
+2. Return to details: there must be one reader screen and no stacked readers; tab bar returns normally.
+3. Turn next-chapter preload on/off under Ajustes → Leitor and verify chapter navigation still works both ways.
+4. Test Fit screen, width, height and original size in page mode, including zoom and rotation; Webtoon should remain full-width.
+5. Restore progress by reopening a chapter; check read/history and offline pages still work.
+6. Confirm no regressions to backup restore, source icons and iOS 12 diagnostics (11/11).

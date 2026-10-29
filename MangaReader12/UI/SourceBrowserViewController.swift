@@ -661,7 +661,30 @@ final class MangaDetailsViewController: UITableViewController {
             manga: manga,
             chapter: chapter,
             pages: pages,
-            manifest: sourceRecord.manifest
+            manifest: sourceRecord.manifest,
+            chapters: chapters,
+            resolvePages: { [weak self] target, completion in
+                guard let self = self else {
+                    completion(.failure(ReaderError.noPages))
+                    return
+                }
+                if let manager = self.downloadManager,
+                   let local = try? manager.localPages(
+                        sourceID: self.sourceRecord.manifest.id,
+                        mangaID: manga.id,
+                        chapterID: target.id
+                   ),
+                   !local.isEmpty {
+                    completion(.success(local))
+                    return
+                }
+                self.runtime.callDecoded(
+                    "pages",
+                    arguments: [target.id],
+                    as: [Page].self,
+                    completion: completion
+                )
+            }
         )
 
         reader.hidesBottomBarWhenPushed = true

@@ -121,3 +121,23 @@ Build-16 required retest:
 - [ ] The main app tab bar (including its background band) is absent throughout the reader screen.
 - [ ] Center tap hides/shows reader-specific navigation/controls cleanly.
 - [ ] Leaving reader restores the main app tab bar.
+
+
+## Build 16 — physical acceptance report (2026-10-29)
+
+User tested the build-16 IPA on physical iOS 12 and reported both required gates as approved:
+- [x] Backup restore with the previous \`.mr12backup\` — PASS.
+- [x] Immersive reader: bottom app tab bar/band removed — PASS.
+
+The build-16 blockers are closed. The additional legacy unchecked rows above
+record earlier checkpoints and should not be mistaken for new build-16 failures.
+
+## Build 17 — M9B physical gate (pending)
+
+- [ ] Reader previous/next chapter opens correct chapter and returns without stacking.
+- [ ] Next-chapter preload toggle persists; source failures do not interrupt current reading.
+- [ ] Offline-first chapter switching works without needing source network access.
+- [ ] Fit-screen / fit-width / fit-height / original scale modes are usable with zoom.
+- [ ] Webtoon remains continuous and full width after selecting a scale option.
+- [ ] Chapter read progress, History and last-page resume remain correct.
+- [ ] Bottom tab bar, backups, icons and 11/11 diagnostics remain regression-free.
