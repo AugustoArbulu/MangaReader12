@@ -72,3 +72,13 @@ After build 11 passed CI and was merged, two runtime-consistency improvements we
 - existing Library entries refresh persisted cover/metadata after successful details + chapters loading.
 
 The physical acceptance build is therefore **build 12**.
+
+
+## Build 12 physical feedback
+
+User reported all requested functionality working except restore of the generated `.mr12backup`.
+
+Observed error:
+`The backup database failed validation.`
+
+The build-13 hotfix replaces exact-`user_version` validation with SQLite integrity + required-schema validation. Backup format version remains unchanged, so the already-exported file is the preferred retest artifact.
