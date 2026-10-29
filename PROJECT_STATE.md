@@ -7,7 +7,7 @@
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (15)**
+- App version: **0.1.0 (16)**
 
 ## Accepted physical checkpoints
 
@@ -150,3 +150,33 @@ One consolidated test should validate:
 3. Refresh demo repository and update Demo/Alt Demo to 1.3.1 / 1.0.1.
 4. Confirm extension/source icons appear in repository catalog and installed-source list.
 5. Confirm 11/11, Dark Mode and existing reading flows remain functional.
+
+
+## Build 16 hotfix — portable SQLite WAL normalization + immersive reader
+
+Physical build-15 feedback:
+- extension/source icons: **working**
+- backup restore: failed with `SQLite 14: unable to open database file` during validation
+- reader center tap removed tab labels/content but the main tab-bar band remained visible
+
+### Backup fix
+- Portable backup payload now gets its SQLite header checked before opening.
+- The restored temporary database is opened read-write and normalized with:
+  - `PRAGMA temp_store=MEMORY`
+  - `PRAGMA journal_mode=DELETE`
+- Validation then checks supported schema version + required MangaReader12 tables.
+- `quick_check` is removed from the physical restore path because the old backup can be a WAL-mode database image without companion `-wal/-shm` files.
+- Existing `.mr12backup` remains the required retest file.
+
+### Reader fix
+- Reader is pushed with `hidesBottomBarWhenPushed = true`.
+- The main app tab bar is therefore removed by UIKit for the entire reader screen, including its background band/safe-area layout.
+- Center tap still toggles the reader-specific top/bottom controls.
+- Leaving the reader restores the app tab bar automatically.
+
+### Physical gate
+1. Restore the same old `.mr12backup`.
+2. Confirm Library/category/progress/settings return.
+3. Open reader and confirm the main app tab bar/band is absent entirely.
+4. Center tap must hide/show reader chrome without leaving a bottom app band.
+5. Reconfirm extension icons remain visible.
