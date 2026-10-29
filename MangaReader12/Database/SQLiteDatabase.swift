@@ -1009,6 +1009,649 @@ final class LibraryRepository {
     }
 }
 
+
+// MARK: - Reading progress, history and downloads
+
+struct ChapterReadingState: Equatable {
+    let sourceChapterID: String
+    let isRead: Bool
+    let lastPageRead: Int
+    let downloaded: Bool
+}
+
+struct HistoryRecord: Equatable {
+    let sourceID: String
+    let sourceMangaID: String
+    let mangaTitle: String
+    let cover: String?
+    let mangaURL: String?
+    let sourceChapterID: String?
+    let chapterName: String?
+    let lastReadAt: TimeInterval
+}
+
+struct ChapterDownloadRecord: Equatable {
+    let sourceID: String
+    let sourceMangaID: String
+    let sourceChapterID: String
+    let state: String
+    let progress: Double
+    let localPath: String?
+    let updatedAt: TimeInterval
+}
+
+final class ReadingProgressRepository {
+    private let database: SQLiteDatabase
+
+    init(database: SQLiteDatabase) {
+        self.database = database
+    }
+
+    static func defaultRepository() throws -> ReadingProgressRepository {
+        let database = try SQLiteDatabase.defaultDatabase()
+        try database.openAndMigrate()
+        return ReadingProgressRepository(database: database)
+    }
+
+    func recordProgress(
+        sourceID: String,
+        manga: Manga,
+        chapter: Chapter,
+        pageIndex: Int,
+        totalPages: Int
+    ) throws {
+        try database.openAndMigrate()
+        let safePage = max(0, pageIndex)
+        let completed = totalPages > 0 && safePage >= totalPages - 1
+        let now = Date().timeIntervalSince1970
+
+        try database.withConnection { handle in
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+            do {
+                let ids = try ensureReadingRows(
+                    sourceID: sourceID,
+                    manga: manga,
+                    chapter: chapter,
+                    handle: handle
+                )
+
+                let updateChapter = try prepareStatement(
+                    """
+                    UPDATE chapters
+                    SET last_page_read = ?,
+                        is_read = CASE WHEN ? = 1 THEN 1 ELSE is_read END
+                    WHERE internal_id = ?;
+                    """,
+                    handle: handle
+                )
+                defer { sqlite3_finalize(updateChapter) }
+
+                guard sqlite3_bind_int(updateChapter, 1, Int32(safePage)) == SQLITE_OK,
+                      sqlite3_bind_int(updateChapter, 2, completed ? 1 : 0) == SQLITE_OK,
+                      sqlite3_bind_int64(updateChapter, 3, ids.chapterID) == SQLITE_OK,
+                      sqlite3_step(updateChapter) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+
+                let updateHistory = try prepareStatement(
+                    """
+                    UPDATE history
+                    SET chapter_id = ?, last_read_at = ?
+                    WHERE manga_id = ?;
+                    """,
+                    handle: handle
+                )
+                defer { sqlite3_finalize(updateHistory) }
+
+                guard sqlite3_bind_int64(updateHistory, 1, ids.chapterID) == SQLITE_OK,
+                      sqlite3_bind_double(updateHistory, 2, now) == SQLITE_OK,
+                      sqlite3_bind_int64(updateHistory, 3, ids.mangaID) == SQLITE_OK,
+                      sqlite3_step(updateHistory) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+
+                if sqlite3_changes(handle) == 0 {
+                    let insertHistory = try prepareStatement(
+                        """
+                        INSERT INTO history (manga_id, chapter_id, last_read_at)
+                        VALUES (?, ?, ?);
+                        """,
+                        handle: handle
+                    )
+                    defer { sqlite3_finalize(insertHistory) }
+
+                    guard sqlite3_bind_int64(insertHistory, 1, ids.mangaID) == SQLITE_OK,
+                          sqlite3_bind_int64(insertHistory, 2, ids.chapterID) == SQLITE_OK,
+                          sqlite3_bind_double(insertHistory, 3, now) == SQLITE_OK,
+                          sqlite3_step(insertHistory) == SQLITE_DONE else {
+                        throw sqliteError(handle)
+                    }
+                }
+
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
+            }
+        }
+    }
+
+    func markRead(
+        sourceID: String,
+        manga: Manga,
+        chapter: Chapter,
+        isRead: Bool
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let ids = try ensureReadingRows(
+                sourceID: sourceID,
+                manga: manga,
+                chapter: chapter,
+                handle: handle
+            )
+
+            let statement = try prepareStatement(
+                """
+                UPDATE chapters
+                SET is_read = ?,
+                    last_page_read = CASE WHEN ? = 0 THEN 0 ELSE last_page_read END
+                WHERE internal_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int(statement, 1, isRead ? 1 : 0) == SQLITE_OK,
+                  sqlite3_bind_int(statement, 2, isRead ? 1 : 0) == SQLITE_OK,
+                  sqlite3_bind_int64(statement, 3, ids.chapterID) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    func chapterStates(
+        sourceID: String,
+        sourceMangaID: String
+    ) throws -> [String: ChapterReadingState] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT c.source_chapter_id, c.is_read, c.last_page_read, c.downloaded
+                FROM chapters c
+                JOIN manga m ON m.internal_id = c.manga_id
+                WHERE m.source_id = ? AND m.source_manga_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+
+            var states: [String: ChapterReadingState] = [:]
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let sourceChapterID = columnText(statement, index: 0) else {
+                    throw sqliteError(handle)
+                }
+
+                states[sourceChapterID] = ChapterReadingState(
+                    sourceChapterID: sourceChapterID,
+                    isRead: sqlite3_column_int(statement, 1) != 0,
+                    lastPageRead: Int(sqlite3_column_int(statement, 2)),
+                    downloaded: sqlite3_column_int(statement, 3) != 0
+                )
+            }
+
+            return states
+        }
+    }
+
+    func history() throws -> [HistoryRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.source_id,
+                    m.source_manga_id,
+                    m.title,
+                    m.cover,
+                    m.url,
+                    c.source_chapter_id,
+                    c.name,
+                    h.last_read_at
+                FROM history h
+                JOIN manga m ON m.internal_id = h.manga_id
+                LEFT JOIN chapters c ON c.internal_id = h.chapter_id
+                ORDER BY h.last_read_at DESC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var records: [HistoryRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let sourceID = columnText(statement, index: 0),
+                      let sourceMangaID = columnText(statement, index: 1),
+                      let mangaTitle = columnText(statement, index: 2) else {
+                    throw sqliteError(handle)
+                }
+
+                records.append(
+                    HistoryRecord(
+                        sourceID: sourceID,
+                        sourceMangaID: sourceMangaID,
+                        mangaTitle: mangaTitle,
+                        cover: columnText(statement, index: 3),
+                        mangaURL: columnText(statement, index: 4),
+                        sourceChapterID: columnText(statement, index: 5),
+                        chapterName: columnText(statement, index: 6),
+                        lastReadAt: sqlite3_column_double(statement, 7)
+                    )
+                )
+            }
+
+            return records
+        }
+    }
+
+    func removeHistory(
+        sourceID: String,
+        sourceMangaID: String
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                DELETE FROM history
+                WHERE manga_id = (
+                    SELECT internal_id FROM manga
+                    WHERE source_id = ? AND source_manga_id = ?
+                    LIMIT 1
+                );
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+}
+
+final class DownloadRepository {
+    private let database: SQLiteDatabase
+
+    init(database: SQLiteDatabase) {
+        self.database = database
+    }
+
+    static func defaultRepository() throws -> DownloadRepository {
+        let database = try SQLiteDatabase.defaultDatabase()
+        try database.openAndMigrate()
+        return DownloadRepository(database: database)
+    }
+
+    func setState(
+        sourceID: String,
+        manga: Manga,
+        chapter: Chapter,
+        state: String,
+        progress: Double,
+        localPath: String?
+    ) throws {
+        try database.openAndMigrate()
+        let now = Date().timeIntervalSince1970
+        let clampedProgress = max(0, min(progress, 1))
+
+        try database.withConnection { handle in
+            let ids = try ensureReadingRows(
+                sourceID: sourceID,
+                manga: manga,
+                chapter: chapter,
+                handle: handle
+            )
+
+            let update = try prepareStatement(
+                """
+                UPDATE downloads
+                SET state = ?, progress = ?, local_path = ?, updated_at = ?
+                WHERE chapter_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(update) }
+
+            try bindText(state, index: 1, statement: update)
+            guard sqlite3_bind_double(update, 2, clampedProgress) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindOptionalText(localPath, index: 3, statement: update)
+            guard sqlite3_bind_double(update, 4, now) == SQLITE_OK,
+                  sqlite3_bind_int64(update, 5, ids.chapterID) == SQLITE_OK,
+                  sqlite3_step(update) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            if sqlite3_changes(handle) == 0 {
+                let insert = try prepareStatement(
+                    """
+                    INSERT INTO downloads
+                    (chapter_id, state, progress, local_path, updated_at)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    handle: handle
+                )
+                defer { sqlite3_finalize(insert) }
+
+                guard sqlite3_bind_int64(insert, 1, ids.chapterID) == SQLITE_OK else {
+                    throw sqliteError(handle)
+                }
+                try bindText(state, index: 2, statement: insert)
+                guard sqlite3_bind_double(insert, 3, clampedProgress) == SQLITE_OK else {
+                    throw sqliteError(handle)
+                }
+                try bindOptionalText(localPath, index: 4, statement: insert)
+                guard sqlite3_bind_double(insert, 5, now) == SQLITE_OK,
+                      sqlite3_step(insert) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+            }
+
+            let downloaded = state == "completed"
+            let markChapter = try prepareStatement(
+                "UPDATE chapters SET downloaded = ? WHERE internal_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(markChapter) }
+
+            guard sqlite3_bind_int(markChapter, 1, downloaded ? 1 : 0) == SQLITE_OK,
+                  sqlite3_bind_int64(markChapter, 2, ids.chapterID) == SQLITE_OK,
+                  sqlite3_step(markChapter) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    func record(
+        sourceID: String,
+        sourceMangaID: String,
+        sourceChapterID: String
+    ) throws -> ChapterDownloadRecord? {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT d.state, d.progress, d.local_path, d.updated_at
+                FROM downloads d
+                JOIN chapters c ON c.internal_id = d.chapter_id
+                JOIN manga m ON m.internal_id = c.manga_id
+                WHERE m.source_id = ?
+                  AND m.source_manga_id = ?
+                  AND c.source_chapter_id = ?
+                LIMIT 1;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+            try bindText(sourceChapterID, index: 3, statement: statement)
+
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE { return nil }
+
+            guard result == SQLITE_ROW,
+                  let state = columnText(statement, index: 0) else {
+                throw sqliteError(handle)
+            }
+
+            return ChapterDownloadRecord(
+                sourceID: sourceID,
+                sourceMangaID: sourceMangaID,
+                sourceChapterID: sourceChapterID,
+                state: state,
+                progress: sqlite3_column_double(statement, 1),
+                localPath: columnText(statement, index: 2),
+                updatedAt: sqlite3_column_double(statement, 3)
+            )
+        }
+    }
+
+    func remove(
+        sourceID: String,
+        sourceMangaID: String,
+        sourceChapterID: String
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let find = try prepareStatement(
+                """
+                SELECT c.internal_id
+                FROM chapters c
+                JOIN manga m ON m.internal_id = c.manga_id
+                WHERE m.source_id = ?
+                  AND m.source_manga_id = ?
+                  AND c.source_chapter_id = ?
+                LIMIT 1;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(find) }
+
+            try bindText(sourceID, index: 1, statement: find)
+            try bindText(sourceMangaID, index: 2, statement: find)
+            try bindText(sourceChapterID, index: 3, statement: find)
+
+            guard sqlite3_step(find) == SQLITE_ROW else { return }
+            let chapterID = sqlite3_column_int64(find, 0)
+
+            let delete = try prepareStatement(
+                "DELETE FROM downloads WHERE chapter_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(delete) }
+
+            guard sqlite3_bind_int64(delete, 1, chapterID) == SQLITE_OK,
+                  sqlite3_step(delete) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            let mark = try prepareStatement(
+                "UPDATE chapters SET downloaded = 0 WHERE internal_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(mark) }
+
+            guard sqlite3_bind_int64(mark, 1, chapterID) == SQLITE_OK,
+                  sqlite3_step(mark) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+}
+
+private func ensureReadingRows(
+    sourceID: String,
+    manga: Manga,
+    chapter: Chapter,
+    handle: OpaquePointer
+) throws -> (mangaID: Int64, chapterID: Int64) {
+    let now = Date().timeIntervalSince1970
+
+    let updateManga = try prepareStatement(
+        """
+        UPDATE manga
+        SET title = ?, cover = ?, description = ?, status = ?, url = ?, last_update = ?
+        WHERE source_id = ? AND source_manga_id = ?;
+        """,
+        handle: handle
+    )
+    defer { sqlite3_finalize(updateManga) }
+
+    try bindText(manga.title, index: 1, statement: updateManga)
+    try bindOptionalText(manga.cover, index: 2, statement: updateManga)
+    try bindOptionalText(manga.description, index: 3, statement: updateManga)
+    try bindText(manga.status.rawValue, index: 4, statement: updateManga)
+    try bindOptionalText(manga.url, index: 5, statement: updateManga)
+    guard sqlite3_bind_double(updateManga, 6, now) == SQLITE_OK else {
+        throw sqliteError(handle)
+    }
+    try bindText(sourceID, index: 7, statement: updateManga)
+    try bindText(manga.id, index: 8, statement: updateManga)
+
+    guard sqlite3_step(updateManga) == SQLITE_DONE else {
+        throw sqliteError(handle)
+    }
+
+    if sqlite3_changes(handle) == 0 {
+        let insertManga = try prepareStatement(
+            """
+            INSERT INTO manga
+            (source_id, source_manga_id, title, cover, description, status, url, last_update, date_added)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            handle: handle
+        )
+        defer { sqlite3_finalize(insertManga) }
+
+        try bindText(sourceID, index: 1, statement: insertManga)
+        try bindText(manga.id, index: 2, statement: insertManga)
+        try bindText(manga.title, index: 3, statement: insertManga)
+        try bindOptionalText(manga.cover, index: 4, statement: insertManga)
+        try bindOptionalText(manga.description, index: 5, statement: insertManga)
+        try bindText(manga.status.rawValue, index: 6, statement: insertManga)
+        try bindOptionalText(manga.url, index: 7, statement: insertManga)
+        guard sqlite3_bind_double(insertManga, 8, now) == SQLITE_OK,
+              sqlite3_bind_double(insertManga, 9, now) == SQLITE_OK,
+              sqlite3_step(insertManga) == SQLITE_DONE else {
+            throw sqliteError(handle)
+        }
+    }
+
+    let findManga = try prepareStatement(
+        """
+        SELECT internal_id
+        FROM manga
+        WHERE source_id = ? AND source_manga_id = ?
+        LIMIT 1;
+        """,
+        handle: handle
+    )
+    defer { sqlite3_finalize(findManga) }
+
+    try bindText(sourceID, index: 1, statement: findManga)
+    try bindText(manga.id, index: 2, statement: findManga)
+
+    guard sqlite3_step(findManga) == SQLITE_ROW else {
+        throw sqliteError(handle)
+    }
+    let mangaID = sqlite3_column_int64(findManga, 0)
+
+    let updateChapter = try prepareStatement(
+        """
+        UPDATE chapters
+        SET name = ?, number = ?, volume = ?, url = ?
+        WHERE manga_id = ? AND source_chapter_id = ?;
+        """,
+        handle: handle
+    )
+
+    try bindText(chapter.name, index: 1, statement: updateChapter)
+    try bindOptionalDouble(chapter.number, index: 2, statement: updateChapter)
+    try bindOptionalDouble(chapter.volume, index: 3, statement: updateChapter)
+    try bindOptionalText(chapter.url, index: 4, statement: updateChapter)
+    guard sqlite3_bind_int64(updateChapter, 5, mangaID) == SQLITE_OK else {
+        sqlite3_finalize(updateChapter)
+        throw sqliteError(handle)
+    }
+    try bindText(chapter.id, index: 6, statement: updateChapter)
+
+    guard sqlite3_step(updateChapter) == SQLITE_DONE else {
+        sqlite3_finalize(updateChapter)
+        throw sqliteError(handle)
+    }
+    let chapterChanged = sqlite3_changes(handle)
+    sqlite3_finalize(updateChapter)
+
+    if chapterChanged == 0 {
+        let insertChapter = try prepareStatement(
+            """
+            INSERT INTO chapters
+            (manga_id, source_chapter_id, name, number, volume, url)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """,
+            handle: handle
+        )
+
+        guard sqlite3_bind_int64(insertChapter, 1, mangaID) == SQLITE_OK else {
+            sqlite3_finalize(insertChapter)
+            throw sqliteError(handle)
+        }
+        try bindText(chapter.id, index: 2, statement: insertChapter)
+        try bindText(chapter.name, index: 3, statement: insertChapter)
+        try bindOptionalDouble(chapter.number, index: 4, statement: insertChapter)
+        try bindOptionalDouble(chapter.volume, index: 5, statement: insertChapter)
+        try bindOptionalText(chapter.url, index: 6, statement: insertChapter)
+
+        guard sqlite3_step(insertChapter) == SQLITE_DONE else {
+            sqlite3_finalize(insertChapter)
+            throw sqliteError(handle)
+        }
+        sqlite3_finalize(insertChapter)
+    }
+
+    let findChapter = try prepareStatement(
+        """
+        SELECT internal_id
+        FROM chapters
+        WHERE manga_id = ? AND source_chapter_id = ?
+        LIMIT 1;
+        """,
+        handle: handle
+    )
+    defer { sqlite3_finalize(findChapter) }
+
+    guard sqlite3_bind_int64(findChapter, 1, mangaID) == SQLITE_OK else {
+        throw sqliteError(handle)
+    }
+    try bindText(chapter.id, index: 2, statement: findChapter)
+
+    guard sqlite3_step(findChapter) == SQLITE_ROW else {
+        throw sqliteError(handle)
+    }
+
+    return (
+        mangaID: mangaID,
+        chapterID: sqlite3_column_int64(findChapter, 0)
+    )
+}
+
 private func executeSQLite(_ sql: String, handle: OpaquePointer) throws {
     var errorMessage: UnsafeMutablePointer<Int8>?
     let result = sqlite3_exec(handle, sql, nil, nil, &errorMessage)
