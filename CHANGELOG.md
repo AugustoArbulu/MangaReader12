@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.0-build18-live-reader-scale-comparison — 2026-10-29
+
+- Physical build-17 preliminary report: the app appears to work, but scale comparison requires more immediate control in the open chapter. Full M9B physical acceptance remains pending.
+- Within an open chapter, Opções → Comparar escalas reveals an always-visible comparison strip with Tela, Largura, Altura and Original.
+- Tapping another scale instantly updates visible pages without closing the strip, resetting chapter progress, reloading the collection, or fetching images again.
+- Fechar dismisses the comparison strip; the chosen scale persists using the existing ReaderPreferences key and backup format.
+- The strip dismisses automatically when hiding reader controls or switching to Webtoon.
+- Keeps UIKit/AppDelegate, locked iOS 12.0 deployment target and Xcode 15.4 CI.
+- Build number 18, pending physical acceptance.
+
 ## 0.1.0-build17-m9b-chapters-reader-scale — 2026-10-29
 
 - Accepted physical build 16: original backup successfully restored; reader main tab bar/band is absent.
