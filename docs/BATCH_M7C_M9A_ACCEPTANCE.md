@@ -8,7 +8,7 @@
 - [ ] IPA packages successfully.
 
 ## Physical iOS 12 regression
-- [ ] Build 11 installs and launches.
+- [ ] Build 12 installs and launches.
 - [ ] Existing diagnostics remain **11/11**.
 - [ ] Dark Mode, Library and History remain functional.
 
@@ -59,3 +59,9 @@
 - [ ] No requirement is placed on observing an actual background fetch; iOS 12 decides execution timing.
 
 Do not mark accepted from CI alone.
+
+
+## Hardening checks
+- [ ] Restoring a backup on the same device keeps locally installed sources available when their scripts are still present.
+- [ ] Download files excluded by the backup are cleared during restore and do not remain as ghost storage.
+- [ ] Opening details of an older Library entry refreshes its persisted cover metadata.
