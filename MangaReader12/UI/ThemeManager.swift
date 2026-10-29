@@ -99,6 +99,10 @@ final class ThemeManager {
         tabBar.isTranslucent = false
 
         UITableView.appearance().separatorColor = colors.separator
+        UITableViewHeaderFooterView.appearance().tintColor = colors.background
+        UILabel.appearance(
+            whenContainedInInstancesOf: [UITableViewHeaderFooterView.self]
+        ).textColor = colors.secondaryText
         UISwitch.appearance().onTintColor = colors.accent
     }
 
