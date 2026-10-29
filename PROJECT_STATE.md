@@ -227,3 +227,14 @@ Physical build-15 feedback:
 - Existing reader settings and backup preference persistence are reused; no schema changes.
 - Consolidated physical retest: same image, switch four scales repeatedly, check page stays the same, closing controls, Webtoon, and chapter navigation.
 - Compatibility: iOS 12.0 target, UIKit, no SwiftUI/Combine/async-await.
+
+
+## Build 18 physical issue / Build 19 hotfix (2026-10-29)
+
+- User physically reported that pressing the centered **Largura/Altura** segments fires the reader's center-tap hide-controls action.
+- Build 18 scale UI is otherwise available but **not fully physically approved** because of this gesture collision.
+- Build 19 registers UIGestureRecognizerDelegate on the reader's root-level single/double tap recognizers, excluding taps anywhere in visible in-reader overlay panels and nested UIControls.
+- Center taps on the manga image remain enabled, and side tap-zone navigation remains unchanged.
+- Branch: hotfix-build19-reader-overlay-gesture. The full build-17 M9B suite still has no complete physical acceptance report.
+- Physical gate: open scale panel and alternate Tela/Largura/Altura/Original repeatedly, confirm panel stays open, and verify center tap on the manga image still toggles controls as before.
+- iOS 12.0 deployment target and UIKit remain locked.
