@@ -7,7 +7,7 @@
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (11)**
+- App version: **0.1.0 (12)**
 
 ## Accepted physical checkpoints
 
@@ -33,7 +33,7 @@
 - Physical checks for updates/categories/reader preferences/Downloads UI were not reported before work continued.
 - Those checks are included in the build-11 physical gate.
 
-## Implemented in build 11
+## Implemented in build 12 (build-11 mega-batch + hardening)
 
 ### M7C — visual manga UI / covers
 - Source-returned `cover` URLs render in Browse/search.
@@ -86,13 +86,18 @@
 ### Product audit
 - `docs/MIHON_FEATURE_AUDIT_IOS12.md` records current Mihon-inspired features, iOS adaptations, limitations and future priorities.
 
+### Hardening before physical test
+- Same-device restore preserves source records only for sources whose active scripts still exist on disk.
+- Restore clears excluded offline chapter files so download state and storage remain coherent.
+- Loading details for an existing Library entry refreshes its persisted cover/title/status/description/chapters, so older entries can gain cover metadata from updated sources.
+
 ## Regression
 
 - Existing 11/11 core diagnostics must remain green.
 - iOS deployment target remains 12.0.
 - Build 10 physical gate is carried into build 11.
 
-## Build-11 physical acceptance gate
+## Build-12 physical acceptance gate
 
 One consolidated test should validate:
 1. Build-10 pending flows: Chapter 2 update detection, categories/filtering, reader mode/direction/resume and Downloads screen.
