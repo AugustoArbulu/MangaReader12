@@ -221,6 +221,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 
         navigationController?.pushViewController(
             MangaDetailsViewController(
+                sourceRecord: sourceRecord,
                 runtime: runtime,
                 summary: items[indexPath.row]
             ),
@@ -244,17 +245,22 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 }
 
 final class MangaDetailsViewController: UITableViewController {
+    private let sourceRecord: InstalledSourceRecord
     private let runtime: JavaScriptSourceRuntime
     private let summary: SourceMangaSummary
 
     private var manga: Manga?
     private var chapters: [Chapter] = []
     private var pendingRequests = 0
+    private var libraryRepository: LibraryRepository?
+    private var isInLibrary = false
 
     init(
+        sourceRecord: InstalledSourceRecord,
         runtime: JavaScriptSourceRuntime,
         summary: SourceMangaSummary
     ) {
+        self.sourceRecord = sourceRecord
         self.runtime = runtime
         self.summary = summary
         super.init(style: .grouped)
@@ -271,11 +277,29 @@ final class MangaDetailsViewController: UITableViewController {
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 74
 
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let refreshButton = UIBarButtonItem(
             barButtonSystemItem: .refresh,
             target: self,
             action: #selector(refreshTapped)
         )
+        let libraryButton = UIBarButtonItem(
+            title: "Biblioteca",
+            style: .plain,
+            target: self,
+            action: #selector(libraryTapped)
+        )
+        navigationItem.rightBarButtonItems = [refreshButton, libraryButton]
+
+        do {
+            libraryRepository = try LibraryRepository.defaultRepository()
+            isInLibrary = try libraryRepository?.isInLibrary(
+                sourceID: sourceRecord.manifest.id,
+                sourceMangaID: summary.id
+            ) ?? false
+            updateLibraryButton()
+        } catch {
+            libraryRepository = nil
+        }
 
         loadDetailsAndChapters()
     }
@@ -284,12 +308,62 @@ final class MangaDetailsViewController: UITableViewController {
         loadDetailsAndChapters()
     }
 
+
+    @objc private func libraryTapped() {
+        guard let manga = manga,
+              let repository = libraryRepository else {
+            showMessage(
+                title: "Biblioteca",
+                message: "Aguarde os detalhes do mangá terminarem de carregar."
+            )
+            return
+        }
+
+        do {
+            if isInLibrary {
+                try repository.remove(
+                    sourceID: sourceRecord.manifest.id,
+                    sourceMangaID: manga.id
+                )
+                isInLibrary = false
+                showMessage(
+                    title: "Biblioteca",
+                    message: "Mangá removido da Biblioteca."
+                )
+            } else {
+                try repository.add(
+                    sourceID: sourceRecord.manifest.id,
+                    manga: manga,
+                    chapters: chapters
+                )
+                isInLibrary = true
+                showMessage(
+                    title: "Biblioteca",
+                    message: "Mangá adicionado à Biblioteca."
+                )
+            }
+
+            updateLibraryButton()
+        } catch {
+            showError(error)
+        }
+    }
+
+    private func updateLibraryButton() {
+        guard let items = navigationItem.rightBarButtonItems,
+              items.count > 1 else {
+            return
+        }
+
+        items[1].title = isInLibrary ? "Remover" : "Biblioteca"
+    }
+
     private func loadDetailsAndChapters() {
         guard pendingRequests == 0 else { return }
 
         pendingRequests = 2
         navigationItem.prompt = "Carregando detalhes e capítulos…"
-        navigationItem.rightBarButtonItem?.isEnabled = false
+        navigationItem.rightBarButtonItems?.first?.isEnabled = false
 
         runtime.callDecoded(
             "details",
@@ -346,7 +420,7 @@ final class MangaDetailsViewController: UITableViewController {
 
         if pendingRequests == 0 {
             navigationItem.prompt = nil
-            navigationItem.rightBarButtonItem?.isEnabled = true
+            navigationItem.rightBarButtonItems?.first?.isEnabled = true
         }
     }
 
@@ -468,10 +542,18 @@ final class MangaDetailsViewController: UITableViewController {
 
                 switch result {
                 case .success(let pages):
-                    let firstURL = pages.first?.imageUrl ?? "nenhuma"
-                    self.showMessage(
-                        title: "\(pages.count) página(s)",
-                        message: "Primeira imagem: \(firstURL)"
+                    guard !pages.isEmpty else {
+                        self.showError(ReaderError.noPages)
+                        return
+                    }
+
+                    self.navigationController?.pushViewController(
+                        ReaderViewController(
+                            chapter: chapter,
+                            pages: pages,
+                            manifest: self.sourceRecord.manifest
+                        ),
+                        animated: true
                     )
 
                 case .failure(let error):
