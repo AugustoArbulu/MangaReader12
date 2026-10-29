@@ -141,3 +141,13 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Webtoon remains continuous and full width after selecting a scale option.
 - [ ] Chapter read progress, History and last-page resume remain correct.
 - [ ] Bottom tab bar, backups, icons and 11/11 diagnostics remain regression-free.
+
+
+## Build 17 feedback / Build 18 focused retest
+
+- [x] Build 17 preliminary device report: appears to function.
+- [ ] Full build 17 physical acceptance not yet confirmed.
+- [ ] While reading, Opções → Comparar escalas displays Tela/Largura/Altura/Original.
+- [ ] Switching scale repeatedly gives immediate visual comparison on the SAME image without a reader reload.
+- [ ] Fechar, center tap, and switching to Webtoon hide the comparison controls.
+- [ ] Chosen scale persists for the next chapter; current page, zoom, offline, and reader tab bar remain functional.

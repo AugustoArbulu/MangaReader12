@@ -339,6 +339,13 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         centerImage()
     }
 
+    func setScaleMode(_ mode: ReaderScaleMode) {
+        scaleMode = mode
+        // Update the image already displayed without reloading the chapter,
+        // moving the collection, or triggering image downloads.
+        layoutImage(resetZoom: true)
+    }
+
     func toggleZoom() {
         guard zoomScrollView.maximumZoomScale > 1 else { return }
         let target: CGFloat = zoomScrollView.zoomScale > 1.05 ? 1 : 2.5
@@ -378,6 +385,12 @@ final class ReaderViewController: UIViewController,
     private let brightnessSlider = UISlider()
     private let brightnessLabel = UILabel()
     private let directionButton = UIButton(type: .system)
+    private let scaleComparisonView = UIView()
+    private let scaleComparisonLabel = UILabel()
+    private let scaleComparisonControl = UISegmentedControl(
+        items: ["Tela", "Largura", "Altura", "Original"]
+    )
+    private let scaleComparisonCloseButton = UIButton(type: .system)
 
     private var displayMode: ReaderDisplayMode = ReaderPreferences.shared.displayMode
     private var pageDirection: ReaderPageDirection = ReaderPreferences.shared.pageDirection
@@ -455,6 +468,7 @@ final class ReaderViewController: UIViewController,
         view.addSubview(collectionView)
 
         configureControls()
+        configureScaleComparison()
         configureGestures()
 
         NSLayoutConstraint.activate([
@@ -467,6 +481,36 @@ final class ReaderViewController: UIViewController,
             controlsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             controlsView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             controlsView.heightAnchor.constraint(equalToConstant: 48),
+
+            scaleComparisonView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scaleComparisonView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scaleComparisonView.bottomAnchor.constraint(equalTo: controlsView.topAnchor),
+            scaleComparisonView.heightAnchor.constraint(equalToConstant: 84),
+
+            scaleComparisonLabel.leadingAnchor.constraint(
+                equalTo: scaleComparisonView.leadingAnchor, constant: 14
+            ),
+            scaleComparisonLabel.topAnchor.constraint(
+                equalTo: scaleComparisonView.topAnchor, constant: 7
+            ),
+
+            scaleComparisonCloseButton.trailingAnchor.constraint(
+                equalTo: scaleComparisonView.trailingAnchor, constant: -14
+            ),
+            scaleComparisonCloseButton.centerYAnchor.constraint(
+                equalTo: scaleComparisonLabel.centerYAnchor
+            ),
+
+            scaleComparisonControl.leadingAnchor.constraint(
+                equalTo: scaleComparisonView.leadingAnchor, constant: 12
+            ),
+            scaleComparisonControl.trailingAnchor.constraint(
+                equalTo: scaleComparisonView.trailingAnchor, constant: -12
+            ),
+            scaleComparisonControl.bottomAnchor.constraint(
+                equalTo: scaleComparisonView.bottomAnchor, constant: -8
+            ),
+            scaleComparisonControl.heightAnchor.constraint(equalToConstant: 32),
 
             brightnessLabel.leadingAnchor.constraint(equalTo: controlsView.leadingAnchor, constant: 14),
             brightnessLabel.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor),
@@ -532,6 +576,7 @@ final class ReaderViewController: UIViewController,
         super.viewWillDisappear(animated)
 
         if isMovingFromParent || navigationController?.isBeingDismissed == true {
+            scaleComparisonView.isHidden = true
             UIScreen.main.brightness = originalBrightness
             UIApplication.shared.isIdleTimerDisabled = originalIdleTimerDisabled
             navigationController?.setNavigationBarHidden(false, animated: false)
@@ -645,9 +690,9 @@ final class ReaderViewController: UIViewController,
         }
         if displayMode == .pages {
             sheet.addAction(UIAlertAction(
-                title: "Escala: \(scaleMode.title)",
+                title: "Comparar escalas: \(scaleMode.title)",
                 style: .default
-            ) { [weak self] _ in self?.showScalePicker() })
+            ) { [weak self] _ in self?.showScaleComparison() })
         }
         sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
         if let popover = sheet.popoverPresentationController {
@@ -656,25 +701,34 @@ final class ReaderViewController: UIViewController,
         present(sheet, animated: true)
     }
 
-    private func showScalePicker() {
-        let sheet = UIAlertController(
-            title: "Escala das páginas",
-            message: "No Webtoon, as imagens sempre ocupam a largura da tela.",
-            preferredStyle: .actionSheet
-        )
-        for mode in [ReaderScaleMode.fitScreen, .fitWidth, .fitHeight, .original] {
-            sheet.addAction(UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
-                guard let self = self else { return }
-                self.scaleMode = mode
-                self.preferences.scaleMode = mode
-                self.collectionView.reloadData()
-            })
+    private func showScaleComparison() {
+        guard displayMode == .pages else { return }
+        if controlsHidden {
+            controlsHidden = false
+            controlsView.isHidden = false
+            navigationController?.setNavigationBarHidden(false, animated: true)
         }
-        sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
-        if let popover = sheet.popoverPresentationController {
-            popover.barButtonItem = navigationItem.rightBarButtonItem
+        scaleComparisonControl.selectedSegmentIndex = scaleMode.rawValue
+        scaleComparisonView.isHidden = false
+    }
+
+    @objc private func closeScaleComparison() {
+        scaleComparisonView.isHidden = true
+    }
+
+    @objc private func comparisonScaleChanged(_ sender: UISegmentedControl) {
+        guard displayMode == .pages,
+              let selected = ReaderScaleMode(rawValue: sender.selectedSegmentIndex),
+              selected != scaleMode else { return }
+
+        scaleMode = selected
+        preferences.scaleMode = selected
+
+        // The current page stays visible throughout comparison, without a
+        // collection reload, progress mutation, or new source request.
+        for case let cell as ReaderPageCell in collectionView.visibleCells {
+            cell.setScaleMode(selected)
         }
-        present(sheet, animated: true)
     }
 
     private func changeChapter(to newChapter: Chapter) {
@@ -789,11 +843,47 @@ final class ReaderViewController: UIViewController,
     private func toggleControls() {
         controlsHidden.toggle()
         controlsView.isHidden = controlsHidden
+        if controlsHidden {
+            scaleComparisonView.isHidden = true
+        }
 
         navigationController?.setNavigationBarHidden(
             controlsHidden,
             animated: true
         )
+    }
+
+    private func configureScaleComparison() {
+        scaleComparisonView.translatesAutoresizingMaskIntoConstraints = false
+        scaleComparisonView.backgroundColor = UIColor(white: 0.08, alpha: 0.94)
+        scaleComparisonView.isHidden = true
+        view.addSubview(scaleComparisonView)
+
+        scaleComparisonLabel.translatesAutoresizingMaskIntoConstraints = false
+        scaleComparisonLabel.text = "Escala das páginas"
+        scaleComparisonLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        scaleComparisonLabel.textColor = .white
+        scaleComparisonView.addSubview(scaleComparisonLabel)
+
+        scaleComparisonCloseButton.translatesAutoresizingMaskIntoConstraints = false
+        scaleComparisonCloseButton.setTitle("Fechar", for: .normal)
+        scaleComparisonCloseButton.setTitleColor(.white, for: .normal)
+        scaleComparisonCloseButton.titleLabel?.font = UIFont.systemFont(ofSize: 13)
+        scaleComparisonCloseButton.addTarget(
+            self, action: #selector(closeScaleComparison), for: .touchUpInside
+        )
+        scaleComparisonView.addSubview(scaleComparisonCloseButton)
+
+        scaleComparisonControl.translatesAutoresizingMaskIntoConstraints = false
+        scaleComparisonControl.selectedSegmentIndex = scaleMode.rawValue
+        scaleComparisonControl.tintColor = .white
+        scaleComparisonControl.setTitleTextAttributes(
+            [.font: UIFont.systemFont(ofSize: 11)], for: .normal
+        )
+        scaleComparisonControl.addTarget(
+            self, action: #selector(comparisonScaleChanged(_:)), for: .valueChanged
+        )
+        scaleComparisonView.addSubview(scaleComparisonControl)
     }
 
     private func configureControls() {
@@ -834,6 +924,7 @@ final class ReaderViewController: UIViewController,
     }
 
     @objc private func modeChanged() {
+        closeScaleComparison()
         let current = currentPageIndex()
         displayMode = ReaderDisplayMode(rawValue: modeControl.selectedSegmentIndex) ?? .pages
         ReaderPreferences.shared.displayMode = displayMode

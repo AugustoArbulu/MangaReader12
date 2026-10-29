@@ -210,3 +210,20 @@ Physical build-15 feedback:
 4. Test Fit screen, width, height and original size in page mode, including zoom and rotation; Webtoon should remain full-width.
 5. Restore progress by reopening a chapter; check read/history and offline pages still work.
 6. Confirm no regressions to backup restore, source icons and iOS 12 diagnostics (11/11).
+
+
+## Build 17 physical feedback (partial)
+
+- User reports the build 17 **appears to be functioning** on iOS 12.
+- Requested a more convenient way to compare page scales directly within a chapter.
+- Do **not** mark the full M9B physical gate as passed yet.
+
+## Build 18 UI adjustment — live scale comparison (physical gate pending)
+
+- The chapter's Opções entry opens a compact floating scale comparison strip over the reader.
+- Four options: Tela / Largura / Altura / Original. Switching updates already visible images immediately while keeping the strip open.
+- A Fechar button and center-tap hide the strip; changing to Webtoon also closes it.
+- The current page and saved chapter progress are not reset by scale comparison.
+- Existing reader settings and backup preference persistence are reused; no schema changes.
+- Consolidated physical retest: same image, switch four scales repeatedly, check page stays the same, closing controls, Webtoon, and chapter navigation.
+- Compatibility: iOS 12.0 target, UIKit, no SwiftUI/Combine/async-await.
