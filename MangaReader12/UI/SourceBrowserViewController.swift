@@ -479,6 +479,22 @@ final class MangaDetailsViewController: UITableViewController {
         if pendingRequests == 0 {
             navigationItem.prompt = nil
             navigationItem.rightBarButtonItems?.first?.isEnabled = true
+
+            if isInLibrary,
+               let manga = manga,
+               let repository = libraryRepository {
+                do {
+                    try repository.add(
+                        sourceID: sourceRecord.manifest.id,
+                        manga: manga,
+                        chapters: chapters
+                    )
+                } catch {
+                    // Details remain usable even if refreshing cached Library
+                    // metadata fails; the explicit Library action still reports
+                    // persistence errors to the user.
+                }
+            }
         }
     }
 
