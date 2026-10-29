@@ -288,7 +288,7 @@ final class ExploreViewController: UITableViewController {
             let source = sources[indexPath.row]
             cell.textLabel?.text = source.manifest.name
             cell.detailTextLabel?.text = "v\(source.manifest.version) • \(source.manifest.lang) • \(source.enabled ? "ativada" : "desativada")"
-            cell.accessoryType = .none
+            cell.accessoryType = source.enabled ? .disclosureIndicator : .none
         }
 
         return cell
@@ -324,6 +324,25 @@ final class ExploreViewController: UITableViewController {
             message: "Versão \(record.manifest.version)",
             preferredStyle: .actionSheet
         )
+
+
+        sheet.addAction(UIAlertAction(
+            title: "Abrir source",
+            style: .default
+        ) { [weak self] _ in
+            guard record.enabled else {
+                self?.showMessage(
+                    title: "Source desativada",
+                    message: "Ative essa source antes de abri-la."
+                )
+                return
+            }
+
+            self?.navigationController?.pushViewController(
+                SourceBrowserViewController(sourceRecord: record),
+                animated: true
+            )
+        })
 
         sheet.addAction(UIAlertAction(
             title: record.enabled ? "Desativar" : "Ativar",
@@ -649,7 +668,7 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryType = .disclosureIndicator
         } else {
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M2D–M3A • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M3B–M4A • iOS 12.0"
             cell.accessoryType = .none
         }
 

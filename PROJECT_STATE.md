@@ -2,90 +2,67 @@
 
 ## Checkpoint
 
-- Project: MangaReader12 (provisional name)
-- Phase: **Batch M2D–M3A — repository lifecycle + first Mihon-style UI**
+- Project: MangaReader12
+- Phase: **Batch M3B–M4A — installed source browsing, manga details and chapters**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (5)**
+- App version: **0.1.0 (6)**
 
 ## Accepted checkpoints
 
 - Milestone 0 — COMPLETE
-- Milestone 1A — ACCEPTED (4/4 physical iOS 12)
-- Milestone 1B — ACCEPTED (5/5 physical iOS 12)
-- Milestone 1C — ACCEPTED (6/6 physical iOS 12)
-- Milestone 2A — ACCEPTED (7/7 physical iOS 12)
-- Milestone 2B — ACCEPTED (8/8 physical iOS 12)
-- Milestone 2C — **ACCEPTED on 2026-10-29**
-  - PR #6 merged
-  - Merge commit `a32fa264d4dfae868880773a7bf30ac078972910`
-  - Post-merge run `40815165763`: green
-  - Physical iOS 12 diagnostics: **9/9 green**
+- M1A — ACCEPTED (4/4)
+- M1B — ACCEPTED (5/5)
+- M1C — ACCEPTED (6/6)
+- M2A — ACCEPTED (7/7)
+- M2B — ACCEPTED (8/8)
+- M2C — ACCEPTED (9/9)
+- Batch M2D–M3A — **ACCEPTED on physical iOS 12**
+  - PR #7 merged
+  - Merge commit `b2d06e38cedfe90286a3f37a9b85a62ece373558`
+  - Post-merge run `40816795777`: green
+  - Diagnostics: **11/11**
+  - Demo repository: loaded
+  - Demo source: installed
+  - Installed runtime: **Runtime OK**
+  - Enable/disable: passed
+  - No-previous-version rollback path: passed
 
-## Implemented in this larger batch
+## Implemented in this batch
 
-### M2D — repository lifecycle coordination
-- Catalog refresh → install/update planning
-- Script download → SHA-256 verification → atomic installer
-- SQLite source metadata save after filesystem promotion
-- Rollback/cleanup path when persistence fails
-- Enable/disable installed source state
-- Remove source with best-effort database restoration on filesystem failure
-- Repository/source listing APIs
+### M3B — Installed source browsing
+- “Abrir source” action for enabled installed sources
+- Runtime is loaded from the installed `active/source.js`
+- Popular manga list through `source.popular(page)`
+- Pagination hook using `hasNextPage`
+- Pull-to-refresh
+- Per-source search through `source.search(query,page,filters)`
 
-### M2E — installed source runtime
-- Reads `active/manifest.json` + `active/source.js`
-- Creates JavaScriptCore runtime from the installed manifest
-- Loads the installed script
-- Validates all six Source API v1 methods before exposing the runtime
+### M3C — Manga details
+- Selecting a manga opens a native UIKit details screen
+- `source.details(mangaId)` populates title, author, status, genres and description
 
-### M2F — installed source management foundation
-- Installed-source listing
-- Enable/disable
-- Rollback
-- Remove
-- Repository refresh and install/update actions
-
-### M3A — first real UIKit app shell
-- Tab bar: Biblioteca / Atualizações / Histórico / Explorar / Ajustes
-- Explorar lists repositories and installed sources
-- Add custom HTTPS repository URL
-- Built-in controlled MangaReader12 demo repository option
-- Repository catalog screen with install/update state
-- Installed-source action sheet with enable/disable, rollback, remove and runtime test
-- Diagnostics moved into Ajustes and rendered as a scrollable table
+### M4A — Chapters / reader bridge
+- `source.chapters(mangaId)` populates chapter rows
+- Chapter selection invokes `source.pages(chapterId)`
+- Current checkpoint shows page count + first image URL
+- This validates the final source API step before implementing the actual image reader
 
 ## Diagnostics
 
-The batch expands the on-device suite from **9 to 11 checks**:
-
-10. Source lifecycle — coordinated DB + disk install/update/toggle/rollback/remove
-11. Installed runtime — installed `source.js` loads through JavaScriptCore and passes the source contract
-
-## Controlled end-to-end fixture
-
-The repository contains:
-
-- `fixtures/repository.json`
-- `fixtures/source.js`
-
-The UI exposes a one-tap option to add this demo repository after the batch is merged to `main`. It is only a controlled validation source and does not enable third-party sources by default.
-
-## Validation status for this batch
-
-- Swift parser checks for new backend/UI files: passed locally
-- Info.plist validation: passed locally
-- Linux full typecheck: unavailable for SQLite-backed files because the local Linux environment lacks the `SQLite3` module
-- Xcode 15.4 Debug/Release build: **pending GitHub Actions**
-- Physical iOS 12 validation: **pending after green CI**
+The regression suite remains **11 checks**. This batch intentionally uses functional UI/device validation for the new browse flow rather than inflating the diagnostic count.
 
 ## Acceptance gate
 
-After green CI, sideload build 5 and verify:
+After green CI, sideload build 6 and validate:
 
-- App opens into the five-tab UIKit shell.
-- Ajustes → Diagnósticos reports **11/11**.
-- Explorar → + → MangaReader12 demo repository loads.
-- Demo source installs successfully.
-- Selecting the installed demo source → “Testar runtime instalado” reports **Runtime OK**.
+1. Existing **11/11** remains green.
+2. Explorar → installed MangaReader12 Demo → **Abrir source**.
+3. Popular list shows **Demo Manga**.
+4. Search returns a manga result.
+5. Opening Demo Manga shows details.
+6. Chapter 1 appears.
+7. Tapping Chapter 1 resolves **1 página** and shows the demo image URL.
+
+After that checkpoint, the next larger block can implement the actual reader + initial library persistence.
