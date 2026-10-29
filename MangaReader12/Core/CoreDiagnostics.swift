@@ -17,6 +17,7 @@ enum CoreDiagnostics {
         results.append(runSourceContractDiagnostic())
         results.append(runRepositoryCatalogDiagnostic())
         results.append(runRepositoryTransportDiagnostic())
+        results.append(runSourceInstallerDiagnostic())
         return results
     }
 
@@ -538,4 +539,146 @@ enum CoreDiagnostics {
             )
         }
     }
+
+    private static func runSourceInstallerDiagnostic() -> CoreDiagnosticItem {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(
+            "MangaReader12-M2C-\(UUID().uuidString)",
+            isDirectory: true
+        )
+
+        let installer = SourceScriptInstaller(
+            baseDirectory: root,
+            fileManager: fileManager
+        )
+
+        let sourceID = "diagnostic-atomic-install"
+        defer {
+            try? installer.remove(sourceID: sourceID)
+            try? fileManager.removeItem(at: root)
+        }
+
+        do {
+            let scriptV1 = Data("var diagnosticVersion = 1;".utf8)
+            let scriptV2 = Data("var diagnosticVersion = 2;".utf8)
+
+            let manifestV1 = SourceManifest(
+                id: sourceID,
+                name: "Diagnostic Atomic Source",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: SHA256Digest.hex(scriptV1)
+            )
+
+            let manifestV2 = SourceManifest(
+                id: sourceID,
+                name: "Diagnostic Atomic Source",
+                version: "2.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: SHA256Digest.hex(scriptV2)
+            )
+
+            try installer.install(
+                manifest: manifestV1,
+                scriptData: scriptV1
+            )
+
+            guard try installer.active(sourceID: sourceID).manifest.version == "1.0.0",
+                  try installer.previous(sourceID: sourceID) == nil else {
+                return CoreDiagnosticItem(
+                    name: "Source installer",
+                    passed: false,
+                    detail: "Initial install layout mismatch"
+                )
+            }
+
+            try installer.install(
+                manifest: manifestV2,
+                scriptData: scriptV2
+            )
+
+            guard try installer.active(sourceID: sourceID).manifest.version == "2.0.0",
+                  try installer.previous(sourceID: sourceID)?.manifest.version == "1.0.0" else {
+                return CoreDiagnosticItem(
+                    name: "Source installer",
+                    passed: false,
+                    detail: "Update did not preserve previous version"
+                )
+            }
+
+            try installer.rollback(sourceID: sourceID)
+
+            guard try installer.active(sourceID: sourceID).manifest.version == "1.0.0",
+                  try installer.previous(sourceID: sourceID)?.manifest.version == "2.0.0" else {
+                return CoreDiagnosticItem(
+                    name: "Source installer",
+                    passed: false,
+                    detail: "Rollback did not restore previous version"
+                )
+            }
+
+            let badManifest = SourceManifest(
+                id: sourceID,
+                name: "Diagnostic Atomic Source",
+                version: "3.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: SHA256Digest.hex(Data("expected bytes".utf8))
+            )
+
+            do {
+                try installer.install(
+                    manifest: badManifest,
+                    scriptData: Data("corrupt bytes".utf8)
+                )
+
+                return CoreDiagnosticItem(
+                    name: "Source installer",
+                    passed: false,
+                    detail: "Integrity mismatch was not rejected"
+                )
+            } catch RepositoryTransportError.integrityMismatch {
+                guard try installer.active(sourceID: sourceID).manifest.version == "1.0.0" else {
+                    return CoreDiagnosticItem(
+                        name: "Source installer",
+                        passed: false,
+                        detail: "Rejected update changed active version"
+                    )
+                }
+
+                return CoreDiagnosticItem(
+                    name: "Source installer",
+                    passed: true,
+                    detail: "Atomic install + update + rollback OK"
+                )
+            }
+        } catch {
+            return CoreDiagnosticItem(
+                name: "Source installer",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
 }

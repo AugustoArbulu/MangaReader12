@@ -657,3 +657,307 @@ enum SHA256Digest {
         return (value >> amount) | (value << (32 - amount))
     }
 }
+
+// MARK: - Atomic source script installation
+
+struct InstalledSourceScript {
+    let manifest: SourceManifest
+    let scriptData: Data
+}
+
+enum SourceScriptInstallerError: Error, LocalizedError {
+    case applicationSupportUnavailable
+    case invalidSourceID
+    case installedSourceMissing
+    case rollbackUnavailable
+    case stagedValidationFailed
+    case swapFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .applicationSupportUnavailable:
+            return "Application Support directory is unavailable."
+        case .invalidSourceID:
+            return "Source ID is invalid for on-disk installation."
+        case .installedSourceMissing:
+            return "Installed source files are missing."
+        case .rollbackUnavailable:
+            return "No previous source version is available for rollback."
+        case .stagedValidationFailed:
+            return "Staged source files failed validation."
+        case .swapFailed(let message):
+            return "Could not atomically replace source files: \(message)"
+        }
+    }
+}
+
+final class SourceScriptInstaller {
+    private let fileManager: FileManager
+    private let baseDirectory: URL
+
+    init(
+        baseDirectory: URL,
+        fileManager: FileManager = .default
+    ) {
+        self.baseDirectory = baseDirectory
+        self.fileManager = fileManager
+    }
+
+    static func defaultInstaller() throws -> SourceScriptInstaller {
+        let fileManager = FileManager.default
+
+        guard let applicationSupport = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw SourceScriptInstallerError.applicationSupportUnavailable
+        }
+
+        let directory = applicationSupport
+            .appendingPathComponent("MangaReader12", isDirectory: true)
+            .appendingPathComponent("Sources", isDirectory: true)
+
+        return SourceScriptInstaller(
+            baseDirectory: directory,
+            fileManager: fileManager
+        )
+    }
+
+    func install(
+        manifest: SourceManifest,
+        scriptData: Data
+    ) throws {
+        try manifest.validate()
+        try validateSourceID(manifest.id)
+
+        _ = try SourceScriptIntegrity.verify(
+            data: scriptData,
+            manifest: manifest
+        )
+
+        try fileManager.createDirectory(
+            at: baseDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let root = sourceRoot(manifest.id)
+        try fileManager.createDirectory(
+            at: root,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let active = root.appendingPathComponent("active", isDirectory: true)
+        let previous = root.appendingPathComponent("previous", isDirectory: true)
+        let staging = root.appendingPathComponent(
+            ".staging-\(UUID().uuidString)",
+            isDirectory: true
+        )
+
+        try fileManager.createDirectory(
+            at: staging,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        defer {
+            if fileManager.fileExists(atPath: staging.path) {
+                try? fileManager.removeItem(at: staging)
+            }
+        }
+
+        try write(
+            manifest: manifest,
+            scriptData: scriptData,
+            to: staging
+        )
+
+        guard try validateInstalledDirectory(staging) else {
+            throw SourceScriptInstallerError.stagedValidationFailed
+        }
+
+        if fileManager.fileExists(atPath: previous.path) {
+            try fileManager.removeItem(at: previous)
+        }
+
+        var previousWasCreated = false
+
+        if fileManager.fileExists(atPath: active.path) {
+            do {
+                try fileManager.moveItem(at: active, to: previous)
+                previousWasCreated = true
+            } catch {
+                throw SourceScriptInstallerError.swapFailed(
+                    "Could not move active version to previous: \(error.localizedDescription)"
+                )
+            }
+        }
+
+        do {
+            try fileManager.moveItem(at: staging, to: active)
+        } catch {
+            if previousWasCreated,
+               !fileManager.fileExists(atPath: active.path),
+               fileManager.fileExists(atPath: previous.path) {
+                try? fileManager.moveItem(at: previous, to: active)
+            }
+
+            throw SourceScriptInstallerError.swapFailed(
+                "Could not promote staged version: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    func rollback(sourceID: String) throws {
+        try validateSourceID(sourceID)
+
+        let root = sourceRoot(sourceID)
+        let active = root.appendingPathComponent("active", isDirectory: true)
+        let previous = root.appendingPathComponent("previous", isDirectory: true)
+
+        guard fileManager.fileExists(atPath: active.path),
+              fileManager.fileExists(atPath: previous.path) else {
+            throw SourceScriptInstallerError.rollbackUnavailable
+        }
+
+        let swap = root.appendingPathComponent(
+            ".rollback-\(UUID().uuidString)",
+            isDirectory: true
+        )
+
+        do {
+            try fileManager.moveItem(at: active, to: swap)
+        } catch {
+            throw SourceScriptInstallerError.swapFailed(
+                "Could not stage current version for rollback: \(error.localizedDescription)"
+            )
+        }
+
+        do {
+            try fileManager.moveItem(at: previous, to: active)
+        } catch {
+            try? fileManager.moveItem(at: swap, to: active)
+            throw SourceScriptInstallerError.swapFailed(
+                "Could not restore previous version: \(error.localizedDescription)"
+            )
+        }
+
+        do {
+            try fileManager.moveItem(at: swap, to: previous)
+        } catch {
+            try? fileManager.moveItem(at: active, to: previous)
+            try? fileManager.moveItem(at: swap, to: active)
+
+            throw SourceScriptInstallerError.swapFailed(
+                "Could not preserve replaced version after rollback: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    func active(sourceID: String) throws -> InstalledSourceScript {
+        try validateSourceID(sourceID)
+
+        let active = sourceRoot(sourceID)
+            .appendingPathComponent("active", isDirectory: true)
+
+        guard fileManager.fileExists(atPath: active.path) else {
+            throw SourceScriptInstallerError.installedSourceMissing
+        }
+
+        return try readInstalledDirectory(active)
+    }
+
+    func previous(sourceID: String) throws -> InstalledSourceScript? {
+        try validateSourceID(sourceID)
+
+        let previous = sourceRoot(sourceID)
+            .appendingPathComponent("previous", isDirectory: true)
+
+        guard fileManager.fileExists(atPath: previous.path) else {
+            return nil
+        }
+
+        return try readInstalledDirectory(previous)
+    }
+
+    func remove(sourceID: String) throws {
+        try validateSourceID(sourceID)
+
+        let root = sourceRoot(sourceID)
+        if fileManager.fileExists(atPath: root.path) {
+            try fileManager.removeItem(at: root)
+        }
+    }
+
+    private func sourceRoot(_ sourceID: String) -> URL {
+        return baseDirectory.appendingPathComponent(
+            sourceID,
+            isDirectory: true
+        )
+    }
+
+    private func write(
+        manifest: SourceManifest,
+        scriptData: Data,
+        to directory: URL
+    ) throws {
+        let manifestData = try JSONEncoder().encode(manifest)
+
+        try manifestData.write(
+            to: directory.appendingPathComponent("manifest.json"),
+            options: .atomic
+        )
+
+        try scriptData.write(
+            to: directory.appendingPathComponent("source.js"),
+            options: .atomic
+        )
+    }
+
+    private func validateInstalledDirectory(_ directory: URL) throws -> Bool {
+        let installed = try readInstalledDirectory(directory)
+        try installed.manifest.validate()
+
+        _ = try SourceScriptIntegrity.verify(
+            data: installed.scriptData,
+            manifest: installed.manifest
+        )
+
+        return true
+    }
+
+    private func readInstalledDirectory(
+        _ directory: URL
+    ) throws -> InstalledSourceScript {
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        let scriptURL = directory.appendingPathComponent("source.js")
+
+        guard fileManager.fileExists(atPath: manifestURL.path),
+              fileManager.fileExists(atPath: scriptURL.path) else {
+            throw SourceScriptInstallerError.installedSourceMissing
+        }
+
+        let manifestData = try Data(contentsOf: manifestURL)
+        let scriptData = try Data(contentsOf: scriptURL)
+        let manifest = try JSONDecoder().decode(
+            SourceManifest.self,
+            from: manifestData
+        )
+
+        return InstalledSourceScript(
+            manifest: manifest,
+            scriptData: scriptData
+        )
+    }
+
+    private func validateSourceID(_ sourceID: String) throws {
+        guard sourceID.range(
+            of: "^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$",
+            options: .regularExpression
+        ) != nil else {
+            throw SourceScriptInstallerError.invalidSourceID
+        }
+    }
+}
+

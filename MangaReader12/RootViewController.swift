@@ -20,13 +20,13 @@ final class RootViewController: UIViewController {
 
     private func configureViews() {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Milestone 2B"
+        titleLabel.text = "Milestone 2C"
         titleLabel.font = UIFont.boldSystemFont(ofSize: 28)
         titleLabel.textAlignment = .center
         titleLabel.textColor = .black
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.text = "Repository transport + integrity — iOS 12.0"
+        subtitleLabel.text = "Atomic source install + rollback — iOS 12.0"
         subtitleLabel.font = UIFont.systemFont(ofSize: 16)
         subtitleLabel.textAlignment = .center
         subtitleLabel.textColor = .darkGray
@@ -43,7 +43,7 @@ final class RootViewController: UIViewController {
         diagnosticsStack.axis = .vertical
         diagnosticsStack.alignment = .fill
         diagnosticsStack.distribution = .fill
-        diagnosticsStack.spacing = 5
+        diagnosticsStack.spacing = 4
 
         activityIndicator.translatesAutoresizingMaskIntoConstraints = false
         activityIndicator.hidesWhenStopped = true
@@ -100,7 +100,7 @@ final class RootViewController: UIViewController {
         for result in results {
             let label = UILabel()
             label.numberOfLines = 0
-            label.font = UIFont.systemFont(ofSize: 12.5)
+            label.font = UIFont.systemFont(ofSize: 12.0)
             label.textColor = result.passed
                 ? UIColor(red: 0.08, green: 0.45, blue: 0.18, alpha: 1)
                 : .red
