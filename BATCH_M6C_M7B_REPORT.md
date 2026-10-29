@@ -40,3 +40,11 @@ All UI remains UIKit. No SwiftUI, Combine, SceneDelegate or required structured 
 ## Acceptance
 
 Build 10 requires physical iOS 12 validation of source 1.2.0 update detection, category assignment/filtering, reader preference persistence/resume, and the dedicated Downloads screen.
+
+
+## CI status
+
+- PR #12 merged.
+- Merge commit: `792fc8852da836da5aaf99bb39e3a29d8b9b8991`
+- Post-merge run: `40823779755` — success.
+- Build 10 physical iOS 12 acceptance has not yet been reported; the physical gate is carried forward into build 11.
