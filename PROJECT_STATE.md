@@ -3,11 +3,11 @@
 ## Checkpoint
 
 - Project: MangaReader12
-- Phase: **Batch M3B–M4A — installed source browsing, manga details and chapters**
+- Phase: **Batch M4B–M5A — real reader + persistent Library**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (6)**
+- App version: **0.1.0 (7)**
 
 ## Accepted checkpoints
 
@@ -18,51 +18,61 @@
 - M2A — ACCEPTED (7/7)
 - M2B — ACCEPTED (8/8)
 - M2C — ACCEPTED (9/9)
-- Batch M2D–M3A — **ACCEPTED on physical iOS 12**
-  - PR #7 merged
-  - Merge commit `b2d06e38cedfe90286a3f37a9b85a62ece373558`
-  - Post-merge run `40816795777`: green
-  - Diagnostics: **11/11**
-  - Demo repository: loaded
-  - Demo source: installed
-  - Installed runtime: **Runtime OK**
-  - Enable/disable: passed
-  - No-previous-version rollback path: passed
+- Batch M2D–M3A — ACCEPTED (11/11 + repository/runtime flow)
+- Batch M3B–M4A — **ACCEPTED on physical iOS 12**
+  - PR #8 merged
+  - Merge commit `ece765472bffca0ebfc2e75a117d2580b6d35db7`
+  - Post-merge run `40817968324`: green
+  - Source Popular/search: passed
+  - Manga details: passed
+  - Chapter list: passed
+  - Page resolution: passed
 
 ## Implemented in this batch
 
-### M3B — Installed source browsing
-- “Abrir source” action for enabled installed sources
-- Runtime is loaded from the installed `active/source.js`
-- Popular manga list through `source.popular(page)`
-- Pagination hook using `hasNextPage`
-- Pull-to-refresh
-- Per-source search through `source.search(query,page,filters)`
+### M4B — image reader
+- Native UIKit reader receives `Page[]` from installed source runtime
+- Image requests enforce the source manifest domain allowlist
+- HTTPS-only transport by default
+- Response body capped at 20 MiB per image
+- Per-page headers are forwarded
+- Page-mode horizontal paging
+- Pinch-to-zoom up to 4x in page mode
+- Basic Webtoon/continuous vertical mode
+- Dynamic vertical cell heights after image dimensions are known
 
-### M3C — Manga details
-- Selecting a manga opens a native UIKit details screen
-- `source.details(mangaId)` populates title, author, status, genres and description
+### M5A — persistent Library
+- Add/remove Library action on manga details
+- Manga + chapters are persisted into the existing SQLite schema
+- Biblioteca tab is now functional
+- Library survives app relaunch
+- Tapping a Library manga reloads its installed source runtime and opens details
+- Swipe-to-delete removes it from Library
 
-### M4A — Chapters / reader bridge
-- `source.chapters(mangaId)` populates chapter rows
-- Chapter selection invokes `source.pages(chapterId)`
-- Current checkpoint shows page count + first image URL
-- This validates the final source API step before implementing the actual image reader
+### Controlled reader fixture
+- Demo source version advanced to 1.1.0
+- Two real PNG pages stored in `fixtures/page1.png` and `fixtures/page2.png`
+- Demo manifest now allows `raw.githubusercontent.com`
+- Demo source SHA-256 updated for integrity validation
 
-## Diagnostics
+## Regression
 
-The regression suite remains **11 checks**. This batch intentionally uses functional UI/device validation for the new browse flow rather than inflating the diagnostic count.
+Existing **11/11 diagnostics** remain the regression suite. New reader/library behavior is validated functionally on device.
 
 ## Acceptance gate
 
-After green CI, sideload build 6 and validate:
+After green CI, sideload build 7 and:
 
-1. Existing **11/11** remains green.
-2. Explorar → installed MangaReader12 Demo → **Abrir source**.
-3. Popular list shows **Demo Manga**.
-4. Search returns a manga result.
-5. Opening Demo Manga shows details.
-6. Chapter 1 appears.
-7. Tapping Chapter 1 resolves **1 página** and shows the demo image URL.
+1. Confirm 11/11 remains green.
+2. Explorar → demo repository → update MangaReader12 Demo from 1.0.0 to **1.1.0**.
+3. Open source → Demo Manga → Chapter 1.
+4. Reader displays two actual images.
+5. Horizontal page mode moves between page 1 and 2.
+6. Pinch zoom works in page mode.
+7. Switch to Webtoon and scroll vertically through both pages.
+8. Back on manga details, add it to Biblioteca.
+9. Biblioteca shows Demo Manga.
+10. Close and reopen app; Demo Manga remains in Biblioteca.
+11. Open Demo Manga from Biblioteca and reach Chapter 1 again.
 
-After that checkpoint, the next larger block can implement the actual reader + initial library persistence.
+If that passes, next large block can add reading progress/history, reader controls/brightness/direction, image preload/cache and initial download support.
