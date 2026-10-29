@@ -20,7 +20,11 @@ final class DownloadsViewController: UITableViewController {
         title = "Downloads"
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 64
+        tableView.estimatedRowHeight = 100
+        tableView.register(
+            MangaCoverCell.self,
+            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+        )
         applyTheme()
 
         do {
@@ -75,12 +79,10 @@ final class DownloadsViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "DownloadCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
-
         if let error = startupError {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "DownloadError")
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: "DownloadError")
+            ThemeManager.shared.style(cell: cell)
             cell.textLabel?.text = "Erro ao abrir Downloads"
             cell.detailTextLabel?.text = error.localizedDescription
             cell.detailTextLabel?.numberOfLines = 0
@@ -88,12 +90,22 @@ final class DownloadsViewController: UITableViewController {
             return cell
         }
 
-        let record = records[indexPath.row]
-        cell.textLabel?.text = record.mangaTitle
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: MangaCoverCell.reuseIdentifier,
+            for: indexPath
+        ) as? MangaCoverCell else {
+            return UITableViewCell()
+        }
 
+        let record = records[indexPath.row]
         let percent = Int(round(record.progress * 100))
-        cell.detailTextLabel?.text = "\(record.chapterName) • \(stateText(record.state)) • \(percent)%"
-        cell.detailTextLabel?.numberOfLines = 2
+        cell.configure(
+            title: record.mangaTitle,
+            subtitle: "\(record.chapterName) • \(stateText(record.state)) • \(percent)%",
+            coverURL: nil,
+            allowedDomains: [],
+            badge: record.state == "completed" ? "Offline" : nil
+        )
         cell.accessoryType = record.state == "completed"
             ? .disclosureIndicator
             : .none
