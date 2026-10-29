@@ -25,10 +25,7 @@ final class MainTabBarController: UITabBarController {
             ),
             makeNavigation(
                 title: "Histórico",
-                root: PlaceholderViewController(
-                    titleText: "Histórico",
-                    message: "Seu histórico de leitura aparecerá aqui."
-                )
+                root: HistoryViewController()
             ),
             makeNavigation(
                 title: "Explorar",
@@ -706,7 +703,7 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M5B • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M5C–M6B • iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
