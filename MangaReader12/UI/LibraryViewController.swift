@@ -120,8 +120,8 @@ final class LibraryViewController: UITableViewController {
         cell.textLabel?.text = record.title
 
         var details = [record.status.rawValue]
-        if let names = try? categoryRepository?.names(mangaID: record.internalID),
-           let names = names,
+        if let categoryRepository = categoryRepository,
+           let names = try? categoryRepository.names(mangaID: record.internalID),
            !names.isEmpty {
             details.append(names.joined(separator: ", "))
         }
