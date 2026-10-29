@@ -243,11 +243,13 @@ final class MigrationManager {
             categoryIDs: oldCategoryIDs
         )
 
-        let oldByKey = Dictionary(
-            uniqueKeysWithValues: originalChapters.map {
-                (migrationKey($0), $0)
+        var oldByKey: [String: Chapter] = [:]
+        for chapter in originalChapters {
+            let key = migrationKey(chapter)
+            if oldByKey[key] == nil {
+                oldByKey[key] = chapter
             }
-        )
+        }
 
         var matched = 0
         var migratedHistoryChapter: Chapter?
@@ -280,6 +282,11 @@ final class MigrationManager {
                 date: history.lastReadAt
             )
         }
+
+        try reading.removeHistory(
+            sourceID: originalSourceID,
+            sourceMangaID: originalManga.id
+        )
 
         try library.remove(
             sourceID: originalSourceID,
