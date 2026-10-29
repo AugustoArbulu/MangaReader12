@@ -25,7 +25,11 @@ final class HistoryViewController: UITableViewController {
         title = "Histórico"
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 64
+        tableView.estimatedRowHeight = 100
+        tableView.register(
+            MangaCoverCell.self,
+            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+        )
         applyTheme()
 
         do {
@@ -80,12 +84,10 @@ final class HistoryViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "HistoryCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
-
         if let error = startupError {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "HistoryError")
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: "HistoryError")
+            ThemeManager.shared.style(cell: cell)
             cell.textLabel?.text = "Erro ao abrir Histórico"
             cell.detailTextLabel?.text = error.localizedDescription
             cell.detailTextLabel?.numberOfLines = 0
@@ -93,9 +95,14 @@ final class HistoryViewController: UITableViewController {
             return cell
         }
 
-        let record = records[indexPath.row]
-        cell.textLabel?.text = record.mangaTitle
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: MangaCoverCell.reuseIdentifier,
+            for: indexPath
+        ) as? MangaCoverCell else {
+            return UITableViewCell()
+        }
 
+        let record = records[indexPath.row]
         var details: [String] = []
         if let chapterName = record.chapterName {
             details.append(chapterName)
@@ -104,8 +111,12 @@ final class HistoryViewController: UITableViewController {
             from: Date(timeIntervalSince1970: record.lastReadAt)
         ))
 
-        cell.detailTextLabel?.text = details.joined(separator: " • ")
-        cell.detailTextLabel?.numberOfLines = 2
+        cell.configure(
+            title: record.mangaTitle,
+            subtitle: details.joined(separator: " • "),
+            coverURL: record.cover,
+            allowedDomains: []
+        )
         cell.accessoryType = .disclosureIndicator
         return cell
     }

@@ -3,13 +3,13 @@
 ## Checkpoint
 
 - Project: MangaReader12
-- Phase: **Batch M6C–M7B — updates, categories, persistent reader settings and Downloads UI**
+- Phase: **Batch M7C–M9A — visual covers, backup/restore, migration, reader QoL, storage and opportunistic updates**
 - Deployment target: **iOS 12.0 — locked**
 - Canonical toolchain: **Xcode 15.4 / Swift 5.10 compiler / Swift 5 language mode**
 - CI target: GitHub Actions `macos-14`
-- App version: **0.1.0 (10)**
+- App version: **0.1.0 (11)**
 
-## Accepted checkpoints
+## Accepted physical checkpoints
 
 - Milestone 0 — COMPLETE
 - M1A — ACCEPTED (4/4)
@@ -22,70 +22,86 @@
 - Batch M3B–M4A — ACCEPTED (browse/details/chapters)
 - Batch M4B–M5A — ACCEPTED (reader + persistent Library)
 - Batch M5B — ACCEPTED (custom iOS 12 Dark Mode)
-- Batch M5C–M6B — **ACCEPTED on physical iOS 12**
-  - PR #11 merged
-  - Merge commit `e5a3f2bea37c59864598f4255b4ba7d5d0321eee`
-  - Post-merge run `40822171633`: green
-  - Read state + Histórico: passed
-  - Brightness control + restore: passed
-  - Offline chapter download/relaunch/reopen/removal: passed
-  - Dark Mode + Library regression: passed
+- Batch M5C–M6B — ACCEPTED (progress/history/cache/offline)
 
-## Implemented in this batch
+## CI-complete but physical acceptance pending
 
-### M6C — Library updates
-- Atualizações tab is now functional
-- Manual refresh checks every manga currently in Biblioteca
-- Installed/enabled source runtime is used for chapter refresh
-- Existing persisted chapter IDs are compared with the source chapter list
-- New chapters are synchronized into SQLite
-- `library.last_checked` is updated after successful checks
-- New discoveries are kept in a bounded persistent update feed
-- Tapping an update reopens manga details
-- Controlled demo source 1.2.0 adds **Chapter 2** for deterministic testing
+### Batch M6C–M7B / build 10
+- PR #12 merged
+- Merge commit `792fc8852da836da5aaf99bb39e3a29d8b9b8991`
+- Post-merge run `40823779755`: green
+- Physical checks for updates/categories/reader preferences/Downloads UI were not reported before work continued.
+- Those checks are included in the build-11 physical gate.
 
-### M7A — categories
-- Uses existing `categories` and `manga_categories` tables
-- Create/delete categories
-- Assign multiple categories to a Library manga
-- Manga rows show category names
-- Filter Biblioteca by category or show all
+## Implemented in build 11
 
-### M7B — reader settings
-- Reader mode Páginas/Webtoon persists in UserDefaults
-- Page direction LTR/RTL persists in UserDefaults
-- Direction can be changed in reader controls
-- Ajustes → Leitor exposes mode and direction preferences
-- Reader restores the saved `last_page_read` when reopening a chapter
+### M7C — visual manga UI / covers
+- Source-returned `cover` URLs render in Browse/search.
+- Cover rows now appear in Library, History, Updates and Downloads.
+- Manga details use a larger native UIKit cover/header layout.
+- Memory + disk cover cache.
+- Source-manifest domain allowlist is enforced while browsing; persisted entries may refetch only their exact cover host.
 
-### M7B — Downloads UI
-- Ajustes → Downloads lists persisted download records
-- Shows manga, chapter, state and progress
-- Completed entries can reopen manga details
-- Swipe delete removes local files and persisted download state
+### M8A — backup / restore
+- Portable `.mr12backup` format.
+- Consistent SQLite snapshot via SQLite backup API.
+- Includes Library/manga/chapter/history/categories/repositories/source settings plus selected app/reader settings.
+- Excludes downloaded chapter files and installed JavaScript source scripts.
+- Portable snapshot removes download DB state and installed-source records so restore does not claim missing files/scripts exist.
+- iOS document picker export/import.
+- Restores root UI after import.
+
+### M8B — source migration
+- Searches other installed + enabled sources for matching title.
+- Visual candidate list with covers.
+- Transfers Library entry, categories, compatible read/last-page progress and history.
+- Chapter mapping prefers chapter number and falls back to normalized chapter name.
+- Offline downloads intentionally do not migrate.
+- Controlled second source `fixture.altdemo` allows deterministic physical testing.
+
+### M9A — reader quality of life
+- Persisted background: black / gray / white.
+- Optional page number.
+- Keep screen on with prior idle-timer state restored on exit.
+- Tap zones: side navigation + center chrome toggle.
+- Double-tap zoom.
+- Optional Webtoon gap.
+- Existing mode, LTR/RTL, brightness, resume and prefetch remain.
+
+### M9A — data / storage
+- Data & Storage settings screen.
+- Database/download/cache byte totals.
+- Clear reader cache.
+- Clear cover cache.
+- Reindex downloads whose local files are missing.
+- Delete all offline downloads without deleting Library/progress/history.
+- Existing per-download management is linked from the same screen.
+
+### M9A — background Library updates
+- Optional iOS 12 Background Fetch.
+- Manual refresh remains the reliable path.
+- Background execution is opportunistic and scheduled by iOS, not guaranteed at a precise time.
+- Background fetch writes discoveries to the same persistent Updates feed.
+
+### Product audit
+- `docs/MIHON_FEATURE_AUDIT_IOS12.md` records current Mihon-inspired features, iOS adaptations, limitations and future priorities.
 
 ## Regression
 
-Existing **11/11 diagnostics** remain the core regression suite. Deployment target remains 12.0.
+- Existing 11/11 core diagnostics must remain green.
+- iOS deployment target remains 12.0.
+- Build 10 physical gate is carried into build 11.
 
-## Acceptance gate
+## Build-11 physical acceptance gate
 
-After green CI, sideload build 10 and validate:
-
-1. Confirm existing 11/11 remains green.
-2. Explorar → demo repository → update MangaReader12 Demo to **1.2.0**.
-3. Confirm Demo Manga is still in Biblioteca and Chapter 2 is not yet persisted as an update.
-4. Open **Atualizações** and tap refresh.
-5. Result should report **1 capítulo novo** and show Demo Manga → Chapter 2 in the feed.
-6. Open that update and confirm Chapter 2 appears in manga details.
-7. Biblioteca → Categorias → create **Teste**.
-8. Swipe Demo Manga → Categorias → assign **Teste** → Salvar.
-9. Biblioteca → Filtrar → Teste should show Demo Manga; Todos should restore all.
-10. Ajustes → Leitor: set Webtoon, reopen Chapter 1 and confirm Webtoon is selected by default.
-11. Set Páginas + Direita → Esquerda, reopen reader and confirm the saved direction.
-12. Read only to page 2, leave and reopen; reader should resume at the saved page.
-13. Download Chapter 1 and confirm Ajustes → Downloads shows it as Offline.
-14. Remove it from Downloads and confirm the Offline marker disappears in manga details.
-15. Dark Mode and existing History/Library flows remain functional.
-
-If this passes, the next large block can focus on richer Updates scheduling/automation inside iOS limits, backup/restore, migration between sources and reader quality-of-life controls.
+One consolidated test should validate:
+1. Build-10 pending flows: Chapter 2 update detection, categories/filtering, reader mode/direction/resume and Downloads screen.
+2. Update demo repository: MangaReader12 Demo should become **1.3.0**; also install **MangaReader12 Alt Demo 1.0.0**.
+3. Cover thumbnails appear in source browse and persisted screens after the title has been refreshed/saved.
+4. Demo Manga details show a large cover, title, metadata, genres and description.
+5. Backup: create/export a `.mr12backup`, make a visible state change, restore the backup and verify the earlier Library/category/progress/settings state returns.
+6. Migration: with Demo Manga in Library and Alt Demo installed, Details → Migrar → choose Alt Demo. Category and compatible read progress/history should transfer. Downloads should not transfer.
+7. Reader QoL: background color, page-number toggle, side tap zones, center chrome toggle, double-tap zoom, keep-screen-on setting, Webtoon gap.
+8. Data & Storage: size rows load; reader/cover cache cleanup works; reindex downloads completes; delete-all-downloads clears Offline state without deleting Library/history.
+9. Automatic updates toggle can be enabled/disabled. Actual background execution cannot be deterministically forced because iOS 12 schedules Background Fetch.
+10. Dark Mode, History, Library, reader and 11/11 diagnostics remain functional.

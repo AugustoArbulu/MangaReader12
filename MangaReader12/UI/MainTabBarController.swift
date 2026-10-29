@@ -663,7 +663,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 5
+        return 6
     }
 
     override func tableView(
@@ -693,19 +693,34 @@ final class SettingsViewController: UITableViewController {
 
         case 1:
             cell.textLabel?.text = "Leitor"
-            cell.detailTextLabel?.text = "Modo padrão e direção das páginas"
+            cell.detailTextLabel?.text = "Modo, direção, fundo, tap zones e outros controles"
             cell.accessoryType = .disclosureIndicator
             cell.accessoryView = nil
             cell.selectionStyle = .default
 
         case 2:
-            cell.textLabel?.text = "Downloads"
-            cell.detailTextLabel?.text = "Capítulos salvos para leitura offline"
+            cell.textLabel?.text = "Dados e armazenamento"
+            cell.detailTextLabel?.text = "Backup, Downloads, caches e uso de espaço"
             cell.accessoryType = .disclosureIndicator
             cell.accessoryView = nil
             cell.selectionStyle = .default
 
         case 3:
+            cell.textLabel?.text = "Atualização automática"
+            cell.detailTextLabel?.text = "Oportunista: o iOS 12 decide quando executar em segundo plano"
+            cell.accessoryType = .none
+
+            let toggle = UISwitch()
+            toggle.isOn = BackgroundLibraryUpdateManager.shared.isEnabled
+            toggle.addTarget(
+                self,
+                action: #selector(backgroundUpdatesChanged(_:)),
+                for: .valueChanged
+            )
+            cell.accessoryView = toggle
+            cell.selectionStyle = .none
+
+        case 4:
             cell.textLabel?.text = "Diagnósticos"
             cell.detailTextLabel?.text = "Compatibilidade iOS 12 e subsistemas internos"
             cell.accessoryType = .disclosureIndicator
@@ -714,17 +729,20 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M6C–M7B • iOS 12.0"
+            cell.detailTextLabel?.text = "Batch M7C–M9A • iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
         }
-
         return cell
     }
 
     @objc private func darkModeChanged(_ sender: UISwitch) {
         ThemeManager.shared.setTheme(sender.isOn ? .dark : .light)
+    }
+
+    @objc private func backgroundUpdatesChanged(_ sender: UISwitch) {
+        BackgroundLibraryUpdateManager.shared.isEnabled = sender.isOn
     }
 
     override func tableView(
@@ -742,11 +760,11 @@ final class SettingsViewController: UITableViewController {
 
         case 2:
             navigationController?.pushViewController(
-                DownloadsViewController(),
+                DataStorageViewController(),
                 animated: true
             )
 
-        case 3:
+        case 4:
             navigationController?.pushViewController(
                 RootViewController(),
                 animated: true

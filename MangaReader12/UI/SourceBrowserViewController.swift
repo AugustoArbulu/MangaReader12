@@ -32,7 +32,11 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         title = sourceRecord.manifest.name
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 58
+        tableView.estimatedRowHeight = 100
+        tableView.register(
+            MangaCoverCell.self,
+            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+        )
         navigationItem.searchController = sourceSearchController
         navigationItem.hidesSearchBarWhenScrolling = false
         definesPresentationContext = true
@@ -185,16 +189,20 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "SourceMangaCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: MangaCoverCell.reuseIdentifier,
+            for: indexPath
+        ) as? MangaCoverCell else {
+            return UITableViewCell()
+        }
 
         let item = items[indexPath.row]
-        cell.textLabel?.text = item.title
-        cell.textLabel?.numberOfLines = 2
-        cell.detailTextLabel?.text = item.url ?? item.id
-        cell.detailTextLabel?.numberOfLines = 2
+        cell.configure(
+            title: item.title,
+            subtitle: item.url ?? item.id,
+            coverURL: item.cover,
+            allowedDomains: sourceRecord.manifest.domains
+        )
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -280,7 +288,11 @@ final class MangaDetailsViewController: UITableViewController {
 
         title = summary.title
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 74
+        tableView.estimatedRowHeight = 92
+        tableView.register(
+            MangaDetailsHeaderCell.self,
+            forCellReuseIdentifier: MangaDetailsHeaderCell.reuseIdentifier
+        )
         applyTheme()
 
         let refreshButton = UIBarButtonItem(
@@ -294,7 +306,17 @@ final class MangaDetailsViewController: UITableViewController {
             target: self,
             action: #selector(libraryTapped)
         )
-        navigationItem.rightBarButtonItems = [refreshButton, libraryButton]
+        let migrateButton = UIBarButtonItem(
+            title: "Migrar",
+            style: .plain,
+            target: self,
+            action: #selector(migrationTapped)
+        )
+        navigationItem.rightBarButtonItems = [
+            refreshButton,
+            libraryButton,
+            migrateButton
+        ]
 
         do {
             libraryRepository = try LibraryRepository.defaultRepository()
@@ -322,6 +344,26 @@ final class MangaDetailsViewController: UITableViewController {
         loadDetailsAndChapters()
     }
 
+
+    @objc private func migrationTapped() {
+        guard isInLibrary,
+              let manga = manga else {
+            showMessage(
+                title: "Migração",
+                message: "Adicione esta obra à Biblioteca antes de migrar."
+            )
+            return
+        }
+
+        navigationController?.pushViewController(
+            MigrationViewController(
+                originalSource: sourceRecord,
+                originalManga: manga,
+                originalChapters: chapters
+            ),
+            animated: true
+        )
+    }
 
     @objc private func libraryTapped() {
         guard let manga = manga,
@@ -365,11 +407,12 @@ final class MangaDetailsViewController: UITableViewController {
 
     private func updateLibraryButton() {
         guard let items = navigationItem.rightBarButtonItems,
-              items.count > 1 else {
+              items.count > 2 else {
             return
         }
 
         items[1].title = isInLibrary ? "Remover" : "Biblioteca"
+        items[2].isEnabled = isInLibrary
     }
 
     private func loadDetailsAndChapters() {
@@ -466,41 +509,18 @@ final class MangaDetailsViewController: UITableViewController {
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
         if indexPath.section == 0 {
-            let identifier = "MangaInfoCell"
-            let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-                ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-            ThemeManager.shared.style(cell: cell)
-
-            cell.textLabel?.numberOfLines = 0
-            cell.detailTextLabel?.numberOfLines = 0
-            cell.selectionStyle = .none
-            cell.accessoryType = .none
-
-            if let manga = manga {
-                cell.textLabel?.text = manga.title
-
-                var detailParts: [String] = []
-
-                if let author = manga.author, !author.isEmpty {
-                    detailParts.append("Autor: \(author)")
-                }
-
-                detailParts.append("Status: \(manga.status.rawValue)")
-
-                if !manga.genres.isEmpty {
-                    detailParts.append("Gêneros: \(manga.genres.joined(separator: ", "))")
-                }
-
-                if let description = manga.description, !description.isEmpty {
-                    detailParts.append(description)
-                }
-
-                cell.detailTextLabel?.text = detailParts.joined(separator: "\n")
-            } else {
-                cell.textLabel?.text = summary.title
-                cell.detailTextLabel?.text = "Carregando…"
+            guard let cell = tableView.dequeueReusableCell(
+                withIdentifier: MangaDetailsHeaderCell.reuseIdentifier,
+                for: indexPath
+            ) as? MangaDetailsHeaderCell else {
+                return UITableViewCell()
             }
 
+            cell.configure(
+                manga: manga,
+                fallback: summary,
+                allowedDomains: sourceRecord.manifest.domains
+            )
             return cell
         }
 
@@ -825,6 +845,9 @@ extension SourceBrowserViewController: ThemeApplicable {
 extension MangaDetailsViewController: ThemeApplicable {
     func applyTheme() {
         ThemeManager.shared.style(tableView: tableView)
+        tableView.visibleCells.compactMap { $0 as? MangaDetailsHeaderCell }.forEach {
+            $0.applyPalette()
+        }
         tableView.reloadData()
     }
 }

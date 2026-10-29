@@ -34,6 +34,14 @@
 		A10000000000000000000019 /* ReaderPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* ReaderPreferences.swift */; };
 		A1000000000000000000001A /* DownloadsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* DownloadsViewController.swift */; };
 		A1000000000000000000001B /* ReaderSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* ReaderSettingsViewController.swift */; };
+		A1000000000000000000001C /* MangaArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* MangaArtwork.swift */; };
+		A1000000000000000000001D /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* BackupManager.swift */; };
+		A1000000000000000000001E /* BackupViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* BackupViewController.swift */; };
+		A1000000000000000000001F /* MigrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* MigrationManager.swift */; };
+		A10000000000000000000020 /* MigrationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* MigrationViewController.swift */; };
+		A10000000000000000000021 /* StorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* StorageManager.swift */; };
+		A10000000000000000000022 /* DataStorageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* DataStorageViewController.swift */; };
+		A10000000000000000000023 /* BackgroundLibraryUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* BackgroundLibraryUpdateManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +74,14 @@
 		A2000000000000000000001A /* ReaderPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferences.swift; sourceTree = "<group>"; };
 		A2000000000000000000001B /* DownloadsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsViewController.swift; sourceTree = "<group>"; };
 		A2000000000000000000001C /* ReaderSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsViewController.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* MangaArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaArtwork.swift; sourceTree = "<group>"; };
+		A2000000000000000000001E /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
+		A2000000000000000000001F /* BackupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* MigrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* MigrationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* StorageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* DataStorageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStorageViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000024 /* BackgroundLibraryUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundLibraryUpdateManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +138,8 @@
 			children = (
 				A20000000000000000000005 /* Models.swift */,
 				A20000000000000000000006 /* CoreDiagnostics.swift */,
+				A2000000000000000000001E /* BackupManager.swift */,
+				A20000000000000000000022 /* StorageManager.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -175,6 +193,10 @@
 				A2000000000000000000001A /* ReaderPreferences.swift */,
 				A2000000000000000000001B /* DownloadsViewController.swift */,
 				A2000000000000000000001C /* ReaderSettingsViewController.swift */,
+				A2000000000000000000001D /* MangaArtwork.swift */,
+				A2000000000000000000001F /* BackupViewController.swift */,
+				A20000000000000000000021 /* MigrationViewController.swift */,
+				A20000000000000000000023 /* DataStorageViewController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -191,6 +213,8 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000017 /* LibraryUpdateManager.swift */,
+				A20000000000000000000020 /* MigrationManager.swift */,
+				A20000000000000000000024 /* BackgroundLibraryUpdateManager.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -297,6 +321,14 @@
 				A10000000000000000000019 /* ReaderPreferences.swift in Sources */,
 				A1000000000000000000001A /* DownloadsViewController.swift in Sources */,
 				A1000000000000000000001B /* ReaderSettingsViewController.swift in Sources */,
+				A1000000000000000000001C /* MangaArtwork.swift in Sources */,
+				A1000000000000000000001D /* BackupManager.swift in Sources */,
+				A1000000000000000000001E /* BackupViewController.swift in Sources */,
+				A1000000000000000000001F /* MigrationManager.swift in Sources */,
+				A10000000000000000000020 /* MigrationViewController.swift in Sources */,
+				A10000000000000000000021 /* StorageManager.swift in Sources */,
+				A10000000000000000000022 /* DataStorageViewController.swift in Sources */,
+				A10000000000000000000023 /* BackgroundLibraryUpdateManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -342,7 +374,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -364,7 +396,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;

@@ -242,6 +242,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         page: Page,
         loader: ReaderImageLoader,
         zoomEnabled: Bool,
+        backgroundColor: UIColor,
+        foregroundColor: UIColor,
         imageLoaded: @escaping (UIImage) -> Void
     ) {
         representedURL = page.imageUrl
@@ -249,6 +251,11 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         errorLabel.isHidden = true
         zoomScrollView.zoomScale = 1
         zoomScrollView.maximumZoomScale = zoomEnabled ? 4 : 1
+        self.backgroundColor = backgroundColor
+        contentView.backgroundColor = backgroundColor
+        zoomScrollView.backgroundColor = backgroundColor
+        imageView.backgroundColor = backgroundColor
+        errorLabel.textColor = foregroundColor
         spinner.startAnimating()
 
         loader.load(page: page) { [weak self] result in
@@ -273,6 +280,12 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         }
     }
 
+    func toggleZoom() {
+        guard zoomScrollView.maximumZoomScale > 1 else { return }
+        let target: CGFloat = zoomScrollView.zoomScale > 1.05 ? 1 : 2.5
+        zoomScrollView.setZoomScale(target, animated: true)
+    }
+
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
         return imageView
     }
@@ -291,6 +304,8 @@ final class ReaderViewController: UIViewController,
     private let imageLoader: ReaderImageLoader
     private let progressRepository: ReadingProgressRepository?
     private let originalBrightness: CGFloat
+    private let originalIdleTimerDisabled: Bool
+    private let preferences = ReaderPreferences.shared
 
     private let layout = UICollectionViewFlowLayout()
     private lazy var collectionView = UICollectionView(
@@ -309,6 +324,7 @@ final class ReaderViewController: UIViewController,
     private var lastPersistedIndex = -1
     private var initialPageIndex = 0
     private var didRestoreInitialPage = false
+    private var controlsHidden = false
 
     init(
         sourceID: String,
@@ -324,6 +340,7 @@ final class ReaderViewController: UIViewController,
         self.imageLoader = ReaderImageLoader(manifest: manifest)
         self.progressRepository = try? ReadingProgressRepository.defaultRepository()
         self.originalBrightness = UIScreen.main.brightness
+        self.originalIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -335,14 +352,15 @@ final class ReaderViewController: UIViewController,
         super.viewDidLoad()
 
         title = chapter.name
-        view.backgroundColor = .black
+        let background = readerBackgroundColor()
+        view.backgroundColor = background
 
-        layout.minimumLineSpacing = 0
+        layout.minimumLineSpacing = displayMode == .webtoon && preferences.webtoonGapEnabled ? 8 : 0
         layout.minimumInteritemSpacing = 0
         layout.scrollDirection = displayMode == .pages ? .horizontal : .vertical
 
         collectionView.translatesAutoresizingMaskIntoConstraints = false
-        collectionView.backgroundColor = .black
+        collectionView.backgroundColor = background
         collectionView.dataSource = self
         collectionView.prefetchDataSource = self
         collectionView.delegate = self
@@ -356,6 +374,7 @@ final class ReaderViewController: UIViewController,
         view.addSubview(collectionView)
 
         configureControls()
+        configureGestures()
 
         NSLayoutConstraint.activate([
             collectionView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -392,6 +411,7 @@ final class ReaderViewController: UIViewController,
         applyPageDirection()
         loadInitialProgress()
         updatePagePrompt()
+        UIApplication.shared.isIdleTimerDisabled = preferences.keepScreenOn
     }
 
     override func viewDidLayoutSubviews() {
@@ -425,7 +445,99 @@ final class ReaderViewController: UIViewController,
 
         if isMovingFromParent || navigationController?.isBeingDismissed == true {
             UIScreen.main.brightness = originalBrightness
+            UIApplication.shared.isIdleTimerDisabled = originalIdleTimerDisabled
+            navigationController?.setNavigationBarHidden(false, animated: false)
         }
+    }
+
+    private func configureGestures() {
+        let singleTap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(handleReaderTap(_:))
+        )
+        singleTap.numberOfTapsRequired = 1
+        singleTap.cancelsTouchesInView = false
+
+        let doubleTap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(handleReaderDoubleTap(_:))
+        )
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.cancelsTouchesInView = false
+
+        singleTap.require(toFail: doubleTap)
+        view.addGestureRecognizer(singleTap)
+        view.addGestureRecognizer(doubleTap)
+    }
+
+    @objc private func handleReaderDoubleTap(_ gesture: UITapGestureRecognizer) {
+        guard preferences.doubleTapZoomEnabled,
+              displayMode == .pages else {
+            return
+        }
+
+        let index = currentPageIndex()
+        guard let cell = collectionView.cellForItem(
+            at: IndexPath(item: index, section: 0)
+        ) as? ReaderPageCell else {
+            return
+        }
+
+        cell.toggleZoom()
+    }
+
+    @objc private func handleReaderTap(_ gesture: UITapGestureRecognizer) {
+        guard preferences.tapZonesEnabled else {
+            return
+        }
+
+        let point = gesture.location(in: view)
+        let width = max(1, view.bounds.width)
+
+        if displayMode == .webtoon || point.x >= width / 3 && point.x <= width * 2 / 3 {
+            toggleControls()
+            return
+        }
+
+        let leftSide = point.x < width / 3
+        let shouldAdvance: Bool
+
+        if pageDirection == .rightToLeft {
+            shouldAdvance = leftSide
+        } else {
+            shouldAdvance = !leftSide
+        }
+
+        movePage(forward: shouldAdvance)
+    }
+
+    private func movePage(forward: Bool) {
+        guard displayMode == .pages, !pages.isEmpty else { return }
+
+        let current = currentPageIndex()
+        let target = current + (forward ? 1 : -1)
+
+        guard target >= 0, target < pages.count else { return }
+
+        collectionView.scrollToItem(
+            at: IndexPath(item: target, section: 0),
+            at: .centeredHorizontally,
+            animated: true
+        )
+        persistProgress(index: target)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.updatePagePrompt()
+        }
+    }
+
+    private func toggleControls() {
+        controlsHidden.toggle()
+        controlsView.isHidden = controlsHidden
+        navigationController?.setNavigationBarHidden(
+            controlsHidden,
+            animated: true
+        )
     }
 
     private func configureControls() {
@@ -471,6 +583,7 @@ final class ReaderViewController: UIViewController,
         ReaderPreferences.shared.displayMode = displayMode
 
         layout.scrollDirection = displayMode == .pages ? .horizontal : .vertical
+        layout.minimumLineSpacing = displayMode == .webtoon && preferences.webtoonGapEnabled ? 8 : 0
         collectionView.isPagingEnabled = displayMode == .pages
         applyPageDirection()
         collectionView.reloadData()
@@ -573,7 +686,9 @@ final class ReaderViewController: UIViewController,
         cell.configure(
             page: page,
             loader: imageLoader,
-            zoomEnabled: displayMode == .pages
+            zoomEnabled: displayMode == .pages,
+            backgroundColor: readerBackgroundColor(),
+            foregroundColor: readerForegroundColor()
         ) { [weak self] image in
             guard let self = self,
                   image.size.width > 0 else {
@@ -663,6 +778,11 @@ final class ReaderViewController: UIViewController,
     }
 
     private func updatePagePrompt() {
+        guard preferences.showPageNumber else {
+            navigationItem.prompt = nil
+            return
+        }
+
         guard !pages.isEmpty else {
             navigationItem.prompt = "0 páginas"
             return
@@ -670,6 +790,21 @@ final class ReaderViewController: UIViewController,
 
         let index = currentPageIndex()
         navigationItem.prompt = "\(index + 1) / \(pages.count)"
+    }
+
+    private func readerBackgroundColor() -> UIColor {
+        switch preferences.backgroundStyle {
+        case .black:
+            return .black
+        case .gray:
+            return UIColor(white: 0.20, alpha: 1)
+        case .white:
+            return .white
+        }
+    }
+
+    private func readerForegroundColor() -> UIColor {
+        return preferences.backgroundStyle == .white ? .black : .white
     }
 
     private func persistProgress(index: Int) {

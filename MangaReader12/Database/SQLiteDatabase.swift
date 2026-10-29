@@ -759,6 +759,59 @@ final class LibraryRepository {
         return LibraryRepository(database: database)
     }
 
+    func find(sourceID: String, sourceMangaID: String) throws -> LibraryMangaRecord? {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.internal_id,
+                    m.source_id,
+                    m.source_manga_id,
+                    m.title,
+                    m.cover,
+                    m.description,
+                    m.status,
+                    m.url,
+                    l.date_added
+                FROM library l
+                JOIN manga m ON m.internal_id = l.manga_id
+                WHERE m.source_id = ? AND m.source_manga_id = ?
+                LIMIT 1;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE { return nil }
+
+            guard result == SQLITE_ROW,
+                  let storedSourceID = columnText(statement, index: 1),
+                  let storedMangaID = columnText(statement, index: 2),
+                  let title = columnText(statement, index: 3),
+                  let statusRaw = columnText(statement, index: 6) else {
+                throw sqliteError(handle)
+            }
+
+            return LibraryMangaRecord(
+                internalID: sqlite3_column_int64(statement, 0),
+                sourceID: storedSourceID,
+                sourceMangaID: storedMangaID,
+                title: title,
+                cover: columnText(statement, index: 4),
+                description: columnText(statement, index: 5),
+                status: MangaStatus(rawValue: statusRaw) ?? .unknown,
+                url: columnText(statement, index: 7),
+                dateAdded: sqlite3_column_double(statement, 8)
+            )
+        }
+    }
+
     func isInLibrary(sourceID: String, sourceMangaID: String) throws -> Bool {
         try database.openAndMigrate()
         return try database.withConnection { handle in
@@ -1434,6 +1487,7 @@ struct DownloadListRecord: Equatable {
     let sourceID: String
     let sourceMangaID: String
     let mangaTitle: String
+    let cover: String?
     let sourceChapterID: String
     let chapterName: String
     let state: String
@@ -1615,6 +1669,94 @@ final class ReadingProgressRepository {
             }
 
             return states
+        }
+    }
+
+    func applyMigrationState(
+        sourceID: String,
+        manga: Manga,
+        chapter: Chapter,
+        state: ChapterReadingState
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let ids = try ensureReadingRows(
+                sourceID: sourceID,
+                manga: manga,
+                chapter: chapter,
+                handle: handle
+            )
+
+            let statement = try prepareStatement(
+                """
+                UPDATE chapters
+                SET is_read = ?, last_page_read = ?
+                WHERE internal_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int(statement, 1, state.isRead ? 1 : 0) == SQLITE_OK,
+                  sqlite3_bind_int(statement, 2, Int32(max(0, state.lastPageRead))) == SQLITE_OK,
+                  sqlite3_bind_int64(statement, 3, ids.chapterID) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    func recordHistory(
+        sourceID: String,
+        manga: Manga,
+        chapter: Chapter,
+        date: TimeInterval = Date().timeIntervalSince1970
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let ids = try ensureReadingRows(
+                sourceID: sourceID,
+                manga: manga,
+                chapter: chapter,
+                handle: handle
+            )
+
+            let update = try prepareStatement(
+                """
+                UPDATE history
+                SET chapter_id = ?, last_read_at = ?
+                WHERE manga_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(update) }
+
+            guard sqlite3_bind_int64(update, 1, ids.chapterID) == SQLITE_OK,
+                  sqlite3_bind_double(update, 2, date) == SQLITE_OK,
+                  sqlite3_bind_int64(update, 3, ids.mangaID) == SQLITE_OK,
+                  sqlite3_step(update) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            if sqlite3_changes(handle) == 0 {
+                let insert = try prepareStatement(
+                    """
+                    INSERT INTO history (manga_id, chapter_id, last_read_at)
+                    VALUES (?, ?, ?);
+                    """,
+                    handle: handle
+                )
+                defer { sqlite3_finalize(insert) }
+
+                guard sqlite3_bind_int64(insert, 1, ids.mangaID) == SQLITE_OK,
+                      sqlite3_bind_int64(insert, 2, ids.chapterID) == SQLITE_OK,
+                      sqlite3_bind_double(insert, 3, date) == SQLITE_OK,
+                      sqlite3_step(insert) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+            }
         }
     }
 
@@ -1865,6 +2007,7 @@ final class DownloadRepository {
                     m.source_id,
                     m.source_manga_id,
                     m.title,
+                    m.cover,
                     c.source_chapter_id,
                     c.name,
                     d.state,
@@ -1890,9 +2033,9 @@ final class DownloadRepository {
                       let sourceID = columnText(statement, index: 0),
                       let sourceMangaID = columnText(statement, index: 1),
                       let mangaTitle = columnText(statement, index: 2),
-                      let sourceChapterID = columnText(statement, index: 3),
-                      let chapterName = columnText(statement, index: 4),
-                      let state = columnText(statement, index: 5) else {
+                      let sourceChapterID = columnText(statement, index: 4),
+                      let chapterName = columnText(statement, index: 5),
+                      let state = columnText(statement, index: 6) else {
                     throw sqliteError(handle)
                 }
 
@@ -1901,18 +2044,56 @@ final class DownloadRepository {
                         sourceID: sourceID,
                         sourceMangaID: sourceMangaID,
                         mangaTitle: mangaTitle,
+                        cover: columnText(statement, index: 3),
                         sourceChapterID: sourceChapterID,
                         chapterName: chapterName,
                         state: state,
-                        progress: sqlite3_column_double(statement, 6),
-                        localPath: columnText(statement, index: 7),
-                        updatedAt: sqlite3_column_double(statement, 8)
+                        progress: sqlite3_column_double(statement, 7),
+                        localPath: columnText(statement, index: 8),
+                        updatedAt: sqlite3_column_double(statement, 9)
                     )
                 )
             }
 
             return records
         }
+    }
+
+    func clearAll() throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+            do {
+                try executeSQLite("DELETE FROM downloads;", handle: handle)
+                try executeSQLite("UPDATE chapters SET downloaded = 0;", handle: handle)
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
+            }
+        }
+    }
+
+    func removeMissingFiles(fileManager: FileManager = .default) throws -> Int {
+        let records = try listDownloads()
+        var removed = 0
+
+        for record in records {
+            guard let path = record.localPath,
+                  !fileManager.fileExists(atPath: path) else {
+                continue
+            }
+
+            try remove(
+                sourceID: record.sourceID,
+                sourceMangaID: record.sourceMangaID,
+                sourceChapterID: record.sourceChapterID
+            )
+            removed += 1
+        }
+
+        return removed
     }
 
     func remove(

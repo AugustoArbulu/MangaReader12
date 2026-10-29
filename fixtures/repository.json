@@ -5,7 +5,7 @@
     {
       "id": "fixture.localdemo",
       "name": "MangaReader12 Demo",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "lang": "en",
       "author": "MangaReader12",
       "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/source.js",
@@ -14,7 +14,21 @@
       "minAppVersion": "0.1.0",
       "domains": ["example.com", "raw.githubusercontent.com"],
       "nsfw": false,
-      "sha256": "d41185866e2422a5152ab5cbb8c6ca54eec7177238b54776b0a957aabae756fe"
+      "sha256": "8c5850342a7daf117e73ddcd6a083565ce38fab73baba6a37ced0a234a8b21e2"
+    },
+    {
+      "id": "fixture.altdemo",
+      "name": "MangaReader12 Alt Demo",
+      "version": "1.0.0",
+      "lang": "en",
+      "author": "MangaReader12",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/source-alt.js",
+      "icon": null,
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": ["example.org", "raw.githubusercontent.com"],
+      "nsfw": false,
+      "sha256": "9ed583656968980787439ffb48509bca136598dafb7fe3f5bb67de3d59cb82af"
     }
   ]
 }

@@ -22,7 +22,11 @@ final class LibraryViewController: UITableViewController {
         title = "Biblioteca"
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 64
+        tableView.estimatedRowHeight = 100
+        tableView.register(
+            MangaCoverCell.self,
+            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+        )
         applyTheme()
 
         navigationItem.rightBarButtonItems = [
@@ -103,12 +107,10 @@ final class LibraryViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "LibraryCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
-
         if let error = startupError {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "LibraryError")
+                ?? UITableViewCell(style: .subtitle, reuseIdentifier: "LibraryError")
+            ThemeManager.shared.style(cell: cell)
             cell.textLabel?.text = "Erro ao abrir Biblioteca"
             cell.detailTextLabel?.text = error.localizedDescription
             cell.detailTextLabel?.numberOfLines = 0
@@ -116,9 +118,14 @@ final class LibraryViewController: UITableViewController {
             return cell
         }
 
-        let record = records[indexPath.row]
-        cell.textLabel?.text = record.title
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: MangaCoverCell.reuseIdentifier,
+            for: indexPath
+        ) as? MangaCoverCell else {
+            return UITableViewCell()
+        }
 
+        let record = records[indexPath.row]
         var details = [record.status.rawValue]
         if let categoryRepository = categoryRepository,
            let names = try? categoryRepository.names(mangaID: record.internalID),
@@ -126,7 +133,12 @@ final class LibraryViewController: UITableViewController {
             details.append(names.joined(separator: ", "))
         }
 
-        cell.detailTextLabel?.text = details.joined(separator: " • ")
+        cell.configure(
+            title: record.title,
+            subtitle: details.joined(separator: " • "),
+            coverURL: record.cover,
+            allowedDomains: []
+        )
         cell.accessoryType = .disclosureIndicator
         return cell
     }

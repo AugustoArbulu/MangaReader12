@@ -20,7 +20,11 @@ final class UpdatesViewController: UITableViewController {
         title = "Atualizações"
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 64
+        tableView.estimatedRowHeight = 100
+        tableView.register(
+            MangaCoverCell.self,
+            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+        )
         applyTheme()
 
         navigationItem.rightBarButtonItem = UIBarButtonItem(
@@ -120,15 +124,21 @@ final class UpdatesViewController: UITableViewController {
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "UpdateCell"
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
-        ThemeManager.shared.style(cell: cell)
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: MangaCoverCell.reuseIdentifier,
+            for: indexPath
+        ) as? MangaCoverCell else {
+            return UITableViewCell()
+        }
 
         let event = events[indexPath.row]
-        cell.textLabel?.text = event.mangaTitle
-        cell.detailTextLabel?.text = event.chapterName
-        cell.detailTextLabel?.numberOfLines = 2
+        cell.configure(
+            title: event.mangaTitle,
+            subtitle: event.chapterName,
+            coverURL: event.mangaCover,
+            allowedDomains: [],
+            badge: "Novo"
+        )
         cell.accessoryType = .disclosureIndicator
         return cell
     }

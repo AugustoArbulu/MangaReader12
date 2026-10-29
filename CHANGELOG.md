@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 0.1.0-m7c-m9a-visual-backup-migration-qol — 2026-10-29
+
+- Added cover images from extension-provided `cover` URLs across source browse, Library, History, Updates, Downloads and manga details.
+- Added memory + disk cover caching with source-domain policy enforcement.
+- Reworked manga details with a large cover/header presentation.
+- Added portable `.mr12backup` creation and restore using consistent SQLite snapshots and the iOS document picker.
+- Backup includes Library/database state plus selected app/reader settings; download files and installed source scripts are deliberately excluded.
+- Added source migration with global search across other enabled installed sources.
+- Migration transfers Library membership, categories, compatible read/last-page states and history; offline downloads are deliberately not migrated.
+- Added controlled MangaReader12 Alt Demo source for deterministic migration testing.
+- Updated main demo source to 1.3.0 with cover metadata.
+- Added reader background black/gray/white, optional page counter, keep-screen-on, tap zones, double-tap zoom and optional Webtoon gaps.
+- Added Data & Storage screen with storage usage, cache cleanup, reindex downloads and delete-all-downloads.
+- Added best-effort iOS 12 Background Fetch for Library updates with an explicit opt-in toggle.
+- Added Mihon → iOS 12 feature/QoL audit and roadmap document.
+- Advanced app build number to 11.
+
 ## 0.1.0-m6c-m7b-updates-categories-reader-downloads-ui — 2026-10-29
 
 - Accepted M5C–M6B after successful physical iOS 12 validation of read state, history, brightness, offline chapter persistence and removal.
