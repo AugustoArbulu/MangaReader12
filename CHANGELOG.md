@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.1.0-m6c-m7b-updates-categories-reader-downloads-ui — 2026-10-29
+
+- Accepted M5C–M6B after successful physical iOS 12 validation of read state, history, brightness, offline chapter persistence and removal.
+- Added functional Library update checking with a persistent update feed.
+- Added controlled demo source 1.2.0 with Chapter 2 for update detection validation.
+- Added category creation, deletion, manga assignment and Library filtering.
+- Added persistent reader mode and page-direction preferences.
+- Reader now resumes from the saved last page.
+- Added dedicated reader settings screen.
+- Added dedicated Downloads screen with status/progress and removal.
+- Connected Atualizações to the main tab and Reader/Downloads to Ajustes.
+- Advanced app build number to 10.
+
 ## 0.1.0-m5c-m6b-progress-history-downloads — 2026-10-29
 
 - Accepted M5B after successful physical iOS 12 dark-mode switching and persistence validation.
