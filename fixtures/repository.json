@@ -1,0 +1,20 @@
+{
+  "name": "MangaReader12 Demo Repository",
+  "apiVersion": 1,
+  "sources": [
+    {
+      "id": "fixture.localdemo",
+      "name": "MangaReader12 Demo",
+      "version": "1.0.0",
+      "lang": "en",
+      "author": "MangaReader12",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/source.js",
+      "icon": null,
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": ["example.com"],
+      "nsfw": false,
+      "sha256": "3e0dec61d2081d2d505c03993ef9204f155bf7e3b568f3ba7ad7d2b68218c781"
+    }
+  ]
+}

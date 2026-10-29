@@ -18,6 +18,8 @@ enum CoreDiagnostics {
         results.append(runRepositoryCatalogDiagnostic())
         results.append(runRepositoryTransportDiagnostic())
         results.append(runSourceInstallerDiagnostic())
+        results.append(runSourceLifecycleDiagnostic())
+        results.append(runInstalledRuntimeDiagnostic())
         return results
     }
 
@@ -675,6 +677,298 @@ enum CoreDiagnostics {
         } catch {
             return CoreDiagnosticItem(
                 name: "Source installer",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+
+    private static func runSourceLifecycleDiagnostic() -> CoreDiagnosticItem {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(
+            "MangaReader12-Lifecycle-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let databasePath = root.appendingPathComponent("diagnostic.sqlite").path
+        let sourcesDirectory = root.appendingPathComponent("Sources", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(
+                at: root,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+
+            let database = SQLiteDatabase(path: databasePath)
+            defer {
+                database.close()
+                try? fileManager.removeItem(at: root)
+            }
+
+            try database.openAndMigrate()
+
+            let installer = SourceScriptInstaller(
+                baseDirectory: sourcesDirectory,
+                fileManager: fileManager
+            )
+
+            let manager = SourceLifecycleManager(
+                database: database,
+                installer: installer,
+                appVersion: "0.1.0"
+            )
+
+            let scriptV1 = Data("var source = {};".utf8)
+            let manifestV1 = SourceManifest(
+                id: "diagnostic.lifecycle",
+                name: "Lifecycle Diagnostic",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: SHA256Digest.hex(scriptV1)
+            )
+
+            let installed = try manager.installDownloaded(
+                manifest: manifestV1,
+                scriptData: scriptV1
+            )
+
+            guard installed.manifest.version == "1.0.0",
+                  installed.enabled,
+                  try manager.installedSources().count == 1 else {
+                return CoreDiagnosticItem(
+                    name: "Source lifecycle",
+                    passed: false,
+                    detail: "Install/persistence mismatch"
+                )
+            }
+
+            try manager.setSourceEnabled(
+                false,
+                sourceID: manifestV1.id
+            )
+
+            guard try manager.installedSources().first?.enabled == false else {
+                return CoreDiagnosticItem(
+                    name: "Source lifecycle",
+                    passed: false,
+                    detail: "Enable/disable state mismatch"
+                )
+            }
+
+            let scriptV2 = Data("var source = { version: 2 };".utf8)
+            let manifestV2 = SourceManifest(
+                id: manifestV1.id,
+                name: manifestV1.name,
+                version: "2.0.0",
+                lang: manifestV1.lang,
+                author: manifestV1.author,
+                script: manifestV1.script,
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: manifestV1.domains,
+                nsfw: false,
+                sha256: SHA256Digest.hex(scriptV2)
+            )
+
+            let updated = try manager.installDownloaded(
+                manifest: manifestV2,
+                scriptData: scriptV2
+            )
+
+            guard updated.manifest.version == "2.0.0",
+                  updated.enabled == false,
+                  try installer.previous(sourceID: manifestV1.id)?.manifest.version == "1.0.0" else {
+                return CoreDiagnosticItem(
+                    name: "Source lifecycle",
+                    passed: false,
+                    detail: "Update did not preserve state/version"
+                )
+            }
+
+            let rolledBack = try manager.rollback(sourceID: manifestV1.id)
+
+            guard rolledBack.manifest.version == "1.0.0",
+                  rolledBack.enabled == false else {
+                return CoreDiagnosticItem(
+                    name: "Source lifecycle",
+                    passed: false,
+                    detail: "Rollback did not restore persisted manifest"
+                )
+            }
+
+            try manager.removeSource(sourceID: manifestV1.id)
+
+            guard try manager.installedSources().isEmpty else {
+                return CoreDiagnosticItem(
+                    name: "Source lifecycle",
+                    passed: false,
+                    detail: "Source removal left database state behind"
+                )
+            }
+
+            return CoreDiagnosticItem(
+                name: "Source lifecycle",
+                passed: true,
+                detail: "DB + disk install/update/toggle/rollback/remove OK"
+            )
+        } catch {
+            try? fileManager.removeItem(at: root)
+            return CoreDiagnosticItem(
+                name: "Source lifecycle",
+                passed: false,
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private static func runInstalledRuntimeDiagnostic() -> CoreDiagnosticItem {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(
+            "MangaReader12-Runtime-\(UUID().uuidString)",
+            isDirectory: true
+        )
+
+        let sourceID = "diagnostic.installed-runtime"
+        let script = """
+        var source = {
+          metadata: function() {
+            return {
+              id: "diagnostic.installed-runtime",
+              name: "Installed Runtime Diagnostic",
+              lang: "en",
+              version: "1.0.0"
+            };
+          },
+          popular: function(page) {
+            return { items: [], hasNextPage: false };
+          },
+          search: function(query, page, filters) {
+            return { items: [], hasNextPage: false };
+          },
+          details: function(mangaId) {
+            return {
+              id: mangaId,
+              title: "Diagnostic",
+              altTitles: [],
+              cover: null,
+              author: null,
+              artist: null,
+              description: null,
+              status: "unknown",
+              genres: [],
+              url: null
+            };
+          },
+          chapters: function(mangaId) { return []; },
+          pages: function(chapterId) { return []; }
+        };
+        """
+
+        do {
+            let installer = SourceScriptInstaller(
+                baseDirectory: root,
+                fileManager: fileManager
+            )
+            defer {
+                try? installer.remove(sourceID: sourceID)
+                try? fileManager.removeItem(at: root)
+            }
+
+            let scriptData = Data(script.utf8)
+            let manifest = SourceManifest(
+                id: sourceID,
+                name: "Installed Runtime Diagnostic",
+                version: "1.0.0",
+                lang: "en",
+                author: "MangaReader12",
+                script: "https://example.com/source.js",
+                icon: nil,
+                apiVersion: 1,
+                minAppVersion: "0.1.0",
+                domains: ["example.com"],
+                nsfw: false,
+                sha256: SHA256Digest.hex(scriptData)
+            )
+
+            try installer.install(
+                manifest: manifest,
+                scriptData: scriptData
+            )
+
+            let loader = InstalledSourceRuntimeLoader(installer: installer)
+            let semaphore = DispatchSemaphore(value: 0)
+            var diagnosticResult: Result<SourceMetadata, Error>?
+
+            loader.load(sourceID: sourceID) { runtimeResult in
+                switch runtimeResult {
+                case .success(let runtime):
+                    runtime.callDecoded(
+                        "metadata",
+                        as: SourceMetadata.self
+                    ) { metadataResult in
+                        diagnosticResult = metadataResult
+                        semaphore.signal()
+                    }
+
+                case .failure(let error):
+                    diagnosticResult = .failure(error)
+                    semaphore.signal()
+                }
+            }
+
+            let waitResult = semaphore.wait(timeout: .now() + 3)
+            guard waitResult == .success else {
+                return CoreDiagnosticItem(
+                    name: "Installed runtime",
+                    passed: false,
+                    detail: "Runtime load timed out"
+                )
+            }
+
+            switch diagnosticResult {
+            case .success(let metadata)?:
+                guard metadata.id == sourceID,
+                      metadata.version == "1.0.0" else {
+                    return CoreDiagnosticItem(
+                        name: "Installed runtime",
+                        passed: false,
+                        detail: "Installed metadata mismatch"
+                    )
+                }
+
+                return CoreDiagnosticItem(
+                    name: "Installed runtime",
+                    passed: true,
+                    detail: "active/source.js → JavaScriptCore contract OK"
+                )
+
+            case .failure(let error)?:
+                return CoreDiagnosticItem(
+                    name: "Installed runtime",
+                    passed: false,
+                    detail: error.localizedDescription
+                )
+
+            case nil:
+                return CoreDiagnosticItem(
+                    name: "Installed runtime",
+                    passed: false,
+                    detail: "Runtime produced no diagnostic result"
+                )
+            }
+        } catch {
+            try? fileManager.removeItem(at: root)
+            return CoreDiagnosticItem(
+                name: "Installed runtime",
                 passed: false,
                 detail: error.localizedDescription
             )

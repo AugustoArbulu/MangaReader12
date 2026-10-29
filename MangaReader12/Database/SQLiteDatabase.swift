@@ -404,6 +404,73 @@ final class SourceRepository {
         }
     }
 
+
+
+    func list() throws -> [InstalledSourceRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT manifest_json, enabled, installed_at, updated_at
+                FROM sources
+                ORDER BY name COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var records: [InstalledSourceRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE {
+                    break
+                }
+
+                guard result == SQLITE_ROW,
+                      let manifestJSON = columnText(statement, index: 0),
+                      let data = manifestJSON.data(using: .utf8) else {
+                    throw sqliteError(handle)
+                }
+
+                records.append(
+                    InstalledSourceRecord(
+                        manifest: try JSONDecoder().decode(SourceManifest.self, from: data),
+                        enabled: sqlite3_column_int(statement, 1) != 0,
+                        installedAt: sqlite3_column_double(statement, 2),
+                        updatedAt: sqlite3_column_double(statement, 3)
+                    )
+                )
+            }
+
+            return records
+        }
+    }
+
+    func setEnabled(_ enabled: Bool, sourceID: String) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                "UPDATE sources SET enabled = ?, updated_at = ? WHERE source_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int(statement, 1, enabled ? 1 : 0) == SQLITE_OK,
+                  sqlite3_bind_double(statement, 2, Date().timeIntervalSince1970) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+
+            try bindText(sourceID, index: 3, statement: statement)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
     func remove(sourceID: String) throws {
         try database.openAndMigrate()
 
@@ -554,6 +621,58 @@ final class RepositoryRepository {
                 enabled: sqlite3_column_int(statement, 3) != 0,
                 lastRefresh: lastRefresh
             )
+        }
+    }
+
+
+
+    func list() throws -> [RepositoryRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT internal_id, name, url, enabled, last_refresh
+                FROM repositories
+                ORDER BY name COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var records: [RepositoryRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE {
+                    break
+                }
+
+                guard result == SQLITE_ROW,
+                      let name = columnText(statement, index: 1),
+                      let storedURL = columnText(statement, index: 2) else {
+                    throw sqliteError(handle)
+                }
+
+                let lastRefresh: TimeInterval?
+                if sqlite3_column_type(statement, 4) == SQLITE_NULL {
+                    lastRefresh = nil
+                } else {
+                    lastRefresh = sqlite3_column_double(statement, 4)
+                }
+
+                records.append(
+                    RepositoryRecord(
+                        internalID: sqlite3_column_int64(statement, 0),
+                        name: name,
+                        url: storedURL,
+                        enabled: sqlite3_column_int(statement, 3) != 0,
+                        lastRefresh: lastRefresh
+                    )
+                )
+            }
+
+            return records
         }
     }
 
