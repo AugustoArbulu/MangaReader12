@@ -185,6 +185,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
     private let spinner = UIActivityIndicatorView(style: .whiteLarge)
     private let errorLabel = UILabel()
     private var representedURL: String?
+    private var scaleMode: ReaderScaleMode = .fitScreen
+    private var lastViewportSize: CGSize = .zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -225,12 +227,18 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         errorLabel.isHidden = true
         errorLabel.text = nil
         zoomScrollView.zoomScale = 1
+        zoomScrollView.contentInset = .zero
+        zoomScrollView.contentSize = .zero
+        lastViewportSize = .zero
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         zoomScrollView.frame = contentView.bounds
-        imageView.frame = zoomScrollView.bounds
+        if lastViewportSize != contentView.bounds.size {
+            lastViewportSize = contentView.bounds.size
+            layoutImage(resetZoom: true)
+        }
         spinner.center = CGPoint(
             x: contentView.bounds.midX,
             y: contentView.bounds.midY
@@ -242,11 +250,13 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         page: Page,
         loader: ReaderImageLoader,
         zoomEnabled: Bool,
+        scaleMode: ReaderScaleMode,
         backgroundColor: UIColor,
         foregroundColor: UIColor,
         imageLoaded: @escaping (UIImage) -> Void
     ) {
         representedURL = page.imageUrl
+        self.scaleMode = scaleMode
         imageView.image = nil
         errorLabel.isHidden = true
         zoomScrollView.zoomScale = 1
@@ -270,6 +280,7 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
                 switch result {
                 case .success(let image):
                     self.imageView.image = image
+                    self.layoutImage(resetZoom: true)
                     imageLoaded(image)
 
                 case .failure(let error):
@@ -278,6 +289,54 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
                 }
             }
         }
+    }
+
+    private func layoutImage(resetZoom: Bool) {
+        guard let image = imageView.image, image.size.width > 0, image.size.height > 0 else {
+            imageView.frame = zoomScrollView.bounds
+            zoomScrollView.contentSize = zoomScrollView.bounds.size
+            return
+        }
+
+        let viewport = zoomScrollView.bounds.size
+        let width = max(1, viewport.width)
+        let height = max(1, viewport.height)
+        let horizontal = width / image.size.width
+        let vertical = height / image.size.height
+        let factor: CGFloat
+        switch scaleMode {
+        case .fitScreen: factor = min(horizontal, vertical)
+        case .fitWidth: factor = horizontal
+        case .fitHeight: factor = vertical
+        case .original: factor = 1
+        }
+
+        if resetZoom {
+            zoomScrollView.setZoomScale(1, animated: false)
+        }
+
+        let scaledSize = CGSize(
+            width: max(1, image.size.width * factor),
+            height: max(1, image.size.height * factor)
+        )
+        imageView.frame = CGRect(origin: .zero, size: scaledSize)
+        zoomScrollView.contentSize = scaledSize
+        centerImage()
+    }
+
+    private func centerImage() {
+        let viewSize = zoomScrollView.bounds.size
+        let imageSize = imageView.frame.size
+        let vertical = max(0, (viewSize.height - imageSize.height) / 2)
+        let horizontal = max(0, (viewSize.width - imageSize.width) / 2)
+        zoomScrollView.contentInset = UIEdgeInsets(
+            top: vertical, left: horizontal,
+            bottom: vertical, right: horizontal
+        )
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerImage()
     }
 
     func toggleZoom() {
@@ -299,13 +358,15 @@ final class ReaderViewController: UIViewController,
 
     private let sourceID: String
     private let manga: Manga
-    private let chapter: Chapter
-    private let pages: [Page]
+    private var chapter: Chapter
+    private var pages: [Page]
     private let imageLoader: ReaderImageLoader
     private let progressRepository: ReadingProgressRepository?
     private let originalBrightness: CGFloat
     private let originalIdleTimerDisabled: Bool
     private let preferences = ReaderPreferences.shared
+    private let chaptersInReadingOrder: [Chapter]
+    private let pageResolver: ((Chapter, @escaping (Result<[Page], Error>) -> Void) -> Void)?
 
     private let layout = UICollectionViewFlowLayout()
     private lazy var collectionView = UICollectionView(
@@ -325,18 +386,38 @@ final class ReaderViewController: UIViewController,
     private var initialPageIndex = 0
     private var didRestoreInitialPage = false
     private var controlsHidden = false
+    private var scaleMode: ReaderScaleMode = ReaderPreferences.shared.scaleMode
+    private var isChangingChapter = false
+    private var prefetchingChapterID: String?
+    private var attemptedPreloadChapterID: String?
+    private var prefetchedChapterID: String?
+    private var prefetchedChapterPages: [Page] = []
 
     init(
         sourceID: String,
         manga: Manga,
         chapter: Chapter,
         pages: [Page],
-        manifest: SourceManifest
+        manifest: SourceManifest,
+        chapters: [Chapter] = [],
+        resolvePages: ((Chapter, @escaping (Result<[Page], Error>) -> Void) -> Void)? = nil
     ) {
         self.sourceID = sourceID
         self.manga = manga
         self.chapter = chapter
         self.pages = pages
+        // Numeric chapter order wins when all chapters have valid numbers;
+        // otherwise sources normally list newest first, so reverse that list.
+        if !chapters.isEmpty && chapters.allSatisfy({ $0.number?.isFinite == true }) {
+            self.chaptersInReadingOrder = chapters.enumerated().sorted {
+                let left = $0.element.number ?? 0
+                let right = $1.element.number ?? 0
+                return left == right ? $0.offset > $1.offset : left < right
+            }.map { $0.element }
+        } else {
+            self.chaptersInReadingOrder = Array(chapters.reversed())
+        }
+        self.pageResolver = resolvePages
         self.imageLoader = ReaderImageLoader(manifest: manifest)
         self.progressRepository = try? ReadingProgressRepository.defaultRepository()
         self.originalBrightness = UIScreen.main.brightness
@@ -407,6 +488,12 @@ final class ReaderViewController: UIViewController,
             for: .valueChanged
         )
         navigationItem.titleView = modeControl
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Opções",
+            style: .plain,
+            target: self,
+            action: #selector(optionsTapped)
+        )
 
         applyPageDirection()
         loadInitialProgress()
@@ -438,6 +525,7 @@ final class ReaderViewController: UIViewController,
         )
         updatePagePrompt()
         persistProgress(index: index)
+        prefetchUpcomingChapterIfNeeded()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -525,9 +613,176 @@ final class ReaderViewController: UIViewController,
             animated: true
         )
         persistProgress(index: target)
+        if target >= pages.count - 2 { prefetchUpcomingChapterIfNeeded(for: target) }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             self?.updatePagePrompt()
+        }
+    }
+
+    private func adjacentChapter(forward: Bool) -> Chapter? {
+        guard let index = chaptersInReadingOrder.firstIndex(where: { $0.id == chapter.id }) else {
+            return nil
+        }
+        let target = index + (forward ? 1 : -1)
+        guard chaptersInReadingOrder.indices.contains(target) else { return nil }
+        return chaptersInReadingOrder[target]
+    }
+
+    @objc private func optionsTapped() {
+        let sheet = UIAlertController(title: "Leitor", message: nil, preferredStyle: .actionSheet)
+        if let previous = adjacentChapter(forward: false) {
+            sheet.addAction(UIAlertAction(
+                title: "Anterior: \(previous.name)",
+                style: .default
+            ) { [weak self] _ in self?.changeChapter(to: previous) })
+        }
+        if let next = adjacentChapter(forward: true) {
+            sheet.addAction(UIAlertAction(
+                title: "Próximo: \(next.name)",
+                style: .default
+            ) { [weak self] _ in self?.changeChapter(to: next) })
+        }
+        if displayMode == .pages {
+            sheet.addAction(UIAlertAction(
+                title: "Escala: \(scaleMode.title)",
+                style: .default
+            ) { [weak self] _ in self?.showScalePicker() })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.barButtonItem = navigationItem.rightBarButtonItem
+        }
+        present(sheet, animated: true)
+    }
+
+    private func showScalePicker() {
+        let sheet = UIAlertController(
+            title: "Escala das páginas",
+            message: "No Webtoon, as imagens sempre ocupam a largura da tela.",
+            preferredStyle: .actionSheet
+        )
+        for mode in [ReaderScaleMode.fitScreen, .fitWidth, .fitHeight, .original] {
+            sheet.addAction(UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                self.scaleMode = mode
+                self.preferences.scaleMode = mode
+                self.collectionView.reloadData()
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.barButtonItem = navigationItem.rightBarButtonItem
+        }
+        present(sheet, animated: true)
+    }
+
+    private func changeChapter(to newChapter: Chapter) {
+        guard !isChangingChapter,
+              newChapter.id != chapter.id,
+              let resolve = pageResolver else { return }
+
+        if prefetchedChapterID == newChapter.id && !prefetchedChapterPages.isEmpty {
+            displayChapter(newChapter, pages: prefetchedChapterPages)
+            return
+        }
+
+        isChangingChapter = true
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        navigationItem.prompt = "Carregando capítulo…"
+        resolve(newChapter) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.isChangingChapter = false
+                self.navigationItem.rightBarButtonItem?.isEnabled = true
+                switch result {
+                case .success(let newPages):
+                    if newPages.isEmpty {
+                        self.presentReaderError(ReaderError.noPages)
+                    } else {
+                        self.displayChapter(newChapter, pages: newPages)
+                    }
+                case .failure(let error):
+                    self.presentReaderError(error)
+                }
+                self.updatePagePrompt()
+            }
+        }
+    }
+
+    private func presentReaderError(_ error: Error) {
+        let alert = UIAlertController(
+            title: "Não foi possível abrir o capítulo",
+            message: error.localizedDescription,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func displayChapter(_ newChapter: Chapter, pages newPages: [Page]) {
+        // Persist the outgoing chapter before changing the active identity.
+        persistProgress(index: currentPageIndex())
+        chapter = newChapter
+        pages = newPages
+        title = newChapter.name
+        aspectRatios.removeAll()
+        lastPersistedIndex = -1
+        initialPageIndex = 0
+        prefetchedChapterID = nil
+        prefetchedChapterPages.removeAll()
+        prefetchingChapterID = nil
+        attemptedPreloadChapterID = nil
+        loadInitialProgress()
+
+        collectionView.setContentOffset(.zero, animated: false)
+        collectionView.reloadData()
+        layout.invalidateLayout()
+        let index = min(max(0, initialPageIndex), newPages.count - 1)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.collectionView.layoutIfNeeded()
+            self.collectionView.scrollToItem(
+                at: IndexPath(item: index, section: 0),
+                at: self.displayMode == .pages ? .centeredHorizontally : .top,
+                animated: false
+            )
+            self.updatePagePrompt()
+            self.persistProgress(index: index)
+            self.prefetchUpcomingChapterIfNeeded()
+        }
+    }
+
+    private func prefetchUpcomingChapterIfNeeded(for index: Int? = nil) {
+        guard preferences.preloadNextChapter,
+              let resolve = pageResolver,
+              !pages.isEmpty,
+              (index ?? currentPageIndex()) >= max(0, pages.count - 2),
+              let next = adjacentChapter(forward: true),
+              prefetchedChapterID != next.id,
+              prefetchingChapterID != next.id,
+              attemptedPreloadChapterID != next.id else {
+            return
+        }
+        let originChapterID = chapter.id
+        prefetchingChapterID = next.id
+        attemptedPreloadChapterID = next.id
+        resolve(next) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if self.prefetchingChapterID == next.id {
+                    self.prefetchingChapterID = nil
+                }
+                guard self.chapter.id == originChapterID else { return }
+                if case .success(let upcomingPages) = result, !upcomingPages.isEmpty {
+                    self.prefetchedChapterID = next.id
+                    self.prefetchedChapterPages = upcomingPages
+                    for page in upcomingPages.prefix(2) {
+                        self.imageLoader.prefetch(page: page)
+                    }
+                }
+                // Preload failures must not interrupt the currently open chapter.
+            }
         }
     }
 
@@ -684,14 +939,17 @@ final class ReaderViewController: UIViewController,
         }
 
         let page = pages[indexPath.item]
+        let renderedChapterID = chapter.id
         cell.configure(
             page: page,
             loader: imageLoader,
             zoomEnabled: displayMode == .pages,
+            scaleMode: displayMode == .webtoon ? .fitWidth : scaleMode,
             backgroundColor: readerBackgroundColor(),
             foregroundColor: readerForegroundColor()
         ) { [weak self] image in
             guard let self = self,
+                  renderedChapterID == self.chapter.id,
                   image.size.width > 0 else {
                 return
             }
@@ -726,6 +984,9 @@ final class ReaderViewController: UIViewController,
         if displayMode == .webtoon {
             persistProgress(index: indexPath.item)
         }
+        if indexPath.item >= pages.count - 2 {
+            prefetchUpcomingChapterIfNeeded(for: indexPath.item)
+        }
     }
 
     func collectionView(
@@ -749,6 +1010,7 @@ final class ReaderViewController: UIViewController,
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         updatePagePrompt()
         persistProgress(index: currentPageIndex())
+        prefetchUpcomingChapterIfNeeded()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -817,15 +1079,20 @@ final class ReaderViewController: UIViewController,
 
         lastPersistedIndex = index
 
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-
-            try? self.progressRepository?.recordProgress(
-                sourceID: self.sourceID,
-                manga: self.manga,
-                chapter: self.chapter,
+        // Capture an immutable chapter snapshot: next/previous chapter may
+        // change while SQLite persistence is queued on a background thread.
+        let currentChapter = chapter
+        let currentManga = manga
+        let currentSourceID = sourceID
+        let pageCount = pages.count
+        let repository = progressRepository
+        DispatchQueue.global(qos: .utility).async {
+            try? repository?.recordProgress(
+                sourceID: currentSourceID,
+                manga: currentManga,
+                chapter: currentChapter,
                 pageIndex: index,
-                totalPages: self.pages.count
+                totalPages: pageCount
             )
         }
     }

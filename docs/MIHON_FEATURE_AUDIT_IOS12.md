@@ -53,8 +53,8 @@ Official references reviewed:
 | Brightness control | Implemented | Restores original brightness |
 | Resume last page | Implemented | SQLite progress |
 | Page preload | Implemented | UICollectionView prefetch |
-| Next-chapter preload | Planned | Need chapter navigation lifecycle first |
-| Reader scale types | Planned | Fit-width/fit-height/original/smart-fit variants |
+| Next-chapter preload | Build 17 (physical gate pending) | Prefetch next chapter metadata/pages near current chapter end |
+| Reader scale types | Build 17 (physical gate pending) | Fit screen/width/height/original; smart-fit deferred |
 | Crop borders | Planned | Image-processing step; must be memory-safe on older devices |
 | Split/rotate wide pages | Planned | Feasible, but image memory limits matter |
 | Skip read/filtered/duplicate chapters | Planned | Needs chapter filtering/duplicate rules |

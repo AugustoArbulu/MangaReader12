@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build17-m9b-chapters-reader-scale — 2026-10-29
+
+- Accepted physical build 16: original backup successfully restored; reader main tab bar/band is absent.
+- Added previous/next chapter options inside the reader, without stacking reader controllers.
+- Retained offline-first page resolution and native JS source-domain enforcement on chapter transitions.
+- Added optional end-of-chapter preloading for next-chapter page references and first two images.
+- Added persisted reader image scale modes: fit screen, fit width, fit height and original size.
+- Added settings UI for scale and preloading; backup preferences now carry both settings.
+- Snapshot chapter identity for asynchronous reading-progress persistence during transitions.
+- Advanced app build number to 17; iOS 12 target stays locked.
+
 ## 0.1.0-build16-backup-wal-reader-immersive — 2026-10-29
 
 - Physical iOS 12 restore exposed `SQLite 14: unable to open database file` while validating the portable snapshot.

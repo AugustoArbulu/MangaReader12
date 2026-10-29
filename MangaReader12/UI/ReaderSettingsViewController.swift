@@ -27,8 +27,8 @@ final class ReaderSettingsViewController: UITableViewController {
         numberOfRowsInSection section: Int
     ) -> Int {
         switch section {
-        case 0: return 2
-        case 1: return 3
+        case 0: return 3
+        case 1: return 4
         case 2: return 2
         default: return 1
         }
@@ -71,12 +71,26 @@ final class ReaderSettingsViewController: UITableViewController {
             cell.detailTextLabel?.text = preferences.pageDirection.title
             cell.accessoryType = .disclosureIndicator
 
+        case (0, 2):
+            configureSwitch(
+                cell,
+                title: "Pré-carregar próximo capítulo",
+                subtitle: "Tenta preparar as primeiras páginas ao chegar perto do fim.",
+                isOn: preferences.preloadNextChapter,
+                action: #selector(preloadNextChapterChanged(_:))
+            )
+
         case (1, 0):
             cell.textLabel?.text = "Cor de fundo"
             cell.detailTextLabel?.text = preferences.backgroundStyle.title
             cell.accessoryType = .disclosureIndicator
 
         case (1, 1):
+            cell.textLabel?.text = "Escala das páginas"
+            cell.detailTextLabel?.text = preferences.scaleMode.title
+            cell.accessoryType = .disclosureIndicator
+
+        case (1, 2):
             configureSwitch(
                 cell,
                 title: "Mostrar número da página",
@@ -85,7 +99,7 @@ final class ReaderSettingsViewController: UITableViewController {
                 action: #selector(showPageNumberChanged(_:))
             )
 
-        case (1, 2):
+        case (1, 3):
             configureSwitch(
                 cell,
                 title: "Manter tela ligada",
@@ -138,6 +152,8 @@ final class ReaderSettingsViewController: UITableViewController {
             showDirectionPicker()
         case (1, 0):
             showBackgroundPicker()
+        case (1, 1):
+            showScalePicker()
         default:
             break
         }
@@ -174,6 +190,10 @@ final class ReaderSettingsViewController: UITableViewController {
 
     @objc private func doubleTapZoomChanged(_ sender: UISwitch) {
         preferences.doubleTapZoomEnabled = sender.isOn
+    }
+
+    @objc private func preloadNextChapterChanged(_ sender: UISwitch) {
+        preferences.preloadNextChapter = sender.isOn
     }
 
     @objc private func webtoonGapChanged(_ sender: UISwitch) {
@@ -243,6 +263,21 @@ final class ReaderSettingsViewController: UITableViewController {
             })
         }
 
+        presentActionSheet(sheet)
+    }
+
+    private func showScalePicker() {
+        let sheet = UIAlertController(
+            title: "Escala padrão das páginas",
+            message: "Webtoon sempre ajusta à largura.",
+            preferredStyle: .actionSheet
+        )
+        for mode in [ReaderScaleMode.fitScreen, .fitWidth, .fitHeight, .original] {
+            sheet.addAction(UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
+                self?.preferences.scaleMode = mode
+                self?.tableView.reloadData()
+            })
+        }
         presentActionSheet(sheet)
     }
 

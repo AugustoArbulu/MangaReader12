@@ -31,6 +31,22 @@ enum ReaderBackgroundStyle: Int {
     }
 }
 
+enum ReaderScaleMode: Int {
+    case fitScreen = 0
+    case fitWidth = 1
+    case fitHeight = 2
+    case original = 3
+
+    var title: String {
+        switch self {
+        case .fitScreen: return "Ajustar à tela"
+        case .fitWidth: return "Ajustar à largura"
+        case .fitHeight: return "Ajustar à altura"
+        case .original: return "Tamanho original"
+        }
+    }
+}
+
 final class ReaderPreferences {
     static let shared = ReaderPreferences()
 
@@ -43,6 +59,8 @@ final class ReaderPreferences {
     private let tapZonesKey = "reader.tapZones"
     private let webtoonGapKey = "reader.webtoonGap"
     private let doubleTapZoomKey = "reader.doubleTapZoom"
+    private let scaleModeKey = "reader.scaleMode"
+    private let preloadNextChapterKey = "reader.preloadNextChapter"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -104,6 +122,19 @@ final class ReaderPreferences {
     var doubleTapZoomEnabled: Bool {
         get { return bool(forKey: doubleTapZoomKey, defaultValue: true) }
         set { defaults.set(newValue, forKey: doubleTapZoomKey) }
+    }
+
+    var scaleMode: ReaderScaleMode {
+        get {
+            return ReaderScaleMode(rawValue: defaults.integer(forKey: scaleModeKey))
+                ?? .fitScreen
+        }
+        set { defaults.set(newValue.rawValue, forKey: scaleModeKey) }
+    }
+
+    var preloadNextChapter: Bool {
+        get { return bool(forKey: preloadNextChapterKey, defaultValue: true) }
+        set { defaults.set(newValue, forKey: preloadNextChapterKey) }
     }
 
     private func bool(forKey key: String, defaultValue: Bool) -> Bool {
