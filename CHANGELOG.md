@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.1.0-build14-ios12-backup-validation — 2026-10-29
+
+- Physical iOS 12 restore reached the improved validator and exposed the exact failing query.
+- Replaced `PRAGMA quick_check(1);` with the older, broadly compatible `PRAGMA quick_check;` syntax.
+- Validation-query errors now include SQLite prepare/step result codes and the native SQLite message.
+- Existing `.mr12backup` files remain compatible and should be reused.
+- Advanced app build number to 14.
+
 ## 0.1.0-build13-backup-validation — 2026-10-29
 
 - Fixed restore rejecting a valid MangaReader12 backup because validation required an exact SQLite `user_version == 1`.
