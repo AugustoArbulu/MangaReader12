@@ -4,7 +4,7 @@ var source = {
       id: "fixture.localdemo",
       name: "MangaReader12 Demo",
       lang: "en",
-      version: "1.3.0"
+      version: "1.3.1"
     };
   },
 
