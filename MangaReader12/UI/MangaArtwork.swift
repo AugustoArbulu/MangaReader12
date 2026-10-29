@@ -384,3 +384,132 @@ final class MangaDetailsHeaderCell: UITableViewCell {
         descriptionView.textColor = colors.primaryText
     }
 }
+
+
+final class SourceIconCell: UITableViewCell {
+    static let reuseIdentifier = "SourceIconCell"
+
+    private let iconView = UIImageView()
+    private let fallbackLabel = UILabel()
+    private let titleView = UILabel()
+    private let subtitleView = UILabel()
+    private var representedURL: String?
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.contentMode = .scaleAspectFill
+        iconView.clipsToBounds = true
+        iconView.layer.cornerRadius = 9
+        iconView.backgroundColor = UIColor(white: 0.22, alpha: 1)
+
+        fallbackLabel.translatesAutoresizingMaskIntoConstraints = false
+        fallbackLabel.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+        fallbackLabel.textAlignment = .center
+        fallbackLabel.adjustsFontSizeToFitWidth = true
+        fallbackLabel.minimumScaleFactor = 0.7
+        iconView.addSubview(fallbackLabel)
+
+        titleView.translatesAutoresizingMaskIntoConstraints = false
+        titleView.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        titleView.numberOfLines = 1
+
+        subtitleView.translatesAutoresizingMaskIntoConstraints = false
+        subtitleView.font = UIFont.systemFont(ofSize: 12.5)
+        subtitleView.numberOfLines = 2
+
+        contentView.addSubview(iconView)
+        contentView.addSubview(titleView)
+        contentView.addSubview(subtitleView)
+
+        NSLayoutConstraint.activate([
+            iconView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            iconView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 46),
+            iconView.heightAnchor.constraint(equalToConstant: 46),
+
+            fallbackLabel.leadingAnchor.constraint(equalTo: iconView.leadingAnchor, constant: 4),
+            fallbackLabel.trailingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: -4),
+            fallbackLabel.topAnchor.constraint(equalTo: iconView.topAnchor, constant: 4),
+            fallbackLabel.bottomAnchor.constraint(equalTo: iconView.bottomAnchor, constant: -4),
+
+            titleView.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 12),
+            titleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -34),
+            titleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 11),
+
+            subtitleView.leadingAnchor.constraint(equalTo: titleView.leadingAnchor),
+            subtitleView.trailingAnchor.constraint(equalTo: titleView.trailingAnchor),
+            subtitleView.topAnchor.constraint(equalTo: titleView.bottomAnchor, constant: 4),
+            subtitleView.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -10)
+        ])
+
+        applyPalette()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        representedURL = nil
+        iconView.image = nil
+        fallbackLabel.isHidden = false
+    }
+
+    func configure(
+        title: String,
+        subtitle: String?,
+        iconURL: String?
+    ) {
+        titleView.text = title
+        subtitleView.text = subtitle
+        representedURL = iconURL
+        iconView.image = nil
+        fallbackLabel.text = initials(for: title)
+        fallbackLabel.isHidden = false
+        applyPalette()
+
+        CoverImageLoader.shared.load(
+            urlString: iconURL,
+            allowedDomains: []
+        ) { [weak self] image in
+            guard let self = self,
+                  self.representedURL == iconURL else {
+                return
+            }
+
+            if let image = image {
+                self.iconView.image = image
+                self.fallbackLabel.isHidden = true
+            }
+        }
+    }
+
+    func applyPalette() {
+        let colors = ThemeManager.shared.palette
+        backgroundColor = colors.cellBackground
+        contentView.backgroundColor = colors.cellBackground
+        titleView.textColor = colors.primaryText
+        subtitleView.textColor = colors.secondaryText
+        fallbackLabel.textColor = .white
+        iconView.backgroundColor = colors.accent
+        tintColor = colors.accent
+
+        let selected = UIView()
+        selected.backgroundColor = ThemeManager.shared.isDark
+            ? UIColor(white: 0.20, alpha: 1)
+            : UIColor(white: 0.90, alpha: 1)
+        selectedBackgroundView = selected
+    }
+
+    private func initials(for title: String) -> String {
+        let parts = title
+            .split(separator: " ")
+            .prefix(2)
+
+        let value = parts.compactMap { $0.first }.map { String($0) }.joined()
+        return value.isEmpty ? "S" : value.uppercased()
+    }
+}
