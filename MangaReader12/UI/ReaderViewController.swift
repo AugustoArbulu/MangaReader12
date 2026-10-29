@@ -24,10 +24,16 @@ enum ReaderError: Error, LocalizedError {
 
 final class ReaderImageLoader {
     private let client: HTTPClient
-    private let cache = NSCache<NSString, UIImage>()
+    private let memoryCache = NSCache<NSString, UIImage>()
+    private let fileManager: FileManager
+    private let diskCacheDirectory: URL?
 
-    init(manifest: SourceManifest) {
-        client = HTTPClient(
+    init(
+        manifest: SourceManifest,
+        fileManager: FileManager = .default
+    ) {
+        self.fileManager = fileManager
+        self.client = HTTPClient(
             policy: HTTPPolicy(
                 allowedDomains: manifest.domains,
                 timeout: 25,
@@ -35,7 +41,27 @@ final class ReaderImageLoader {
                 maxResponseBytes: 20 * 1024 * 1024
             )
         )
-        cache.countLimit = 12
+
+        memoryCache.countLimit = 18
+
+        if let base = fileManager.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first {
+            let directory = base
+                .appendingPathComponent("MangaReader12", isDirectory: true)
+                .appendingPathComponent("ReaderImageCache", isDirectory: true)
+
+            try? fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            diskCacheDirectory = directory
+            trimDiskCache(maxFiles: 160)
+        } else {
+            diskCacheDirectory = nil
+        }
     }
 
     func load(
@@ -44,8 +70,32 @@ final class ReaderImageLoader {
     ) {
         let key = page.imageUrl as NSString
 
-        if let cached = cache.object(forKey: key) {
+        if let cached = memoryCache.object(forKey: key) {
             completion(.success(cached))
+            return
+        }
+
+        if let url = URL(string: page.imageUrl), url.isFileURL {
+            do {
+                let data = try Data(contentsOf: url)
+                guard let image = UIImage(data: data) else {
+                    completion(.failure(ReaderError.invalidImage))
+                    return
+                }
+
+                memoryCache.setObject(image, forKey: key)
+                completion(.success(image))
+            } catch {
+                completion(.failure(error))
+            }
+            return
+        }
+
+        if let diskURL = cacheFileURL(for: page.imageUrl),
+           let data = try? Data(contentsOf: diskURL),
+           let image = UIImage(data: data) {
+            memoryCache.setObject(image, forKey: key)
+            completion(.success(image))
             return
         }
 
@@ -68,12 +118,61 @@ final class ReaderImageLoader {
                     return
                 }
 
-                self?.cache.setObject(image, forKey: key)
+                self?.memoryCache.setObject(image, forKey: key)
+
+                if let diskURL = self?.cacheFileURL(for: page.imageUrl) {
+                    try? response.data.write(to: diskURL, options: .atomic)
+                }
+
                 completion(.success(image))
 
             case .failure(let error):
                 completion(.failure(error))
             }
+        }
+    }
+
+    func prefetch(page: Page) {
+        load(page: page) { _ in }
+    }
+
+    private func cacheFileURL(for value: String) -> URL? {
+        guard let directory = diskCacheDirectory else { return nil }
+        return directory.appendingPathComponent(stableKey(value) + ".bin")
+    }
+
+    private func stableKey(_ value: String) -> String {
+        var hash: UInt64 = 1469598103934665603
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1099511628211
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    private func trimDiskCache(maxFiles: Int) {
+        guard let directory = diskCacheDirectory,
+              let files = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+              ),
+              files.count > maxFiles else {
+            return
+        }
+
+        let sorted = files.sorted { lhs, rhs in
+            let leftDate = (try? lhs.resourceValues(
+                forKeys: [.contentModificationDateKey]
+            ).contentModificationDate) ?? .distantPast
+            let rightDate = (try? rhs.resourceValues(
+                forKeys: [.contentModificationDateKey]
+            ).contentModificationDate) ?? .distantPast
+            return leftDate < rightDate
+        }
+
+        for file in sorted.prefix(max(0, files.count - maxFiles)) {
+            try? fileManager.removeItem(at: file)
         }
     }
 }
@@ -182,28 +281,45 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
 final class ReaderViewController: UIViewController,
     UICollectionViewDataSource,
     UICollectionViewDelegateFlowLayout,
+    UICollectionViewDataSourcePrefetching,
     UIScrollViewDelegate {
 
+    private let sourceID: String
+    private let manga: Manga
     private let chapter: Chapter
     private let pages: [Page]
     private let imageLoader: ReaderImageLoader
+    private let progressRepository: ReadingProgressRepository?
+    private let originalBrightness: CGFloat
+
     private let layout = UICollectionViewFlowLayout()
     private lazy var collectionView = UICollectionView(
         frame: .zero,
         collectionViewLayout: layout
     )
     private let modeControl = UISegmentedControl(items: ["Páginas", "Webtoon"])
+    private let controlsView = UIView()
+    private let brightnessSlider = UISlider()
+    private let brightnessLabel = UILabel()
+
     private var displayMode: ReaderDisplayMode = .pages
     private var aspectRatios: [Int: CGFloat] = [:]
+    private var lastPersistedIndex = -1
 
     init(
+        sourceID: String,
+        manga: Manga,
         chapter: Chapter,
         pages: [Page],
         manifest: SourceManifest
     ) {
+        self.sourceID = sourceID
+        self.manga = manga
         self.chapter = chapter
         self.pages = pages
         self.imageLoader = ReaderImageLoader(manifest: manifest)
+        self.progressRepository = try? ReadingProgressRepository.defaultRepository()
+        self.originalBrightness = UIScreen.main.brightness
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -224,6 +340,7 @@ final class ReaderViewController: UIViewController,
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .black
         collectionView.dataSource = self
+        collectionView.prefetchDataSource = self
         collectionView.delegate = self
         collectionView.isPagingEnabled = true
         collectionView.showsHorizontalScrollIndicator = false
@@ -234,11 +351,26 @@ final class ReaderViewController: UIViewController,
         )
         view.addSubview(collectionView)
 
+        configureControls()
+
         NSLayoutConstraint.activate([
             collectionView.topAnchor.constraint(equalTo: view.topAnchor),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            controlsView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controlsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controlsView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            controlsView.heightAnchor.constraint(equalToConstant: 48),
+
+            brightnessLabel.leadingAnchor.constraint(equalTo: controlsView.leadingAnchor, constant: 14),
+            brightnessLabel.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor),
+            brightnessLabel.widthAnchor.constraint(equalToConstant: 58),
+
+            brightnessSlider.leadingAnchor.constraint(equalTo: brightnessLabel.trailingAnchor, constant: 8),
+            brightnessSlider.trailingAnchor.constraint(equalTo: controlsView.trailingAnchor, constant: -16),
+            brightnessSlider.centerYAnchor.constraint(equalTo: controlsView.centerYAnchor)
         ])
 
         modeControl.selectedSegmentIndex = ReaderDisplayMode.pages.rawValue
@@ -250,11 +382,47 @@ final class ReaderViewController: UIViewController,
         navigationItem.titleView = modeControl
 
         updatePagePrompt()
+        persistProgress(index: 0)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         layout.invalidateLayout()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+
+        if isMovingFromParent || navigationController?.isBeingDismissed == true {
+            UIScreen.main.brightness = originalBrightness
+        }
+    }
+
+    private func configureControls() {
+        controlsView.translatesAutoresizingMaskIntoConstraints = false
+        controlsView.backgroundColor = UIColor(white: 0.08, alpha: 0.88)
+        view.addSubview(controlsView)
+
+        brightnessLabel.translatesAutoresizingMaskIntoConstraints = false
+        brightnessLabel.text = "Brilho"
+        brightnessLabel.textColor = .white
+        brightnessLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        controlsView.addSubview(brightnessLabel)
+
+        brightnessSlider.translatesAutoresizingMaskIntoConstraints = false
+        brightnessSlider.minimumValue = 0.05
+        brightnessSlider.maximumValue = 1
+        brightnessSlider.value = Float(UIScreen.main.brightness)
+        brightnessSlider.addTarget(
+            self,
+            action: #selector(brightnessChanged),
+            for: .valueChanged
+        )
+        controlsView.addSubview(brightnessSlider)
+    }
+
+    @objc private func brightnessChanged() {
+        UIScreen.main.brightness = CGFloat(brightnessSlider.value)
     }
 
     @objc private func modeChanged() {
@@ -266,6 +434,7 @@ final class ReaderViewController: UIViewController,
         collectionView.reloadData()
         layout.invalidateLayout()
         updatePagePrompt()
+        persistProgress(index: 0)
     }
 
     func collectionView(
@@ -312,6 +481,25 @@ final class ReaderViewController: UIViewController,
 
     func collectionView(
         _ collectionView: UICollectionView,
+        prefetchItemsAt indexPaths: [IndexPath]
+    ) {
+        for indexPath in indexPaths where indexPath.item < pages.count {
+            imageLoader.prefetch(page: pages[indexPath.item])
+        }
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        willDisplay cell: UICollectionViewCell,
+        forItemAt indexPath: IndexPath
+    ) {
+        if displayMode == .webtoon {
+            persistProgress(index: indexPath.item)
+        }
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
         layout collectionViewLayout: UICollectionViewLayout,
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
@@ -330,6 +518,7 @@ final class ReaderViewController: UIViewController,
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         updatePagePrompt()
+        persistProgress(index: currentPageIndex())
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -338,26 +527,51 @@ final class ReaderViewController: UIViewController,
         }
     }
 
+    private func currentPageIndex() -> Int {
+        guard !pages.isEmpty else { return 0 }
+
+        if displayMode == .pages {
+            let width = max(1, collectionView.bounds.width)
+            return min(
+                pages.count - 1,
+                max(0, Int(round(collectionView.contentOffset.x / width)))
+            )
+        }
+
+        let visible = collectionView.indexPathsForVisibleItems
+            .sorted { $0.item < $1.item }
+        return visible.first?.item ?? 0
+    }
+
     private func updatePagePrompt() {
         guard !pages.isEmpty else {
             navigationItem.prompt = "0 páginas"
             return
         }
 
-        let index: Int
+        let index = currentPageIndex()
+        navigationItem.prompt = "\(index + 1) / \(pages.count)"
+    }
 
-        if displayMode == .pages {
-            let width = max(1, collectionView.bounds.width)
-            index = min(
-                pages.count - 1,
-                max(0, Int(round(collectionView.contentOffset.x / width)))
-            )
-        } else {
-            let visible = collectionView.indexPathsForVisibleItems
-                .sorted { $0.item < $1.item }
-            index = visible.first?.item ?? 0
+    private func persistProgress(index: Int) {
+        guard index >= 0,
+              index < pages.count,
+              index != lastPersistedIndex else {
+            return
         }
 
-        navigationItem.prompt = "\(index + 1) / \(pages.count)"
+        lastPersistedIndex = index
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+
+            try? self.progressRepository?.recordProgress(
+                sourceID: self.sourceID,
+                manga: self.manga,
+                chapter: self.chapter,
+                pageIndex: index,
+                totalPages: self.pages.count
+            )
+        }
     }
 }

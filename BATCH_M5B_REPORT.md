@@ -1,5 +1,7 @@
 # Batch M5B Report — Custom Dark Mode
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Goal
@@ -37,3 +39,10 @@ The reader remains black in both themes, which avoids changing image presentatio
 ## Acceptance
 
 Build 8 requires a physical iOS 12 check for immediate switching and persistence across relaunch.
+
+## Acceptance evidence
+
+- PR #10 merged
+- Merge commit: `157aacb0593b717d0186ddc993ac18259aa18456`
+- Post-merge run `40820967384`: success
+- Physical iOS 12: all requested dark/light switching and persistence checks passed

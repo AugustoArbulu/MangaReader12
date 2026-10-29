@@ -26,6 +26,8 @@
 		A10000000000000000000011 /* ReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* ReaderViewController.swift */; };
 		A10000000000000000000012 /* LibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* LibraryViewController.swift */; };
 		A10000000000000000000013 /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* ThemeManager.swift */; };
+		A10000000000000000000014 /* HistoryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* HistoryViewController.swift */; };
+		A10000000000000000000015 /* ChapterDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* ChapterDownloadManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +52,8 @@
 		A20000000000000000000012 /* ReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* LibraryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000014 /* ThemeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* HistoryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* ChapterDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterDownloadManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +89,7 @@
 				A40000000000000000000006 /* Sources */,
 				A40000000000000000000007 /* SourceRuntime */,
 				A40000000000000000000009 /* UI */,
+				A4000000000000000000000A /* Downloads */,
 				A20000000000000000000003 /* Info.plist */,
 				A20000000000000000000004 /* LaunchScreen.storyboard */,
 			);
@@ -151,8 +156,17 @@
 				A20000000000000000000012 /* ReaderViewController.swift */,
 				A20000000000000000000013 /* LibraryViewController.swift */,
 				A20000000000000000000014 /* ThemeManager.swift */,
+				A20000000000000000000015 /* HistoryViewController.swift */,
 			);
 			path = UI;
+			sourceTree = "<group>";
+		};
+		A4000000000000000000000A /* Downloads */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000016 /* ChapterDownloadManager.swift */,
+			);
+			path = Downloads;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000008 /* Frameworks */ = {
@@ -249,6 +263,8 @@
 				A10000000000000000000011 /* ReaderViewController.swift in Sources */,
 				A10000000000000000000012 /* LibraryViewController.swift in Sources */,
 				A10000000000000000000013 /* ThemeManager.swift in Sources */,
+				A10000000000000000000014 /* HistoryViewController.swift in Sources */,
+				A10000000000000000000015 /* ChapterDownloadManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,7 +310,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -316,7 +332,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
