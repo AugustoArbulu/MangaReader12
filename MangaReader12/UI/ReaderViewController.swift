@@ -448,6 +448,7 @@ final class ReaderViewController: UIViewController,
             UIApplication.shared.isIdleTimerDisabled = originalIdleTimerDisabled
             navigationController?.setNavigationBarHidden(false, animated: false)
             tabBarController?.tabBar.isHidden = false
+            tabBarController?.tabBar.alpha = 1
         }
     }
 
