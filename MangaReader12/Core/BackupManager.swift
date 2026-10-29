@@ -221,11 +221,14 @@ final class BackupManager {
             throw BackupManagerError.invalidBackup
         }
 
+        try validateSQLiteHeader(databaseData)
+
         let temporaryDatabase = fileManager.temporaryDirectory
             .appendingPathComponent("MangaReader12-Restore-\(UUID().uuidString).sqlite")
         defer { try? fileManager.removeItem(at: temporaryDatabase) }
 
         try databaseData.write(to: temporaryDatabase, options: .atomic)
+        try normalizePortableDatabase(at: temporaryDatabase)
         try validateDatabase(at: temporaryDatabase)
 
         let preservedSources = try installedSourcesThatStillHaveScripts()
@@ -369,6 +372,72 @@ final class BackupManager {
         if let message = message { sqlite3_free(message) }
     }
 
+    private func validateSQLiteHeader(_ data: Data) throws {
+        let signature = Array("SQLite format 3\0".utf8)
+
+        guard data.count >= signature.count else {
+            throw BackupManagerError.databaseValidationFailed(
+                "database payload is too small to be SQLite."
+            )
+        }
+
+        let prefix = Array(data.prefix(signature.count))
+
+        guard prefix == signature else {
+            throw BackupManagerError.databaseValidationFailed(
+                "database payload does not have a valid SQLite header."
+            )
+        }
+    }
+
+    private func normalizePortableDatabase(at url: URL) throws {
+        var handle: OpaquePointer?
+        let result = sqlite3_open_v2(
+            url.path,
+            &handle,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+
+        guard result == SQLITE_OK, let opened = handle else {
+            if let handle = handle { sqlite3_close(handle) }
+            throw BackupManagerError.databaseOpenFailed(Int(result))
+        }
+        defer { sqlite3_close(opened) }
+
+        var message: UnsafeMutablePointer<Int8>?
+        let sql = """
+        PRAGMA temp_store=MEMORY;
+        PRAGMA journal_mode=DELETE;
+        """
+
+        let executeResult = sqlite3_exec(
+            opened,
+            sql,
+            nil,
+            nil,
+            &message
+        )
+
+        guard executeResult == SQLITE_OK else {
+            let text = message.map { String(cString: $0) }
+                ?? sqlite3_errmsg(opened).map { String(cString: $0) }
+                ?? "Unknown SQLite error"
+
+            if let message = message {
+                sqlite3_free(message)
+            }
+
+            throw BackupManagerError.databaseValidationFailed(
+                "could not normalize portable SQLite journal mode (SQLite \(executeResult)): \(text)"
+            )
+        }
+
+        if let message = message {
+            sqlite3_free(message)
+        }
+    }
+
     private func validateDatabase(at url: URL) throws {
         var handle: OpaquePointer?
         let result = sqlite3_open_v2(
@@ -382,17 +451,6 @@ final class BackupManager {
             throw BackupManagerError.databaseOpenFailed(Int(result))
         }
         defer { sqlite3_close(opened) }
-
-        let quickCheck = try singleTextValue(
-            sql: "PRAGMA quick_check;",
-            handle: opened
-        )
-
-        guard quickCheck.lowercased() == "ok" else {
-            throw BackupManagerError.databaseValidationFailed(
-                "SQLite quick_check returned '\(quickCheck)'."
-            )
-        }
 
         let version = try singleIntegerValue(
             sql: "PRAGMA user_version;",
@@ -461,47 +519,6 @@ final class BackupManager {
                 "missing required table(s): \(missing.joined(separator: ", "))."
             )
         }
-    }
-
-    private func singleTextValue(
-        sql: String,
-        handle: OpaquePointer
-    ) throws -> String {
-        var statement: OpaquePointer?
-        defer { sqlite3_finalize(statement) }
-
-        let prepareResult = sqlite3_prepare_v2(
-            handle,
-            sql,
-            -1,
-            &statement,
-            nil
-        )
-
-        guard prepareResult == SQLITE_OK else {
-            let message = sqlite3_errmsg(handle).map {
-                String(cString: $0)
-            } ?? "Unknown SQLite error"
-
-            throw BackupManagerError.databaseValidationFailed(
-                "validation query could not be prepared (SQLite \(prepareResult)): \(message)"
-            )
-        }
-
-        let stepResult = sqlite3_step(statement)
-
-        guard stepResult == SQLITE_ROW,
-              let rawValue = sqlite3_column_text(statement, 0) else {
-            let message = sqlite3_errmsg(handle).map {
-                String(cString: $0)
-            } ?? "Unknown SQLite error"
-
-            throw BackupManagerError.databaseValidationFailed(
-                "validation query failed while reading the result (SQLite \(stepResult)): \(message)"
-            )
-        }
-
-        return String(cString: rawValue)
     }
 
     private func singleIntegerValue(
