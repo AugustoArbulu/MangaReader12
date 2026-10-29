@@ -1,5 +1,7 @@
 # Batch M5C–M6B Report
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Goal
@@ -46,3 +48,10 @@ All new UI remains UIKit/callback based. No iOS 13 Dark Mode APIs, Combine, Swif
 ## Acceptance
 
 Build 9 requires physical validation of progress/history, brightness, persistence and offline chapter reopening.
+
+## Acceptance evidence
+
+- PR #11 merged
+- Merge commit: `e5a3f2bea37c59864598f4255b4ba7d5d0321eee`
+- Post-merge run `40822171633`: success
+- Physical iOS 12: all requested progress/history/brightness/offline regression checks passed
