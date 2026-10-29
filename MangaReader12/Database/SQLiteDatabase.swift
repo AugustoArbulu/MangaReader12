@@ -1007,6 +1007,396 @@ final class LibraryRepository {
             return records
         }
     }
+
+    func list(categoryID: Int64) throws -> [LibraryMangaRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.internal_id,
+                    m.source_id,
+                    m.source_manga_id,
+                    m.title,
+                    m.cover,
+                    m.description,
+                    m.status,
+                    m.url,
+                    l.date_added
+                FROM library l
+                JOIN manga m ON m.internal_id = l.manga_id
+                JOIN manga_categories mc ON mc.manga_id = m.internal_id
+                WHERE mc.category_id = ?
+                ORDER BY l.date_added DESC, m.title COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int64(statement, 1, categoryID) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+
+            var records: [LibraryMangaRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let sourceID = columnText(statement, index: 1),
+                      let sourceMangaID = columnText(statement, index: 2),
+                      let title = columnText(statement, index: 3),
+                      let statusRaw = columnText(statement, index: 6) else {
+                    throw sqliteError(handle)
+                }
+
+                records.append(
+                    LibraryMangaRecord(
+                        internalID: sqlite3_column_int64(statement, 0),
+                        sourceID: sourceID,
+                        sourceMangaID: sourceMangaID,
+                        title: title,
+                        cover: columnText(statement, index: 4),
+                        description: columnText(statement, index: 5),
+                        status: MangaStatus(rawValue: statusRaw) ?? .unknown,
+                        url: columnText(statement, index: 7),
+                        dateAdded: sqlite3_column_double(statement, 8)
+                    )
+                )
+            }
+
+            return records
+        }
+    }
+
+    func knownChapterIDs(
+        sourceID: String,
+        sourceMangaID: String
+    ) throws -> Set<String> {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT c.source_chapter_id
+                FROM chapters c
+                JOIN manga m ON m.internal_id = c.manga_id
+                WHERE m.source_id = ? AND m.source_manga_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+
+            var ids = Set<String>()
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let chapterID = columnText(statement, index: 0) else {
+                    throw sqliteError(handle)
+                }
+
+                ids.insert(chapterID)
+            }
+
+            return ids
+        }
+    }
+
+    func touchLastChecked(
+        sourceID: String,
+        sourceMangaID: String,
+        date: Date = Date()
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                UPDATE library
+                SET last_checked = ?
+                WHERE manga_id = (
+                    SELECT internal_id
+                    FROM manga
+                    WHERE source_id = ? AND source_manga_id = ?
+                    LIMIT 1
+                );
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_double(statement, 1, date.timeIntervalSince1970) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+            try bindText(sourceID, index: 2, statement: statement)
+            try bindText(sourceMangaID, index: 3, statement: statement)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+}
+
+// MARK: - Categories
+
+
+struct CategoryRecord: Equatable {
+    let internalID: Int64
+    let name: String
+    let sortOrder: Int
+}
+
+final class CategoryRepository {
+    private let database: SQLiteDatabase
+
+    init(database: SQLiteDatabase) {
+        self.database = database
+    }
+
+    static func defaultRepository() throws -> CategoryRepository {
+        let database = try SQLiteDatabase.defaultDatabase()
+        try database.openAndMigrate()
+        return CategoryRepository(database: database)
+    }
+
+    func list() throws -> [CategoryRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT internal_id, name, sort_order
+                FROM categories
+                ORDER BY sort_order ASC, name COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var records: [CategoryRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let name = columnText(statement, index: 1) else {
+                    throw sqliteError(handle)
+                }
+
+                records.append(
+                    CategoryRecord(
+                        internalID: sqlite3_column_int64(statement, 0),
+                        name: name,
+                        sortOrder: Int(sqlite3_column_int(statement, 2))
+                    )
+                )
+            }
+
+            return records
+        }
+    }
+
+    @discardableResult
+    func create(name: String) throws -> CategoryRecord {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw CategoryRepositoryError.emptyName
+        }
+
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let nextOrderStatement = try prepareStatement(
+                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM categories;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(nextOrderStatement) }
+
+            guard sqlite3_step(nextOrderStatement) == SQLITE_ROW else {
+                throw sqliteError(handle)
+            }
+
+            let nextOrder = sqlite3_column_int(nextOrderStatement, 0)
+            let insert = try prepareStatement(
+                """
+                INSERT INTO categories (name, sort_order)
+                VALUES (?, ?);
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(insert) }
+
+            try bindText(trimmed, index: 1, statement: insert)
+            guard sqlite3_bind_int(insert, 2, nextOrder) == SQLITE_OK,
+                  sqlite3_step(insert) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+
+            return CategoryRecord(
+                internalID: sqlite3_last_insert_rowid(handle),
+                name: trimmed,
+                sortOrder: Int(nextOrder)
+            )
+        }
+    }
+
+    func remove(categoryID: Int64) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                "DELETE FROM categories WHERE internal_id = ?;",
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int64(statement, 1, categoryID) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    func categoryIDs(mangaID: Int64) throws -> Set<Int64> {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT category_id
+                FROM manga_categories
+                WHERE manga_id = ?;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int64(statement, 1, mangaID) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+
+            var result = Set<Int64>()
+
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+                guard step == SQLITE_ROW else {
+                    throw sqliteError(handle)
+                }
+                result.insert(sqlite3_column_int64(statement, 0))
+            }
+
+            return result
+        }
+    }
+
+    func names(mangaID: Int64) throws -> [String] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT c.name
+                FROM manga_categories mc
+                JOIN categories c ON c.internal_id = mc.category_id
+                WHERE mc.manga_id = ?
+                ORDER BY c.sort_order ASC, c.name COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_bind_int64(statement, 1, mangaID) == SQLITE_OK else {
+                throw sqliteError(handle)
+            }
+
+            var names: [String] = []
+
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+
+                guard step == SQLITE_ROW,
+                      let name = columnText(statement, index: 0) else {
+                    throw sqliteError(handle)
+                }
+
+                names.append(name)
+            }
+
+            return names
+        }
+    }
+
+    func setCategories(
+        mangaID: Int64,
+        categoryIDs: Set<Int64>
+    ) throws {
+        try database.openAndMigrate()
+
+        try database.withConnection { handle in
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+
+            do {
+                let delete = try prepareStatement(
+                    "DELETE FROM manga_categories WHERE manga_id = ?;",
+                    handle: handle
+                )
+                defer { sqlite3_finalize(delete) }
+
+                guard sqlite3_bind_int64(delete, 1, mangaID) == SQLITE_OK,
+                      sqlite3_step(delete) == SQLITE_DONE else {
+                    throw sqliteError(handle)
+                }
+
+                for categoryID in categoryIDs {
+                    let insert = try prepareStatement(
+                        """
+                        INSERT INTO manga_categories (manga_id, category_id)
+                        VALUES (?, ?);
+                        """,
+                        handle: handle
+                    )
+
+                    guard sqlite3_bind_int64(insert, 1, mangaID) == SQLITE_OK,
+                          sqlite3_bind_int64(insert, 2, categoryID) == SQLITE_OK,
+                          sqlite3_step(insert) == SQLITE_DONE else {
+                        sqlite3_finalize(insert)
+                        throw sqliteError(handle)
+                    }
+
+                    sqlite3_finalize(insert)
+                }
+
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
+            }
+        }
+    }
+}
+
+enum CategoryRepositoryError: Error, LocalizedError {
+    case emptyName
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyName:
+            return "Category name cannot be empty."
+        }
+    }
 }
 
 
@@ -1034,6 +1424,18 @@ struct ChapterDownloadRecord: Equatable {
     let sourceID: String
     let sourceMangaID: String
     let sourceChapterID: String
+    let state: String
+    let progress: Double
+    let localPath: String?
+    let updatedAt: TimeInterval
+}
+
+struct DownloadListRecord: Equatable {
+    let sourceID: String
+    let sourceMangaID: String
+    let mangaTitle: String
+    let sourceChapterID: String
+    let chapterName: String
     let state: String
     let progress: Double
     let localPath: String?
@@ -1214,6 +1616,17 @@ final class ReadingProgressRepository {
 
             return states
         }
+    }
+
+    func chapterState(
+        sourceID: String,
+        sourceMangaID: String,
+        sourceChapterID: String
+    ) throws -> ChapterReadingState? {
+        return try chapterStates(
+            sourceID: sourceID,
+            sourceMangaID: sourceMangaID
+        )[sourceChapterID]
     }
 
     func history() throws -> [HistoryRecord] {
@@ -1439,6 +1852,66 @@ final class DownloadRepository {
                 localPath: columnText(statement, index: 2),
                 updatedAt: sqlite3_column_double(statement, 3)
             )
+        }
+    }
+
+    func listDownloads() throws -> [DownloadListRecord] {
+        try database.openAndMigrate()
+
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.source_id,
+                    m.source_manga_id,
+                    m.title,
+                    c.source_chapter_id,
+                    c.name,
+                    d.state,
+                    d.progress,
+                    d.local_path,
+                    d.updated_at
+                FROM downloads d
+                JOIN chapters c ON c.internal_id = d.chapter_id
+                JOIN manga m ON m.internal_id = c.manga_id
+                ORDER BY d.updated_at DESC, m.title COLLATE NOCASE ASC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var records: [DownloadListRecord] = []
+
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+
+                guard result == SQLITE_ROW,
+                      let sourceID = columnText(statement, index: 0),
+                      let sourceMangaID = columnText(statement, index: 1),
+                      let mangaTitle = columnText(statement, index: 2),
+                      let sourceChapterID = columnText(statement, index: 3),
+                      let chapterName = columnText(statement, index: 4),
+                      let state = columnText(statement, index: 5) else {
+                    throw sqliteError(handle)
+                }
+
+                records.append(
+                    DownloadListRecord(
+                        sourceID: sourceID,
+                        sourceMangaID: sourceMangaID,
+                        mangaTitle: mangaTitle,
+                        sourceChapterID: sourceChapterID,
+                        chapterName: chapterName,
+                        state: state,
+                        progress: sqlite3_column_double(statement, 6),
+                        localPath: columnText(statement, index: 7),
+                        updatedAt: sqlite3_column_double(statement, 8)
+                    )
+                )
+            }
+
+            return records
         }
     }
 
