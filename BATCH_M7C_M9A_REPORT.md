@@ -61,3 +61,14 @@ iOS 12 Background Fetch is exposed as an opt-in best-effort update mechanism. Ma
 ## Acceptance note
 
 Build 10 passed CI but did not receive a reported physical acceptance before this larger batch started. Build 11 therefore carries both the build-10 physical checks and the new build-11 checks in one device checkpoint.
+
+
+## Pre-device hardening
+
+After build 11 passed CI and was merged, two runtime-consistency improvements were added before physical testing:
+
+- same-device backup restore preserves locally installed source records when the corresponding active scripts still exist;
+- excluded offline download files are cleared during restore;
+- existing Library entries refresh persisted cover/metadata after successful details + chapters loading.
+
+The physical acceptance build is therefore **build 12**.
