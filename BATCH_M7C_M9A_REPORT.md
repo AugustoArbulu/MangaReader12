@@ -82,3 +82,14 @@ Observed error:
 `The backup database failed validation.`
 
 The build-13 hotfix replaces exact-`user_version` validation with SQLite integrity + required-schema validation. Backup format version remains unchanged, so the already-exported file is the preferred retest artifact.
+
+
+## Build 13 physical restore result
+
+The improved validator produced:
+
+`The backup database failed validation: could not execute validation query.`
+
+Because this error comes from the first integrity query, the portable backup was decoded and written as SQLite successfully. The remaining incompatibility is the `PRAGMA quick_check(1)` query form on the physical iOS 12 SQLite runtime.
+
+Build 14 changes this to the older `PRAGMA quick_check;` form and adds native SQLite error details for any further validator incompatibility.

@@ -384,7 +384,7 @@ final class BackupManager {
         defer { sqlite3_close(opened) }
 
         let quickCheck = try singleTextValue(
-            sql: "PRAGMA quick_check(1);",
+            sql: "PRAGMA quick_check;",
             handle: opened
         )
 
@@ -470,17 +470,34 @@ final class BackupManager {
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
 
-        guard sqlite3_prepare_v2(
+        let prepareResult = sqlite3_prepare_v2(
             handle,
             sql,
             -1,
             &statement,
             nil
-        ) == SQLITE_OK,
-        sqlite3_step(statement) == SQLITE_ROW,
-        let rawValue = sqlite3_column_text(statement, 0) else {
+        )
+
+        guard prepareResult == SQLITE_OK else {
+            let message = sqlite3_errmsg(handle).map {
+                String(cString: $0)
+            } ?? "Unknown SQLite error"
+
             throw BackupManagerError.databaseValidationFailed(
-                "could not execute validation query."
+                "validation query could not be prepared (SQLite \(prepareResult)): \(message)"
+            )
+        }
+
+        let stepResult = sqlite3_step(statement)
+
+        guard stepResult == SQLITE_ROW,
+              let rawValue = sqlite3_column_text(statement, 0) else {
+            let message = sqlite3_errmsg(handle).map {
+                String(cString: $0)
+            } ?? "Unknown SQLite error"
+
+            throw BackupManagerError.databaseValidationFailed(
+                "validation query failed while reading the result (SQLite \(stepResult)): \(message)"
             )
         }
 
