@@ -101,7 +101,23 @@ Remaining physical gate:
 - [ ] Reader center tap hides the navigation bar, reader controls **and main bottom tab bar**.
 - [ ] Second center tap restores all reader/app chrome.
 - [ ] Leaving reader while chrome is hidden restores the tab bar for the rest of the app.
-- [ ] Refresh demo repository; source icons appear in the repository catalog.
+- [x] Refresh demo repository; source icons appear in the repository catalog.
 - [ ] Update MangaReader12 Demo to **1.3.1** and Alt Demo to **1.0.1**.
-- [ ] Installed-source list shows the repository-provided icons after update.
+- [x] Installed-source list shows the repository-provided icons after update.
 - [ ] Sources without an icon still show a readable initials fallback.
+
+
+## Build 16 final restore/reader retest
+
+Build-15 physical result:
+- [x] Repository/installed-source icons work.
+- [ ] Backup restore still failed with `SQLite 14: unable to open database file`.
+- [ ] Main tab-bar background band still remained in reader after center tap.
+
+Build-16 required retest:
+- [ ] Restore the same existing `.mr12backup` successfully after WAL→DELETE normalization.
+- [ ] Restored Library/category/progress/settings state is correct.
+- [ ] Installed source scripts remain usable after restore.
+- [ ] The main app tab bar (including its background band) is absent throughout the reader screen.
+- [ ] Center tap hides/shows reader-specific navigation/controls cleanly.
+- [ ] Leaving reader restores the main app tab bar.
