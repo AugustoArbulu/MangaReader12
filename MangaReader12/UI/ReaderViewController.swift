@@ -361,7 +361,8 @@ final class ReaderViewController: UIViewController,
     UICollectionViewDataSource,
     UICollectionViewDelegateFlowLayout,
     UICollectionViewDataSourcePrefetching,
-    UIScrollViewDelegate {
+    UIScrollViewDelegate,
+    UIGestureRecognizerDelegate {
 
     private let sourceID: String
     private let manga: Manga
@@ -590,6 +591,7 @@ final class ReaderViewController: UIViewController,
         )
         singleTap.numberOfTapsRequired = 1
         singleTap.cancelsTouchesInView = false
+        singleTap.delegate = self
 
         let doubleTap = UITapGestureRecognizer(
             target: self,
@@ -597,10 +599,39 @@ final class ReaderViewController: UIViewController,
         )
         doubleTap.numberOfTapsRequired = 2
         doubleTap.cancelsTouchesInView = false
+        doubleTap.delegate = self
 
         singleTap.require(toFail: doubleTap)
         view.addGestureRecognizer(singleTap)
         view.addGestureRecognizer(doubleTap)
+    }
+
+    // The reader owns root-level tap recognizers for its left/center/right
+    // navigation zones. Those recognizers must never react to controls
+    // placed over the image (especially the central scale selector).
+    // Delegate filtering runs before recognizing either single or double taps.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldReceive touch: UITouch
+    ) -> Bool {
+        let location = touch.location(in: view)
+        if (!scaleComparisonView.isHidden &&
+            scaleComparisonView.frame.contains(location)) ||
+           (!controlsView.isHidden &&
+            controlsView.frame.contains(location)) {
+            return false
+        }
+
+        // Also respect controls added by future in-reader overlays.
+        var candidate = touch.view
+        while let current = candidate {
+            if current is UIControl {
+                return false
+            }
+            candidate = current.superview
+        }
+
+        return true
     }
 
     @objc private func handleReaderDoubleTap(_ gesture: UITapGestureRecognizer) {

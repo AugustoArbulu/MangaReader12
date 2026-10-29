@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build19-reader-gesture-overlay-hotfix — 2026-10-29
+
+- Physical build-18 report: tapping Largura or Altura in the center of the live scale selector also triggered the reader's center-tap action and hid the reader controls.
+- Root cause: root-level single/double-tap recognizers did not exclude touches in floating UI controls.
+- Reader now filters both tap recognizers via UIGestureRecognizerDelegate before recognition.
+- Touches inside the visible scale comparison panel or brightness/direction controls never trigger the page tap-zone handlers, regardless of their horizontal location.
+- Future nested UIControl elements are protected as well.
+- Taps directly on the image still navigate pages / toggle chrome; scale switching remains immediate and stays on the same page.
+- No changes to scale modes, backup schema, iOS 12 deployment target or existing source handling.
+- Advanced build to 19; focused physical retest pending.
+
 ## 0.1.0-build18-live-reader-scale-comparison — 2026-10-29
 
 - Physical build-17 preliminary report: the app appears to work, but scale comparison requires more immediate control in the open chapter. Full M9B physical acceptance remains pending.

@@ -151,3 +151,13 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Switching scale repeatedly gives immediate visual comparison on the SAME image without a reader reload.
 - [ ] Fechar, center tap, and switching to Webtoon hide the comparison controls.
 - [ ] Chosen scale persists for the next chapter; current page, zoom, offline, and reader tab bar remain functional.
+
+
+## Build 18 feedback / Build 19 gesture hotfix
+
+- [x] Build 18 scale comparison panel is available in physical iOS 12 reader.
+- [ ] Build 18 scale controls not fully approved: Largura/Altura center touches also hide chrome.
+- [ ] Build 19: all four scale controls can be tapped, repeatedly, without hiding the panel.
+- [ ] Build 19: center tap on manga **image** still toggles the reader chrome.
+- [ ] Build 19: side tap-zones still navigate in LTR/RTL; brightness/direction controls do not turn pages.
+- [ ] Build 19: page, progress, Webtoon, back navigation and immersive bottom-tab-bar behavior remain intact.
