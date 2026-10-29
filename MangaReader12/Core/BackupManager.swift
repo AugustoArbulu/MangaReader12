@@ -169,6 +169,7 @@ final class BackupManager {
             from: try liveDatabaseURL(),
             to: snapshotURL
         )
+        try sanitizePortableSnapshot(at: snapshotURL)
 
         let databaseData = try Data(contentsOf: snapshotURL)
 
@@ -268,6 +269,41 @@ final class BackupManager {
             attributes: nil
         )
         return directory.appendingPathComponent("library.sqlite")
+    }
+
+    private func sanitizePortableSnapshot(at url: URL) throws {
+        var handle: OpaquePointer?
+        let result = sqlite3_open_v2(
+            url.path,
+            &handle,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+
+        guard result == SQLITE_OK, let opened = handle else {
+            if let handle = handle { sqlite3_close(handle) }
+            throw BackupManagerError.databaseOpenFailed(result)
+        }
+        defer { sqlite3_close(opened) }
+
+        let sql = """
+        BEGIN IMMEDIATE TRANSACTION;
+        DELETE FROM downloads;
+        UPDATE chapters SET downloaded = 0;
+        DELETE FROM sources;
+        COMMIT;
+        """
+
+        var message: UnsafeMutablePointer<Int8>?
+        let executeResult = sqlite3_exec(opened, sql, nil, nil, &message)
+
+        guard executeResult == SQLITE_OK else {
+            let text = message.map { String(cString: $0) } ?? "Unknown SQLite error"
+            if let message = message { sqlite3_free(message) }
+            throw BackupManagerError.databaseCopyFailed(executeResult, text)
+        }
+
+        if let message = message { sqlite3_free(message) }
     }
 
     private func validateDatabase(at url: URL) throws {
