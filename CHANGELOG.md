@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.0-m5b-dark-mode — 2026-10-29
+
+- Accepted M4B–M5A after successful physical iOS 12 validation of the real reader, zoom, Webtoon mode and persistent Library.
+- Added a custom dark theme compatible with iOS 12.
+- Added persistent theme preference via UserDefaults.
+- Added instant light/dark switching from Ajustes.
+- Themed navigation bars, tab bar, tables, cells, text, search UI, placeholders, Library, source browsing, manga details and diagnostics.
+- Kept the reader black independently of the app theme.
+- Advanced app build number to 8.
+
 ## 0.1.0-m4b-m5a-reader-library — 2026-10-29
 
 - Accepted M3B–M4A after complete physical iOS 12 browse/details/chapter validation.
