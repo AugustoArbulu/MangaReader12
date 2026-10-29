@@ -55,7 +55,7 @@ final class DataStorageViewController: UITableViewController {
         case 0: return 2
         case 1: return 4
         case 2: return 3
-        default: return 1
+        default: return 2
         }
     }
 
@@ -125,6 +125,11 @@ final class DataStorageViewController: UITableViewController {
             cell.textLabel?.text = "Reindexar downloads"
             cell.detailTextLabel?.text = "Remove do banco registros cujos arquivos offline não existem mais."
 
+        case (3, 0):
+            cell.textLabel?.text = "Gerenciar downloads"
+            cell.detailTextLabel?.text = "Ver capítulos offline, progresso e remover itens individualmente."
+            cell.accessoryType = .disclosureIndicator
+
         default:
             cell.textLabel?.text = "Apagar todos os downloads"
             cell.detailTextLabel?.text = "Remove todos os capítulos salvos offline."
@@ -172,6 +177,12 @@ final class DataStorageViewController: UITableViewController {
             }
 
         case (3, 0):
+            navigationController?.pushViewController(
+                DownloadsViewController(),
+                animated: true
+            )
+
+        case (3, 1):
             confirmClearDownloads()
 
         default:
