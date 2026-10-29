@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.1.0-m2d-m3a-batch — 2026-10-29
+
+- Accepted M2C after green post-merge Xcode 15.4 CI and 9/9 diagnostics on physical iOS 12.
+- Added repository lifecycle coordination across catalog planning, script transport, atomic files and SQLite state.
+- Added installed-source runtime loading directly from the active on-disk JavaScript extension.
+- Added source list, enable/disable, rollback and removal management.
+- Added a controlled demo repository and source for end-to-end validation.
+- Added first Mihon-style UIKit navigation shell: Biblioteca, Atualizações, Histórico, Explorar and Ajustes.
+- Added repository/source management UI under Explorar.
+- Moved diagnostics into Ajustes with a scalable table UI.
+- Expanded diagnostics to 11 checks.
+- Advanced app build number to 5.
+
 ## 0.1.0-m2c-atomic-source-install — 2026-10-29
 
 - Accepted M2B after green post-merge CI and 8/8 diagnostics on a physical iOS 12 device.

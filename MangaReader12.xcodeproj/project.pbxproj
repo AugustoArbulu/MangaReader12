@@ -19,6 +19,9 @@
 		A1000000000000000000000A /* JavaScriptSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* JavaScriptSourceRuntime.swift */; };
 		A1000000000000000000000B /* JavaScriptCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* JavaScriptCore.framework */; };
 		A1000000000000000000000C /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* libsqlite3.tbd */; };
+		A1000000000000000000000D /* RepositoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* RepositoryManager.swift */; };
+		A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* InstalledSourceRuntime.swift */; };
+		A1000000000000000000000F /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* MainTabBarController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +39,9 @@
 		A2000000000000000000000B /* JavaScriptSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptSourceRuntime.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		A2000000000000000000000D /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+		A2000000000000000000000E /* RepositoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryManager.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* InstalledSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledSourceRuntime.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* MainTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabBarController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +76,7 @@
 				A40000000000000000000005 /* Networking */,
 				A40000000000000000000006 /* Sources */,
 				A40000000000000000000007 /* SourceRuntime */,
+				A40000000000000000000009 /* UI */,
 				A20000000000000000000003 /* Info.plist */,
 				A20000000000000000000004 /* LaunchScreen.storyboard */,
 			);
@@ -113,6 +120,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000009 /* SourceManifest.swift */,
+				A2000000000000000000000E /* RepositoryManager.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -122,8 +130,17 @@
 			children = (
 				A2000000000000000000000A /* SourceStorage.swift */,
 				A2000000000000000000000B /* JavaScriptSourceRuntime.swift */,
+				A2000000000000000000000F /* InstalledSourceRuntime.swift */,
 			);
 			path = SourceRuntime;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000009 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000010 /* MainTabBarController.swift */,
+			);
+			path = UI;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000008 /* Frameworks */ = {
@@ -213,6 +230,9 @@
 				A10000000000000000000008 /* SourceManifest.swift in Sources */,
 				A10000000000000000000009 /* SourceStorage.swift in Sources */,
 				A1000000000000000000000A /* JavaScriptSourceRuntime.swift in Sources */,
+				A1000000000000000000000D /* RepositoryManager.swift in Sources */,
+				A1000000000000000000000E /* InstalledSourceRuntime.swift in Sources */,
+				A1000000000000000000000F /* MainTabBarController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,7 +278,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -280,7 +300,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;

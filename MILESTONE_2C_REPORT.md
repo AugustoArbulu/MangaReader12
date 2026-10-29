@@ -1,5 +1,7 @@
 # Milestone 2C Report — Atomic Source Install + Rollback
 
+**Status: ACCEPTED — 2026-10-29**
+
 Date: 2026-10-29
 
 ## Goal
@@ -51,3 +53,12 @@ The implementation uses Foundation/FileManager APIs available to the iOS 12 targ
 - IPA packaging succeeds.
 - Physical iOS 12 launches build 4.
 - **9/9** diagnostics green.
+
+
+## Acceptance evidence
+
+- PR #6 merged
+- Merge commit: `a32fa264d4dfae868880773a7bf30ac078972910`
+- Post-merge GitHub Actions run: `40815165763` — success
+- Physical iOS 12 launch: success
+- On-device diagnostics: **9/9 green**
