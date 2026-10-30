@@ -861,6 +861,7 @@ final class SourceInformationViewController: UITableViewController {
     private let record: InstalledSourceRecord
     private let storage: SourceStorage
     private var isTesting = false
+    private var networkDiagnostics: MangaDexHTTPSDiagnostics?
 
     init(record: InstalledSourceRecord) {
         self.record = record
@@ -886,7 +887,8 @@ final class SourceInformationViewController: UITableViewController {
     override func tableView(
         _ tableView: UITableView, numberOfRowsInSection section: Int
     ) -> Int {
-        return section == 0 ? 5 : 2
+        return section == 0 ? 5 :
+            (record.manifest.id == "org.mangareader12.mangadex" ? 3 : 2)
     }
 
     override func tableView(
@@ -929,10 +931,14 @@ final class SourceInformationViewController: UITableViewController {
             if indexPath.row == 0 {
                 cell.textLabel?.text = "Verificar runtime"
                 cell.detailTextLabel?.text = "Testa carregamento e metadata da fonte"
-            } else {
+            } else if indexPath.row == 1 {
                 cell.textLabel?.text = "Limpar preferências desta fonte"
                 cell.detailTextLabel?.text =
                     "Remove apenas o armazenamento JS desta fonte; pode exigir reconfiguração"
+            } else {
+                cell.textLabel?.text = "Diagnosticar HTTPS do MangaDex"
+                cell.detailTextLabel?.text =
+                    "Compara API, URLSession do iOS e HTTPS de controle; não altera certificados"
             }
         }
         return cell
@@ -943,10 +949,37 @@ final class SourceInformationViewController: UITableViewController {
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard indexPath.section == 1 else { return }
-        if indexPath.row == 0 {
-            testRuntime()
-        } else {
-            confirmReset()
+        switch indexPath.row {
+        case 0: testRuntime()
+        case 1: confirmReset()
+        default: diagnoseMangaDexHTTPS()
+        }
+    }
+
+    private func diagnoseMangaDexHTTPS() {
+        guard record.manifest.id == "org.mangareader12.mangadex",
+              networkDiagnostics == nil else { return }
+
+        navigationItem.prompt = "Testando conexões HTTPS…"
+        let diagnostic = MangaDexHTTPSDiagnostics()
+        networkDiagnostics = diagnostic
+        diagnostic.run { [weak self] report in
+            guard let self = self else { return }
+            self.networkDiagnostics = nil
+            self.navigationItem.prompt = nil
+
+            let alert = UIAlertController(
+                title: "Diagnóstico HTTPS",
+                message: report,
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(
+                title: "Copiar relatório", style: .default
+            ) { _ in
+                UIPasteboard.general.string = report
+            })
+            alert.addAction(UIAlertAction(title: "Fechar", style: .cancel))
+            self.present(alert, animated: true)
         }
     }
 
@@ -1017,6 +1050,100 @@ final class SourceInformationViewController: UITableViewController {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+// Read-only, opt-in diagnostic. No trust-challenge override, TLS downgrade,
+// insecure HTTP, global ATS exemption or source-domain policy changes.
+private final class MangaDexHTTPSDiagnostics {
+    private let sourceClient = HTTPClient(
+        policy: HTTPPolicy(
+            allowedDomains: ["mangadex.org"],
+            timeout: 12,
+            maxResponseBytes: 64 * 1024
+        )
+    )
+    private var results: [String] = []
+
+    func run(completion: @escaping (String) -> Void) {
+        results = [
+            "iOS " + UIDevice.current.systemVersion,
+            "Certificados: validação padrão do iOS (sem exceções)",
+            "Teste somente leitura; sem dados de conta."
+        ]
+        testSourceClient(completion: completion)
+    }
+
+    private func testSourceClient(completion: @escaping (String) -> Void) {
+        sourceClient.send(
+            HTTPRequest(url: "https://api.mangadex.org/ping")
+        ) { [self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self.results.append("API via HTTPClient: HTTP \(response.statusCode)")
+                case .failure(let error):
+                    self.results.append(
+                        "API via HTTPClient: " + self.describe(error)
+                    )
+                }
+                self.testSystemSession(index: 0, completion: completion)
+            }
+        }
+    }
+
+    private func testSystemSession(
+        index: Int,
+        completion: @escaping (String) -> Void
+    ) {
+        // The system session differs from our delegate-backed HTTPClient,
+        // helping distinguish TLS/device trust from a client implementation bug.
+        let destinations: [(String, String)] = [
+            ("API via URLSession", "https://api.mangadex.org/ping"),
+            ("Site MangaDex", "https://mangadex.org/"),
+            ("GitHub de controle", "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/repository-mangadex.json"),
+            ("HTTPS de controle", "https://example.com/")
+        ]
+        guard index < destinations.count else {
+            completion(results.joined(separator: "\n"))
+            return
+        }
+        let entry = destinations[index]
+        guard let url = URL(string: entry.1), url.scheme == "https" else {
+            results.append(entry.0 + ": URL inválida")
+            testSystemSession(index: index + 1, completion: completion)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.httpMethod = "GET"
+        // All probes use system trust and require HTTPS.
+        URLSession.shared.dataTask(with: request) { [self] _, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self.results.append(entry.0 + ": " + self.describe(error))
+                } else if let http = response as? HTTPURLResponse {
+                    self.results.append(entry.0 + ": HTTP \(http.statusCode)")
+                } else {
+                    self.results.append(entry.0 + ": resposta inválida")
+                }
+                self.testSystemSession(index: index + 1, completion: completion)
+            }
+        }.resume()
+    }
+
+    private func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        var detail = "\(ns.domain) \(ns.code)"
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            detail += " (suberro \(underlying.domain):\(underlying.code))"
+            if let ssl = underlying.userInfo["_kCFStreamErrorCodeKey"] {
+                detail += " [TLS \(ssl)]"
+            }
+        } else if let ssl = ns.userInfo["_kCFStreamErrorCodeKey"] {
+            detail += " [TLS \(ssl)]"
+        }
+        return detail
     }
 }
 
