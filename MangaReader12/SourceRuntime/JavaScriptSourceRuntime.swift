@@ -228,6 +228,10 @@ private final class HTMLSelectorService: NSObject, WKNavigationDelegate {
             return
         }
         DispatchQueue.main.async {
+            guard self.jobs.count < 4 else {
+                completion(Self.errorJSON("HTML selector queue is full."))
+                return
+            }
             self.jobs.append((html, selectorsJSON, completion))
             self.ensureWebView()
             self.next()
@@ -319,7 +323,8 @@ private final class HTMLSelectorService: NSObject, WKNavigationDelegate {
             var attrs = {};
             for (var k = 0; k < node.attributes.length; k++) {
               var a = node.attributes[k];
-              if (a.name.length < 100 && a.value.length < 4096) attrs[a.name] = a.value;
+              var maxValue = a.name === "data-page" ? (2 * 1024 * 1024) : 4096;
+              if (a.name.length < 100 && a.value.length <= maxValue) attrs[a.name] = a.value;
             }
             return {text: (node.textContent || "").trim().slice(0, 8192),
                     attrs: attrs};
@@ -473,7 +478,10 @@ final class JavaScriptSourceRuntime {
                     try self.raiseSourceFailureIfNeeded(result)
                     finish(.success(try self.decodeUnlocked(type, from: result)))
                 } else {
-                    self.queue.asyncAfter(deadline: .now() + 25) {
+                    // Selected Keiyoushi HTML adapters perform one HTTPS
+                    // request followed by inert WebKit DOM selection.
+                    let timeout: TimeInterval = self.manifest.id.hasPrefix("kei.") ? 40 : 25
+                    self.queue.asyncAfter(deadline: .now() + timeout) {
                         guard !pending.finished else { return }
                         finish(.failure(SourceRuntimeError.sourceTimeout(functionName)))
                     }
