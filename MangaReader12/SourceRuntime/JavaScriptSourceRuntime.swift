@@ -293,7 +293,13 @@ final class JavaScriptSourceRuntime {
                     try self.raiseSourceFailureIfNeeded(result)
                     finish(.success(try self.decodeUnlocked(type, from: result)))
                 } else {
-                    self.queue.asyncAfter(deadline: .now() + 25) {
+                    // The MangaDex API may require a 20s URLSession attempt
+                    // before the secure Network.framework retry on iOS 12.
+                    // Do not time out its typed JS callback before both
+                    // bounded transports have completed.
+                    let timeout: TimeInterval =
+                        self.manifest.id == "org.mangareader12.mangadex" ? 48 : 25
+                    self.queue.asyncAfter(deadline: .now() + timeout) {
                         guard !pending.finished else { return }
                         finish(.failure(SourceRuntimeError.sourceTimeout(functionName)))
                     }
