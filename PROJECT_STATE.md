@@ -508,3 +508,12 @@ User physical Build30 and Webtoons 0.1.1 reports: Manhwa18.net covers now appear
 Build31 is a **diagnostic-only** change, not another unverified attempt to fix server images. In Webtoons.com EN browse view add navigation button `Testar capas`, available when at least one Popular item loaded. User tap explicitly triggers sequential comparison for the first listed work: source-provided list cover URL -> one HTTPS GET; source existing details() -> details cover URL -> one HTTPS GET. Report logs host, extension, query presence, HTTP status/error, MIME/size, UIKit UIImage decoding yes/no; no full URL, title, headers, cookies, or response bodies. At most 2 image GETs; 15s timeout each, 5MiB cap; stop on HTTP429. Source domains policy remains in force.
 
 Test acceptance: user installs verified Build31 on iOS12.5.8, enters Webtoons.com EN Popular, taps `Testar capas`, selects `Copiar relatório` and pastes full report. Outcome can distinguish null/placeholder list URL, blocked host, SSL, unsupported image type, or a native presentation/cache defect when the same file decodes. Do not claim fixes before results. Manhwa18.net unaffected; scripts and SHA256-pinned catalog stay exactly the same.
+
+## M13-A Webtoons EN v0.1.2 — list CDN normalization candidate (2026-10-30)
+
+- Physical Build31 report, iOS 12.5.8: first list cover on `webtoon-phinf.pstatic.net` returned HTTP 403 text/html (467 bytes, UIImage NO); the same manga details cover on `swebtoon-phinf.pstatic.net` returned HTTP 200 image/jpeg (116259 bytes, UIImage YES).
+- Evidence indicates host/path/request-context differences rather than an iOS image decoder failure. Exact list asset on alternate host is not yet physically verified.
+- Source-only candidate: normalize precisely `https://webtoon-phinf.pstatic.net` list cover URLs to `https://swebtoon-phinf.pstatic.net`, preserve path and query, no extra metadata requests, no host expansion, no special cookies/headers/cert exceptions. Other image hosts unchanged.
+- Increment only Webtoons source manifest/script version to 0.1.2; pin SHA-256 and offline regression tests. No new IPA needed; update source from repository after merge.
+- Physical gate: update the selected source and reopen Popular list; confirm covers render, then verify details image and one previously working chapter. If still blank, the alternate host asset may not exist; stop and report without adding broad retries.
+- No change to HotComics HTTP403, Manhwa18.net, paused MangaDex, the remaining M13 ports, or deployment target iOS 12.0.
