@@ -272,3 +272,20 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] GitHub and example.com HTTPS controls help distinguish host-only and all-host failures.
 - [ ] Underlying TLS/CFNetwork error plus iOS minor version copied.
 - [ ] Source remains installed, no trust exception or altered TLS policy.
+
+
+## Build 27 confirmed device differential results
+
+- [x] iOS 12.5.8 reported.
+- [x] Safari ping => pong.
+- [x] HTTPClient and URLSession on MangaDex API => -1200 / -9836.
+- [x] Standard URLSession on MangaDex site => -1200 / -9836.
+- [x] GitHub raw and example.com HTTPS controls => HTTP 200.
+- [ ] Secure alternate transport for MangaDex is not yet verified.
+
+## Build 28 additional controlled TLS probes
+
+- [ ] WKWebView to MangaDex API returns pong, a TLS error, or controlled timeout.
+- [ ] NWConnection native TLS handshake returns ready, concrete error or controlled timeout.
+- [ ] Full report can be copied from Source Information screen.
+- [ ] No modification to installed source, library/downloads or certificates; Demo still works.

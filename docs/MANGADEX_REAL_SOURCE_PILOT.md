@@ -47,3 +47,18 @@ Opening MangaDex experimental source failed with Network transport error -1200 w
 5. The diagnostic makes read-only requests, does not change installed source data and does not fix the TLS problem by itself.
 
 Reference: https://developer.apple.com/library/archive/technotes/tn2232/
+
+
+## Build 27 physical result / Build 28 next experiment
+
+User-reported iOS 12.5.8:
+- Safari shows pong at MangaDex API /ping.
+- URLSession and the app's HTTPClient fail API and MangaDex site with -1200 / TLS -9836.
+- URLSession succeeds against raw.githubusercontent.com and example.com (HTTP 200).
+
+-9836 is Apple's errSSLPeerProtocolVersion, a peer-rejected TLS version; the precise server/client handshake mismatch cannot be inferred beyond this. Apple confirms URLSession TLS 1.3 support on iOS 12.2+.
+
+Build 28 adds two opt-in probes to the **existing** Explorar -> MangaDex -> Informações e dados da fonte -> Diagnosticar HTTPS do MangaDex report:
+1. Ephemeral WKWebView loads the same HTTPS API /ping, with standard OS trust. Record HTTP success and pong body or TLS error.
+2. Network.framework performs native default-trust TLS handshake to api.mangadex.org:443. Record ready/failure.
+No certificate override, TLS downgrade, ATS exception, proxy or insecure relay. Share the full report; no new source install required.

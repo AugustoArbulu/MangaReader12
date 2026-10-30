@@ -426,3 +426,27 @@ Physical build-15 feedback:
 - Safari can independently test https://api.mangadex.org/ping and report whether it displays pong or a certificate/secure connection warning.
 - No source script or repository catalog updates, no insecure TLS bypass and no changes to supported iOS 12 baseline.
 - Build 27 is diagnostic only; needs device results before a targeted fix.
+
+
+## Build 27 detailed device feedback — iOS 12.5.8 (2026-10-30)
+
+The user ran the real diagnostic. Full relevant results:
+- Safari https://api.mangadex.org/ping => pong
+- HTTPClient => NSURLError -1200
+- URLSession.shared API => NSURLErrorDomain -1200, kCFNetwork -1200, _kCFStreamErrorCodeKey -9836
+- URLSession.shared MangaDex home => same -1200 / -9836
+- GitHub raw control => HTTP 200
+- example.com control => HTTP 200
+
+Source API remains blocked on device. This distinguishes peer TLS protocol negotiation failure from an app-specific HTTPClient bug. Do not conclude TLS1.3 absence (iOS12.5.8 has default TLS1.3 support in URLSession/Network.framework).
+
+## Build 28 — Alternate default-trust TLS probes (device gate pending)
+
+- Source tools > Diagnosticar HTTPS do MangaDex appends a WKWebView ephemeral isolated WebKit test to https://api.mangadex.org/ping.
+- Then performs a Network.framework NWConnection TLS handshake to api.mangadex.org:443 using system certificate/host validation without custom trust overrides.
+- Both tests are read-only, have 14s guards, use no credentials, add no broad network permissions and do not change source availability.
+- A successful alternate transport indicates a possible secure native client approach; a failed probe rules out that exact path, not all solutions.
+- If WKWebView succeeds, the next milestone is a carefully guarded verified WebKit-backed API fetch with host allowlist and strict output limits, not an automatic disabling of URLSession trust.
+- If both alternate probes fail, investigate client TLS hellos / server configuration, CDN route policy and permitted server-side compatibility adjustments before proposing a relay.
+- Apple peer protocol version -9836: https://developer.apple.com/documentation/security/errsslpeerprotocolversion
+- Apple platform TLS note: https://support.apple.com/pt-br/guide/security/sec100a75d12/web

@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.1.0-build28-m12b-alternate-tls-probes — 2026-10-30
+
+- Physical iOS 12.5.8 report confirmed MangaDex API via Safari works with pong, but both the app HTTPClient and standard URLSession fail with NSURLErrorDomain -1200 and peer TLS stream -9836 (errSSLPeerProtocolVersion).
+- GitHub and example.com both returned HTTP 200 from the same iOS URLSession diagnostic, excluding a broad loss of HTTPS trust or total lack of network connectivity.
+- Apple identifies -9836 as a TLS protocol version error. iOS 12.5.8 is newer than iOS 12.2, where Apple says TLS 1.3 is enabled by default in URLSession and Network.framework. The exact incompatibility is not yet identified.
+- Extended the existing MangaDex HTTPS diagnostics with two more distinct default-trust transport paths:
+  - A private, ephemeral WKWebView using WebKit to load API /ping, capturing its content or TLS/URL error.
+  - NWConnection from Network.framework to the same domain/443 with TLS options, standard certificate and hostname validation and no custom verify block, reporting handshake success or error.
+- Tests are strictly read-only and only run after explicit user action. Both paths have 14-second timeouts, clean up their connections and do not share login/session data.
+- No TLS downgrades, disabled ATS, disabled certificate validation, proxies, dynamic unrestricted domain exemptions, or unreviewed source script changes.
+- This build does NOT claim MangaDex is fixed; it aims to determine whether a secure alternate iOS-native transport is available.
+- Same iOS 12.0 minimum, Swift 5/UIKit, SQL schema and accepted downloaded/reader features. Bundle version 28; physical gate pending.
+
 ## 0.1.0-build27-m12a-mangadex-tls-diagnostic — 2026-10-30
 
 - The first live MangaDex test on Build 26 returned NSURLErrorDomain code -1200 on Abrir source, before the manga list loaded. This is a TLS secure-connection error, not yet a verified root cause.
