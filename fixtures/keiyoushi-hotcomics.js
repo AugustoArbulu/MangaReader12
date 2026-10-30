@@ -125,7 +125,7 @@ var H = (function () {
           if(res.__sourceError){done(res);return;}
           done(H.items(res,'images').map(function(x){
             return H.cleanURL(base,H.attr(x,'data-src')||H.attr(x,'src'));
-          }).filter(Boolean).map(function(link,i){return {index:i,imageUrl:link,headers:{Referer:base+'/'}; }));
+          }).filter(Boolean).map(function(link,i){return {index:i,imageUrl:link,headers:{Referer:base+'/'}}; }));
         });
       });
     }
