@@ -450,3 +450,13 @@ Source API remains blocked on device. This distinguishes peer TLS protocol negot
 - If both alternate probes fail, investigate client TLS hellos / server configuration, CDN route policy and permitted server-side compatibility adjustments before proposing a relay.
 - Apple peer protocol version -9836: https://developer.apple.com/documentation/security/errsslpeerprotocolversion
 - Apple platform TLS note: https://support.apple.com/pt-br/guide/security/sec100a75d12/web
+
+## M13 — nine user-selected Keiyoushi sources (selection recorded 2026-10-30)
+
+- Explicit scope limited to nine requested extensions: Comix, Asura Scans, Webtoons.com ("webtoon"), Vortex Scans, MadaraDex, HotComics, Manhwa18.net, ToonGod, and Manhwa18.cc.
+- Source-of-truth repositories: https://github.com/keiyoushi/extensions-source (Kotlin source), https://github.com/AugustoArbulu/MangaReader12 (native Swift iOS12 runtime).
+- Source modules exist upstream as of 2026-10-30. Exact technical inventory, shared engines, risk and incremental port design are recorded in docs/M13_SELECTED_KEIYOUSHI_SOURCE_PORTS.md.
+- Selection establishes priority only. No selected source is currently installed from Keiyoushi APK, ported, or physically accepted in MangaReader12. Never present the upstream list as an executable iOS catalog.
+- Keep the approved Build25 behavior stable. Build28 MangaDex native TLS diagnostics are pending physical feedback. The MangaDex pilot is diagnostic/experimental and not one of the nine selected ports.
+- Proposed port development in cohesive bundles: shared safe HTML/HTTP adapters and first independent sites; shared Madara/Iken/Yii engines; complex or restricted sources last. Deliver IPA only after coherent bundle and post-merge CI.
+- No anti-bot bypass, forged authorization, unrestricted remote hosts, insecure TLS or persistent unreviewed native APK execution. Respect third-party access terms, license and attribution.
