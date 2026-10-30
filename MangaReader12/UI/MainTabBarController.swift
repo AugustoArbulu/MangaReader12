@@ -408,6 +408,16 @@ final class ExploreViewController: UITableViewController {
         })
 
         sheet.addAction(UIAlertAction(
+            title: "Informações e dados da fonte",
+            style: .default
+        ) { [weak self] _ in
+            self?.navigationController?.pushViewController(
+                SourceInformationViewController(record: record),
+                animated: true
+            )
+        })
+
+        sheet.addAction(UIAlertAction(
             title: "Rollback para versão anterior",
             style: .default
         ) { [weak self] _ in
@@ -842,6 +852,178 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+// Isolated source diagnostics and settings maintenance. This screen never
+// exposes persisted values or removes user Library/download data.
+final class SourceInformationViewController: UITableViewController {
+    private let record: InstalledSourceRecord
+    private let storage: SourceStorage
+    private var isTesting = false
+
+    init(record: InstalledSourceRecord) {
+        self.record = record
+        self.storage = SourceStorage(sourceID: record.manifest.id)
+        super.init(style: .grouped)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = record.manifest.name
+        tableView.tableFooterView = UIView()
+        applyTheme()
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        return 2
+    }
+
+    override func tableView(
+        _ tableView: UITableView, numberOfRowsInSection section: Int
+    ) -> Int {
+        return section == 0 ? 5 : 2
+    }
+
+    override func tableView(
+        _ tableView: UITableView, titleForHeaderInSection section: Int
+    ) -> String? {
+        return section == 0 ? "Informações da fonte" : "Manutenção"
+    }
+
+    override func tableView(
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "SourceInfoCell")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "SourceInfoCell")
+        ThemeManager.shared.style(cell: cell)
+        cell.accessoryType = .none
+        cell.selectionStyle = .none
+        cell.detailTextLabel?.numberOfLines = 0
+
+        if indexPath.section == 0 {
+            switch indexPath.row {
+            case 0:
+                cell.textLabel?.text = "Identificador"
+                cell.detailTextLabel?.text = record.manifest.id
+            case 1:
+                cell.textLabel?.text = "Versão e idioma"
+                cell.detailTextLabel?.text = "v\(record.manifest.version) • \(record.manifest.lang)"
+            case 2:
+                cell.textLabel?.text = "Estado"
+                cell.detailTextLabel?.text = record.enabled ? "Ativada" : "Desativada"
+            case 3:
+                cell.textLabel?.text = "Domínios permitidos"
+                cell.detailTextLabel?.text = record.manifest.domains.joined(separator: ", ")
+            default:
+                cell.textLabel?.text = "Preferências da fonte"
+                cell.detailTextLabel?.text = "\(storage.entryCount()) entradas locais"
+            }
+        } else {
+            cell.selectionStyle = .default
+            cell.accessoryType = .disclosureIndicator
+            if indexPath.row == 0 {
+                cell.textLabel?.text = "Verificar runtime"
+                cell.detailTextLabel?.text = "Testa carregamento e metadata da fonte"
+            } else {
+                cell.textLabel?.text = "Limpar preferências desta fonte"
+                cell.detailTextLabel?.text =
+                    "Remove apenas o armazenamento JS desta fonte; pode exigir reconfiguração"
+            }
+        }
+        return cell
+    }
+
+    override func tableView(
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.section == 1 else { return }
+        if indexPath.row == 0 {
+            testRuntime()
+        } else {
+            confirmReset()
+        }
+    }
+
+    private func testRuntime() {
+        guard !isTesting else { return }
+        isTesting = true
+        navigationItem.prompt = "Verificando runtime…"
+        do {
+            let loader = try InstalledSourceRuntimeLoader.defaultLoader()
+            loader.load(sourceID: record.manifest.id) { [weak self] outcome in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    switch outcome {
+                    case .failure(let error):
+                        self.finishTest(.failure(error))
+                    case .success(let runtime):
+                        runtime.callDecoded("metadata", as: SourceMetadata.self) {
+                            [weak self] metadata in
+                            DispatchQueue.main.async {
+                                self?.finishTest(metadata)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            finishTest(.failure(error))
+        }
+    }
+
+    private func finishTest(_ result: Result<SourceMetadata, Error>) {
+        isTesting = false
+        navigationItem.prompt = nil
+        switch result {
+        case .failure(let error):
+            showMessage(title: "Falha no runtime", message: error.localizedDescription)
+        case .success(let meta):
+            showMessage(
+                title: "Runtime OK",
+                message: "\(meta.name) • versão \(meta.version) • \(meta.lang)"
+            )
+        }
+    }
+
+    private func confirmReset() {
+        let count = storage.entryCount()
+        let alert = UIAlertController(
+            title: "Limpar dados desta fonte?",
+            message: "Serão apagadas \(count) entradas do armazenamento JS de \(record.manifest.name). Isso pode redefinir opções e sessões da fonte. Biblioteca, downloads, histórico e preferências do leitor não serão alterados.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(
+            title: "Limpar dados", style: .destructive
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let removed = self.storage.clearAll()
+            self.tableView.reloadData()
+            self.showMessage(
+                title: "Dados da fonte limpos",
+                message: "\(removed) entradas locais removidas."
+            )
+        })
+        present(alert, animated: true)
+    }
+
+    private func showMessage(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+extension SourceInformationViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
     }
 }
 
