@@ -89,14 +89,13 @@ var H = (function () {
           title:'h1.subj, h3.subj',author:'.detail_header .info .author',
           artist:'.detail_header .info .author_area',genre:'.detail_header .info .genre',
           description:'#_asideDetail p.summary',status:'#_asideDetail p.day_info',
-          thumb:'head meta[property="og:image"]'
-        }}},function(res){
+        }},coverMeta:{selector:'head meta[property="og:image"]'}},function(res){
           if(res.__sourceError){done(res);return;}
           var item=H.items(res,'body')[0]||{},title=H.text(H.field(item,'title'));
           if(!title){H.fail(done,'Webtoons title not found');return;}
           var st=H.text(H.field(item,'status')).toUpperCase();
           done({id:mangaId,title:title,altTitles:[],
-            cover:H.cleanURL(base,H.attr(H.field(item,'thumb'),'content')),
+            cover:H.cleanURL(base,H.attr(H.items(res,'coverMeta')[0],'content')),
             author:H.text(H.field(item,'author'))||null,
             artist:H.text(H.field(item,'artist'))||null,
             description:H.text(H.field(item,'description')),
