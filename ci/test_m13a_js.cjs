@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.1');
+      assert.equal(source.version,'0.1.2');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -142,7 +142,9 @@ async function testWebtoons() {
     }
   });
   assert.equal((await r.call('metadata')).id,'kei.webtoons.en');
-  assert.equal((await r.call('popular',1)).items.length,1);
+  const initialListing=await r.call('popular',1);
+  assert.equal(initialListing.items.length,1);
+  assert.equal(initialListing.items[0].cover,'https://swebtoon-phinf.pstatic.net/cover.jpg');
   assert.equal((await r.call('search','a',1,[])).items.length,1);
   assert.equal((await r.call('details',root)).status,'ongoing');
   const chapters=await r.call('chapters',root);
@@ -158,7 +160,7 @@ async function testWebtoons() {
       return {items:[
         node('',{href:root},{title:node('Lazy thumbnail'),
           cover:node('',{src:'data:image/gif;base64,AA==',
-            'data-src':'https://webtoon-phinf.pstatic.net/real-cover.jpg'})}),
+            'data-src':'https://webtoon-phinf.pstatic.net/real-cover.jpg?type=q90'})}),
         node('',{href:'https://www.webtoons.com/en/original/another/list?title_no=43'},
           {title:node('Srcset thumbnail'),
           cover:node('',{src:'data:image/svg+xml;base64,AA==',
@@ -168,9 +170,9 @@ async function testWebtoons() {
   });
   const lazyResult=await lazy.call('popular',1);
   assert.equal(lazyResult.items.length,2);
-  assert.equal(lazyResult.items[0].cover,'https://webtoon-phinf.pstatic.net/real-cover.jpg');
-  assert.equal(lazyResult.items[1].cover,'https://webtoon-phinf.pstatic.net/cover-1.jpg');
-  console.log('PASS Webtoons EN: lazy data-src/srcset cover URL extraction');
+  assert.equal(lazyResult.items[0].cover,'https://swebtoon-phinf.pstatic.net/real-cover.jpg?type=q90');
+  assert.equal(lazyResult.items[1].cover,'https://swebtoon-phinf.pstatic.net/cover-1.jpg');
+  console.log('PASS Webtoons EN: list cover URLs normalized to permitted image CDN');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
 }
 async function testSecurity() {
