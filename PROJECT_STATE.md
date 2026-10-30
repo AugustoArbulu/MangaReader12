@@ -460,3 +460,17 @@ Source API remains blocked on device. This distinguishes peer TLS protocol negot
 - Keep the approved Build25 behavior stable. Build28 MangaDex native TLS diagnostics are pending physical feedback. The MangaDex pilot is diagnostic/experimental and not one of the nine selected ports.
 - Proposed port development in cohesive bundles: shared safe HTML/HTTP adapters and first independent sites; shared Madara/Iken/Yii engines; complex or restricted sources last. Deliver IPA only after coherent bundle and post-merge CI.
 - No anti-bot bypass, forged authorization, unrestricted remote hosts, insecure TLS or persistent unreviewed native APK execution. Respect third-party access terms, license and attribution.
+
+
+## Build 28 physical report (2026-10-30)
+
+- iOS 12.5.8: Safari API /ping -> pong; HTTPClient/URLSession API and home -> -1200 / -9836; WKWebView API -> -1200 / -9836; GitHub and example.com -> HTTP 200; Network.framework with default TLS trust -> connected.
+- Apple identifies -9836 as errSSLPeerProtocolVersion; exact peer/client handshake cause not packet captured. TLS ready does not prove HTTP data exchange.
+
+## Build 29 — narrow Network.framework HTTPS HTTP/1.1 fallback
+
+- Standard URLSession remains first choice for all requests and controls original host allowlist.
+- On error -1200 for GETs at exact api.mangadex.org only, Network.framework attempts one default-trust HTTPS+HTTP/1.1 request and parses bounded response. No extra retry for 403, 429, login or captcha.
+- 22s fallback timeout; 20s URLSession timeout; JS source callback 48s only for MangaDex. Response parser validates framing and bounds. No ATS or certificate exceptions.
+- Device acceptance pending: real API status, popular list, search, details and chapters. Cover and image CDN paths are not covered by API-only fallback and remain independently pending.
+- Other selected Keiyoushi ports, Demo and stored library items unaffected.

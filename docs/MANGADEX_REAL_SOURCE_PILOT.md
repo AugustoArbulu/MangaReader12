@@ -62,3 +62,12 @@ Build 28 adds two opt-in probes to the **existing** Explorar -> MangaDex -> Info
 1. Ephemeral WKWebView loads the same HTTPS API /ping, with standard OS trust. Record HTTP success and pong body or TLS error.
 2. Network.framework performs native default-trust TLS handshake to api.mangadex.org:443. Record ready/failure.
 No certificate override, TLS downgrade, ATS exception, proxy or insecure relay. Share the full report; no new source install required.
+
+
+## Build 29 — Native HTTPS request over a verified TLS handshake
+
+Build 28 physically validated the TLS handshake but NOT a complete HTTP roundtrip.
+
+Build 29 attempts a fallback on a GET to api.mangadex.org only when the normal URLSession returns -1200: Network.framework TLS with system default trust, then HTTP/1.1 with bounded response parsing. This does not override certificates, permit arbitrary domains, downgrade TLS or use a relay.
+
+After installing Build29, open the existing installed MangaDex source, check popular entries, search and details, and optionally chapter listing. If any exact error occurs, capture it. Covers at uploads.mangadex.org and image servers are not included in the fallback and may still fail independently. Stop repeated retries on 403/429.

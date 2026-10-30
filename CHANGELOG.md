@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.0-build29-m12c-secure-mangadex-http1-fallback — 2026-10-30
+
+- Build 28 device diagnostic (iOS 12.5.8): HTTPClient, URLSession, WKWebView failed MangaDex API TLS with -1200/-9836, HTTPS controls succeeded; Network.framework negotiated TLS using default system trust. Safari /ping returned pong.
+- Narrowly scoped Network.framework HTTPS+HTTP/1.1 GET fallback is triggered only after URLSession -1200 against exact host api.mangadex.org. iOS system trust remains enforced, no arbitrary certificates, proxies, cleartext HTTP, TLS downgrade or automatic cross-host redirects.
+- Hand-written HTTP/1.1 response parser handles Content-Length, chunked encoding, and connection-close framed bodies; 32 KiB header cap, 8 MiB body cap (respecting policy), 22s fallback timeout, completion once.
+- Requests are HTTPS, with validated host, honest User-Agent, no Via, identity encoding and CRLF-injection filtering on forwarded headers. Source-level 401/403/429 remain unchanged, not bypassed.
+- MangaDex source asynchronous callback timeout is 48s to accommodate both bounded network transports; all others remain 25s.
+- Does NOT claim MangaDex live browsing or reading works yet. Images and covers on other hosts are separate.
+- No migration; iOS12/Swift5/UIKit target preserved. Bundle 29; physical gate pending.
+
 ## 0.1.0-build28-m12b-alternate-tls-probes — 2026-10-30
 
 - Physical iOS 12.5.8 report confirmed MangaDex API via Safari works with pong, but both the app HTTPClient and standard URLSession fail with NSURLErrorDomain -1200 and peer TLS stream -9836 (errSSLPeerProtocolVersion).

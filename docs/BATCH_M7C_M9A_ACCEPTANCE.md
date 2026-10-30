@@ -289,3 +289,18 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] NWConnection native TLS handshake returns ready, concrete error or controlled timeout.
 - [ ] Full report can be copied from Source Information screen.
 - [ ] No modification to installed source, library/downloads or certificates; Demo still works.
+
+
+## Build 28 physical TLS diagnostic accepted
+
+- [x] iOS 12.5.8 WKWebView API: -1200 / TLS -9836.
+- [x] Network.framework: secure TLS ready with default trust.
+- [ ] Network.framework actual HTTP response was not tested by Build28.
+
+## Build 29 device test: actual HTTP response over native TLS
+
+- [ ] MangaDex popular list loads JSON from the production API.
+- [ ] Search + details + chapter listing from same API succeed where permitted.
+- [ ] Server 401/403/429 is reported and does not trigger bypass or repeated access retries.
+- [ ] Covers / reader images evaluated separately; remain unverified.
+- [ ] Demo, iOS12 support, source data, downloads and reader not regressed.
