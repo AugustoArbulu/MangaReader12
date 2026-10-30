@@ -499,3 +499,12 @@ User's Build30 physical report: Manhwa18.net covers NOW display. Webtoons.com EN
 The Webtoons list JS adapter v0.1.0 only read the first card img src, whereas details use og:image. Some list layouts may use a data image placeholder in src and store the HTTPS thumbnail in data-src or srcset. Source v0.1.1 selects supported native HTTPS URL variants and ignores placeholders. This is a hypothesis-guided source-only fix, not physically verified yet. The allowlist remains webtoons.com / pstatic.net and the script/catalog SHA-256 are pinned and checked in CI.
 
 Do not build an IPA for this source-only change. After PR merge and CI, user should refresh the selected Keiyoushi source repository and apply the offered Webtoons update. Manhwa18.net source unchanged. If Webtoons thumbnails still fail, obtain a safe per-source cover URL/status diagnostic rather than broadening hosts or making N background manga-detail requests. Continue M13 selected ports. MangaDex remains paused.
+
+
+## M13-A Build31 — Webtoons cover differential diagnostic (2026-10-30)
+
+User physical Build30 and Webtoons 0.1.1 reports: Manhwa18.net covers now appear and chapter images work. Webtoons.com EN cover thumbnails still blank in list after source 0.1.1; cover appears inside manga details, and chapter images load. HotComics HTTP403 remains inaccessible.
+
+Build31 is a **diagnostic-only** change, not another unverified attempt to fix server images. In Webtoons.com EN browse view add navigation button `Testar capas`, available when at least one Popular item loaded. User tap explicitly triggers sequential comparison for the first listed work: source-provided list cover URL -> one HTTPS GET; source existing details() -> details cover URL -> one HTTPS GET. Report logs host, extension, query presence, HTTP status/error, MIME/size, UIKit UIImage decoding yes/no; no full URL, title, headers, cookies, or response bodies. At most 2 image GETs; 15s timeout each, 5MiB cap; stop on HTTP429. Source domains policy remains in force.
+
+Test acceptance: user installs verified Build31 on iOS12.5.8, enters Webtoons.com EN Popular, taps `Testar capas`, selects `Copiar relatório` and pastes full report. Outcome can distinguish null/placeholder list URL, blocked host, SSL, unsupported image type, or a native presentation/cache defect when the same file decodes. Do not claim fixes before results. Manhwa18.net unaffected; scripts and SHA256-pinned catalog stay exactly the same.

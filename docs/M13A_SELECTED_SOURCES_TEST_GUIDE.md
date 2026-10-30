@@ -61,3 +61,20 @@ The remaining selected extensions are Vortex Scans, ToonGod, Manhwa18.cc, Asura 
 Physical Build30 result: Manhwa18.net series covers now display. Webtoons EN covers display within work details but not in lists. Webtoons JS v0.1.0 only consumed img.src on list cards, but details use og:image. New source-only v0.1.1 safely checks image lazy-load attributes and srcset before src. It does not guarantee the site actually provides these candidates or that the image host allows the fetch.
 
 After source update is published, keep Build30 installed and refresh the existing selected Keiyoushi catalog. Update only Webtoons.com EN (v0.1.1); do not reinstall the application or other sources. Refresh Webtoons Popular and Search. Check thumbnails and then manga details. If list thumbnails remain blank, collect source and location (list vs details), and if necessary a targeted cover URL/status diagnostic in a later IPA batch. No repeated access retries or anti-bot bypass.
+
+
+## Build31 — Webtoons EN list/detail cover diagnostic
+
+User installed Webtoons.com EN source 0.1.1 on Build30; covers still absent on Popular/Search even while the selected work's detail cover is visible. Manhwa18.net covers now work.
+
+Install Build31 without removing existing installed extensions. Open Webtoons.com EN, wait for Popular titles, tap `Testar capas` in the navigation bar, and `Copiar relatório`. Send the report with the list and detail cover results. This is a user-initiated read-only comparison of one source work: at most 2 direct image HTTPS GETs and 1 source details request. No request to HotComics; no MangaDex activity.
+
+Interpretation guide:
+- List cover URL absent -> inspect original listing markup/JS selector, do not change native network.
+- Source list cover host rejected by manifest -> compare actual CDN host, request only narrowly justified changes.
+- HTTP 200 and UIImage NO -> investigate MIME/format (e.g. WebP/AVIF) on iOS12; do not assume network failure.
+- HTTP403/429 -> normal site decision; avoid bypass; stop on 429.
+- HTTP200 and UIImage YES but no visual display -> inspect cover cache/cell reuse and source-specific presentation.
+- Details cover succeeds while list fails -> compare reported hostname/content-type and source list semantics.
+
+No manga titles, paths, URL query, cookies or image content are included in copied report.
