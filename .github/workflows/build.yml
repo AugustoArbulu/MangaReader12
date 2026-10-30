@@ -30,6 +30,9 @@ jobs:
       - name: Audit iOS 12 compatibility guardrails
         run: ./ci/audit_ios12.sh
 
+      - name: Test selected Keiyoushi JS source contract (offline)
+        run: node ci/test_m13a_js.cjs
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
