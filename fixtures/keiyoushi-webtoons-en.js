@@ -47,7 +47,15 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.1';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.2';
+  // The listing's webtoon-phinf host returned 403 on physical iOS 12.5.8.
+  // The official alternate image host swebtoon-phinf served the details image
+  // with normal HTTPS. Try that exact host for listing covers, preserving the
+  // source-provided path and query; never rewrite unrelated image hosts.
+  function canonicalListCoverURL(url) {
+    return url.replace(/^https:\/\/webtoon-phinf\.pstatic\.net(?=[\/?#]|$)/i,
+      'https://swebtoon-phinf.pstatic.net');
+  }
   // The episode/series page uses og:image, but list cards can use lazy image
   // attributes and an inert data: placeholder in src. Prefer source-provided
   // actual HTTPS image URLs rather than trying to download the placeholder.
@@ -73,7 +81,7 @@ var H = (function () {
     for(var k=0;k<choices.length;k++){
       var u=H.cleanURL(base,choices[k]);
       if(u && /^https:\/\/(?:[a-z0-9-]+\.)*(?:webtoons\.com|pstatic\.net)(?:[/:?#]|$)/i.test(u)){
-        return u;
+        return canonicalListCoverURL(u);
       }
     }
     return null;
