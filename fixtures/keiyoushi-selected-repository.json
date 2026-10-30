@@ -1,0 +1,52 @@
+{
+  "name": "MangaReader12 — Selected Keiyoushi Ports (M13-A pilot)",
+  "apiVersion": 1,
+  "sources": [
+    {
+      "id": "kei.hotcomics",
+      "name": "HotComics (experimental)",
+      "version": "0.1.0",
+      "lang": "en",
+      "author": "Unofficial port by MangaReader12; upstream Keiyoushi (Apache-2.0)",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-hotcomics.js",
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": [
+        "hotcomics.io"
+      ],
+      "nsfw": true,
+      "sha256": "b229ca5732bd2ac00cb69497ae7b5c513c97d1258385cf7b27d59d164776417a"
+    },
+    {
+      "id": "kei.manhwa18net",
+      "name": "Manhwa18.net (experimental)",
+      "version": "0.1.0",
+      "lang": "en",
+      "author": "Unofficial port by MangaReader12; upstream Keiyoushi (Apache-2.0)",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-manhwa18net.js",
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": [
+        "manhwa18.net"
+      ],
+      "nsfw": true,
+      "sha256": "b09fc193e4efb682372702dd1403326d0ec406145dac99fc352b08d94e5f158b"
+    },
+    {
+      "id": "kei.webtoons.en",
+      "name": "Webtoons.com EN (experimental)",
+      "version": "0.1.0",
+      "lang": "en",
+      "author": "Unofficial port by MangaReader12; upstream Keiyoushi (Apache-2.0)",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-webtoons-en.js",
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": [
+        "webtoons.com",
+        "pstatic.net"
+      ],
+      "nsfw": false,
+      "sha256": "0c29351d101d944a0fcdf255e984c6d2ef402e2bed547c0e8a3423ba4488d703"
+    }
+  ]
+}

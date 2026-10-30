@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build29-m13a-selected-keiyoushi-sources — 2026-10-30
+
+- First user-selected Keiyoushi source package (M13-A): three native JavaScript adapters — HotComics, Manhwa18.net and Webtoons.com EN. These are **unofficial experimental ports**, not Android APKs and not fully proven on sites.
+- Added a native WebKit DOMParser-based source bridge available as Native.htmlSelect(markup, selectorSpecsJSON, callback). It uses inert markup parsing in a local empty WKWebView, returns sanitized bounded CSS selector results, and does not execute fetched webpage JavaScript.
+- Created dedicated pilot repository catalog fixtures/keiyoushi-selected-repository.json with explicit HTTPS host allowlists, SHA-256 integrity pins and source attribution (Keiyoushi Apache-2.0).
+- Ported upstream browsing/search/details/chapter/page logic into the existing six-function JavaScript source contract. Manhwa18.net uses Inertia #app[data-page] JSON; HotComics and Webtoons EN use HTML/CSS selectors; Webtoons episode listing uses its known mobile JSON API.
+- Source bridge enforces 3 MiB HTML input, 4 MiB result, 2 MiB Inertia data-page attribute, bounded selector count, four pending HTML jobs, and 40s source timeout for selected ports. HTTPS trust and per-source domain allowlists preserved; no captcha, age gate or access-control bypass.
+- New offline Node smoke harness ci/test_m13a_js.cjs exercises all 6 methods for all 3 sources using simulated responses and negative URL checks, now run within the existing GitHub Actions CI.
+- Does not claim real-world site success, iOS12 WebKit parser success, cover/CDN accessibility or offline chapter reading until physical QA. A public site can reject app access, change markup, require credentials, or fail TLS on iOS12.
+- Build number 29 (Build29 MangaDex fallback PR was closed unmerged); Swift5/UIKit/iOS12 baseline, stored Library/downloads and existing Demo fixtures unchanged.
+
 ## 0.1.0-build28-m12b-alternate-tls-probes — 2026-10-30
 
 - Physical iOS 12.5.8 report confirmed MangaDex API via Safari works with pong, but both the app HTTPClient and standard URLSession fail with NSURLErrorDomain -1200 and peer TLS stream -9836 (errSSLPeerProtocolVersion).

@@ -460,3 +460,16 @@ Source API remains blocked on device. This distinguishes peer TLS protocol negot
 - Keep the approved Build25 behavior stable. Build28 MangaDex native TLS diagnostics are pending physical feedback. The MangaDex pilot is diagnostic/experimental and not one of the nine selected ports.
 - Proposed port development in cohesive bundles: shared safe HTML/HTTP adapters and first independent sites; shared Madara/Iken/Yii engines; complex or restricted sources last. Deliver IPA only after coherent bundle and post-merge CI.
 - No anti-bot bypass, forged authorization, unrestricted remote hosts, insecure TLS or persistent unreviewed native APK execution. Respect third-party access terms, license and attribution.
+
+
+## M13-A Build 29 — first 3 user-selected Keiyoushi source adapters (2026-10-30)
+
+- Current active scope: 9 requested sources from M13 PR #31. MangaDex is paused by explicit user direction; its earlier Build29 TLS fallback PR #32 was CLOSED UNMERGED, not deployed. Do not restart it unless user explicitly requests.
+- Selected independent source pack now has three experimental JS ports: HotComics (en, NSFW), Manhwa18.net (en, NSFW), Webtoons.com EN (safe), in fixtures/keiyoushi-{hotcomics,manhwa18net,webtoons-en}.js.
+- Dedicated SHA-pinned catalog fixtures/keiyoushi-selected-repository.json. Does not modify bundled Demo or MangaDex catalogs. Scripts honor iOS native source API v1, callback-based HTTP bridge, strict HTTPS allowlist, and route/API metadata from Keiyoushi's Apache-2.0 project.
+- Native HTML selector bridge Native.htmlSelect uses inert WebKit DOMParser, CSS selector specs and bounded JSON, with no third-party page script execution or WebView navigation to site domains. This is an iOS12 client parser; iOS physical QA pending.
+- CI has Node smoke tests for six required source methods, response parsing and bad URL rejection. Simulated CI and successful Swift build DO NOT prove live site availability.
+- First useful physical gate: install Build29 over Build28, add new catalog URL https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-selected-repository.json; install each source, test catalog + a permitted search + details + chapters + reader; report first exact failure per source.
+- Caveats: no official affiliation to Keiyoushi or hosted sites; CDN image domains can differ and be blocked; Webtoons motion toon unsupported, English only; HotComics chapter links may require permitted login; Manhwa18.net payload markup/selector may change. Do not bypass.
+- Remaining six user-selected source ports (Vortex Scans, ToonGod, Manhwa18.cc, Asura Scans, MadaraDex, Comix) remain planned/unimplemented. Shared engine groupings in docs/M13_SELECTED_KEIYOUSHI_SOURCE_PORTS.md.
+- Do not release Build29 as physically accepted before device test.

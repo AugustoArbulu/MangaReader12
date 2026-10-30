@@ -58,3 +58,11 @@ These are **engineering estimates from the code structure, not verified operatio
 - https://github.com/keiyoushi/extensions-source/tree/main/src/all/manhwa18net
 - https://github.com/keiyoushi/extensions-source/tree/main/src/en/toongod
 - https://github.com/keiyoushi/extensions-source/tree/main/src/all/manhwa18cc
+
+
+## M13-A implementation status — 2026-10-30
+
+- Three JS source candidates and a separate SHA256 pinned catalog are implemented in branch feature-m13a-keiyoushi-html-source-pack, targeting iOS Build29. This is an experimental pilot, NOT nine working sources.
+- New Native.htmlSelect bridge uses WebKit DOMParser only on inert HTML to supply a CSS selector utility for JavaScriptCore; no Android code is executed, no arbitrary resource script evaluation.
+- ci/test_m13a_js.cjs tests six source methods per adapter with mock HTTPS and selector results; GitHub Actions adds an explicit test step. Real server, DOM parsing on the physical iOS12 device, image CDN trust, downloads and permitted access remain QA gates.
+- Stage two remains shared engine ports for Vortex Scans/Iken, ToonGod/MadaraNoAjax, Manhwa18.cc/YiiMadara. Stage three remains Asura Scans, MadaraDex and Comix, subject to site access policies.
