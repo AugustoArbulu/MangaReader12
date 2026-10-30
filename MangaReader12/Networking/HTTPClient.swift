@@ -1,4 +1,5 @@
 import Foundation
+import Network
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -327,6 +328,8 @@ final class HTTPClient {
 
     private let sessionDelegate: HTTPClientSessionDelegate
     private let session: URLSession
+    private let secureFallbackLock = NSLock()
+    private var secureFallbacks: [UUID: MangaDexSecureHTTP1Operation] = [:]
 
     init(policy: HTTPPolicy, cookieStorage: HTTPCookieStorage = .shared) {
         self.policy = policy
@@ -378,10 +381,52 @@ final class HTTPClient {
         sessionDelegate.register(
             task: task,
             originalURL: request.url,
-            completion: completion
+            completion: { [weak self] result in
+                guard case .failure(let error) = result,
+                      let self = self,
+                      self.shouldRetryMangaDexTLS(error: error, request: request) else {
+                    completion(result)
+                    return
+                }
+                self.retryMangaDexViaNetwork(request: request, completion: completion)
+            }
         )
         task.resume()
         return task
+    }
+
+    private func shouldRetryMangaDexTLS(error: Error, request: HTTPRequest) -> Bool {
+        guard let url = URL(string: request.url),
+              url.scheme == "https",
+              url.host?.lowercased() == "api.mangadex.org",
+              request.method.uppercased() == "GET",
+              request.body == nil else {
+            return false
+        }
+        if case .transport(let code, _) = error as? HTTPClientError {
+            return code == -1200
+        }
+        return false
+    }
+
+    private func retryMangaDexViaNetwork(
+        request: HTTPRequest,
+        completion: @escaping (Result<HTTPResponse, Error>) -> Void
+    ) {
+        let identifier = UUID()
+        let operation = MangaDexSecureHTTP1Operation(
+            request: request,
+            limit: policy.maxResponseBytes
+        )
+        secureFallbackLock.lock()
+        secureFallbacks[identifier] = operation
+        secureFallbackLock.unlock()
+        operation.start { [weak self] result in
+            self?.secureFallbackLock.lock()
+            self?.secureFallbacks.removeValue(forKey: identifier)
+            self?.secureFallbackLock.unlock()
+            completion(result)
+        }
     }
 
     static func classifyTransportError(_ error: Error) -> HTTPClientError {
@@ -397,5 +442,314 @@ final class HTTPClient {
         default:
             return .transport(code: urlError.errorCode, message: urlError.localizedDescription)
         }
+    }
+}
+
+
+// MARK: - Narrow iOS 12 MangaDex TLS fallback (Network.framework)
+//
+// On some physical iOS 12.5.8 devices CFNetwork rejects the peer protocol
+// version (-9836) for MangaDex, while NWConnection with default system
+// TLS trust completes the handshake. Network.framework is a TLS byte stream,
+// not an HTTP client: this intentionally bounded HTTP/1.1 GET transport is
+// used only for api.mangadex.org after URLSession fails with -1200.
+//
+// No certificate trust override, HTTP downgrade, proxy, cookies, unrelated
+// host retry, automatic redirect or unrestricted response size is permitted.
+private enum MangaDexHTTP1Error: Error, LocalizedError {
+    case badHTTPResponse
+    case unsupportedTransferEncoding
+    case unsupportedCompression
+    case responseTooLarge
+    case incompleteResponse
+    case timedOut
+    case transport(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .badHTTPResponse: return "MangaDex returned an invalid HTTP/1.1 response."
+        case .unsupportedTransferEncoding: return "Unsupported MangaDex HTTP transfer encoding."
+        case .unsupportedCompression: return "Compressed MangaDex response was not negotiated."
+        case .responseTooLarge: return "MangaDex response exceeded the safe size limit."
+        case .incompleteResponse: return "MangaDex closed the secure connection before finishing HTTP."
+        case .timedOut: return "MangaDex secure Network.framework request timed out."
+        case .transport(let value): return "MangaDex secure Network.framework transport: " + value
+        }
+    }
+}
+
+private enum MangaDexHTTP1Decoder {
+    static let boundary = Data([13, 10, 13, 10])
+    static let crlf = Data([13, 10])
+    static let maxHeaderBytes = 32 * 1024
+
+    // Nil means we need more bytes. Never return partial or unchecked data.
+    static func decode(
+        bytes: Data,
+        complete: Bool,
+        limit: Int,
+        finalURL: String
+    ) throws -> HTTPResponse? {
+        guard let range = bytes.range(of: boundary) else {
+            if bytes.count > maxHeaderBytes { throw MangaDexHTTP1Error.responseTooLarge }
+            if complete { throw MangaDexHTTP1Error.incompleteResponse }
+            return nil
+        }
+        guard range.lowerBound <= maxHeaderBytes else {
+            throw MangaDexHTTP1Error.responseTooLarge
+        }
+        let headerData = bytes.subdata(in: 0..<range.lowerBound)
+        guard let headerText = String(data: headerData, encoding: .utf8) else {
+            throw MangaDexHTTP1Error.badHTTPResponse
+        }
+        let lines = headerText.components(separatedBy: "\r\n")
+        guard let first = lines.first else { throw MangaDexHTTP1Error.badHTTPResponse }
+        let statusParts = first.split(separator: " ", omittingEmptySubsequences: true)
+        guard statusParts.count >= 2,
+              (statusParts[0] == "HTTP/1.1" || statusParts[0] == "HTTP/1.0"),
+              let status = Int(statusParts[1]),
+              (100...599).contains(status),
+              status != 100 else {
+            throw MangaDexHTTP1Error.badHTTPResponse
+        }
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() {
+            guard !line.isEmpty,
+                  let colon = line.firstIndex(of: ":") else {
+                throw MangaDexHTTP1Error.badHTTPResponse
+            }
+            let name = String(line[..<colon]).lowercased()
+            let value = String(line[line.index(after: colon)...])
+                .trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, !name.contains(" "), !value.contains("\0") else {
+                throw MangaDexHTTP1Error.badHTTPResponse
+            }
+            headers[name] = headers[name].map { $0 + ", " + value } ?? value
+        }
+        if let encoding = headers["content-encoding"],
+           !encoding.isEmpty, encoding.lowercased() != "identity" {
+            throw MangaDexHTTP1Error.unsupportedCompression
+        }
+        let bodyStart = range.upperBound
+        let body = bytes.subdata(in: bodyStart..<bytes.count)
+        var decoded: Data?
+        if let transfer = headers["transfer-encoding"]?.lowercased(),
+           !transfer.isEmpty {
+            guard transfer == "chunked" else {
+                throw MangaDexHTTP1Error.unsupportedTransferEncoding
+            }
+            decoded = try decodeChunked(body, limit: limit)
+        } else if let length = headers["content-length"] {
+            guard let count = Int(length), count >= 0, count <= limit else {
+                throw MangaDexHTTP1Error.responseTooLarge
+            }
+            if body.count >= count {
+                decoded = body.subdata(in: 0..<count)
+            }
+        } else if complete {
+            guard body.count <= limit else { throw MangaDexHTTP1Error.responseTooLarge }
+            decoded = body
+        }
+        guard let data = decoded else {
+            if complete { throw MangaDexHTTP1Error.incompleteResponse }
+            return nil
+        }
+        guard data.count <= limit else { throw MangaDexHTTP1Error.responseTooLarge }
+        return HTTPResponse(
+            statusCode: status,
+            headers: headers,
+            data: data,
+            finalURL: finalURL
+        )
+    }
+
+    private static func decodeChunked(_ bytes: Data, limit: Int) throws -> Data? {
+        var cursor = 0
+        var output = Data()
+        while cursor < bytes.count {
+            guard let lineEnd = bytes.range(of: crlf, in: cursor..<bytes.count)?.lowerBound else {
+                if bytes.count - cursor > 128 { throw MangaDexHTTP1Error.badHTTPResponse }
+                return nil
+            }
+            guard lineEnd - cursor <= 128,
+                  let line = String(data: bytes.subdata(in: cursor..<lineEnd), encoding: .ascii),
+                  let sizePart = line.split(separator: ";", maxSplits: 1).first,
+                  let length = Int(sizePart.trimmingCharacters(in: .whitespaces), radix: 16),
+                  length >= 0 else {
+                throw MangaDexHTTP1Error.badHTTPResponse
+            }
+            cursor = lineEnd + 2
+            guard length <= limit - output.count else {
+                throw MangaDexHTTP1Error.responseTooLarge
+            }
+            guard length <= bytes.count - cursor else { return nil }
+            if length == 0 {
+                // The terminal zero-size chunk is followed by CRLF, or
+                // optional HTTP trailer lines; no body data follows it.
+                guard bytes.count - cursor >= 2 else { return nil }
+                if bytes[cursor] == 13 && bytes[cursor + 1] == 10 {
+                    return output
+                }
+                guard bytes.range(of: boundary, in: cursor..<bytes.count) != nil else {
+                    return nil
+                }
+                return output
+            }
+            output.append(bytes.subdata(in: cursor..<(cursor + length)))
+            cursor += length
+            guard bytes.count - cursor >= 2 else { return nil }
+            guard bytes[cursor] == 13, bytes[cursor + 1] == 10 else {
+                throw MangaDexHTTP1Error.badHTTPResponse
+            }
+            cursor += 2
+        }
+        return nil
+    }
+}
+
+private final class MangaDexSecureHTTP1Operation {
+    private let request: HTTPRequest
+    private let limit: Int
+    private let queue = DispatchQueue(label: "com.mangareader12.mangadex-secure-http1")
+    private var connection: NWConnection?
+    private var buffer = Data()
+    private var finished = false
+    private var completion: ((Result<HTTPResponse, Error>) -> Void)?
+
+    init(request: HTTPRequest, limit: Int) {
+        self.request = request
+        self.limit = min(max(1024, limit), 8 * 1024 * 1024)
+    }
+
+    func start(completion: @escaping (Result<HTTPResponse, Error>) -> Void) {
+        self.completion = completion
+        queue.async {
+            guard let url = URL(string: self.request.url),
+                  url.scheme == "https",
+                  url.host?.lowercased() == "api.mangadex.org",
+                  self.request.method.uppercased() == "GET",
+                  self.request.body == nil,
+                  let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                self.finish(.failure(MangaDexHTTP1Error.badHTTPResponse))
+                return
+            }
+
+            let path = parts.percentEncodedPath.isEmpty ? "/" : parts.percentEncodedPath
+            let query = parts.percentEncodedQuery.map { "?" + $0 } ?? ""
+            var requestText = "GET " + path + query +
+                " HTTP/1.1\r\nHost: api.mangadex.org\r\n" +
+                "Connection: close\r\nAccept-Encoding: identity\r\n" +
+                "User-Agent: MangaReader12/0.1 (iOS 12+)\r\n"
+            let forbidden = Set([
+                "host", "connection", "content-length", "transfer-encoding",
+                "accept-encoding"
+            ])
+            for (name, value) in self.request.headers.sorted(by: { $0.key < $1.key }) {
+                guard !forbidden.contains(name.lowercased()),
+                      !name.isEmpty,
+                      name.range(of: "^[A-Za-z0-9-]+$", options: .regularExpression) != nil,
+                      !value.contains("\r"), !value.contains("\n") else {
+                    continue
+                }
+                requestText += name + ": " + value + "\r\n"
+            }
+            requestText += "\r\n"
+            guard let bytes = requestText.data(using: .utf8) else {
+                self.finish(.failure(MangaDexHTTP1Error.badHTTPResponse))
+                return
+            }
+
+            // No custom verify block or TLS downgrade: iOS evaluates trust.
+            let parameters = NWParameters(
+                tls: NWProtocolTLS.Options(),
+                tcp: NWProtocolTCP.Options()
+            )
+            let network = NWConnection(
+                host: NWEndpoint.Host("api.mangadex.org"),
+                port: NWEndpoint.Port(rawValue: 443)!,
+                using: parameters
+            )
+            self.connection = network
+            network.stateUpdateHandler = { [weak self] state in
+                guard let self = self, !self.finished else { return }
+                switch state {
+                case .ready:
+                    network.send(
+                        content: bytes,
+                        completion: .contentProcessed({ error in
+                            if let error = error {
+                                self.finish(.failure(MangaDexHTTP1Error.transport(
+                                    String(describing: error)
+                                )))
+                            } else {
+                                self.receiveMore()
+                            }
+                        })
+                    )
+                case .failed(let error):
+                    self.finish(.failure(MangaDexHTTP1Error.transport(
+                        String(describing: error)
+                    )))
+                case .cancelled:
+                    self.finish(.failure(MangaDexHTTP1Error.transport("cancelled")))
+                default:
+                    break
+                }
+            }
+            network.start(queue: self.queue)
+            self.queue.asyncAfter(deadline: .now() + 22) { [weak self] in
+                guard let self = self, !self.finished else { return }
+                self.finish(.failure(MangaDexHTTP1Error.timedOut))
+            }
+        }
+    }
+
+    private func receiveMore() {
+        guard let network = connection, !finished else { return }
+        network.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) {
+            [weak self] data, _, complete, error in
+            guard let self = self, !self.finished else { return }
+            if let error = error {
+                self.finish(.failure(MangaDexHTTP1Error.transport(
+                    String(describing: error)
+                )))
+                return
+            }
+            if let data = data, !data.isEmpty {
+                self.buffer.append(data)
+            }
+            // The extra 32 KB is reserved for HTTP headers. Chunk framing
+            // consumes additional bytes so allow at most 64 KB of overhead.
+            if self.buffer.count > self.limit + 64 * 1024 {
+                self.finish(.failure(MangaDexHTTP1Error.responseTooLarge))
+                return
+            }
+            do {
+                if let response = try MangaDexHTTP1Decoder.decode(
+                    bytes: self.buffer,
+                    complete: complete,
+                    limit: self.limit,
+                    finalURL: self.request.url
+                ) {
+                    self.finish(.success(response))
+                } else if !complete {
+                    self.receiveMore()
+                }
+            } catch {
+                self.finish(.failure(error))
+            }
+        }
+    }
+
+    private func finish(_ result: Result<HTTPResponse, Error>) {
+        guard !finished else { return }
+        finished = true
+        connection?.stateUpdateHandler = nil
+        connection?.cancel()
+        connection = nil
+        buffer.removeAll(keepingCapacity: false)
+        let callback = completion
+        completion = nil
+        callback?(result)
     }
 }
