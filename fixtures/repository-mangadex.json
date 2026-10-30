@@ -1,0 +1,22 @@
+{
+  "name": "MangaReader12 — MangaDex Experimental",
+  "apiVersion": 1,
+  "sources": [
+    {
+      "id": "org.mangareader12.mangadex",
+      "name": "MangaDex (experimental)",
+      "version": "0.1.0",
+      "lang": "en",
+      "author": "MangaReader12 (unofficial integration)",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/source-mangadex.js",
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": [
+        "mangadex.org",
+        "mangadex.network"
+      ],
+      "nsfw": false,
+      "sha256": "38b360b0d08cfd7d2ecc204749408471a535b8f405a20ada4d5a50a894f78188"
+    }
+  ]
+}
