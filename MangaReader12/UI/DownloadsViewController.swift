@@ -20,6 +20,7 @@ final class DownloadsViewController: UITableViewController {
         super.viewDidLoad()
 
         title = "Downloads"
+        updateDemoTestButton()
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 100
@@ -55,6 +56,34 @@ final class DownloadsViewController: UITableViewController {
 
     deinit {
         refreshTimer?.invalidate()
+    }
+
+    private func updateDemoTestButton() {
+        let enabled = UserDefaults.standard.bool(
+            forKey: ChapterDownloadManager.demoSlowModeKey
+        )
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: enabled ? "Teste 8s: ON" : "Teste 8s: OFF",
+            style: .plain,
+            target: self,
+            action: #selector(toggleDemoTestMode)
+        )
+        navigationItem.rightBarButtonItem?.accessibilityLabel =
+            enabled ? "Desativar espera de teste da fonte Demo" :
+                "Ativar espera de teste da fonte Demo"
+    }
+
+    @objc private func toggleDemoTestMode() {
+        let key = ChapterDownloadManager.demoSlowModeKey
+        let enabled = !UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.set(enabled, forKey: key)
+        updateDemoTestButton()
+        showMessage(
+            title: enabled ? "Modo de teste ativado" : "Modo de teste desativado",
+            message: enabled
+                ? "Somente na fonte Demo, cada página aguardará 8 segundos antes de baixar. Abra a Demo, inicie um download e volte aqui para testar Pausar, Retomar e Priorizar. As fontes reais não são afetadas."
+                : "As fontes Demo voltaram à velocidade normal. Downloads reais nunca foram afetados."
+        )
     }
 
     @objc private func refreshPulled() {
