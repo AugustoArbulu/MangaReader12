@@ -138,3 +138,9 @@ The build-11 backup captures the SQLite Library state plus selected app/reader s
 - Adds experimental MangaDex API catalog+source (separate from Demo) to exercise real metadata, search, chapter listing and chapter images.
 - Direct Android Keiyoushi APK repositories still cannot be installed as MangaReader12 JavaScript catalogs.
 - HTTPS/source-domain restrictions and MangaDex API attribution remain mandatory.
+
+## M13 source selection
+
+The user's nine named Keiyoushi extensions are now the scoped target list (2026-10-30).
+See docs/M13_SELECTED_KEIYOUSHI_SOURCE_PORTS.md for canonical upstream paths, inherited engines, complexity, supported scope and validation gates.
+No port implementation or live source QA is implied by this planning record.
