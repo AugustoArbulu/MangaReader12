@@ -77,6 +77,11 @@ private final class ChapterDownloadJob {
 }
 
 final class ChapterDownloadManager {
+    // QA-only throttle for the bundled Demo sources. Disabled by default.
+    // Never slows real sources or modifies their HTTP/network behavior.
+    static let demoSlowModeKey = "diagnostics.slowDemoDownloads"
+    static let demoSlowDelay: TimeInterval = 8
+
     private static let sharedLock = NSLock()
     private static var sharedManager: ChapterDownloadManager?
 
@@ -277,6 +282,38 @@ final class ChapterDownloadManager {
         let index = job.nextIndex
         job.requestSerial += 1
         let serial = job.requestSerial
+
+        // Demo chapters can finish in 0.1s, making it impossible to test
+        // Pause/Resume/Prioritize by hand. Only a consciously enabled test
+        // switch inserts an asynchronous delay before each Demo page.
+        // It never sleeps on the UI thread, alters real sources, or writes
+        // fake downloaded pages.
+        let isBundledDemo = job.sourceID == "fixture.localdemo" ||
+            job.sourceID == "fixture.altdemo"
+        if isBundledDemo &&
+           UserDefaults.standard.bool(forKey: ChapterDownloadManager.demoSlowModeKey) {
+            worker.asyncAfter(
+                deadline: .now() + ChapterDownloadManager.demoSlowDelay
+            ) { [weak self, weak job] in
+                guard let self = self, let job = job else { return }
+                self.performPageRequest(of: job, index: index, serial: serial)
+            }
+        } else {
+            performPageRequest(of: job, index: index, serial: serial)
+        }
+    }
+
+    private func performPageRequest(
+        of job: ChapterDownloadJob, index: Int, serial: Int
+    ) {
+        // If pause/resume happened during the artificial delay, the old
+        // scheduled request must never start or complete in the new session.
+        guard jobs[job.key] === job,
+              runningKey == job.key,
+              job.state == "downloading",
+              job.nextIndex == index,
+              job.requestSerial == serial else { return }
+
         let page = job.pages[index]
         job.task = job.client.send(
             HTTPRequest(method: "GET", url: page.imageUrl, headers: page.headers)
