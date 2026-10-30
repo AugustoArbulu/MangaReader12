@@ -348,3 +348,35 @@ Physical build-15 feedback:
 - User's current iOS 12 source engine is unchanged; Android APK compatibility/Keiyoushi direct execution is **not** implied.
 - Does not change download, backup, reader or SQLite schema, and does not bypass site restrictions.
 - Physical check: install the two bundled Demo sources, search a shared sample manga title, verify results show source names, tap one result, open details/chapter. Search a nonmatch and cancel. Confirm original per-source search remains functional.
+
+
+## Build 24 physically accepted — 2026-10-30
+
+- User reports "funcionou" after using Build 24 global search on their iPhone.
+- M11A global JS source search baseline is accepted.
+- No claim that all source failure/cancellation edge cases received separate physical checks.
+
+## Delivery cadence (requested 2026-10-30)
+
+- User prefers meaningful multi-feature increments and one grouped device test instead of frequent tiny IPA builds.
+- Prioritize cohesive milestone bundles, compile/CI and static QA before delivery, reserve focused physical validation only for interface/device interactions not reproducible in CI.
+- Work only on feature branches and merge after green push + PR CI; preserve iOS 12, repo main and existing accepted features.
+
+## Build 25 M11B — Global search & source-tools batch (device QA pending)
+
+1. Global search displays a Load more footer for sources advertising hasNextPage. Each source advances its own page counter; up to 5 pages/source and at most 40 results/page are rendered.
+2. Fontes opens an enabled-source checklist. All enabled sources are selected by default. Aplicar changes the search scope and invalidates old async callbacks.
+3. Repeated manga IDs are de-duplicated within the same source; distinct source records are preserved.
+4. Exploration source action "Informações e dados da fonte" displays manifest metadata, allowlisted domains and count of stored source-local JS preference keys.
+5. Explicit runtime metadata check and confirmation-gated deletion of only JS sources.<sourceID>.storage.* values. User must opt in; no automatic clearing.
+6. The source reset does not touch downloads/Library/history/reader prefs, nor cookies. Source runtime and source API remain unchanged.
+7. No alteration of downloader, backup, SQLite schema, reader, or deployment target. Swift 5/UIKit/iOS 12.0.
+
+### Grouped device acceptance
+
+- Open Explorar -> lupa -> Buscar. Search with both Demo sources enabled and confirm source-tagged hits and opening manga details.
+- Open Fontes, select only one source, apply, and confirm only that source appears; select Todas to restore.
+- If a source returns hasNextPage, use Carregar mais resultados and confirm page append, stable source labels, no duplicates. Demo fixtures may not have pagination; no synthetic extra pages are asserted.
+- Open Explorar -> installed source -> Informações e dados da fonte. Inspect manifest and run Verificar runtime.
+- In source tools, check confirmation before resetting storage; cancel first. Optional destructive clear only if testing disposable Demo settings, and verify Library/downloads remain intact.
+- Verify Backup/Reader/Downloads and 11/11 diagnostics without repeating exhaustive old feature tests.
