@@ -130,6 +130,108 @@ final class ChapterDownloadManager {
         return instance
     }
 
+    private func planURL(for directory: URL) -> URL {
+        return directory.appendingPathComponent("_download-plan.json")
+    }
+
+    private func savePlan(for job: ChapterDownloadJob) throws {
+        let plan = DownloadRecoveryPlan(
+            schemaVersion: 1, sourceID: job.sourceID,
+            manga: job.manga, chapter: job.chapter, pages: job.pages,
+            manifest: job.manifest, queueOrder: job.queueOrder
+        )
+        let data = try JSONEncoder().encode(plan)
+        let url = planURL(for: job.directory)
+        try data.write(to: url, options: .atomic)
+        // This file can contain authentication headers; keep device file
+        // protection, while allowing the queue to restore after first unlock.
+        try? fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func completedPagePrefix(in directory: URL, count: Int) -> Int {
+        var index = 0
+        while index < count {
+            let path = directory.appendingPathComponent(
+                String(format: "page-%05d.bin", index)
+            ).path
+            guard let attributes = try? fileManager.attributesOfItem(atPath: path),
+                  let size = attributes[.size] as? NSNumber,
+                  size.intValue > 0 else { break }
+            index += 1
+        }
+        return index
+    }
+
+    private func restorePreviousSession() throws {
+        let records = try repository.listDownloads()
+        // No URLSessionDataTask survives a process restart. Rebuild only
+        // validated plans, leaving missing/corrupted plans retryable.
+        try repository.markInterruptedDownloads()
+        var restoredQueue: [ChapterDownloadJob] = []
+        for record in records where
+            record.state == "queued" ||
+            record.state == "downloading" ||
+            record.state == "paused" {
+            do {
+                let expected = try chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                guard record.localPath == expected.path else { continue }
+                let data = try Data(contentsOf: planURL(for: expected))
+                let plan = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: data)
+                guard plan.schemaVersion == 1,
+                      plan.sourceID == record.sourceID,
+                      plan.manifest.id == record.sourceID,
+                      plan.manga.id == record.sourceMangaID,
+                      plan.chapter.id == record.sourceChapterID,
+                      !plan.pages.isEmpty,
+                      plan.pages.count <= 5000 else { continue }
+                let key = jobKey(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                guard jobs[key] == nil else { continue }
+                let job = ChapterDownloadJob(
+                    key: key, sourceID: plan.sourceID,
+                    manga: plan.manga, chapter: plan.chapter,
+                    pages: plan.pages, directory: expected,
+                    manifest: plan.manifest, queueOrder: plan.queueOrder,
+                    progress: { _ in }, completion: { _ in }
+                )
+                job.nextIndex = completedPagePrefix(
+                    in: expected, count: plan.pages.count
+                )
+                job.state = record.state == "paused" ? "paused" : "queued"
+                try repository.setState(
+                    sourceID: job.sourceID, manga: job.manga,
+                    chapter: job.chapter, state: job.state,
+                    progress: job.fraction, localPath: job.directory.path
+                )
+                jobs[key] = job
+                nextQueueOrder = max(nextQueueOrder, plan.queueOrder + 1)
+                if job.state == "queued" { restoredQueue.append(job) }
+            } catch {
+                // Keep any already downloaded page files for inspection;
+                // the database row can be retried via source resolution.
+                continue
+            }
+        }
+        restoredQueue.sort {
+            if $0.queueOrder == $1.queueOrder {
+                return $0.key < $1.key
+            }
+            return $0.queueOrder < $1.queueOrder
+        }
+        pending = restoredQueue.map { $0.key }
+        startNextIfNeeded()
+    }
+
     private func jobKey(sourceID: String, mangaID: String, chapterID: String) -> String {
         return [sourceID, mangaID, chapterID].joined(separator: "\u{1F}")
     }
