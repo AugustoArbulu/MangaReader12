@@ -100,10 +100,10 @@ final class CoverImageLoader {
                     return
                 }
 
-                self?.memoryCache.setObject(image, forKey: key)
+                self.memoryCache.setObject(image, forKey: key)
 
-                if let diskURL = self?.cacheURL(for: raw) {
-                    self?.queue.async {
+                if let diskURL = self.cacheURL(for: raw) {
+                    self.queue.async {
                         try? response.data.write(to: diskURL, options: .atomic)
                     }
                 }
