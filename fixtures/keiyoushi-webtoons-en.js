@@ -63,7 +63,7 @@ var H = (function () {
       // HTML srcset is a comma-delimited list of URLs + width/density.
       var entries=value.split(',');
       for(var i=0;i<entries.length;i++){
-        var token=entries[i].trim().split(/\\s+/)[0];
+        var token=entries[i].trim().split(/\s+/)[0];
         if(token) choices.push(token);
       }
     }
@@ -72,7 +72,7 @@ var H = (function () {
     choices.push(H.attr(image,'src'));
     for(var k=0;k<choices.length;k++){
       var u=H.cleanURL(base,choices[k]);
-      if(u && /^https:\/\/(?:[a-z0-9-]+\\.)*(?:webtoons\\.com|pstatic\\.net)(?:[/:?#]|$)/i.test(u)){
+      if(u && /^https:\/\/(?:[a-z0-9-]+\.)*(?:webtoons\.com|pstatic\.net)(?:[/:?#]|$)/i.test(u)){
         return u;
       }
     }
