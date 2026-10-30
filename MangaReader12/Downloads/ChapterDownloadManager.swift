@@ -26,6 +26,18 @@ enum ChapterDownloadError: Error, LocalizedError {
     }
 }
 
+// Private metadata saved next to each chapter's page files. The entire
+// operation stays within the app's Application Support sandbox.
+private struct DownloadRecoveryPlan: Codable {
+    let schemaVersion: Int
+    let sourceID: String
+    let manga: Manga
+    let chapter: Chapter
+    let pages: [Page]
+    let manifest: SourceManifest
+    let queueOrder: Int
+}
+
 // A job keeps the HTTP client alive while the queue is active. An interrupted
 // page is cancelled at the URLSessionTask level and retried on resume;
 // previously atomically written pages remain untouched.
@@ -37,6 +49,8 @@ private final class ChapterDownloadJob {
     let pages: [Page]
     let directory: URL
     let client: HTTPClient
+    let manifest: SourceManifest
+    var queueOrder: Int
     let progress: (Double) -> Void
     let completion: (Result<[Page], Error>) -> Void
     var nextIndex = 0
@@ -52,6 +66,7 @@ private final class ChapterDownloadJob {
         pages: [Page],
         directory: URL,
         manifest: SourceManifest,
+        queueOrder: Int,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
@@ -61,6 +76,8 @@ private final class ChapterDownloadJob {
         self.chapter = chapter
         self.pages = pages
         self.directory = directory
+        self.manifest = manifest
+        self.queueOrder = queueOrder
         self.client = HTTPClient(policy: HTTPPolicy(
             allowedDomains: manifest.domains,
             timeout: 30,
@@ -91,6 +108,7 @@ final class ChapterDownloadManager {
     private var jobs: [String: ChapterDownloadJob] = [:]
     private var pending: [String] = []
     private var runningKey: String?
+    private var nextQueueOrder = 0
 
     init(
         fileManager: FileManager = .default,
@@ -106,10 +124,8 @@ final class ChapterDownloadManager {
 
         if let instance = sharedManager { return instance }
         let repository = try DownloadRepository.defaultRepository()
-        // A prior process cannot own a live URLSession task anymore. Mark
-        // interrupted queued/running jobs as retryable, never as "Offline".
-        try repository.markInterruptedDownloads()
         let instance = ChapterDownloadManager(repository: repository)
+        try instance.restorePreviousSession()
         sharedManager = instance
         return instance
     }
