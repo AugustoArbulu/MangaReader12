@@ -282,8 +282,11 @@ final class ChapterDownloadManager {
                 let job = ChapterDownloadJob(
                     key: key, sourceID: sourceID, manga: manga,
                     chapter: chapter, pages: pages, directory: directory,
-                    manifest: manifest, progress: progress, completion: completion
+                    manifest: manifest, queueOrder: self.nextQueueOrder,
+                    progress: progress, completion: completion
                 )
+                try self.savePlan(for: job)
+                self.nextQueueOrder += 1
                 self.jobs[key] = job
                 self.pending.append(key)
                 DispatchQueue.main.async { progress(0) }
@@ -314,6 +317,7 @@ final class ChapterDownloadManager {
             pending.removeAll { $0 == key }
             if runningKey == key {
                 runningKey = nil
+                job.requestSerial += 1
                 job.task?.cancel()
                 job.task = nil
             }
@@ -349,6 +353,15 @@ final class ChapterDownloadManager {
             guard let job = jobs[key], job.state == "queued",
                   let position = pending.firstIndex(of: key),
                   position > 0 else { return false }
+            let previousOrder = job.queueOrder
+            let firstOrder = pending.compactMap { jobs[$0]?.queueOrder }.min() ?? 0
+            job.queueOrder = firstOrder - 1
+            do {
+                try savePlan(for: job)
+            } catch {
+                job.queueOrder = previousOrder
+                return false
+            }
             pending.remove(at: position)
             pending.insert(key, at: 0)
             return true
@@ -491,6 +504,9 @@ final class ChapterDownloadManager {
         result: Result<[Page], Error>
     ) {
         job.task = nil
+        // Retire stale URLs/headers from the resumable plan on completion
+        // or failure. Never remove the actual offline page files here.
+        try? fileManager.removeItem(at: planURL(for: job.directory))
         jobs.removeValue(forKey: job.key)
         pending.removeAll { $0 == job.key }
         if runningKey == job.key { runningKey = nil }
