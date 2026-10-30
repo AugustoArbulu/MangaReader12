@@ -1084,7 +1084,7 @@ private final class MangaDexHTTPSDiagnostics {
                     self.results.append("API via HTTPClient: HTTP \(response.statusCode)")
                 case .failure(let error):
                     self.results.append(
-                        "API via HTTPClient: " + self.describe(error)
+                        "API via HTTPClient: " + error.localizedDescription
                     )
                 }
                 self.testSystemSession(index: 0, completion: completion)
