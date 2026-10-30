@@ -195,26 +195,95 @@ final class DownloadsViewController: UITableViewController {
     ) -> [UITableViewRowAction]? {
         guard startupError == nil else { return nil }
         let record = records[indexPath.row]
-        // The original page downloader is not cancellable; do not remove
-        // files while they are still being written.
-        if record.state == "downloading" { return nil }
+
+        if record.state == "downloading" || record.state == "queued" {
+            let pause = UITableViewRowAction(
+                style: .normal, title: "Pausar"
+            ) { [weak self] _, _ in self?.pauseDownload(record) }
+            pause.backgroundColor = UIColor(red: 0.76, green: 0.52, blue: 0.12, alpha: 1)
+            if record.state == "queued" {
+                let prioritize = UITableViewRowAction(
+                    style: .normal, title: "Priorizar"
+                ) { [weak self] _, _ in self?.prioritizeDownload(record) }
+                prioritize.backgroundColor = UIColor(red: 0.15, green: 0.48, blue: 0.74, alpha: 1)
+                return [prioritize, pause]
+            }
+            return [pause]
+        }
 
         let remove = UITableViewRowAction(
-            style: .destructive,
-            title: "Remover"
-        ) { [weak self] _, _ in
-            self?.removeDownload(record)
-        }
-        if record.state != "failed" { return [remove] }
+            style: .destructive, title: "Remover"
+        ) { [weak self] _, _ in self?.removeDownload(record) }
 
-        let retry = UITableViewRowAction(
-            style: .normal,
-            title: "Tentar novamente"
-        ) { [weak self] _, _ in
-            self?.retryDownload(record)
+        if record.state == "paused" {
+            let resume = UITableViewRowAction(
+                style: .normal, title: "Retomar"
+            ) { [weak self] _, _ in self?.resumeDownload(record) }
+            resume.backgroundColor = UIColor(red: 0.12, green: 0.50, blue: 0.30, alpha: 1)
+            return [remove, resume]
         }
-        retry.backgroundColor = UIColor(red: 0.14, green: 0.50, blue: 0.78, alpha: 1)
-        return [remove, retry]
+
+        if record.state == "failed" {
+            let retry = UITableViewRowAction(
+                style: .normal, title: "Tentar novamente"
+            ) { [weak self] _, _ in self?.retryDownload(record) }
+            retry.backgroundColor = UIColor(red: 0.14, green: 0.50, blue: 0.78, alpha: 1)
+            return [remove, retry]
+        }
+
+        return [remove]
+    }
+
+    private func pauseDownload(_ record: DownloadListRecord) {
+        guard let manager = manager else { return }
+        do {
+            if try !manager.pause(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            ) {
+                reloadDownloads()
+                showMessage(
+                    title: "Download não está ativo",
+                    message: "Atualize a lista ou reinicie a transferência interrompida."
+                )
+                return
+            }
+            reloadDownloads()
+        } catch { showError(error) }
+    }
+
+    private func resumeDownload(_ record: DownloadListRecord) {
+        guard let manager = manager else { return }
+        do {
+            if try manager.resume(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            ) {
+                reloadDownloads()
+            } else {
+                // After app termination the request context is gone. Fetch
+                // fresh page URLs using the installed source and start over.
+                retryDownload(record)
+            }
+        } catch { showError(error) }
+    }
+
+    private func prioritizeDownload(_ record: DownloadListRecord) {
+        guard let manager = manager else { return }
+        if manager.prioritize(
+            sourceID: record.sourceID,
+            mangaID: record.sourceMangaID,
+            chapterID: record.sourceChapterID
+        ) {
+            reloadDownloads()
+        } else {
+            showMessage(
+                title: "Fila",
+                message: "Esse download já é o próximo ou começou a baixar."
+            )
+        }
     }
 
     private func removeDownload(_ record: DownloadListRecord) {
@@ -264,7 +333,7 @@ final class DownloadsViewController: UITableViewController {
                 sourceID: record.sourceID,
                 sourceMangaID: record.sourceMangaID,
                 sourceChapterID: record.sourceChapterID
-            )?.state == "failed" else {
+            ).map({ $0.state == "failed" || $0.state == "paused" }) == true else {
                 reloadDownloads()
                 return
             }
@@ -486,6 +555,8 @@ final class DownloadsViewController: UITableViewController {
             return "Offline"
         case "downloading":
             return "Baixando"
+        case "queued":
+            return "Na fila"
         case "failed":
             return "Falhou"
         case "paused":
