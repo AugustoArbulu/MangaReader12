@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build24-m11a-global-search — 2026-10-30
+
+- User physically confirmed **"tudo funcionando"** on build 23. Record M10C foreground restart recovery and paused state as accepted on the test iPhone.
+- Explore now has a dedicated search button (magnifying glass) for searching across all enabled, installed JavaScript sources.
+- Global search requests the first results page per source sequentially, with source name/language on each matching manga row and source-domain-aware covers.
+- Selecting a result loads its owning installed source and opens the existing Manga Details screen; Library and reader functions are not duplicated.
+- Search cancellation/changed-query generation tokens ignore late results from an earlier search, and individual source failures yield partial results rather than aborting the entire search.
+- Does not load Android/Keiyoushi APKs; only MangaReader12 source API v1, with existing HTTPS/source allowed-domain guards.
+- No migrations, no changes to Downloads, backup or reader. iOS 12 minimum remains 12.0.
+- Build 24 pending physical acceptance.
+
 ## 0.1.0-build23-m10c-recover-downloads — 2026-10-30
 
 - Physical feedback for build 22: user confirmed the opt-in slow Demo download test worked on their iOS 12 device; the earlier timing blocker is closed. The complete multi-chapter priority/resume/relaunch matrix remains a focused QA checkpoint rather than assumed entirely accepted.
