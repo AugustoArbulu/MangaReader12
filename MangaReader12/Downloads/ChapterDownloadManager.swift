@@ -42,6 +42,7 @@ private final class ChapterDownloadJob {
     var nextIndex = 0
     var state = "queued"
     var task: URLSessionDataTask?
+    var requestSerial = 0
 
     init(
         key: String,
@@ -274,6 +275,8 @@ final class ChapterDownloadManager {
         }
 
         let index = job.nextIndex
+        job.requestSerial += 1
+        let serial = job.requestSerial
         let page = job.pages[index]
         job.task = job.client.send(
             HTTPRequest(method: "GET", url: page.imageUrl, headers: page.headers)
@@ -285,7 +288,8 @@ final class ChapterDownloadManager {
                 guard self.jobs[job.key] === job,
                       self.runningKey == job.key,
                       job.state == "downloading",
-                      job.nextIndex == index else { return }
+                      job.nextIndex == index,
+                      job.requestSerial == serial else { return }
                 job.task = nil
 
                 switch result {
