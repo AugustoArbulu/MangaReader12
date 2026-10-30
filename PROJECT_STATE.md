@@ -255,3 +255,35 @@ Physical build-15 feedback:
 - Keeps source-domain policy and native storage paths; no SQLite migration.
 - Build 20 is not yet complete download queue management: **pause, resume, persistent ordered queue and reorder are future stages**.
 - Physical gate: verify failed row's swipe-to-retry where possible; progress refresh and pull-to-refresh; completed offline chapter opens; no mid-write deletion; 11/11 diagnostics and reader scale remain intact.
+
+
+## Build 20 — Physical acceptance (2026-10-30)
+
+- User explicitly reported **"tudo funcionando"** after physically testing the Build 20 iOS 12 IPA.
+- Build 20 Downloads live progress/pull-to-refresh/retry is **physically accepted**.
+- Pre-existing Build 19 scale-panel gesture fix remains accepted.
+
+## Build 21 — M10B shared foreground download queue (physical gate pending)
+
+- All callers of ChapterDownloadManager.defaultManager share one retained queue coordinator in the running app.
+- One active chapter transfer at a time; further chapters enter **queued** state, retaining source-specific HTTPS/allowed-domain policy.
+- Pausing a queued/active download updates SQLite and cancels only its active URLSession task.
+- Resuming inside the current app session keeps the atomically completed page files and continues with the first incomplete page.
+- Queued chapters may be prioritized via the Downloads row swipe action.
+- Removing an active transfer is prohibited to avoid deleting files under a live writer.
+- Downloads row swipe: Pausar (queued/downloading), Retomar (paused), Priorizar (queued), retry (failed), remove (other states).
+- The Downloads timer only reloads the table when records change; swipe menus remain usable.
+- Cold app relaunch cannot reconstruct pending network requests yet. Interrupted queued/running rows become **failed / retryable** on manager initialization. Paused rows are shown as paused; Retomar re-resolves source pages and restarts from page zero if the in-memory job no longer exists.
+- Persistent resume across app relaunch, serialized job metadata and durable queue ordering are **future work**, not implemented here.
+- All prior offline files, Library/history/backup/source behavior is unchanged. No schema migration.
+- Maintains iOS 12.0, UIKit/AppDelegate, Xcode 15.4 / Swift 5 language mode.
+
+### Focused Build 21 physical gate
+
+1. Start a chapter download and pause while progress is visible; ensure percentage stays stable.
+2. Resume; percentage should continue from previously completed pages and finish offline.
+3. Queue two downloads from the source chapter list; confirm one runs and the other shows "Na fila".
+4. Prioritize the queued chapter, pause/resume queued, then confirm the next transfer progresses.
+5. Try swiping while a chapter downloads: it must not offer unsafe removal.
+6. Optional: force-close app with queued/paused state; reopen, confirm interrupted rows become retryable and "Retomar" on an old paused record restarts via source.
+7. Confirm no regressions to reader scale, backup, source icons and on-device 11/11 diagnostics.

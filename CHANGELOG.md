@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.1.0-build21-m10b-foreground-queue — 2026-10-30
+
+- Physically accepted Build 20: user confirmed everything tested is functioning on iOS 12.
+- Refactored chapter downloading to use a shared single-running-job foreground queue across app screens.
+- Added per-chapter pause/resume without re-downloading completed pages during the same app session.
+- Added priority promotion for queued chapters through Downloads swipe actions.
+- Added queued/paused/active state display and blocked removal of active writers.
+- Ignored late cancellation callbacks when a chapter is rapidly paused and resumed.
+- Improved live Downloads refresh so unchanged records do not repeatedly close swipe actions.
+- On a cold app relaunch, unowned queued/running downloads become retryable failures; old paused jobs can be restarted by resolving fresh source pages.
+- **Not implemented yet:** persistent job plans and byte-level restart-safe resumption, durable queue order, background execution guarantee.
+- iOS 12.0 minimum, Swift 5/UIKit, unchanged SQLite v1 schema, source domain restrictions retained.
+- Advanced build number to 21; physical gate pending.
+
 ## 0.1.0-build20-m10a-downloads-retry-refresh — 2026-10-29
 
 - Accepted build 19 physical iOS 12 report: scale changes no longer hide interface when tapping Largura/Altura.
