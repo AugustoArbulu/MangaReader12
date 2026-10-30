@@ -275,10 +275,6 @@ final class ChapterDownloadManager {
                 try self.fileManager.createDirectory(
                     at: directory, withIntermediateDirectories: true, attributes: nil
                 )
-                try self.repository.setState(
-                    sourceID: sourceID, manga: manga, chapter: chapter,
-                    state: "queued", progress: 0, localPath: directory.path
-                )
                 let job = ChapterDownloadJob(
                     key: key, sourceID: sourceID, manga: manga,
                     chapter: chapter, pages: pages, directory: directory,
@@ -286,6 +282,10 @@ final class ChapterDownloadManager {
                     progress: progress, completion: completion
                 )
                 try self.savePlan(for: job)
+                try self.repository.setState(
+                    sourceID: sourceID, manga: manga, chapter: chapter,
+                    state: "queued", progress: 0, localPath: directory.path
+                )
                 self.nextQueueOrder += 1
                 self.jobs[key] = job
                 self.pending.append(key)
