@@ -74,6 +74,9 @@ async function testHotcomics() {
   const r=runtime('keiyoushi-hotcomics.js',{
     http(url) {return url.includes('/chapter/')?'PAGES':url.endsWith('/book/a')?'DETAILS':'LIST';},
     dom(html,specs) {
+      if(specs.entries && html==='DETAILS')return {entries:[node('',{onclick:"popupLogin('/chapter/1')"},{
+        name:node('C1'),date:node('Jan 1, 2026')
+      })]};
       if(specs.entries)return {entries:[node('',{href:'/book/a'},{
         title:node('Comic A'),cover:node('',{'data-src':'/cover.jpg'})
       })],next:[]};
@@ -83,12 +86,6 @@ async function testHotcomics() {
         intro:node('Intro'),description:node('Longer text')
       })]};
       if(specs.images)return {images:[node('',{'data-src':'/page1.png'})]};
-      if(specs.entries===undefined && html==='DETAILS')return {entries:[node('',{onclick:"popupLogin('/chapter/1')"},{
-        name:node('C1'),date:node('Jan 1, 2026')
-      })]};
-      if(specs.entries)return {entries:[node('',{onclick:"popupLogin('/chapter/1')"},{
-        name:node('C1'),date:node('Jan 1, 2026')
-      })]};
       throw Error('unexpected selector');
     }
   });
