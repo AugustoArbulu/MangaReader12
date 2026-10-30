@@ -81,32 +81,40 @@ final class DownloadsViewController: UITableViewController {
     private func reloadDownloads() {
         guard let repository = repository else {
             tableView.reloadData()
+            refreshControl?.endRefreshing()
             return
         }
 
+        let previousRecords = records
+        let previousError = startupError?.localizedDescription
+
         do {
-            let nextRecords = try repository.listDownloads()
-            if records != nextRecords || startupError != nil {
-                records = nextRecords
-                tableView.reloadData()
-            }
+            records = try repository.listDownloads()
             startupError = nil
         } catch {
             startupError = error
         }
 
-        if records.isEmpty && startupError == nil {
-            let label = UILabel()
-            label.text = "Nenhum capítulo offline."
-            label.textAlignment = .center
-            label.textColor = ThemeManager.shared.palette.secondaryText
-            tableView.backgroundView = label
+        let isEmpty = records.isEmpty && startupError == nil
+        if isEmpty {
+            if tableView.backgroundView == nil {
+                let label = UILabel()
+                label.text = "Nenhum capítulo offline."
+                label.textAlignment = .center
+                label.textColor = ThemeManager.shared.palette.secondaryText
+                tableView.backgroundView = label
+            }
         } else {
             tableView.backgroundView = nil
         }
 
         refreshControl?.endRefreshing()
-        tableView.reloadData()
+        // Do not close swipe-action menus every 1.5 seconds when the list did
+        // not actually change (needed for Pause/Resume/Prioritize to be usable).
+        if records != previousRecords ||
+           startupError?.localizedDescription != previousError {
+            tableView.reloadData()
+        }
     }
 
     override func tableView(
