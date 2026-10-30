@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build27-m12a-mangadex-tls-diagnostic — 2026-10-30
+
+- The first live MangaDex test on Build 26 returned NSURLErrorDomain code -1200 on Abrir source, before the manga list loaded. This is a TLS secure-connection error, not yet a verified root cause.
+- Added opt-in Diagnosticar HTTPS do MangaDex in Explorar -> MangaDex -> Informações e dados da fonte, visible to MangaDex experimental source only.
+- A read-only test compares the app HTTPClient to URLSession.shared on the API /ping endpoint, then checks MangaDex website, GitHub fixture HTTPS and example.com controls.
+- Reports iOS point release, HTTP status or a sanitized error domain and code plus underlying TLS/CFNetwork stream code. The report can be copied via the UI.
+- No ATS exception, insecure HTTP, trust bypass, arbitrary proxy, new allowlisted domains, persisted credentials or changes to source script.
+- MangaDex real browsing, chapters, image pages and offline reading remain unverified; this build is diagnostic, not a fix claim.
+- Existing approved Demo source, Library, backup, reader, downloads, Swift 5/UIKit, iOS 12 minimum and SQLite schema unchanged.
+- Bundle version 27, device diagnostic pending.
+
 ## 0.1.0-build26-m12a-mangadex-pilot — 2026-10-30
 
 - User reported Build 25 source/search batch **"tudo parece estar funcionando"** on an iPhone. Mark tested paths as provisionally accepted, not exhaustive edge-case coverage.
