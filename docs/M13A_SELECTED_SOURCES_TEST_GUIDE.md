@@ -54,3 +54,10 @@ The remaining selected extensions are Vortex Scans, ToonGod, Manhwa18.cc, Asura 
 - **Retest narrowly**: covers in source list and manga details (Webtoons.com EN and Manhwa18.net); verify one chapter still displays its pages and, if available, cover in Library.
 - If a cover still fails, report the source and whether it fails only on list or also in manga details; examine actual cover host/HTTP status before allowing additional domain or changing headers.
 - Do not keep retrying HotComics on HTTP403; access is restricted and remains out of physical acceptance.
+
+
+## Webtoons EN v0.1.1 source-only list cover test
+
+Physical Build30 result: Manhwa18.net series covers now display. Webtoons EN covers display within work details but not in lists. Webtoons JS v0.1.0 only consumed img.src on list cards, but details use og:image. New source-only v0.1.1 safely checks image lazy-load attributes and srcset before src. It does not guarantee the site actually provides these candidates or that the image host allows the fetch.
+
+After source update is published, keep Build30 installed and refresh the existing selected Keiyoushi catalog. Update only Webtoons.com EN (v0.1.1); do not reinstall the application or other sources. Refresh Webtoons Popular and Search. Check thumbnails and then manga details. If list thumbnails remain blank, collect source and location (list vs details), and if necessary a targeted cover URL/status diagnostic in a later IPA batch. No repeated access retries or anti-bot bypass.
