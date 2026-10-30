@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.1.0-build25-m11b-search-source-suite — 2026-10-30
+
+- User reported "funcionou" for Build 24 global search on physical iOS 12. Mark M11A as physically accepted.
+- Development cadence changed to cohesive feature batches rather than one minor IPA per change, with one consolidated physical regression checklist.
+- Global search pagination: source-specific hasNextPage state, explicit Carregar mais resultados footer, bounded to five pages per source with up to 40 rendered matches per page.
+- Search source filters: dedicated Fontes picker with checkmarks and Todas / Aplicar actions; only selected, enabled installed JS sources are queried.
+- Search result consistency: deduplicate by original source ID + manga ID, ignore stale asynchronous responses after cancellation/filter/query changes; partial source failures do not abort results.
+- Source information: new Informações e dados da fonte from Explore source actions, with source ID, language, version, enabled state, allowlisted domains, and count of JS storage entries.
+- Per-source diagnostics: explicit runtime metadata check.
+- Source-local reset: confirmation-gated clearing of only that source's namespaced JS UserDefaults storage. Never clears chapter downloads, Library, history, reader prefs or source cookies.
+- Real source URLs still enforced by the existing JavaScript runtime/domain allowlist; no direct Android APK extension compatibility implied.
+- iOS 12.0 UIKit deployment, SQLite, downloader, reader and backups unchanged. Bundle version 25.
+- Device QA pending; build may be merged only after green push + PR CI.
+
 ## 0.1.0-build24-m11a-global-search — 2026-10-30
 
 - User physically confirmed **"tudo funcionando"** on build 23. Record M10C foreground restart recovery and paused state as accepted on the test iPhone.

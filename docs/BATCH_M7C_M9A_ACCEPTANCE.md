@@ -239,3 +239,21 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] A nonmatching query gives clear empty results; cancel/re-search ignores earlier asynchronous responses.
 - [ ] Disable one source; only enabled sources are searched; partial failures do not crash.
 - [ ] Reader, downloads, backup and iOS 12 diagnostics remain stable.
+
+
+## Build 24 physical acceptance — 2026-10-30
+
+- [x] User reports Build 24 global search worked on iPhone.
+- [x] Build 24 M11A baseline accepted as user-reported.
+- [ ] Independent partial-error and cancellation edge cases not separately reported.
+
+## Build 25 M11B — consolidated new-feature test (pending)
+
+- [ ] Explore -> Global Search returns results from active Demo sources and opening a result works.
+- [ ] Fontes picker filters to a single source, then Todas restores both.
+- [ ] Search cancellation and changed query do not append stale matches.
+- [ ] Carregar mais appears only for a source with hasNextPage; new pages append without source/manga duplicates.
+- [ ] Explore -> source actions -> Informações e dados displays correct manifest values.
+- [ ] Runtime metadata diagnostic completes.
+- [ ] Source JS storage reset requires confirmation and does not affect Library, downloads, history, reader settings.
+- [ ] Existing reader scales, offline downloads and iOS 12 diagnostics work.

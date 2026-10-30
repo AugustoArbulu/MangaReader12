@@ -37,7 +37,7 @@ Official references reviewed:
 | Extension origin/integrity | Foundation | Repository URL + SHA-256; publisher signatures still future |
 | Extension enable/disable | Implemented | Persisted in SQLite |
 | Extension rollback | Implemented | Active/previous filesystem slots |
-| Source settings | Foundation | Native storage bridge exists; full settings UI future |
+| Source settings | M11B partial build 25 (device gate pending) | Source info, runtime diagnostics, confirmation-based JS local reset; structured source-defined settings UI future |
 | Cookies / headers | Foundation | Runtime HTTP headers and storage exist; cookie isolation hardening future |
 | WebView/login/captcha | Planned | Use WKWebView where a source legitimately requires user login/challenge |
 | Reader paged LTR | Implemented | UIKit collection reader |
@@ -73,7 +73,7 @@ Official references reviewed:
 | Source migration | Implemented in build 11 | Searches other enabled installed sources |
 | Migration keeps categories/progress/history | Implemented in build 11 | Chapter matching by number, fallback normalized name |
 | Migration of downloads | Not implemented by design | Downloads remain source-specific |
-| Global search across sources | M11A build 24 (physical gate pending) | Explore → Busca global queries first page in enabled JS sources, source-tagged results |
+| Global search across sources | M11B build 25 (device gate pending) | Search multiple pages, per-source filters, source-tagged results; Build 24 baseline physically accepted |
 | Trackers | Planned / deferred | Connector/account model needs design; not required for core reader |
 | Local source | Planned | Files/archives/EPUB ingestion can be added without JS source |
 | Backup automation | iOS-limited | File access/background rules differ; manual portable backup first |
@@ -123,3 +123,10 @@ The build-11 backup captures the SQLite Library state plus selected app/reader s
 - Build 24 M11A: first-page global search across enabled installed JavaScript sources; physical gate pending.
 - Subsequent candidates: per-source settings UI, WKWebView manual sign-in/challenge where permitted, and wide-page reader polish.
 - Native iOS 12 JavaScript source API is still distinct from Android/Keiyoushi APKs; compatibility requires porting or a remote bridge.
+
+
+## Larger batch workflow — adopted after Build 24
+
+- Device testing moves to grouped acceptance after multiple closely related changes rather than distributing one IPA per small enhancement.
+- Build 25 M11B groups source selection, global pagination/deduplication, source information, diagnostics and source-local storage maintenance.
+- Advanced source-defined settings forms and true browser login integration remain separate later milestones.

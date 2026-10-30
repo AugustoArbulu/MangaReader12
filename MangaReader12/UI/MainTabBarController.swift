@@ -408,6 +408,16 @@ final class ExploreViewController: UITableViewController {
         })
 
         sheet.addAction(UIAlertAction(
+            title: "Informações e dados da fonte",
+            style: .default
+        ) { [weak self] _ in
+            self?.navigationController?.pushViewController(
+                SourceInformationViewController(record: record),
+                animated: true
+            )
+        })
+
+        sheet.addAction(UIAlertAction(
             title: "Rollback para versão anterior",
             style: .default
         ) { [weak self] _ in
@@ -502,16 +512,30 @@ final class ExploreViewController: UITableViewController {
 // Global search uses the installed JavaScriptSourceRuntime contract and
 // the same source-domain policy as per-source search. It does not install or
 // execute Android APKs, and it intentionally only requests page one.
+// A single iOS 12-compatible search surface across enabled JS sources.
+// Search batches run sequentially to limit memory and request concurrency.
 final class GlobalSourceSearchViewController: UITableViewController, UISearchBarDelegate {
     private struct SearchMatch {
         let source: InstalledSourceRecord
         let manga: SourceMangaSummary
     }
 
+    private struct PageState {
+        let nextPage: Int
+        let hasMore: Bool
+    }
+
+    private let maxPagesPerSource = 5
     private var matches: [SearchMatch] = []
-    private var searchGeneration = 0
+    private var seenIDs = Set<String>()
+    private var sourcePages: [String: PageState] = [:]
+    private var sourceOptions: [InstalledSourceRecord] = []
+    private var selectedSourceIDs: Set<String>? // nil means all enabled sources
+    private var searchSources: [InstalledSourceRecord] = []
+    private var activeQuery: String?
+    private var generation = 0
     private var failedSources = 0
-    private var searching = false
+    private var loading = false
 
     private lazy var globalSearchController: UISearchController = {
         let controller = UISearchController(searchResultsController: nil)
@@ -532,15 +556,17 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Busca global"
-        tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 98
         tableView.register(
-            MangaCoverCell.self,
-            forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
+            MangaCoverCell.self, forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
         )
         navigationItem.searchController = globalSearchController
         navigationItem.hidesSearchBarWhenScrolling = false
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Fontes", style: .plain,
+            target: self, action: #selector(filterTapped)
+        )
         definesPresentationContext = true
         applyTheme()
         showEmptyState("Digite um título e toque em Buscar.")
@@ -559,6 +585,30 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         tableView.backgroundView = label
     }
 
+    @objc private func filterTapped() {
+        do {
+            let manager = try SourceLifecycleManager.defaultManager()
+            let sources = try manager.installedSources().filter { $0.enabled }
+            let picker = GlobalSearchSourcePickerViewController(
+                sources: sources,
+                selected: selectedSourceIDs ?? Set(sources.map { $0.manifest.id })
+            ) { [weak self] newSelection in
+                guard let self = self else { return }
+                self.selectedSourceIDs = newSelection
+                let query = (self.globalSearchController.searchBar.text ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if query.isEmpty {
+                    self.resetSearch(message: "Digite um título e toque em Buscar.")
+                } else {
+                    self.startSearch(query)
+                }
+            }
+            navigationController?.pushViewController(picker, animated: true)
+        } catch {
+            showMessage(title: "Fontes indisponíveis", message: error.localizedDescription)
+        }
+    }
+
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         let query = (searchBar.text ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -567,35 +617,7 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
             resetSearch(message: "Digite um título para pesquisar.")
             return
         }
-
-        searchGeneration += 1
-        let generation = searchGeneration
-        matches = []
-        failedSources = 0
-        searching = true
-        tableView.reloadData()
-        showEmptyState("Buscando em fontes instaladas…")
-        navigationItem.prompt = "Preparando busca…"
-
-        do {
-            let lifecycle = try SourceLifecycleManager.defaultManager()
-            let sources = try lifecycle.installedSources().filter { $0.enabled }
-            guard !sources.isEmpty else {
-                searching = false
-                navigationItem.prompt = nil
-                showEmptyState("Nenhuma fonte ativa. Instale ou ative uma fonte em Explorar.")
-                return
-            }
-            let loader = try InstalledSourceRuntimeLoader.defaultLoader()
-            searchSource(
-                index: 0, sources: sources, loader: loader,
-                query: query, generation: generation
-            )
-        } catch {
-            searching = false
-            navigationItem.prompt = nil
-            showEmptyState("Não foi possível iniciar a pesquisa: \(error.localizedDescription)")
-        }
+        startSearch(query)
     }
 
     func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
@@ -603,75 +625,136 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
     }
 
     private func resetSearch(message: String) {
-        // Ignore any late responses from earlier asynchronous source searches.
-        searchGeneration += 1
-        searching = false
+        // Invalidates all late async completions from an older query/batch.
+        generation += 1
+        loading = false
+        activeQuery = nil
         failedSources = 0
         matches = []
+        seenIDs = []
+        sourcePages = [:]
+        searchSources = []
         navigationItem.prompt = nil
+        tableView.tableFooterView = UIView(frame: .zero)
         tableView.reloadData()
         showEmptyState(message)
     }
 
-    private func searchSource(
+    private func startSearch(_ query: String) {
+        resetSearch(message: "Buscando em fontes instaladas…")
+        activeQuery = query
+        do {
+            let lifecycle = try SourceLifecycleManager.defaultManager()
+            sourceOptions = try lifecycle.installedSources().filter { $0.enabled }
+            searchSources = sourceOptions.filter {
+                selectedSourceIDs?.contains($0.manifest.id) ?? true
+            }
+            guard !searchSources.isEmpty else {
+                showEmptyState(
+                    sourceOptions.isEmpty
+                        ? "Nenhuma fonte ativa. Instale ou ative uma fonte em Explorar."
+                        : "Nenhuma fonte selecionada. Toque em Fontes para escolher."
+                )
+                return
+            }
+            loadBatch(searchSources)
+        } catch {
+            activeQuery = nil
+            showEmptyState("Erro ao pesquisar: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadBatch(_ sources: [InstalledSourceRecord]) {
+        guard !loading, !sources.isEmpty,
+              let query = activeQuery else { return }
+        loading = true
+        let token = generation
+        updateLoadMoreFooter()
+        do {
+            let loader = try InstalledSourceRuntimeLoader.defaultLoader()
+            fetchNext(
+                index: 0, sources: sources, loader: loader,
+                query: query, token: token
+            )
+        } catch {
+            loading = false
+            navigationItem.prompt = nil
+            showMessage(title: "Erro da pesquisa", message: error.localizedDescription)
+            updateLoadMoreFooter()
+        }
+    }
+
+    private func fetchNext(
         index: Int,
         sources: [InstalledSourceRecord],
         loader: InstalledSourceRuntimeLoader,
         query: String,
-        generation: Int
+        token: Int
     ) {
-        guard generation == searchGeneration else { return }
+        guard token == generation else { return }
         guard index < sources.count else {
-            searching = false
-            navigationItem.prompt = "\(matches.count) resultados • \(sources.count) fontes" +
-                (failedSources > 0 ? " • \(failedSources) falharam" : "")
+            loading = false
+            navigationItem.prompt = "\(matches.count) resultados • \(searchSources.count) fontes" +
+                (failedSources > 0 ? " • \(failedSources) falhas" : "")
             if matches.isEmpty {
-                showEmptyState(
-                    failedSources == sources.count
-                        ? "Nenhuma fonte respondeu à busca. Verifique as fontes instaladas."
-                        : "Nenhum resultado encontrado."
-                )
+                showEmptyState("Nenhum resultado encontrado.")
             }
+            updateLoadMoreFooter()
             return
         }
 
-        navigationItem.prompt = "Buscando na fonte \(index + 1)/\(sources.count)…"
         let source = sources[index]
-        loader.load(sourceID: source.manifest.id) { [weak self] loaded in
+        let id = source.manifest.id
+        let pageNumber = sourcePages[id]?.nextPage ?? 1
+        navigationItem.prompt = "Buscando \(index + 1)/\(sources.count): \(source.manifest.name)…"
+        loader.load(sourceID: id) { [weak self] loaded in
             DispatchQueue.main.async {
-                guard let self = self,
-                      generation == self.searchGeneration else { return }
+                guard let self = self, token == self.generation else { return }
                 switch loaded {
                 case .failure:
                     self.failedSources += 1
-                    self.searchSource(
+                    self.sourcePages[id] = PageState(nextPage: pageNumber, hasMore: false)
+                    self.fetchNext(
                         index: index + 1, sources: sources, loader: loader,
-                        query: query, generation: generation
+                        query: query, token: token
                     )
+
                 case .success(let runtime):
                     runtime.callDecoded(
                         "search",
-                        arguments: [query, 1, [] as [Any]],
+                        arguments: [query, pageNumber, [] as [Any]],
                         as: SourcePagedMangaResult.self
-                    ) { [weak self] pageResult in
+                    ) { [weak self] response in
                         DispatchQueue.main.async {
-                            guard let self = self,
-                                  generation == self.searchGeneration else { return }
-                            switch pageResult {
+                            guard let self = self, token == self.generation else { return }
+                            switch response {
                             case .failure:
                                 self.failedSources += 1
+                                self.sourcePages[id] = PageState(
+                                    nextPage: pageNumber, hasMore: false
+                                )
                             case .success(let page):
-                                self.matches.append(contentsOf: page.items.prefix(40).map {
-                                    SearchMatch(source: source, manga: $0)
-                                })
+                                for item in page.items.prefix(40) {
+                                    let key = id + "\u{1F}" + item.id
+                                    if self.seenIDs.insert(key).inserted {
+                                        self.matches.append(
+                                            SearchMatch(source: source, manga: item)
+                                        )
+                                    }
+                                }
+                                self.sourcePages[id] = PageState(
+                                    nextPage: pageNumber + 1,
+                                    hasMore: page.hasNextPage &&
+                                        pageNumber < self.maxPagesPerSource
+                                )
                                 if !self.matches.isEmpty {
                                     self.showEmptyState(nil)
                                 }
                                 self.tableView.reloadData()
                             }
-                            self.searchSource(
+                            self.fetchNext(
                                 index: index + 1, sources: sources,
-                                loader: loader, query: query, generation: generation
+                                loader: loader, query: query, token: token
                             )
                         }
                     }
@@ -680,20 +763,43 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         }
     }
 
+    private func updateLoadMoreFooter() {
+        let available = searchSources.contains {
+            sourcePages[$0.manifest.id]?.hasMore == true
+        }
+        guard available else {
+            tableView.tableFooterView = UIView(frame: .zero)
+            return
+        }
+        let footer = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 58))
+        let button = UIButton(type: .system)
+        button.setTitle(loading ? "Carregando…" : "Carregar mais resultados", for: .normal)
+        button.isEnabled = !loading
+        button.addTarget(self, action: #selector(loadMoreTapped), for: .touchUpInside)
+        button.frame = footer.bounds
+        footer.addSubview(button)
+        tableView.tableFooterView = footer
+    }
+
+    @objc private func loadMoreTapped() {
+        guard !loading else { return }
+        let pending = searchSources.filter {
+            sourcePages[$0.manifest.id]?.hasMore == true
+        }
+        loadBatch(pending)
+    }
+
     override func tableView(
-        _ tableView: UITableView,
-        numberOfRowsInSection section: Int
+        _ tableView: UITableView, numberOfRowsInSection section: Int
     ) -> Int {
         return matches.count
     }
 
     override func tableView(
-        _ tableView: UITableView,
-        cellForRowAt indexPath: IndexPath
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
         guard let cell = tableView.dequeueReusableCell(
-            withIdentifier: MangaCoverCell.reuseIdentifier,
-            for: indexPath
+            withIdentifier: MangaCoverCell.reuseIdentifier, for: indexPath
         ) as? MangaCoverCell else { return UITableViewCell() }
 
         let match = matches[indexPath.row]
@@ -708,8 +814,7 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
     }
 
     override func tableView(
-        _ tableView: UITableView,
-        didSelectRowAt indexPath: IndexPath
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
         let match = matches[indexPath.row]
@@ -725,8 +830,7 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
                         self.navigationController?.pushViewController(
                             MangaDetailsViewController(
                                 sourceRecord: match.source,
-                                runtime: runtime,
-                                summary: match.manga
+                                runtime: runtime, summary: match.manga
                             ),
                             animated: true
                         )
@@ -751,10 +855,267 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
     }
 }
 
+// Isolated source diagnostics and settings maintenance. This screen never
+// exposes persisted values or removes user Library/download data.
+final class SourceInformationViewController: UITableViewController {
+    private let record: InstalledSourceRecord
+    private let storage: SourceStorage
+    private var isTesting = false
+
+    init(record: InstalledSourceRecord) {
+        self.record = record
+        self.storage = SourceStorage(sourceID: record.manifest.id)
+        super.init(style: .grouped)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = record.manifest.name
+        tableView.tableFooterView = UIView()
+        applyTheme()
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        return 2
+    }
+
+    override func tableView(
+        _ tableView: UITableView, numberOfRowsInSection section: Int
+    ) -> Int {
+        return section == 0 ? 5 : 2
+    }
+
+    override func tableView(
+        _ tableView: UITableView, titleForHeaderInSection section: Int
+    ) -> String? {
+        return section == 0 ? "Informações da fonte" : "Manutenção"
+    }
+
+    override func tableView(
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "SourceInfoCell")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "SourceInfoCell")
+        ThemeManager.shared.style(cell: cell)
+        cell.accessoryType = .none
+        cell.selectionStyle = .none
+        cell.detailTextLabel?.numberOfLines = 0
+
+        if indexPath.section == 0 {
+            switch indexPath.row {
+            case 0:
+                cell.textLabel?.text = "Identificador"
+                cell.detailTextLabel?.text = record.manifest.id
+            case 1:
+                cell.textLabel?.text = "Versão e idioma"
+                cell.detailTextLabel?.text = "v\(record.manifest.version) • \(record.manifest.lang)"
+            case 2:
+                cell.textLabel?.text = "Estado"
+                cell.detailTextLabel?.text = record.enabled ? "Ativada" : "Desativada"
+            case 3:
+                cell.textLabel?.text = "Domínios permitidos"
+                cell.detailTextLabel?.text = record.manifest.domains.joined(separator: ", ")
+            default:
+                cell.textLabel?.text = "Preferências da fonte"
+                cell.detailTextLabel?.text = "\(storage.entryCount()) entradas locais"
+            }
+        } else {
+            cell.selectionStyle = .default
+            cell.accessoryType = .disclosureIndicator
+            if indexPath.row == 0 {
+                cell.textLabel?.text = "Verificar runtime"
+                cell.detailTextLabel?.text = "Testa carregamento e metadata da fonte"
+            } else {
+                cell.textLabel?.text = "Limpar preferências desta fonte"
+                cell.detailTextLabel?.text =
+                    "Remove apenas o armazenamento JS desta fonte; pode exigir reconfiguração"
+            }
+        }
+        return cell
+    }
+
+    override func tableView(
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.section == 1 else { return }
+        if indexPath.row == 0 {
+            testRuntime()
+        } else {
+            confirmReset()
+        }
+    }
+
+    private func testRuntime() {
+        guard !isTesting else { return }
+        isTesting = true
+        navigationItem.prompt = "Verificando runtime…"
+        do {
+            let loader = try InstalledSourceRuntimeLoader.defaultLoader()
+            loader.load(sourceID: record.manifest.id) { [weak self] outcome in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    switch outcome {
+                    case .failure(let error):
+                        self.finishTest(.failure(error))
+                    case .success(let runtime):
+                        runtime.callDecoded("metadata", as: SourceMetadata.self) {
+                            [weak self] metadata in
+                            DispatchQueue.main.async {
+                                self?.finishTest(metadata)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            finishTest(.failure(error))
+        }
+    }
+
+    private func finishTest(_ result: Result<SourceMetadata, Error>) {
+        isTesting = false
+        navigationItem.prompt = nil
+        switch result {
+        case .failure(let error):
+            showMessage(title: "Falha no runtime", message: error.localizedDescription)
+        case .success(let meta):
+            showMessage(
+                title: "Runtime OK",
+                message: "\(meta.name) • versão \(meta.version) • \(meta.lang)"
+            )
+        }
+    }
+
+    private func confirmReset() {
+        let count = storage.entryCount()
+        let alert = UIAlertController(
+            title: "Limpar dados desta fonte?",
+            message: "Serão apagadas \(count) entradas do armazenamento JS de \(record.manifest.name). Isso pode redefinir opções e sessões da fonte. Biblioteca, downloads, histórico e preferências do leitor não serão alterados.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(
+            title: "Limpar dados", style: .destructive
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let removed = self.storage.clearAll()
+            self.tableView.reloadData()
+            self.showMessage(
+                title: "Dados da fonte limpos",
+                message: "\(removed) entradas locais removidas."
+            )
+        })
+        present(alert, animated: true)
+    }
+
+    private func showMessage(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+extension SourceInformationViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
+    }
+}
+
+final class GlobalSearchSourcePickerViewController: UITableViewController {
+    private let sources: [InstalledSourceRecord]
+    private var selectedIDs: Set<String>
+    private let onApply: (Set<String>) -> Void
+
+    init(
+        sources: [InstalledSourceRecord],
+        selected: Set<String>,
+        onApply: @escaping (Set<String>) -> Void
+    ) {
+        self.sources = sources
+        self.selectedIDs = selected
+        self.onApply = onApply
+        super.init(style: .plain)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "Filtrar fontes"
+        tableView.tableFooterView = UIView()
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Aplicar", style: .done,
+            target: self, action: #selector(applyTapped)
+        )
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            title: "Todas", style: .plain,
+            target: self, action: #selector(selectAllTapped)
+        )
+        applyTheme()
+    }
+
+    @objc private func selectAllTapped() {
+        selectedIDs = Set(sources.map { $0.manifest.id })
+        tableView.reloadData()
+    }
+
+    @objc private func applyTapped() {
+        onApply(selectedIDs)
+        navigationController?.popViewController(animated: true)
+    }
+
+    override func tableView(
+        _ tableView: UITableView, numberOfRowsInSection section: Int
+    ) -> Int {
+        return sources.count
+    }
+
+    override func tableView(
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "GlobalSourceFilter")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "GlobalSourceFilter")
+        ThemeManager.shared.style(cell: cell)
+        let source = sources[indexPath.row]
+        cell.textLabel?.text = source.manifest.name
+        cell.detailTextLabel?.text = "\(source.manifest.lang) • v\(source.manifest.version)"
+        cell.accessoryType = selectedIDs.contains(source.manifest.id) ? .checkmark : .none
+        return cell
+    }
+
+    override func tableView(
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let id = sources[indexPath.row].manifest.id
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+        tableView.reloadRows(at: [indexPath], with: .none)
+    }
+}
+
+extension GlobalSearchSourcePickerViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
+    }
+}
+
 extension GlobalSourceSearchViewController: ThemeApplicable {
     func applyTheme() {
         ThemeManager.shared.style(tableView: tableView)
-        if matches.isEmpty && !searching {
+        if matches.isEmpty && !loading {
             showEmptyState("Digite um título e toque em Buscar.")
         }
         tableView.reloadData()
