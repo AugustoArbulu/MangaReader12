@@ -642,7 +642,7 @@ private final class MangaDexSecureHTTP1Operation {
                 "User-Agent: MangaReader12/0.1 (iOS 12+)\r\n"
             let forbidden = Set([
                 "host", "connection", "content-length", "transfer-encoding",
-                "accept-encoding"
+                "accept-encoding", "user-agent", "via"
             ])
             for (name, value) in self.request.headers.sorted(by: { $0.key < $1.key }) {
                 guard !forbidden.contains(name.lowercased()),
