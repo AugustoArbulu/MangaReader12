@@ -42,3 +42,15 @@ A compile PASS and mocked JavaScript tests are insufficient to validate real HTT
 ## Scope / next milestone
 
 The remaining selected extensions are Vortex Scans, ToonGod, Manhwa18.cc, Asura Scans, MadaraDex and Comix. Shared source engine ports will follow the M13 architecture after this initial physical integration test.
+
+
+## Build29 real-device feedback and Build30 targeted fix — 2026-10-30
+
+- **Webtoons.com EN**: source access and chapter images load; covers/series thumbnails missing.
+- **Manhwa18.net**: source access and chapter images load; covers/series thumbnails missing.
+- **HotComics**: server HTTP 403 (source unavailable on this device/network; no bypass or repeated retry).
+- **Native defect**: CoverImageLoader's temporary HTTPClient was deinitialized before URLSession completed, which cancelled cover requests. Build30 retains it until completion and checks source host allowlist before cache access.
+- **No source reinstall needed**: the selected scripts and the SHA-256 catalog were not changed. Install only the new IPA over the current app via Sideloadly.
+- **Retest narrowly**: covers in source list and manga details (Webtoons.com EN and Manhwa18.net); verify one chapter still displays its pages and, if available, cover in Library.
+- If a cover still fails, report the source and whether it fails only on list or also in manga details; examine actual cover host/HTTP status before allowing additional domain or changing headers.
+- Do not keep retrying HotComics on HTTP403; access is restricted and remains out of physical acceptance.

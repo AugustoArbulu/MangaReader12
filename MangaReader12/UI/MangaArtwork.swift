@@ -8,6 +8,13 @@ final class CoverImageLoader {
     private let cacheDirectory: URL?
     private let queue = DispatchQueue(label: "com.mangareader12.cover-cache", qos: .utility)
 
+    // The image HTTPClient owns an ephemeral URLSession and cancels it during
+    // deinit. Keep each client strongly referenced until its callback finishes.
+    // Previously the method-local client was released after send(), so most
+    // cover requests were cancelled before any image bytes arrived.
+    private let inFlightLock = NSLock()
+    private var inFlightClients: [UUID: HTTPClient] = [:]
+
     private init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         memoryCache.countLimit = 120
@@ -40,6 +47,20 @@ final class CoverImageLoader {
             return
         }
 
+        // Enforce the source's HTTPS host allowlist even for cached covers.
+        // An empty allowlist is reserved for the source-icon loader.
+        let domains = allowedDomains.isEmpty ? [host] : allowedDomains
+        let policy = HTTPPolicy(
+            allowedDomains: domains,
+            timeout: 20,
+            maxRedirects: 5,
+            maxResponseBytes: 6 * 1024 * 1024
+        )
+        guard policy.isURLAllowed(url) else {
+            completion(nil)
+            return
+        }
+
         let key = raw as NSString
 
         if let image = memoryCache.object(forKey: key) {
@@ -55,17 +76,22 @@ final class CoverImageLoader {
             return
         }
 
-        let domains = allowedDomains.isEmpty ? [host] : allowedDomains
-        let client = HTTPClient(
-            policy: HTTPPolicy(
-                allowedDomains: domains,
-                timeout: 20,
-                maxRedirects: 5,
-                maxResponseBytes: 6 * 1024 * 1024
-            )
-        )
+        let client = HTTPClient(policy: policy)
+        let requestID = UUID()
+
+        // URLSessionDataTask does not guarantee retention of the HTTPClient
+        // object wrapping it. A local variable alone cannot keep the session
+        // alive for an asynchronous image request.
+        inFlightLock.lock()
+        inFlightClients[requestID] = client
+        inFlightLock.unlock()
 
         client.send(HTTPRequest(url: raw)) { [weak self] result in
+            guard let self = self else { return }
+            self.inFlightLock.lock()
+            self.inFlightClients.removeValue(forKey: requestID)
+            self.inFlightLock.unlock()
+
             switch result {
             case .success(let response):
                 guard (200..<300).contains(response.statusCode),
@@ -74,10 +100,10 @@ final class CoverImageLoader {
                     return
                 }
 
-                self?.memoryCache.setObject(image, forKey: key)
+                self.memoryCache.setObject(image, forKey: key)
 
-                if let diskURL = self?.cacheURL(for: raw) {
-                    self?.queue.async {
+                if let diskURL = self.cacheURL(for: raw) {
+                    self.queue.async {
                         try? response.data.write(to: diskURL, options: .atomic)
                     }
                 }

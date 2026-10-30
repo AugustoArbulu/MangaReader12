@@ -66,3 +66,8 @@ These are **engineering estimates from the code structure, not verified operatio
 - New Native.htmlSelect bridge uses WebKit DOMParser only on inert HTML to supply a CSS selector utility for JavaScriptCore; no Android code is executed, no arbitrary resource script evaluation.
 - ci/test_m13a_js.cjs tests six source methods per adapter with mock HTTPS and selector results; GitHub Actions adds an explicit test step. Real server, DOM parsing on the physical iOS12 device, image CDN trust, downloads and permitted access remain QA gates.
 - Stage two remains shared engine ports for Vortex Scans/Iken, ToonGod/MadaraNoAjax, Manhwa18.cc/YiiMadara. Stage three remains Asura Scans, MadaraDex and Comix, subject to site access policies.
+
+
+## Physical QA update — 2026-10-30
+
+Build29: Webtoons.com EN and Manhwa18.net load chapter images but do not display series covers, and HotComics returns server HTTP 403. The missing covers uncovered a native CoverImageLoader HTTPClient lifetime bug; Build30 addresses the shared loader without changing the JavaScript source catalog. Retest pending. HTTP403 is not bypassed. The six remaining selected source ports are still planned.

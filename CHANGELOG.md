@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build30-m13a-cover-network-lifetime — 2026-10-30
+
+- First real device results from Build29 on iOS 12.5.8: Webtoons.com EN and Manhwa18.net both load source browsing and show chapter images when reading, but series cover thumbnails fail to appear. HotComics returns HTTP 403; its availability is not accepted and no bypass has been attempted.
+- Diagnosed a native cover image loader lifetime defect: CoverImageLoader.load created a method-local HTTPClient that owns an ephemeral URLSession; HTTPClient.deinit invalidated and cancelled that session immediately after send() returned. This affects *all* cover requests, independently of whether a chapter image URL works.
+- CoverImageLoader now strongly retains each active HTTPClient (UUID-keyed in-flight dictionary guarded by NSLock), releases only after the HTTP completion fires, and preserves existing image cache and asynchronous UI update. Prevents premature URLSession invalidation while in flight.
+- Enforces source HTTPS domain allowlist before reading the memory/disk cache, preventing cached images from circumventing the currently installed source host policy. Source-icon loader still uses its explicit icon host when no source policy applies.
+- No modifications to JavaScript adapters, SHA-256-pinned source catalog, source IDs, downloads, chapter reader or database; existing installed sources need no reinstall.
+- No changes to Webtoons/Manhwa18.net chapters that already worked. If some covers still fail, use host-specific follow-up; this build fixes a proven native lifecycle defect but does not assert all cover origins/CDNs are reachable under the domain policy.
+- Do not change the HotComics server 403 through artificial headers, proxy, TLS weakening or access-control bypass. Report as access-restricted/unsupported on this network until normal server access is available.
+- Keep nine Keiyoushi selected sources as the active project goal; MangaDex frozen. Build30, iOS 12.0 minimum, Swift5/UIKit unchanged; physical QA pending.
+
 ## 0.1.0-build29-m13a-selected-keiyoushi-sources — 2026-10-30
 
 - First user-selected Keiyoushi source package (M13-A): three native JavaScript adapters — HotComics, Manhwa18.net and Webtoons.com EN. These are **unofficial experimental ports**, not Android APKs and not fully proven on sites.
