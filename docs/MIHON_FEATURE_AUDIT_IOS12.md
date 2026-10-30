@@ -1,6 +1,6 @@
 # Mihon Feature Audit → MangaReader12 / iOS 12
 
-Updated: 2026-10-29
+Updated: 2026-10-30
 
 This document uses Mihon as a product/UX reference. MangaReader12 is an independent iOS project and is not affiliated with Mihon.
 
@@ -61,7 +61,7 @@ Official references reviewed:
 | Volume-key navigation | iOS-limited | No clean public equivalent to Android volume-key page navigation |
 | Reader page actions (share/save/copy/set cover) | Planned | UIKit share sheet + Photos/Files where permitted |
 | Downloads | Implemented | Sequential chapter pages, source policy preserved |
-| Download queue screen | M10C build 23 (device gate pending) | Foreground serialized queue, pause/resume, persistent restart-safe recovery plans and priority; true background URLSession download future |
+| Download queue screen | M10C build 23 (physically accepted) | Foreground serialized queue, pause/resume, persistent restart-safe recovery plans and priority; true background URLSession download future |
 | Reindex downloads | Implemented in build 11 | Reconciles DB records with missing local paths |
 | Storage usage | Implemented in build 11 | Database/download/cache byte totals |
 | Clear caches | Implemented in build 11 | Reader + cover caches |
@@ -73,7 +73,7 @@ Official references reviewed:
 | Source migration | Implemented in build 11 | Searches other enabled installed sources |
 | Migration keeps categories/progress/history | Implemented in build 11 | Chapter matching by number, fallback normalized name |
 | Migration of downloads | Not implemented by design | Downloads remain source-specific |
-| Global search across sources | Foundation | Migration search does this; general Browse UI future |
+| Global search across sources | M11A build 24 (physical gate pending) | Explore → Busca global queries first page in enabled JS sources, source-tagged results |
 | Trackers | Planned / deferred | Connector/account model needs design; not required for core reader |
 | Local source | Planned | Files/archives/EPUB ingestion can be added without JS source |
 | Backup automation | iOS-limited | File access/background rules differ; manual portable backup first |
@@ -115,3 +115,11 @@ The build-11 backup captures the SQLite Library state plus selected app/reader s
 5. Source UX: global search, source settings, WKWebView login/challenge flow.
 6. Local source: CBZ/ZIP first, then EPUB and optional additional archive formats.
 7. Optional trackers/statistics/incognito once core reading is mature.
+
+
+## Current work after Build 23
+
+- Build 23 M10C restart-safe foreground download queue: **physically accepted** on iOS 12.
+- Build 24 M11A: first-page global search across enabled installed JavaScript sources; physical gate pending.
+- Subsequent candidates: per-source settings UI, WKWebView manual sign-in/challenge where permitted, and wide-page reader polish.
+- Native iOS 12 JavaScript source API is still distinct from Android/Keiyoushi APKs; compatibility requires porting or a remote bridge.

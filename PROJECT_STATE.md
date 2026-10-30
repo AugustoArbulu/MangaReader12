@@ -329,3 +329,22 @@ Physical build-15 feedback:
 4. Start another chapter, pause it, force-close and reopen: it must remain Pausado until you explicitly select Retomar.
 5. Queue multiple chapters, Priorizar one, force-close and reopen: priority should remain.
 6. Return Teste 8s to OFF; verify existing offline chapters and reader controls still work.
+
+
+## Build 23 physical acceptance — 2026-10-30
+
+- User explicitly reported **"tudo funcionando"** on Build 23, following the requested restart-download-recovery tests.
+- Record the Build 23 M10C device gate as **PASS (user-reported)**.
+- This covers foreground restoration after closing/reopening the app and the prior controlled Demo-download workflow as reported.
+- Distinguish foreground restart recovery from true iOS background downloads, which remain unsupported.
+
+## Build 24 — M11A search across installed sources (physical gate pending)
+
+- Explore now presents a magnifying-glass action that pushes **Busca global** without changing bottom tabs.
+- Search issues source API v1 search(query, page=1, filters=[]) sequentially to each enabled installed JavaScript source; one failing source does not hide successful results.
+- First page only, capped at 40 matching items per source. Status reflects sources queried, total matches, and failures. This bounded search prioritizes old-device memory and runtime safety.
+- Results retain the exact source record (manifest/id/domains) and open original MangaDetailsViewController after loading that source's JavaScript runtime.
+- Generation token invalidates stale async results after query changes or cancellation.
+- User's current iOS 12 source engine is unchanged; Android APK compatibility/Keiyoushi direct execution is **not** implied.
+- Does not change download, backup, reader or SQLite schema, and does not bypass site restrictions.
+- Physical check: install the two bundled Demo sources, search a shared sample manga title, verify results show source names, tap one result, open details/chapter. Search a nonmatch and cancel. Confirm original per-source search remains functional.

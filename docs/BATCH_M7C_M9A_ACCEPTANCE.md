@@ -222,3 +222,20 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Queued priority survives force-close/reopen.
 - [ ] Interrupted or expired source URLs fail safely and permit retry.
 - [ ] No regression to offline chapter reading, backup and reader scale.
+
+
+## Build 23 physical acceptance (2026-10-30)
+
+- [x] User explicitly reports "tudo funcionando" after Build 23 physical iPhone test.
+- [x] M10C foreground restart download restoration accepted as user-reported.
+- [x] Retained Build 22 slow Demo testing and Build 19 live reader scale improvements.
+- [ ] True background transfer while the app is terminated is outside the implementation scope.
+
+## Build 24 M11A — global search QA (pending)
+
+- [ ] Explorar's magnifying-glass button opens Busca global.
+- [ ] Query with two enabled Demo sources shows source-qualified results.
+- [ ] Tapping result opens that exact source's Manga Details and existing reader.
+- [ ] A nonmatching query gives clear empty results; cancel/re-search ignores earlier asynchronous responses.
+- [ ] Disable one source; only enabled sources are searched; partial failures do not crash.
+- [ ] Reader, downloads, backup and iOS 12 diagnostics remain stable.
