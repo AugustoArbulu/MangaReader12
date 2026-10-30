@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.1.0-build31-m13a-webtoons-cover-differential — 2026-10-30
+
+- Build30 physically fixed Manhwa18.net cover artwork on iOS 12.5.8, but Webtoons.com EN cover thumbnails are still absent in source lists even though their covers display inside work details. Webtoons source-only v0.1.1 lazy-image URL extraction did not solve the list problem.
+- Added an explicitly user-triggered `Testar capas` action to the Webtoons.com EN source browser, without changing any source scripts, app networking settings, or image loading behavior.
+- For just the **first listed work**, the new diagnostic compares the source's list cover URL with the cover returned by the existing details API and attempts one ordinary HTTPS GET for each (at most two image GETs + one normal source details request). Strict installed-source allowlist applies to both; no arbitrary hosts, HTTP downgrade, custom WebView injection or captcha/access-control bypass.
+- Results: presence of the cover URL, hostname, file extension, query yes/no, HTTP status or transport failure, MIME, response size, UIImage decoder success and final response hostname. No manga title, URL path/query, raw content, auth header or cookies are included in the copied report.
+- Stops further requests after HTTP 429. The HTTPClient is retained until the response finishes (consistent with Build30 fix), and each request is bounded to 15s, 5MiB, 3 redirects; no automatic retries.
+- Physical gate: on Build31, open Webtoons.com EN Popular then tap `Testar capas`, copy and share the report; compare list vs details. If list URL is absent fix extraction, if host is blocked update only with documented approval, if status 200 and UIImage NO inspect image format support, if status 403 respect site access rules.
+- HotComics remains HTTP 403 and is not bypassed; MangaDex remains paused; Manhwa18.net remains unchanged. Six selected Keiyoushi sources still in roadmap.
+- Build31 preserves minimum iOS12, Swift5/UIKit and existing source catalog; no source update or reinstall required.
+
 ## Source-only hotfix: Webtoons.com EN 0.1.1 (M13-A) — 2026-10-30
 
 - Build30 physical feedback: Manhwa18.net series covers appear after shared HTTPClient lifetime repair, and chapter images already worked. Webtoons.com EN series covers still absent in the list but appear within manga details; the cover loader works for a different thumbnail URL from the same source.
