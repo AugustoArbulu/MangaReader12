@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.1.0-build26-m12a-mangadex-pilot — 2026-10-30
+
+- User reported Build 25 source/search batch **"tudo parece estar funcionando"** on an iPhone. Mark tested paths as provisionally accepted, not exhaustive edge-case coverage.
+- Introduced optional asynchronous completion callback for each JavaScript source API method. Existing synchronous Demo scripts still work without changes; async completion has 25-second timeout, per-call completion protection, and error mapping.
+- Added a live, read-only MangaDex pilot source implementing metadata, popular/search, manga details, English chapter listing, and MangaDex@Home image URLs.
+- Created a separate experimental repository catalog in fixtures/repository-mangadex.json. The JS script is SHA-256 pinned, with allowlisted manga domains and HTTPS-only network transport.
+- Source rate limit errors are surfaced explicitly; no 429 flooding or captcha/anti-bot bypass. Chapter pages use data-saver images to reduce memory.
+- MangaDex and scanlation groups are credited by metadata/chapter fields; API acceptable-use requirements include no monetization and respecting content removal requests.
+- Caveats: oldest chapters beyond first 100 English chapters not exposed in pilot; MangaDex@Home hosts outside allowed MangaDex domains may fail safely; links/chapters could expire, and real API cannot be certified by mocked tests.
+- The adapter's six functions passed Node mock-transport and syntax tests; final proof requires a physical device and live MangaDex API/CDN.
+- Build 26, iOS 12 minimum, UIKit/JavaScriptCore, Swift 5, no SQL migration. Physical validation pending.
+
 ## 0.1.0-build25-m11b-search-source-suite — 2026-10-30
 
 - User reported "funcionou" for Build 24 global search on physical iOS 12. Mark M11A as physically accepted.

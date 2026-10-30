@@ -130,3 +130,11 @@ The build-11 backup captures the SQLite Library state plus selected app/reader s
 - Device testing moves to grouped acceptance after multiple closely related changes rather than distributing one IPA per small enhancement.
 - Build 25 M11B groups source selection, global pagination/deduplication, source information, diagnostics and source-local storage maintenance.
 - Advanced source-defined settings forms and true browser login integration remain separate later milestones.
+
+
+## Build 26 M12A real-source pilot (not yet physically accepted)
+
+- Introduces async source callbacks in the JavaScriptCore runtime, retaining sync source API v1 compatibility.
+- Adds experimental MangaDex API catalog+source (separate from Demo) to exercise real metadata, search, chapter listing and chapter images.
+- Direct Android Keiyoushi APK repositories still cannot be installed as MangaReader12 JavaScript catalogs.
+- HTTPS/source-domain restrictions and MangaDex API attribution remain mandatory.

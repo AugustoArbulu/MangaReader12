@@ -380,3 +380,30 @@ Physical build-15 feedback:
 - Open Explorar -> installed source -> Informações e dados da fonte. Inspect manifest and run Verificar runtime.
 - In source tools, check confirmation before resetting storage; cancel first. Optional destructive clear only if testing disposable Demo settings, and verify Library/downloads remain intact.
 - Verify Backup/Reader/Downloads and 11/11 diagnostics without repeating exhaustive old feature tests.
+
+
+## Build 25 physical feedback (2026-10-30)
+
+- User reports "tudo parece estar funcionando" after testing Build 25 search filters, source tools and existing experience.
+- Mark the examined Build 25 flow as provisional physical PASS; pagination with hasNextPage and source-storage destructive reset were not independently evidenced.
+- User prefers larger cohesive batches rather than a new IPA for each tiny feature.
+
+## Build 26 M12A — first real source trial, MangaDex (device QA pending)
+
+- Source API v1 now supports optional asynchronous callbacks as trailing arguments for calls decoded by JavaScriptSourceRuntime. Synchronous source fixture functions remain compatible. A 25-second timeout prevents indefinite waits.
+- Separate pinned experimental MangaDex catalog: fixtures/repository-mangadex.json; JS script: fixtures/source-mangadex.js, SHA-256 38b360b0d08cfd7d2ecc204749408471a535b8f405a20ada4d5a50a894f78188.
+- Source features: search/popular, covers, manga details, first 100 English chapters, data-saver page URLs. Search uses 20 items per page and allowed-domain HTTPS; API 429 is surfaced, not bypassed.
+- Crediting MangaDex and scanlation groups is included; avoid ads, paid access or publication workflows inconsistent with MangaDex API acceptable-use rules.
+- Existing demo fixtures and downloaded chapters are not modified; no migrations and no direct Android Keiyoushi APK support.
+- Risks: API or CDN may fail from the physical iOS 12 network; MangaDex@Home can issue dynamic delivery hosts outside *.mangadex.network which should remain blocked by HTTPPolicy. Older chapters, alternate translated languages and CDN host fallback remain future scope.
+- Real site connection and image loading are NOT marked accepted until on-device test. Mocked Node API responses and Swift CI compilation alone cannot prove it.
+
+### Focused one-shot device test for Build 26
+
+1. Install the new IPA. Under Explorar tap + -> Inserir URL HTTPS and paste https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/repository-mangadex.json
+2. In the new MangaDex Experimental catalog install MangaDex (experimental); ensure source active.
+3. Open MangaDex. Verify real popular cover/title list and search for an English title.
+4. Open real manga details and chapter list, including visible scanlation group attribution.
+5. Try opening an English chapter. If the image delivery domain is rejected or MangaDex rate-limits, retain the exact error and do not retry repeatedly.
+6. Optionally verify offline download of an accessible chapter and the existing Demo source.
+7. Do not use repositories of Android APKs as JS catalog URLs; these remain incompatible.
