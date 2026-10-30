@@ -8,6 +8,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var hasNextPage = false
     private var loading = false
     private var currentQuery: String?
+    private var coverDiagnostic: WebtoonsCoverDiagnostic?
 
     private lazy var sourceSearchController: UISearchController = {
         let controller = UISearchController(searchResultsController: nil)
@@ -42,6 +43,15 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         definesPresentationContext = true
         applyTheme()
 
+        if sourceRecord.manifest.id == "kei.webtoons.en" {
+            navigationItem.rightBarButtonItem = UIBarButtonItem(
+                title: "Testar capas",
+                style: .plain,
+                target: self,
+                action: #selector(diagnoseCoverTapped)
+            )
+        }
+
         refreshControl = UIRefreshControl()
         refreshControl?.addTarget(
             self,
@@ -50,6 +60,50 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         )
 
         loadRuntime()
+    }
+
+    @objc private func diagnoseCoverTapped() {
+        guard sourceRecord.manifest.id == "kei.webtoons.en",
+              coverDiagnostic == nil else { return }
+        guard let runtime = runtime, let first = items.first else {
+            showMessage(
+                title: "Diagnóstico de capas",
+                message: "Abra Populares e carregue pelo menos uma obra antes do teste."
+            )
+            return
+        }
+
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        navigationItem.prompt = "Testando uma capa da lista e dos detalhes…"
+
+        let diagnostic = WebtoonsCoverDiagnostic(
+            summary: first,
+            runtime: runtime,
+            allowedDomains: sourceRecord.manifest.domains
+        )
+        coverDiagnostic = diagnostic
+        diagnostic.run { [weak self] report in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.coverDiagnostic = nil
+                self.navigationItem.rightBarButtonItem?.isEnabled = true
+                self.navigationItem.prompt = nil
+
+                let alert = UIAlertController(
+                    title: "Diagnóstico de capas",
+                    message: report,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(
+                    title: "Copiar relatório",
+                    style: .default
+                ) { _ in
+                    UIPasteboard.general.string = report
+                })
+                alert.addAction(UIAlertAction(title: "Fechar", style: .cancel))
+                self.present(alert, animated: true)
+            }
+        }
     }
 
     @objc private func refreshPulled() {
@@ -251,6 +305,134 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+}
+
+// An explicitly initiated, bounded cover probe. It performs at most one
+// normal GET for a popular-list thumbnail, one regular source details call,
+// and one normal GET for that work's details cover. No automated retries,
+// cross-host exceptions, certificate overrides or background monitoring.
+//
+// URLs may contain tokens or reveal the manga title. The copied report
+// includes only the host and safe format metadata, never URL path/query,
+// authentication headers, HTML, cookies or response body.
+private final class WebtoonsCoverDiagnostic {
+    private let summary: SourceMangaSummary
+    private let runtime: JavaScriptSourceRuntime
+    private let domains: [String]
+    private var client: HTTPClient?
+    private var lines: [String] = []
+    private var finishCallback: ((String) -> Void)?
+
+    init(
+        summary: SourceMangaSummary,
+        runtime: JavaScriptSourceRuntime,
+        allowedDomains: [String]
+    ) {
+        self.summary = summary
+        self.runtime = runtime
+        self.domains = allowedDomains
+    }
+
+    func run(_ completion: @escaping (String) -> Void) {
+        finishCallback = completion
+        lines = [
+            "iOS: " + UIDevice.current.systemVersion,
+            "App: " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"),
+            "Fonte: Webtoons.com EN",
+            "Amostra: primeira obra da lista (sem título no relatório)",
+            "HTTPS padrão; sem login, bypass ou exceções de certificado",
+            "Domínios permitidos: " + domains.joined(separator: ", ")
+        ]
+        probe("Capa da lista", url: summary.cover) { [weak self] rateLimited in
+            guard let self = self else { return }
+            if rateLimited {
+                self.lines.append("Detalhes: não testados após HTTP 429")
+                self.finish()
+                return
+            }
+            self.runtime.callDecoded(
+                "details",
+                arguments: [self.summary.id],
+                as: Manga.self
+            ) { [weak self] result in
+                guard let self = self else { return }
+                switch result {
+                case .success(let manga):
+                    self.probe("Capa dos detalhes", url: manga.cover) { [weak self] _ in
+                        self?.finish()
+                    }
+                case .failure(let error):
+                    self.lines.append("Obtenção dos detalhes: " + error.localizedDescription)
+                    self.finish()
+                }
+            }
+        }
+    }
+
+    private func probe(
+        _ label: String,
+        url: String?,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard let raw = url, !raw.isEmpty,
+              let parsed = URL(string: raw), parsed.scheme?.lowercased() == "https",
+              let host = parsed.host else {
+            lines.append(label + ": URL HTTPS ausente ou inválida")
+            completion(false)
+            return
+        }
+
+        lines.append(label + " URL: host=" + host.lowercased() +
+            ", extensão=" + (parsed.pathExtension.isEmpty ? "(nenhuma)" : parsed.pathExtension.lowercased()) +
+            ", query=" + (parsed.query == nil ? "não" : "sim"))
+
+        let policy = HTTPPolicy(
+            allowedDomains: domains,
+            timeout: 15,
+            maxRedirects: 3,
+            maxResponseBytes: 5 * 1024 * 1024
+        )
+        guard policy.isURLAllowed(parsed) else {
+            lines.append(label + ": host fora dos domínios autorizados")
+            completion(false)
+            return
+        }
+
+        let currentClient = HTTPClient(policy: policy)
+        client = currentClient // Retain URLSession until asynchronous completion.
+        currentClient.send(HTTPRequest(url: raw)) { [weak self] outcome in
+            guard let self = self else { return }
+            self.client = nil
+            switch outcome {
+            case .failure(let error):
+                self.lines.append(label + ": " + error.localizedDescription)
+                completion(false)
+            case .success(let response):
+                let contentType = response.headers.first {
+                    $0.key.lowercased() == "content-type"
+                }?.value ?? "(ausente)"
+                let mime = contentType.components(separatedBy: ";").first ?? contentType
+                let decoded = UIImage(data: response.data) != nil
+                let finalHost = URL(string: response.finalURL)?.host ?? "(desconhecido)"
+                self.lines.append(
+                    label + ": HTTP " + String(response.statusCode) +
+                    ", tipo=" + String(mime.prefix(64)) +
+                    ", bytes=" + String(response.data.count) +
+                    ", UIImage=" + (decoded ? "SIM" : "NÃO") +
+                    ", host final=" + finalHost
+                )
+                completion(response.statusCode == 429)
+            }
+        }
+    }
+
+    private func finish() {
+        client = nil
+        let text = lines.joined(separator: "\n")
+        let callback = finishCallback
+        finishCallback = nil
+        callback?(text)
     }
 }
 
