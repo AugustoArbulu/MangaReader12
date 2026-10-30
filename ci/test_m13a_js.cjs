@@ -4,8 +4,28 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const vm = require('node:vm');
 const path = require('node:path');
+
+// Every installed script must exactly match the SHA-256 pinned in the
+// published catalog. Catch mismatches before an on-device update is offered.
+function verifyPinnedCatalog() {
+  const catalog=JSON.parse(fs.readFileSync(
+    path.join(__dirname,'../fixtures/keiyoushi-selected-repository.json'),'utf8'));
+  const sources=catalog.sources || [];
+  assert.equal(sources.length,3,'Pilot catalog still has three sources');
+  for(const source of sources) {
+    const expected=source.script.split('/').pop();
+    const bytes=fs.readFileSync(path.join(__dirname,'../fixtures',expected));
+    const actual=crypto.createHash('sha256').update(bytes).digest('hex');
+    assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
+    if(source.id==='kei.webtoons.en') {
+      assert.equal(source.version,'0.1.1');
+    }
+  }
+  console.log('PASS Keiyoushi catalog script SHA-256 integrity');
+}
 
 function node(text='', attrs={}, fields={}) { return {text,attrs,fields}; }
 function enc(o) { return JSON.stringify(o).replace(/"/g,'&quot;'); }
@@ -162,5 +182,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});
