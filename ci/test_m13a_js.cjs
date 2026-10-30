@@ -129,6 +129,28 @@ async function testWebtoons() {
   assert.equal(chapters[0].number,1);
   const pages=await r.call('pages',chapters[0].id);
   assert.equal(pages.length,1);
+  // Regression: rankings may render an inert data: placeholder in src and
+  // provide the real thumbnail URL in a deferred source attribute.
+  const lazy=runtime('keiyoushi-webtoons-en.js',{
+    http() {return 'LIST';},
+    dom(html,specs) {
+      assert(specs.items);
+      return {items:[
+        node('',{href:root},{title:node('Lazy thumbnail'),
+          cover:node('',{src:'data:image/gif;base64,AA==',
+            'data-src':'https://webtoon-phinf.pstatic.net/real-cover.jpg'})}),
+        node('',{href:'https://www.webtoons.com/en/original/another/list?title_no=43'},
+          {title:node('Srcset thumbnail'),
+          cover:node('',{src:'data:image/svg+xml;base64,AA==',
+            srcset:'https://webtoon-phinf.pstatic.net/cover-1.jpg 1x, https://webtoon-phinf.pstatic.net/cover-2.jpg 2x'})})
+      ],next:[]};
+    }
+  });
+  const lazyResult=await lazy.call('popular',1);
+  assert.equal(lazyResult.items.length,2);
+  assert.equal(lazyResult.items[0].cover,'https://webtoon-phinf.pstatic.net/real-cover.jpg');
+  assert.equal(lazyResult.items[1].cover,'https://webtoon-phinf.pstatic.net/cover-1.jpg');
+  console.log('PASS Webtoons EN: lazy data-src/srcset cover URL extraction');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
 }
 async function testSecurity() {
