@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.1.0-build23-m10c-recover-downloads — 2026-10-30
+
+- Physical feedback for build 22: user confirmed the opt-in slow Demo download test worked on their iOS 12 device; the earlier timing blocker is closed. The complete multi-chapter priority/resume/relaunch matrix remains a focused QA checkpoint rather than assumed entirely accepted.
+- Download queue now persists a per-chapter recovery plan in Application Support, including the original source manifest, page list and queue priority. Plans are protected by iOS file protection when supported.
+- When the app relaunches, validated plans reconstruct unfinished jobs; already written contiguous nonempty page files are reused, and only remaining pages are requested.
+- Queued/in-progress jobs resume in the foreground when the manager initializes. Intentionally paused jobs stay paused until the user selects Retomar.
+- Priority promotions are saved to the plan, so queued ordering survives relaunch.
+- Missing/corrupt/older plans remain retryable via the existing source resolver; no falsely completed records or intentional deletion of partial images.
+- Completed/failed jobs release the recovery plan (including any sensitive page headers) without deleting existing chapter images.
+- Recovery is not a guarantee of background downloading and does not bypass source authentication, domains, expired URLs or platform execution limits.
+- No SQLite schema migration; iOS 12.0 target, UIKit and Swift 5 remain unchanged.
+- Bundle version 23; physical acceptance pending.
+
 ## 0.1.0-build22-m10b-demo-download-qa — 2026-10-30
 
 - Physical testing blocker: bundled Demo chapters download in approximately 0.1 seconds, making manual pause/resume/priority QA impractical.

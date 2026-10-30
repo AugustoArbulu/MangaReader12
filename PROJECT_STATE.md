@@ -303,3 +303,29 @@ Physical build-15 feedback:
 - No artificial image data; image bytes and offline verification still come from existing source URL and hardened HTTPClient.
 - Physical test: turn on Teste 8s in Downloads, open Demo manga and download a chapter, navigate back to Downloads and pause. Verify stable progress during pause, resume and eventual offline completion; optional two queued/priority test. Disable the switch after QA.
 - Test mode is not an app performance setting and does not change the downloading implementation outside fixtures.
+
+
+## Build 22 — physical feedback / timed Demo QA (2026-10-30)
+
+- User reported "funcionou" after installing Build 22 and using the deterministic Demo speed-control workflow.
+- This confirms the timed test path works on-device and removes the original 0.1s manual-test blocker.
+- The user did not separately detail every pause, reorder and multiple-download scenario; do not infer a full regression matrix PASS.
+
+## Build 23 — M10C restart-safe foreground download recovery (physical gate pending)
+
+- Writes a private Codable _download-plan.json alongside each queued chapter's page files, with original source manifest, page URLs/headers and saved queue priority. Applies file protection to this sensitive app-sandbox data where available.
+- DefaultManager restores valid plans on first creation after launch, checks source/manga/chapter identities, stored directory path and number of pages.
+- Restores nextIndex from a verified contiguous prefix of nonempty page-%05d.bin files. A partially downloaded current page is fetched afresh; completed pages are reused.
+- Database recovery transitions interrupted queued/active jobs into ordered foreground work and leaves manually paused jobs paused.
+- Persists priority promotions across restarts; invalid plans remain retryable and do not destroy existing pages.
+- Cleans recovery plan when job succeeds/fails, preserving offline image files. No SQLite migrations.
+- iOS 12.0, UIKit/AppDelegate, Swift 5, Xcode 15.4, source-allowed domain policy and no anti-bot bypass remain in force.
+- **Limitations:** no guarantee of transfer while backgrounded/terminated. Some sources may expire image URLs or authentication headers; an expired restored job may fail and should be retried to fetch fresh source data.
+
+### Build 23 focused physical gate
+1. In Downloads switch on Teste 8s and begin a Demo chapter download.
+2. Let at least one page finish; force-close the app while the next page is pending (not just return to home).
+3. Reopen Downloads. It should resume the remaining pages without resetting the downloaded prefix. Allow offline completion.
+4. Start another chapter, pause it, force-close and reopen: it must remain Pausado until you explicitly select Retomar.
+5. Queue multiple chapters, Priorizar one, force-close and reopen: priority should remain.
+6. Return Teste 8s to OFF; verify existing offline chapters and reader controls still work.

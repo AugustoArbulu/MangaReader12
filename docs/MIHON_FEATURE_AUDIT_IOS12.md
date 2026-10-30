@@ -61,7 +61,7 @@ Official references reviewed:
 | Volume-key navigation | iOS-limited | No clean public equivalent to Android volume-key page navigation |
 | Reader page actions (share/save/copy/set cover) | Planned | UIKit share sheet + Photos/Files where permitted |
 | Downloads | Implemented | Sequential chapter pages, source policy preserved |
-| Download queue screen | M10B build 21 (physical gate pending) | Foreground sequential queue, in-session pause/resume, priority promotion; restart-safe jobs future |
+| Download queue screen | M10C build 23 (device gate pending) | Foreground serialized queue, pause/resume, persistent restart-safe recovery plans and priority; true background URLSession download future |
 | Reindex downloads | Implemented in build 11 | Reconciles DB records with missing local paths |
 | Storage usage | Implemented in build 11 | Database/download/cache byte totals |
 | Clear caches | Implemented in build 11 | Reader + cover caches |
