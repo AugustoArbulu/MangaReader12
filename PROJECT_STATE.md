@@ -490,3 +490,12 @@ Source API remains blocked on device. This distinguishes peer TLS protocol negot
 - If covers still missing, gather actual cover host and HTTP status (may require a focused in-app diagnostic). Do not blindly add unverified third-party CDN domains or bypass trust.
 - HotComics remains blocked by HTTP 403 and not physically accepted. No repeated reattempts.
 - MangaDex still paused; selected nine Keiyoushi adaptations remain the next engineering milestone.
+
+
+## M13-A source-only Webtoons cover hotfix 0.1.1 (2026-10-30)
+
+User's Build30 physical report: Manhwa18.net covers NOW display. Webtoons.com EN covers are missing only on the source listing; opening a work shows the cover. Webtoons chapter images still display, per previous QA. This separates global native cover HTTPClient lifetime failure (resolved for Manhwa18.net) from Webtoons list thumbnail extraction. HotComics HTTP403 persists and no bypass is approved.
+
+The Webtoons list JS adapter v0.1.0 only read the first card img src, whereas details use og:image. Some list layouts may use a data image placeholder in src and store the HTTPS thumbnail in data-src or srcset. Source v0.1.1 selects supported native HTTPS URL variants and ignores placeholders. This is a hypothesis-guided source-only fix, not physically verified yet. The allowlist remains webtoons.com / pstatic.net and the script/catalog SHA-256 are pinned and checked in CI.
+
+Do not build an IPA for this source-only change. After PR merge and CI, user should refresh the selected Keiyoushi source repository and apply the offered Webtoons update. Manhwa18.net source unchanged. If Webtoons thumbnails still fail, obtain a safe per-source cover URL/status diagnostic rather than broadening hosts or making N background manga-detail requests. Continue M13 selected ports. MangaDex remains paused.

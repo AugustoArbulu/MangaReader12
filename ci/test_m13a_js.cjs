@@ -4,8 +4,28 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const vm = require('node:vm');
 const path = require('node:path');
+
+// Every installed script must exactly match the SHA-256 pinned in the
+// published catalog. Catch mismatches before an on-device update is offered.
+function verifyPinnedCatalog() {
+  const catalog=JSON.parse(fs.readFileSync(
+    path.join(__dirname,'../fixtures/keiyoushi-selected-repository.json'),'utf8'));
+  const sources=catalog.sources || [];
+  assert.equal(sources.length,3,'Pilot catalog still has three sources');
+  for(const source of sources) {
+    const expected=source.script.split('/').pop();
+    const bytes=fs.readFileSync(path.join(__dirname,'../fixtures',expected));
+    const actual=crypto.createHash('sha256').update(bytes).digest('hex');
+    assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
+    if(source.id==='kei.webtoons.en') {
+      assert.equal(source.version,'0.1.1');
+    }
+  }
+  console.log('PASS Keiyoushi catalog script SHA-256 integrity');
+}
 
 function node(text='', attrs={}, fields={}) { return {text,attrs,fields}; }
 function enc(o) { return JSON.stringify(o).replace(/"/g,'&quot;'); }
@@ -129,6 +149,28 @@ async function testWebtoons() {
   assert.equal(chapters[0].number,1);
   const pages=await r.call('pages',chapters[0].id);
   assert.equal(pages.length,1);
+  // Regression: rankings may render an inert data: placeholder in src and
+  // provide the real thumbnail URL in a deferred source attribute.
+  const lazy=runtime('keiyoushi-webtoons-en.js',{
+    http() {return 'LIST';},
+    dom(html,specs) {
+      assert(specs.items);
+      return {items:[
+        node('',{href:root},{title:node('Lazy thumbnail'),
+          cover:node('',{src:'data:image/gif;base64,AA==',
+            'data-src':'https://webtoon-phinf.pstatic.net/real-cover.jpg'})}),
+        node('',{href:'https://www.webtoons.com/en/original/another/list?title_no=43'},
+          {title:node('Srcset thumbnail'),
+          cover:node('',{src:'data:image/svg+xml;base64,AA==',
+            srcset:'https://webtoon-phinf.pstatic.net/cover-1.jpg 1x, https://webtoon-phinf.pstatic.net/cover-2.jpg 2x'})})
+      ],next:[]};
+    }
+  });
+  const lazyResult=await lazy.call('popular',1);
+  assert.equal(lazyResult.items.length,2);
+  assert.equal(lazyResult.items[0].cover,'https://webtoon-phinf.pstatic.net/real-cover.jpg');
+  assert.equal(lazyResult.items[1].cover,'https://webtoon-phinf.pstatic.net/cover-1.jpg');
+  console.log('PASS Webtoons EN: lazy data-src/srcset cover URL extraction');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
 }
 async function testSecurity() {
@@ -140,5 +182,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});

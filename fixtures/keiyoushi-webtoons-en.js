@@ -47,7 +47,37 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.0';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.1';
+  // The episode/series page uses og:image, but list cards can use lazy image
+  // attributes and an inert data: placeholder in src. Prefer source-provided
+  // actual HTTPS image URLs rather than trying to download the placeholder.
+  function listCover(image) {
+    var choices=[
+      H.attr(image,'data-src'),
+      H.attr(image,'data-original'),
+      H.attr(image,'data-lazy-src'),
+      H.attr(image,'data-url')
+    ];
+    function appendSrcSet(value) {
+      if(!value)return;
+      // HTML srcset is a comma-delimited list of URLs + width/density.
+      var entries=value.split(',');
+      for(var i=0;i<entries.length;i++){
+        var token=entries[i].trim().split(/\s+/)[0];
+        if(token) choices.push(token);
+      }
+    }
+    appendSrcSet(H.attr(image,'data-srcset'));
+    appendSrcSet(H.attr(image,'srcset'));
+    choices.push(H.attr(image,'src'));
+    for(var k=0;k<choices.length;k++){
+      var u=H.cleanURL(base,choices[k]);
+      if(u && /^https:\/\/(?:[a-z0-9-]+\.)*(?:webtoons\.com|pstatic\.net)(?:[/:?#]|$)/i.test(u)){
+        return u;
+      }
+    }
+    return null;
+  }
   function listing(path,hasNext,done){
     H.get(base+path,function(resp){
       if(resp.__sourceError){done(resp);return;}
@@ -57,7 +87,7 @@ var H = (function () {
         if(res.__sourceError){done(res);return;}
         var seen={},entries=H.items(res,'items').map(function(x){
           var u=H.cleanURL(base,H.attr(x,'href')),title=H.text(H.field(x,'title'));
-          var cover=H.field(x,'cover'),img=H.cleanURL(base,H.attr(cover,'src'));
+          var cover=H.field(x,'cover'),img=listCover(cover);
           if(!u||!title||seen[u])return null; seen[u]=true;
           return {id:u,title:title,cover:img,url:u};
         }).filter(Boolean);

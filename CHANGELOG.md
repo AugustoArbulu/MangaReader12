@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## Source-only hotfix: Webtoons.com EN 0.1.1 (M13-A) — 2026-10-30
+
+- Build30 physical feedback: Manhwa18.net series covers appear after shared HTTPClient lifetime repair, and chapter images already worked. Webtoons.com EN series covers still absent in the list but appear within manga details; the cover loader works for a different thumbnail URL from the same source.
+- Webtoons EN JS list thumbnail extraction now prefers validated HTTPS image URLs in lazy-loaded data-src, data-original, data-lazy-src, data-url, data-srcset and srcset attributes over a placeholder src. Uses only the already reviewed webtoons.com and pstatic.net hosts; never downloads data URI placeholders.
+- Source manifest updated to v0.1.1 and SHA-256 changed to match new source script, without changing the source ID, iOS bundle/build number or app code.
+- Added offline regression cases for lazy thumbnails and srcset and a catalog SHA-256 verification step to CI. No domain wildcard expansion, altered certificate trust or extra HTML/HTTP requests per listed entry.
+- Real iOS12 list cover rendering is pending one source update and device check. An unsuccessful retry should be diagnosed by the cover host/status, not a claim of a proven fix. No new IPA required; Build30 remains the app build.
+- HotComics still returns HTTP403, no bypass attempted; the remaining 6 selected sources remain in M13 plans. MangaDex stays paused.
+
 ## 0.1.0-build30-m13a-cover-network-lifetime — 2026-10-30
 
 - First real device results from Build29 on iOS 12.5.8: Webtoons.com EN and Manhwa18.net both load source browsing and show chapter images when reading, but series cover thumbnails fail to appear. HotComics returns HTTP 403; its availability is not accepted and no bypass has been attempted.
