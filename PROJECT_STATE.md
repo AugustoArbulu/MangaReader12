@@ -473,3 +473,20 @@ Source API remains blocked on device. This distinguishes peer TLS protocol negot
 - Caveats: no official affiliation to Keiyoushi or hosted sites; CDN image domains can differ and be blocked; Webtoons motion toon unsupported, English only; HotComics chapter links may require permitted login; Manhwa18.net payload markup/selector may change. Do not bypass.
 - Remaining six user-selected source ports (Vortex Scans, ToonGod, Manhwa18.cc, Asura Scans, MadaraDex, Comix) remain planned/unimplemented. Shared engine groupings in docs/M13_SELECTED_KEIYOUSHI_SOURCE_PORTS.md.
 - Do not release Build29 as physically accepted before device test.
+
+
+## M13-A Build29 user physical QA feedback (2026-10-30, iOS 12.5.8)
+
+- Webtoons.com EN: source loads and chapter content images display on the real device. Series thumbnails/covers absent. Search/details/chapters were not independently detailed by the user; do not claim all functions accepted.
+- Manhwa18.net: same: browsing and reading chapter images work, series thumbnails/covers absent.
+- HotComics: HTTP 403 on access. This is a server response, not evidence of a JS parser or TLS bug; do not bypass access protection.
+- Important: chapter image pipeline has separate lifetime from CoverImageLoader. Native cover loader creates temporary HTTPClient, whose deinit invalidates the URLSession, cancelling image loads. This is a code-verified defect affecting all thumbnails.
+
+## Build30 native cover loader fix (physical QA pending)
+
+- Retain each HTTPClient in a CoverImageLoader in-flight dictionary protected by NSLock until network callback, then remove. Existing cache remains; source allowed host policy checked before cache as well as before requests.
+- No new JS scripts or catalog hash changes. Install Build30 over Build29 via Sideloadly; installed source and library data remain intact.
+- Device test: open Webtoons.com and Manhwa18.net lists and details, confirm covers after a short normal load, then open an existing chapter to check reading regression. Check Library cover if present.
+- If covers still missing, gather actual cover host and HTTP status (may require a focused in-app diagnostic). Do not blindly add unverified third-party CDN domains or bypass trust.
+- HotComics remains blocked by HTTP 403 and not physically accepted. No repeated reattempts.
+- MangaDex still paused; selected nine Keiyoushi adaptations remain the next engineering milestone.
