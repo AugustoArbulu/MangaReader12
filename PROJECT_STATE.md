@@ -287,3 +287,19 @@ Physical build-15 feedback:
 5. Try swiping while a chapter downloads: it must not offer unsafe removal.
 6. Optional: force-close app with queued/paused state; reopen, confirm interrupted rows become retryable and "Retomar" on an old paused record restarts via source.
 7. Confirm no regressions to reader scale, backup, source icons and on-device 11/11 diagnostics.
+
+
+## Build 21 physical gate blocker (2026-10-30)
+
+- User cannot practically test the queue: bundled Demo source downloads in approximately **0.1 seconds**.
+- This **does not constitute failure or acceptance** of queue/pause/resume; device QA is blocked by an unrealistic fixture duration.
+- Do not request pause/priority tests on unrestricted instant Demo again.
+
+## Build 22 — opt-in Demo download slow-test mode (physical gate pending)
+
+- Downloads top-right "Teste 8s: OFF / ON" switch is stored in UserDefaults and defaults to OFF.
+- When ON, only fixture.localdemo/fixture.altdemo waits 8 seconds **asynchronously** before each page starts; real sources always download at normal speed.
+- Pending delayed work checks active job, paused state, page index and serial before issuing HTTP; pause/resume is safe even during a simulated delay.
+- No artificial image data; image bytes and offline verification still come from existing source URL and hardened HTTPClient.
+- Physical test: turn on Teste 8s in Downloads, open Demo manga and download a chapter, navigate back to Downloads and pause. Verify stable progress during pause, resume and eventual offline completion; optional two queued/priority test. Disable the switch after QA.
+- Test mode is not an app performance setting and does not change the downloading implementation outside fixtures.

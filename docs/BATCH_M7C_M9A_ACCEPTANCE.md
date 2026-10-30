@@ -195,3 +195,15 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Active job cannot be removed mid-write.
 - [ ] After app restart, stale running/queued jobs become retryable; paused resume falls back to fresh URLs.
 - [ ] No regression to scale comparison, iOS 12 diagnostics, Library and backup.
+
+
+## Build 21 physical testability blocker / Build 22 focused QA
+
+- [x] User reports Demo chapter downloads finish in ~0.1s; manual Pause/Resume is not possible in this time.
+- [ ] Build 21 queue feature still requires physical acceptance (0.1s completion proves only completion).
+- [ ] Build 22 Downloads → "Teste 8s: ON" slows **only** fixture.localdemo/fixture.altdemo.
+- [ ] After enabling, start Demo download and confirm 8s window allows Pausar from Downloads.
+- [ ] Retomar completes and offline pages remain readable.
+- [ ] With multiple chapters, verify queued state and Priorizar without timing race.
+- [ ] Turn "Teste 8s: OFF" again; confirm Demo downloads restore normal speed.
+- [ ] Real sources and existing Backup/Reader behavior unaffected.

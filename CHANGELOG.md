@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.0-build22-m10b-demo-download-qa — 2026-10-30
+
+- Physical testing blocker: bundled Demo chapters download in approximately 0.1 seconds, making manual pause/resume/priority QA impractical.
+- Downloads now offers "Teste 8s: OFF/ON" (OFF by default). When enabled, only the two bundled fixtures (fixture.localdemo and fixture.altdemo) wait eight seconds asynchronously before each page HTTP request.
+- No delay for real sources; source manifest allowed-domain policy, real download byte validation and offline file handling stay intact.
+- The delay is cancellable by existing pause state: a pending delayed request checks job identity, generation serial, active state and chapter index before it may start.
+- Enable the switch before downloading from the Demo, switch back to Downloads to pause/resume. Turn it OFF when test is finished.
+- Build 21 full queue functionality remains pending physical acceptance; build 22 only adds deterministic QA affordance.
+- Bundle version 22, iOS 12.0 minimum unchanged.
+
 ## 0.1.0-build21-m10b-foreground-queue — 2026-10-30
 
 - Physically accepted Build 20: user confirmed everything tested is functioning on iOS 12.
