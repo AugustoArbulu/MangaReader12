@@ -207,3 +207,18 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] With multiple chapters, verify queued state and Priorizar without timing race.
 - [ ] Turn "Teste 8s: OFF" again; confirm Demo downloads restore normal speed.
 - [ ] Real sources and existing Backup/Reader behavior unaffected.
+
+
+## Build 22 physical feedback (2026-10-30)
+
+- [x] The user confirmed the controlled slow Demo test works on a physical iOS 12 device.
+- [x] The original 0.1s Demo-download limitation no longer blocks manual testing.
+- [ ] Individual multi-chapter queue/priority/relaunch cases were not independently detailed.
+
+## Build 23 restart recovery (focused QA pending)
+
+- [ ] Begin Teste 8s chapter download, let one page finish, force-close; reopen and complete using existing page files.
+- [ ] Paused chapter remains paused after relaunch and only resumes when selected.
+- [ ] Queued priority survives force-close/reopen.
+- [ ] Interrupted or expired source URLs fail safely and permit retry.
+- [ ] No regression to offline chapter reading, backup and reader scale.

@@ -26,6 +26,18 @@ enum ChapterDownloadError: Error, LocalizedError {
     }
 }
 
+// Private metadata saved next to each chapter's page files. The entire
+// operation stays within the app's Application Support sandbox.
+private struct DownloadRecoveryPlan: Codable {
+    let schemaVersion: Int
+    let sourceID: String
+    let manga: Manga
+    let chapter: Chapter
+    let pages: [Page]
+    let manifest: SourceManifest
+    let queueOrder: Int
+}
+
 // A job keeps the HTTP client alive while the queue is active. An interrupted
 // page is cancelled at the URLSessionTask level and retried on resume;
 // previously atomically written pages remain untouched.
@@ -37,6 +49,8 @@ private final class ChapterDownloadJob {
     let pages: [Page]
     let directory: URL
     let client: HTTPClient
+    let manifest: SourceManifest
+    var queueOrder: Int
     let progress: (Double) -> Void
     let completion: (Result<[Page], Error>) -> Void
     var nextIndex = 0
@@ -52,6 +66,7 @@ private final class ChapterDownloadJob {
         pages: [Page],
         directory: URL,
         manifest: SourceManifest,
+        queueOrder: Int,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
@@ -61,6 +76,8 @@ private final class ChapterDownloadJob {
         self.chapter = chapter
         self.pages = pages
         self.directory = directory
+        self.manifest = manifest
+        self.queueOrder = queueOrder
         self.client = HTTPClient(policy: HTTPPolicy(
             allowedDomains: manifest.domains,
             timeout: 30,
@@ -91,6 +108,7 @@ final class ChapterDownloadManager {
     private var jobs: [String: ChapterDownloadJob] = [:]
     private var pending: [String] = []
     private var runningKey: String?
+    private var nextQueueOrder = 0
 
     init(
         fileManager: FileManager = .default,
@@ -106,12 +124,112 @@ final class ChapterDownloadManager {
 
         if let instance = sharedManager { return instance }
         let repository = try DownloadRepository.defaultRepository()
-        // A prior process cannot own a live URLSession task anymore. Mark
-        // interrupted queued/running jobs as retryable, never as "Offline".
-        try repository.markInterruptedDownloads()
         let instance = ChapterDownloadManager(repository: repository)
+        try instance.restorePreviousSession()
         sharedManager = instance
         return instance
+    }
+
+    private func planURL(for directory: URL) -> URL {
+        return directory.appendingPathComponent("_download-plan.json")
+    }
+
+    private func savePlan(for job: ChapterDownloadJob) throws {
+        let plan = DownloadRecoveryPlan(
+            schemaVersion: 1, sourceID: job.sourceID,
+            manga: job.manga, chapter: job.chapter, pages: job.pages,
+            manifest: job.manifest, queueOrder: job.queueOrder
+        )
+        let data = try JSONEncoder().encode(plan)
+        let url = planURL(for: job.directory)
+        try data.write(to: url, options: .atomic)
+        // This file can contain authentication headers; keep device file
+        // protection, while allowing the queue to restore after first unlock.
+        try? fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func completedPagePrefix(in directory: URL, count: Int) -> Int {
+        var index = 0
+        while index < count {
+            let path = directory.appendingPathComponent(
+                String(format: "page-%05d.bin", index)
+            ).path
+            guard let attributes = try? fileManager.attributesOfItem(atPath: path),
+                  let size = attributes[.size] as? NSNumber,
+                  size.intValue > 0 else { break }
+            index += 1
+        }
+        return index
+    }
+
+    private func restorePreviousSession() throws {
+        let records = try repository.listDownloads()
+        // No URLSessionDataTask survives a process restart. Rebuild only
+        // validated plans, leaving missing/corrupted plans retryable.
+        try repository.markInterruptedDownloads()
+        var restoredQueue: [ChapterDownloadJob] = []
+        for record in records where
+            record.state == "queued" ||
+            record.state == "downloading" ||
+            record.state == "paused" {
+            do {
+                let expected = try chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                guard record.localPath == expected.path else { continue }
+                let data = try Data(contentsOf: planURL(for: expected))
+                let plan = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: data)
+                guard plan.schemaVersion == 1,
+                      plan.sourceID == record.sourceID,
+                      plan.manifest.id == record.sourceID,
+                      plan.manga.id == record.sourceMangaID,
+                      plan.chapter.id == record.sourceChapterID,
+                      !plan.pages.isEmpty,
+                      plan.pages.count <= 5000 else { continue }
+                let key = jobKey(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                guard jobs[key] == nil else { continue }
+                let job = ChapterDownloadJob(
+                    key: key, sourceID: plan.sourceID,
+                    manga: plan.manga, chapter: plan.chapter,
+                    pages: plan.pages, directory: expected,
+                    manifest: plan.manifest, queueOrder: plan.queueOrder,
+                    progress: { _ in }, completion: { _ in }
+                )
+                job.nextIndex = completedPagePrefix(
+                    in: expected, count: plan.pages.count
+                )
+                job.state = record.state == "paused" ? "paused" : "queued"
+                try repository.setState(
+                    sourceID: job.sourceID, manga: job.manga,
+                    chapter: job.chapter, state: job.state,
+                    progress: job.fraction, localPath: job.directory.path
+                )
+                jobs[key] = job
+                nextQueueOrder = max(nextQueueOrder, plan.queueOrder + 1)
+                if job.state == "queued" { restoredQueue.append(job) }
+            } catch {
+                // Keep any already downloaded page files for inspection;
+                // the database row can be retried via source resolution.
+                continue
+            }
+        }
+        restoredQueue.sort {
+            if $0.queueOrder == $1.queueOrder {
+                return $0.key < $1.key
+            }
+            return $0.queueOrder < $1.queueOrder
+        }
+        pending = restoredQueue.map { $0.key }
+        startNextIfNeeded()
     }
 
     private func jobKey(sourceID: String, mangaID: String, chapterID: String) -> String {
@@ -157,15 +275,18 @@ final class ChapterDownloadManager {
                 try self.fileManager.createDirectory(
                     at: directory, withIntermediateDirectories: true, attributes: nil
                 )
+                let job = ChapterDownloadJob(
+                    key: key, sourceID: sourceID, manga: manga,
+                    chapter: chapter, pages: pages, directory: directory,
+                    manifest: manifest, queueOrder: self.nextQueueOrder,
+                    progress: progress, completion: completion
+                )
+                try self.savePlan(for: job)
                 try self.repository.setState(
                     sourceID: sourceID, manga: manga, chapter: chapter,
                     state: "queued", progress: 0, localPath: directory.path
                 )
-                let job = ChapterDownloadJob(
-                    key: key, sourceID: sourceID, manga: manga,
-                    chapter: chapter, pages: pages, directory: directory,
-                    manifest: manifest, progress: progress, completion: completion
-                )
+                self.nextQueueOrder += 1
                 self.jobs[key] = job
                 self.pending.append(key)
                 DispatchQueue.main.async { progress(0) }
@@ -196,6 +317,7 @@ final class ChapterDownloadManager {
             pending.removeAll { $0 == key }
             if runningKey == key {
                 runningKey = nil
+                job.requestSerial += 1
                 job.task?.cancel()
                 job.task = nil
             }
@@ -231,6 +353,15 @@ final class ChapterDownloadManager {
             guard let job = jobs[key], job.state == "queued",
                   let position = pending.firstIndex(of: key),
                   position > 0 else { return false }
+            let previousOrder = job.queueOrder
+            let firstOrder = pending.compactMap { jobs[$0]?.queueOrder }.min() ?? 0
+            job.queueOrder = firstOrder - 1
+            do {
+                try savePlan(for: job)
+            } catch {
+                job.queueOrder = previousOrder
+                return false
+            }
             pending.remove(at: position)
             pending.insert(key, at: 0)
             return true
@@ -373,6 +504,9 @@ final class ChapterDownloadManager {
         result: Result<[Page], Error>
     ) {
         job.task = nil
+        // Retire stale URLs/headers from the resumable plan on completion
+        // or failure. Never remove the actual offline page files here.
+        try? fileManager.removeItem(at: planURL(for: job.directory))
         jobs.removeValue(forKey: job.key)
         pending.removeAll { $0 == job.key }
         if runningKey == job.key { runningKey = nil }
