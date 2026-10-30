@@ -1871,6 +1871,24 @@ final class DownloadRepository {
         return DownloadRepository(database: database)
     }
 
+    // Queued/running NSURLSession work from a previous app process cannot
+    // still be active after relaunch. Convert those records to retryable
+    // failures once per shared manager initialization. Completed downloads,
+    // saved pages and intentionally paused records are untouched.
+    func markInterruptedDownloads() throws {
+        try database.openAndMigrate()
+        try database.withConnection { handle in
+            try executeSQLite(
+                """
+                UPDATE downloads
+                SET state = 'failed', updated_at = strftime('%s','now')
+                WHERE state IN ('queued', 'downloading');
+                """,
+                handle: handle
+            )
+        }
+    }
+
     func setState(
         sourceID: String,
         manga: Manga,

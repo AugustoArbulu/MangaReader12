@@ -177,3 +177,21 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Retry uses original source and chapter, and downloads become usable offline.
 - [ ] A currently downloading row cannot be removed mid-write.
 - [ ] No regression to reader gestures, backups, source icons, iOS 12 diagnostics.
+
+
+## Build 20 physical acceptance (2026-10-30)
+
+- [x] User reports **all tested build-20 features working** on physical iOS 12.
+- [x] The build-20 physical gate for progress refresh/retry accepted as reported.
+- [x] The build-19 reader-scale gesture bug remains resolved.
+
+## Build 21 M10B foreground queue — pending device QA
+
+- [ ] Two downloads are serialized (one running, one queued).
+- [ ] Pause active and queued downloads using swipe; state/progress remain correct.
+- [ ] Resume during the same app session keeps completed page files.
+- [ ] Prioritize queued job and observe order change.
+- [ ] Completed chapter opens offline.
+- [ ] Active job cannot be removed mid-write.
+- [ ] After app restart, stale running/queued jobs become retryable; paused resume falls back to fresh URLs.
+- [ ] No regression to scale comparison, iOS 12 diagnostics, Library and backup.
