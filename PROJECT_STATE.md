@@ -407,3 +407,22 @@ Physical build-15 feedback:
 5. Try opening an English chapter. If the image delivery domain is rejected or MangaDex rate-limits, retain the exact error and do not retry repeatedly.
 6. Optionally verify offline download of an accessible chapter and the existing Demo source.
 7. Do not use repositories of Android APKs as JS catalog URLs; these remain incompatible.
+
+
+## Build 26 real MangaDex pilot — physical failure (2026-10-30)
+
+- User installed experimental MangaDex source and received: Source failed: network transport error -1200: An SSL error has occurred and a secure connection to the server cannot be made, when tapping Abrir source.
+- First popular call targets https://api.mangadex.org. An SSL/TLS failure occurred before an HTTP response was decoded. Exact failing host and underlying SSL code are still unconfirmed on the device.
+- MangaDex source is NOT physically accepted. Do not conflate the error with a 403, 429 or chapter parsing failure.
+- -1200 alone cannot determine whether the cause is certificate trust, protocol/cipher incompatibility, route/interception, device clock or URLSession-specific behavior.
+- Apple documents TLS 1.3 enabled by default in URLSession starting iOS 12.2; minor OS version not yet confirmed.
+- Never disable certificate verification or global ATS to hide the error.
+
+## Build 27 — safe differential TLS diagnostics (physical gate pending)
+
+- Explore -> installed MangaDex -> Informações e dados da fonte -> Diagnosticar HTTPS do MangaDex.
+- Read-only tests compare API /ping via the production HTTPClient and URLSession.shared, then MangaDex site, GitHub raw fixture and example.com controls. Shows iOS version and sanitized error codes.
+- Copiar relatório copies a diagnostic report with no secret request headers or cookies.
+- Safari can independently test https://api.mangadex.org/ping and report whether it displays pong or a certificate/secure connection warning.
+- No source script or repository catalog updates, no insecure TLS bypass and no changes to supported iOS 12 baseline.
+- Build 27 is diagnostic only; needs device results before a targeted fix.

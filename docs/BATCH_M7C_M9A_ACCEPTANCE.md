@@ -257,3 +257,18 @@ record earlier checkpoints and should not be mistaken for new build-16 failures.
 - [ ] Runtime metadata diagnostic completes.
 - [ ] Source JS storage reset requires confirmation and does not affect Library, downloads, history, reader settings.
 - [ ] Existing reader scales, offline downloads and iOS 12 diagnostics work.
+
+
+## Build 26 MangaDex physical test (2026-10-30)
+
+- [x] Extension installed and reached a live network request.
+- [x] On-device SSL transport error -1200 reported on Abrir source.
+- [ ] Live MangaDex searching, chapter reading, downloading not yet accepted.
+
+## Build 27 TLS diagnostic test
+
+- [ ] Safari result from https://api.mangadex.org/ping recorded.
+- [ ] App probe compares MangaDex via HTTPClient and URLSession.shared.
+- [ ] GitHub and example.com HTTPS controls help distinguish host-only and all-host failures.
+- [ ] Underlying TLS/CFNetwork error plus iOS minor version copied.
+- [ ] Source remains installed, no trust exception or altered TLS policy.
