@@ -114,7 +114,7 @@ var H = (function () {
           if(res.__sourceError){done(res);return;}
           done(H.items(res,'pages').map(function(node){
             return H.cleanURL(base,H.attr(node,'src')||H.attr(node,'data-src')||H.attr(node,'data-lazy-src'));
-          }).filter(Boolean).map(function(u,i){return {index:i,imageUrl:u,headers:{Referer:base+'/'}; }));
+          }).filter(Boolean).map(function(u,i){return {index:i,imageUrl:u,headers:{Referer:base+'/'}}; }));
         });
       });
     }
