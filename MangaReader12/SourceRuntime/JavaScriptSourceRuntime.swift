@@ -179,6 +179,10 @@ private final class NativeBridge: NSObject, NativeBridgeExports {
     }
 }
 
+private final class SourcePendingCall {
+    var finished = false
+}
+
 final class JavaScriptSourceRuntime {
     private let manifest: SourceManifest
     private let queue: DispatchQueue
@@ -251,13 +255,61 @@ final class JavaScriptSourceRuntime {
         completion: @escaping (Result<T, Error>) -> Void
     ) {
         queue.async {
-            do {
-                let value = try self.invokeUnlocked(functionName, arguments: arguments)
-                let decoded = try self.decodeUnlocked(type, from: value)
-                completion(.success(decoded))
-            } catch {
-                completion(.failure(error))
+            // Existing demo sources return a value synchronously. Real HTTP
+            // sources can instead accept one additional callback argument and
+            // return undefined. All callbacks and the timeout are finalized
+            // on the private serial JS queue, never on the UI thread.
+            let pending = SourcePendingCall()
+            let finish: (Result<T, Error>) -> Void = { result in
+                guard !pending.finished else { return }
+                pending.finished = true
+                completion(result)
             }
+
+            let callbackBlock: @convention(block) (JSValue) -> Void = { [weak self] response in
+                guard let self = self else { return }
+                self.queue.async {
+                    guard !pending.finished else { return }
+                    do {
+                        try self.raiseSourceFailureIfNeeded(response)
+                        finish(.success(try self.decodeUnlocked(type, from: response)))
+                    } catch {
+                        finish(.failure(error))
+                    }
+                }
+            }
+
+            do {
+                guard let context = self.context,
+                      let callback = JSValue(object: callbackBlock, in: context) else {
+                    throw SourceRuntimeError.invalidDiagnosticResult
+                }
+                let result = try self.invokeUnlocked(
+                    functionName,
+                    arguments: arguments + [callback],
+                    allowAsync: true
+                )
+                if let result = result, !result.isUndefined, !result.isNull {
+                    try self.raiseSourceFailureIfNeeded(result)
+                    finish(.success(try self.decodeUnlocked(type, from: result)))
+                } else {
+                    self.queue.asyncAfter(deadline: .now() + 25) {
+                        guard !pending.finished else { return }
+                        finish(.failure(SourceRuntimeError.sourceTimeout(functionName)))
+                    }
+                }
+            } catch {
+                finish(.failure(error))
+            }
+        }
+    }
+
+    private func raiseSourceFailureIfNeeded(_ response: JSValue) throws {
+        let reason = response.objectForKeyedSubscript("__sourceError")
+        if let reason = reason, !reason.isNull, !reason.isUndefined {
+            throw SourceRuntimeError.remoteError(
+                reason.toString() ?? "Falha na fonte."
+            )
         }
     }
 
@@ -358,7 +410,11 @@ final class JavaScriptSourceRuntime {
         return source
     }
 
-    private func invokeUnlocked(_ functionName: String, arguments: [Any]) throws -> JSValue? {
+    private func invokeUnlocked(
+        _ functionName: String,
+        arguments: [Any],
+        allowAsync: Bool = false
+    ) throws -> JSValue? {
         self.lastException = nil
         let source = try sourceObjectUnlocked(validatingContract: false)
 
@@ -374,11 +430,12 @@ final class JavaScriptSourceRuntime {
             throw SourceRuntimeError.javaScriptException(message)
         }
 
-        guard let result = value, !result.isUndefined, !result.isNull else {
+        if value == nil || value?.isUndefined == true || value?.isNull == true {
+            if allowAsync { return nil }
             throw SourceRuntimeError.invalidFunctionResult(functionName)
         }
 
-        return result
+        return value
     }
 
     private func decodeUnlocked<T: Decodable>(_ type: T.Type, from value: JSValue?) throws -> T {
@@ -487,6 +544,8 @@ enum SourceRuntimeError: Error, LocalizedError {
     case nonJSONResult
     case decodeFailed(String)
     case invalidDiagnosticResult
+    case remoteError(String)
+    case sourceTimeout(String)
 
     var errorDescription: String? {
         switch self {
@@ -504,6 +563,10 @@ enum SourceRuntimeError: Error, LocalizedError {
             return "Could not decode source result: \(message)"
         case .invalidDiagnosticResult:
             return "JavaScriptCore source contract diagnostic returned an invalid result."
+        case .remoteError(let reason):
+            return "Source failed: \(reason)"
+        case .sourceTimeout(let method):
+            return "Source timed out while calling \(method)."
         }
     }
 }
