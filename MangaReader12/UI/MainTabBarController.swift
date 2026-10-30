@@ -1,4 +1,6 @@
 import UIKit
+import WebKit
+import Network
 
 final class MainTabBarController: UITabBarController {
     override func viewDidLoad() {
@@ -1064,6 +1066,8 @@ private final class MangaDexHTTPSDiagnostics {
         )
     )
     private var results: [String] = []
+    private weak var presentationView: UIView?
+    private var alternateProbe: MangaDexAlternateTLSProbe?
 
     func run(completion: @escaping (String) -> Void) {
         results = [
@@ -1071,6 +1075,7 @@ private final class MangaDexHTTPSDiagnostics {
             "Certificados: validação padrão do iOS (sem exceções)",
             "Teste somente leitura; sem dados de conta."
         ]
+        presentationView = UIApplication.shared.keyWindow?.rootViewController?.view
         testSourceClient(completion: completion)
     }
 
@@ -1105,7 +1110,13 @@ private final class MangaDexHTTPSDiagnostics {
             ("HTTPS de controle", "https://example.com/")
         ]
         guard index < destinations.count else {
-            completion(results.joined(separator: "\n"))
+            let alternate = MangaDexAlternateTLSProbe()
+            alternateProbe = alternate
+            alternate.run(on: presentationView) { [self] findings in
+                self.results.append(contentsOf: findings)
+                self.alternateProbe = nil
+                completion(self.results.joined(separator: "\n"))
+            }
             return
         }
         let entry = destinations[index]
@@ -1144,6 +1155,152 @@ private final class MangaDexHTTPSDiagnostics {
             detail += " [TLS \(ssl)]"
         }
         return detail
+    }
+}
+
+// Alternate TLS stacks tested only after normal URLSession fails. WebKit
+// uses an ephemeral WKWebView and iOS' default certificate verification.
+// Network.framework uses NWParameters(tls:) with system trust and no custom
+// verify block. Neither approach overrides ATS or bypasses server checks.
+private final class MangaDexAlternateTLSProbe: NSObject, WKNavigationDelegate {
+    private var results: [String] = []
+    private var webView: WKWebView?
+    private var networkConnection: NWConnection?
+    private var callback: (([String]) -> Void)?
+    private var webFinished = false
+    private var networkFinished = false
+
+    func run(on hostView: UIView?, completion: @escaping ([String]) -> Void) {
+        callback = completion
+        guard let hostView = hostView else {
+            results.append("WebKit: sem tela disponível")
+            startNetwork()
+            return
+        }
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        let browser = WKWebView(
+            frame: CGRect(x: 0, y: 0, width: 1, height: 1),
+            configuration: config
+        )
+        // Keep the ephemeral WebView attached to a real view to ensure that
+        // the iOS 12 WebContent process can start loading.
+        browser.alpha = 0.01
+        browser.isUserInteractionEnabled = false
+        browser.navigationDelegate = self
+        hostView.addSubview(browser)
+        webView = browser
+        if let url = URL(string: "https://api.mangadex.org/ping") {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 12
+            browser.load(request)
+        } else {
+            finishWebKit("URL inválida")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
+            self?.finishWebKit("tempo esgotado")
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFinish navigation: WKNavigation!
+    ) {
+        webView.evaluateJavaScript("document.body ? document.body.innerText : ''") {
+            [weak self] content, error in
+            if let error = error {
+                self?.finishWebKit("HTTPS OK, leitura do corpo falhou: \((error as NSError).code)")
+            } else {
+                let value = (content as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                self?.finishWebKit(
+                    "HTTPS OK" + (value.isEmpty ? "" : " • " + String(value.prefix(50)))
+                )
+            }
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        finishWebKit("falhou " + describe(error))
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        finishWebKit("falhou " + describe(error))
+    }
+
+    private func finishWebKit(_ result: String) {
+        guard !webFinished else { return }
+        webFinished = true
+        results.append("API via WKWebView: " + result)
+        webView?.navigationDelegate = nil
+        webView?.stopLoading()
+        webView?.removeFromSuperview()
+        webView = nil
+        startNetwork()
+    }
+
+    private func startNetwork() {
+        let options = NWProtocolTLS.Options()
+        // No verify override: Network.framework performs standard
+        // hostname + certificate trust validation for this TLS hostname.
+        let parameters = NWParameters(
+            tls: options,
+            tcp: NWProtocolTCP.Options()
+        )
+        let endpoint = NWEndpoint.Port(rawValue: 443)!
+        let connection = NWConnection(
+            host: NWEndpoint.Host("api.mangadex.org"),
+            port: endpoint,
+            using: parameters
+        )
+        networkConnection = connection
+        let queue = DispatchQueue(label: "mangareader12.mangadex.tls-probe")
+        connection.stateUpdateHandler = { [weak self] state in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch state {
+                case .ready:
+                    self.finishNetwork("TLS conectado, confiança padrão OK")
+                case .failed(let error):
+                    self.finishNetwork("falhou: " + String(describing: error))
+                default:
+                    break
+                }
+            }
+        }
+        connection.start(queue: queue)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
+            self?.finishNetwork("tempo esgotado")
+        }
+    }
+
+    private func finishNetwork(_ result: String) {
+        guard !networkFinished else { return }
+        networkFinished = true
+        results.append("API via Network.framework: " + result)
+        networkConnection?.stateUpdateHandler = nil
+        networkConnection?.cancel()
+        networkConnection = nil
+        let onComplete = callback
+        callback = nil
+        onComplete?(results)
+    }
+
+    private func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError
+        let code = underlying?.userInfo["_kCFStreamErrorCodeKey"]
+            ?? ns.userInfo["_kCFStreamErrorCodeKey"]
+        return "\(ns.domain) \(ns.code)" +
+            (code.map { " [TLS \($0)]" } ?? "")
     }
 }
 
