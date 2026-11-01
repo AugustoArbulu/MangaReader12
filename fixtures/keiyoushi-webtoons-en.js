@@ -47,7 +47,53 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.3';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.4';
+  // Capture only sanitized attributes of the listing response already parsed.
+  // This contains neither full URLs nor titles and performs zero extra GETs.
+  var coverTrace = {};
+  var traceOrder = [];
+  function kindOf(value) {
+    if(!value)return 'empty';
+    if(/^data:/i.test(value))return 'data';
+    if(/^http:\/\//i.test(value))return 'http';
+    if(/^https:\/\//i.test(value)) {
+      if(/^https:\/\/(?:[a-z0-9-]+\.)*pstatic\.net(?:[\/?#]|$)/i.test(value))return 'pstatic-https';
+      if(/^https:\/\/(?:[a-z0-9-]+\.)*webtoons\.com(?:[\/?#]|$)/i.test(value))return 'webtoons-https';
+      return 'other-https';
+    }
+    if(/^\/\//.test(value))return 'protocol-relative';
+    if(/^\//.test(value))return 'root-relative';
+    if(/background/i.test(value))return 'css';
+    return 'other';
+  }
+  function rememberTrace(id, card, coverPresent) {
+    var names=['cover','coverLazy','coverSrcset','coverHost','coverPicture','coverData','coverStyle'];
+    var fields=[], attrNames=[], kinds=[], seen={};
+    function inspect(node, origin) {
+      if(!node)return;
+      fields.push(origin);
+      var attrs=node.attrs || {};
+      Object.keys(attrs).sort().forEach(function(name){
+        // Structural metadata only; never record any attribute value.
+        if(!/^(?:src|srcset|style|data-[a-z0-9-]{1,48})$/i.test(name))return;
+        var marker=origin+'.'+name;
+        if(seen[marker])return;seen[marker]=true;
+        if(attrNames.length>=24)return;
+        attrNames.push(marker);
+        kinds.push(marker+'='+kindOf(attrs[name]));
+      });
+    }
+    inspect(card,'card');
+    for(var i=0;i<names.length;i++)inspect(H.field(card,names[i]),names[i]);
+    if(!Object.prototype.hasOwnProperty.call(coverTrace,id)){
+      traceOrder.push(id);
+      if(traceOrder.length>200)delete coverTrace[traceOrder.shift()];
+    }
+    coverTrace[id]={
+      matched:true,coverFound:!!coverPresent,fields:fields.slice(0,12),
+      attributes:attrNames,kinds:kinds
+    };
+  }
   // The listing's webtoon-phinf host returned 403 on physical iOS 12.5.8.
   // The official alternate image host swebtoon-phinf served the details image
   // with normal HTTPS. Try that exact host for listing covers, preserving the
@@ -130,6 +176,7 @@ var H = (function () {
           var u=H.cleanURL(base,H.attr(x,'href')),title=H.text(H.field(x,'title'));
           var img=listCardCover(x);
           if(!u||!title||seen[u])return null; seen[u]=true;
+          rememberTrace(u,x,!!img);
           return {id:u,title:title,cover:img,url:u};
         }).filter(Boolean);
         done({items:entries,hasNextPage:hasNext===null?H.items(res,'next').length>0:hasNext});
@@ -142,6 +189,13 @@ var H = (function () {
     H.get(u,done);
   }
   var source={
+    // Optional diagnostic method invoked only after the user explicitly
+    // swipes a selected manga row. No fresh website request.
+    inspectCover:function(mangaId) {
+      return coverTrace[mangaId] || {
+        matched:false,coverFound:false,fields:[],attributes:[],kinds:[]
+      };
+    },
     metadata:function(){return {id:id,name:'Webtoons.com EN (experimental)',lang:'en',version:version};},
     popular:function(page,done){
       var ranks=['trending','popular','originals','canvas'];
