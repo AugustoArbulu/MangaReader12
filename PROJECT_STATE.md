@@ -593,3 +593,11 @@ Source 0.1.3 candidate extracts additional same-card image attributes and elemen
 - MangaDetailsViewController accessed via Library hydrates the same completedOfflineSnapshot before asynchronous source refresh. Only suppresses the expected -1009 remote error if a usable offline snapshot is present; other errors remain visible. LibraryRepository.add metadata update after refresh now requires **both** remote details and chapters success, preventing a failed offline refresh from replacing saved data with a partial list.
 - Static offline route regression in ci/test_m13a_js.cjs checks local-only Downloads open, completed/source/manga query guards, and Library fallback gate, in addition to Swift iOS12 Debug/Release compilation. This structural test does not simulate physical disconnected device.
 - Retain working Build34/35 during validation. Build36 requires a new unsigned IPA because changes are native; Webtoons source remains 0.1.7. Test airplane mode starting from Downloads tab and from Library after a fresh app launch; confirm at least three images, progress and adjacent downloaded chapter navigation; then return online and verify chapter numbers and metadata. Do not delete or re-download existing chapters as a prerequisite.
+
+## Handoff do roadmap de produto — 2026-11-01 (documentação somente)
+
+- Documento canônico para retomada futura: **docs/HANDOFF_ROADMAP_MANGAREADER12_2026-11-01.md** (371 linhas).
+- Explicita baseline físico **Build36 + Webtoons EN 0.1.7**, correção offline -1009, limites do aceite e inexistência de medições de stress/RAM.
+- Consolidou R0–R8: estabilidade; UI Populares/Recentes/filtros; fontes Keiyoushi e monitoramento supervisionado; leitor; Biblioteca; downloads; CBZ/ZIP; hardening; extras.
+- Confirma adapters JS próprios, não APKs Keiyoushi; catálogo atualiza fontes, mas não incorpora automaticamente commits Kotlin upstream. Não atribuir disponibilidade a filtros/Recentes sem comprovação por fonte.
+- Regras de continuidade: branch → PR → CI verde → squash merge main, nenhum código alterado neste handoff, nenhum novo IPA. Próximo ponto sugerido após autorização do usuário: **R1-A** (capabilities opcionais preservando contrato v1).
