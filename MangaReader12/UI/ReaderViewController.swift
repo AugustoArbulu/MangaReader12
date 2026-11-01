@@ -22,11 +22,29 @@ enum ReaderError: Error, LocalizedError {
     }
 }
 
+// iOS 12 reader image pipeline. File IO, image construction, and the
+// scheduling state live on one utility queue; completion always arrives on
+// the main queue. Identical requests share one bounded network transfer.
 final class ReaderImageLoader {
+    private struct PendingPage {
+        let key: String
+        let page: Page
+    }
+
+    private typealias ImageCompletion = (Result<UIImage, Error>) -> Void
     private let client: HTTPClient
     private let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager: FileManager
     private let diskCacheDirectory: URL?
+    private let workQueue = DispatchQueue(
+        label: "com.mangareader12.reader-image-cache", qos: .userInitiated
+    )
+    private let maxConcurrentTransfers = 3
+    private var activeTransfers = 0
+    private var pending: [PendingPage] = []
+    private var waiting: [String: [ImageCompletion]] = [:]
+    private var diskWritesSinceTrim = 0
+    private var memoryWarningObserver: NSObjectProtocol?
 
     init(
         manifest: SourceManifest,
@@ -42,25 +60,45 @@ final class ReaderImageLoader {
             )
         )
 
-        memoryCache.countLimit = 18
+        // Count-only caching allows 18 tall webtoon strips to exhaust RAM.
+        // NSCache uses the estimated decoded pixel footprint (not JPEG bytes).
+        memoryCache.countLimit = 8
+        memoryCache.totalCostLimit = 48 * 1024 * 1024
 
         if let base = fileManager.urls(
-            for: .cachesDirectory,
-            in: .userDomainMask
+            for: .cachesDirectory, in: .userDomainMask
         ).first {
             let directory = base
                 .appendingPathComponent("MangaReader12", isDirectory: true)
                 .appendingPathComponent("ReaderImageCache", isDirectory: true)
-
             try? fileManager.createDirectory(
                 at: directory,
                 withIntermediateDirectories: true,
                 attributes: nil
             )
             diskCacheDirectory = directory
-            trimDiskCache(maxFiles: 160)
         } else {
             diskCacheDirectory = nil
+        }
+
+        // No directory enumeration or image decoding on the UIKit path.
+        workQueue.async { [weak self] in
+            self?.trimDiskCache(maxFiles: 160, maxBytes: 192 * 1024 * 1024)
+        }
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.workQueue.async { [weak self] in
+                self?.memoryCache.removeAllObjects()
+            }
+        }
+    }
+
+    deinit {
+        if let token = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(token)
         }
     }
 
@@ -68,67 +106,8 @@ final class ReaderImageLoader {
         page: Page,
         completion: @escaping (Result<UIImage, Error>) -> Void
     ) {
-        let key = page.imageUrl as NSString
-
-        if let cached = memoryCache.object(forKey: key) {
-            completion(.success(cached))
-            return
-        }
-
-        if let url = URL(string: page.imageUrl), url.isFileURL {
-            do {
-                let data = try Data(contentsOf: url)
-                guard let image = UIImage(data: data) else {
-                    completion(.failure(ReaderError.invalidImage))
-                    return
-                }
-
-                memoryCache.setObject(image, forKey: key)
-                completion(.success(image))
-            } catch {
-                completion(.failure(error))
-            }
-            return
-        }
-
-        if let diskURL = cacheFileURL(for: page.imageUrl),
-           let data = try? Data(contentsOf: diskURL),
-           let image = UIImage(data: data) {
-            memoryCache.setObject(image, forKey: key)
-            completion(.success(image))
-            return
-        }
-
-        client.send(
-            HTTPRequest(
-                method: "GET",
-                url: page.imageUrl,
-                headers: page.headers
-            )
-        ) { [weak self] result in
-            switch result {
-            case .success(let response):
-                guard (200..<300).contains(response.statusCode) else {
-                    completion(.failure(ReaderError.httpStatus(response.statusCode)))
-                    return
-                }
-
-                guard let image = UIImage(data: response.data) else {
-                    completion(.failure(ReaderError.invalidImage))
-                    return
-                }
-
-                self?.memoryCache.setObject(image, forKey: key)
-
-                if let diskURL = self?.cacheFileURL(for: page.imageUrl) {
-                    try? response.data.write(to: diskURL, options: .atomic)
-                }
-
-                completion(.success(image))
-
-            case .failure(let error):
-                completion(.failure(error))
-            }
+        workQueue.async { [weak self] in
+            self?.loadOnWorker(page: page, completion: completion)
         }
     }
 
@@ -136,43 +115,187 @@ final class ReaderImageLoader {
         load(page: page) { _ in }
     }
 
-    private func cacheFileURL(for value: String) -> URL? {
-        guard let directory = diskCacheDirectory else { return nil }
-        return directory.appendingPathComponent(stableKey(value) + ".bin")
-    }
-
-    private func stableKey(_ value: String) -> String {
-        var hash: UInt64 = 1469598103934665603
-        for byte in value.utf8 {
-            hash ^= UInt64(byte)
-            hash = hash &* 1099511628211
+    // Only called on workQueue. The existing HTTPS/domain policy is applied
+    // even for disk hits. Local downloaded pages remain usable offline.
+    private func loadOnWorker(page: Page, completion: @escaping ImageCompletion) {
+        let fileURL = URL(string: page.imageUrl)
+        let isLocalFile = fileURL?.isFileURL == true
+        if !isLocalFile {
+            do {
+                _ = try client.policy.validatedURL(page.imageUrl)
+            } catch {
+                deliver(.failure(error), to: [completion])
+                return
+            }
         }
-        return String(format: "%016llx", hash)
-    }
 
-    private func trimDiskCache(maxFiles: Int) {
-        guard let directory = diskCacheDirectory,
-              let files = try? fileManager.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-              ),
-              files.count > maxFiles else {
+        // Source domain scope and request headers are part of this digest:
+        // another source/Referer cannot reuse cached content for the same URL.
+        // Raw auth headers and URLs are never stored as cache filenames.
+        let key = cacheKey(for: page)
+        if let image = memoryCache.object(forKey: key as NSString) {
+            deliver(.success(image), to: [completion])
             return
         }
 
-        let sorted = files.sorted { lhs, rhs in
-            let leftDate = (try? lhs.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate) ?? .distantPast
-            let rightDate = (try? rhs.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate) ?? .distantPast
-            return leftDate < rightDate
+        if waiting[key] != nil {
+            waiting[key]?.append(completion)
+            return
         }
 
-        for file in sorted.prefix(max(0, files.count - maxFiles)) {
-            try? fileManager.removeItem(at: file)
+        if isLocalFile, let url = fileURL {
+            do {
+                let data = try Data(contentsOf: url)
+                guard let image = UIImage(data: data) else {
+                    deliver(.failure(ReaderError.invalidImage), to: [completion])
+                    return
+                }
+                remember(image, for: key)
+                deliver(.success(image), to: [completion])
+            } catch {
+                deliver(.failure(error), to: [completion])
+            }
+            return
+        }
+
+        if let diskURL = cacheFileURL(for: key),
+           let data = try? Data(contentsOf: diskURL) {
+            if let image = UIImage(data: data) {
+                remember(image, for: key)
+                deliver(.success(image), to: [completion])
+                return
+            }
+            // Corrupt cached files must not repeatedly block a valid fetch.
+            try? fileManager.removeItem(at: diskURL)
+        }
+
+        waiting[key] = [completion]
+        pending.append(PendingPage(key: key, page: page))
+        startPendingTransfers()
+    }
+
+    // No overlapping transfer for the same cache key and at most 3 total.
+    private func startPendingTransfers() {
+        while activeTransfers < maxConcurrentTransfers && !pending.isEmpty {
+            let request = pending.removeFirst()
+            activeTransfers += 1
+            client.send(
+                HTTPRequest(
+                    method: "GET",
+                    url: request.page.imageUrl,
+                    headers: request.page.headers
+                )
+            ) { [weak self] result in
+                self?.workQueue.async { [weak self] in
+                    self?.finish(request, result: result)
+                }
+            }
+        }
+    }
+
+    private func finish(
+        _ request: PendingPage,
+        result: Result<HTTPResponse, Error>
+    ) {
+        activeTransfers = max(0, activeTransfers - 1)
+        let output: Result<UIImage, Error>
+        switch result {
+        case .success(let response):
+            if !(200..<300).contains(response.statusCode) {
+                output = .failure(ReaderError.httpStatus(response.statusCode))
+            } else if let image = UIImage(data: response.data) {
+                remember(image, for: request.key)
+                if let diskURL = cacheFileURL(for: request.key) {
+                    do {
+                        try response.data.write(to: diskURL, options: .atomic)
+                        diskWritesSinceTrim += 1
+                        if diskWritesSinceTrim >= 8 {
+                            diskWritesSinceTrim = 0
+                            trimDiskCache(
+                                maxFiles: 160,
+                                maxBytes: 192 * 1024 * 1024
+                            )
+                        }
+                    } catch {
+                        // Cache failures must not break live online reading.
+                    }
+                }
+                output = .success(image)
+            } else {
+                output = .failure(ReaderError.invalidImage)
+            }
+        case .failure(let error):
+            output = .failure(error)
+        }
+
+        if let completions = waiting.removeValue(forKey: request.key) {
+            deliver(output, to: completions)
+        }
+        startPendingTransfers()
+    }
+
+    private func remember(_ image: UIImage, for key: String) {
+        // Even a small compressed JPEG may expand to tens of MB of pixels.
+        let width = max(1, min(32_000, Int(image.size.width * image.scale)))
+        let height = max(1, min(32_000, Int(image.size.height * image.scale)))
+        memoryCache.setObject(
+            image, forKey: key as NSString, cost: width * height * 4
+        )
+    }
+
+    private func deliver(
+        _ result: Result<UIImage, Error>,
+        to completions: [ImageCompletion]
+    ) {
+        DispatchQueue.main.async {
+            completions.forEach { $0(result) }
+        }
+    }
+
+    private func cacheKey(for page: Page) -> String {
+        let scope = client.policy.allowedDomains.sorted().joined(separator: ",")
+        let headers = page.headers.keys.sorted().map {
+            $0.lowercased() + ":" + (page.headers[$0] ?? "")
+        }.joined(separator: "\u{0}")
+        let input = page.imageUrl + "\u{0}" + scope + "\u{0}" + headers
+        return SHA256Digest.hex(Data(input.utf8))
+    }
+
+    private func cacheFileURL(for key: String) -> URL? {
+        guard let directory = diskCacheDirectory else { return nil }
+        return directory.appendingPathComponent(key + ".bin")
+    }
+
+    // Bounded by disk bytes AND count. Run at startup and periodically after
+    // successful writes, always on workQueue and never on the main thread.
+    private func trimDiskCache(maxFiles: Int, maxBytes: Int) {
+        guard let directory = diskCacheDirectory,
+              let files = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [
+                    .contentModificationDateKey, .fileSizeKey, .isRegularFileKey
+                ],
+                options: [.skipsHiddenFiles]
+              ) else { return }
+
+        let entries: [(url: URL, size: Int, date: Date)] = files.compactMap { url in
+            guard let values = try? url.resourceValues(
+                forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+            ), values.isRegularFile == true else { return nil }
+            return (url, max(0, values.fileSize ?? 0),
+                values.contentModificationDate ?? .distantPast)
+        }
+        var totalBytes = entries.reduce(0) { $0 + $1.size }
+        var totalFiles = entries.count
+        for entry in entries.sorted(by: { $0.date < $1.date }) {
+            guard totalFiles > maxFiles || totalBytes > maxBytes else { break }
+            do {
+                try fileManager.removeItem(at: entry.url)
+                totalFiles -= 1
+                totalBytes -= entry.size
+            } catch {
+                // Failure to trim disk cache must not block the reader.
+            }
         }
     }
 }
