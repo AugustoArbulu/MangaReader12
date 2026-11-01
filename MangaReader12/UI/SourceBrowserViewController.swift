@@ -363,12 +363,13 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 // URLs may contain tokens or reveal the manga title. The copied report
 // includes only the host and safe format metadata, never URL path/query,
 // authentication headers, HTML, cookies or response body.
-private struct WebtoonsCoverTrace: Decodable {
+private struct WebtoonsDetailsCoverTrace: Decodable {
     let matched: Bool
-    let coverFound: Bool
-    let fields: [String]
-    let attributes: [String]
-    let kinds: [String]
+    let metaPresent: Bool
+    let contentPresent: Bool
+    let contentClass: String
+    let resolvedFound: Bool
+    let resolvedClass: String
 }
 
 private final class WebtoonsCoverDiagnostic {
@@ -405,31 +406,50 @@ private final class WebtoonsCoverDiagnostic {
             "Domínios permitidos: " + domains.joined(separator: ", ")
         ]
         if inspectSource, let selected = summaries.first {
-            runtime.callDecoded(
-                "inspectCover",
-                arguments: [selected.id],
-                as: WebtoonsCoverTrace.self
-            ) { [weak self] outcome in
-                guard let self = self else { return }
-                switch outcome {
-                case .success(let trace):
-                    self.lines.append("Registro da ficha: " +
-                        (trace.matched ? "SIM" : "NÃO"))
-                    self.lines.append("URL reconhecida pelo adaptador: " +
-                        (trace.coverFound ? "SIM" : "NÃO"))
-                    self.lines.append("Elementos encontrados: " +
-                        (trace.fields.isEmpty ? "(nenhum)" : trace.fields.joined(separator: ", ")))
-                    self.lines.append("Atributos presentes: " +
-                        (trace.attributes.isEmpty ? "(nenhum)" : trace.attributes.joined(separator: ", ")))
-                    self.lines.append("Tipos de valores: " +
-                        (trace.kinds.isEmpty ? "(nenhum)" : trace.kinds.joined(separator: ", ")))
-                case .failure:
-                    self.lines.append("Inspeção de atributos indisponível. Atualize Webtoons EN para 0.1.4.")
+            // Prefer metadata carried by the exact decoded row. The v0.1.4
+            // legacy lookup by manga ID can refer to another ranking entry.
+            if let snapshot = selected.coverDiagnostic {
+                lines.append("Origem do diagnóstico: ficha selecionada (snapshot)")
+                appendObservation(snapshot)
+                runImageProbes()
+            } else {
+                lines.append("Origem do diagnóstico: consulta por ID (legado; pode divergir)")
+                runtime.callDecoded(
+                    "inspectCover",
+                    arguments: [selected.id],
+                    as: SourceCoverObservation.self
+                ) { [weak self] outcome in
+                    guard let self = self else { return }
+                    switch outcome {
+                    case .success(let trace):
+                        self.appendObservation(trace)
+                    case .failure:
+                        self.lines.append("Metadados indisponíveis. Atualize Webtoons EN para 0.1.5.")
+                    }
+                    self.runImageProbes()
                 }
-                self.runImageProbes()
             }
         } else {
             runImageProbes()
+        }
+    }
+
+    private func appendObservation(_ trace: SourceCoverObservation) {
+        lines.append("Registro da ficha: " + (trace.matched ? "SIM" : "NÃO"))
+        lines.append("URL reconhecida pelo adaptador: " + (trace.coverFound ? "SIM" : "NÃO"))
+        lines.append("URL de saída JS: " + (trace.outputClass ?? "(indisponível)") +
+            ", caracteres=" + (trace.outputLength.map { String($0) } ?? "?"))
+        lines.append("Elementos encontrados: " +
+            (trace.fields.isEmpty ? "(nenhum)" : trace.fields.joined(separator: ", ")))
+        lines.append("Atributos presentes: " +
+            (trace.attributes.isEmpty ? "(nenhum)" : trace.attributes.joined(separator: ", ")))
+        lines.append("Tipos de valores: " +
+            (trace.kinds.isEmpty ? "(nenhum)" : trace.kinds.joined(separator: ", ")))
+        if let selected = summaries.first {
+            let modelHasCover = selected.cover != nil && !(selected.cover?.isEmpty ?? true)
+            lines.append("URL recebida no modelo Swift: " + (modelHasCover ? "SIM" : "NÃO"))
+            lines.append("JS e Swift concordam na presença da URL: " +
+                (trace.coverFound == modelHasCover ? "SIM" : "NÃO"))
         }
     }
 
@@ -454,8 +474,36 @@ private final class WebtoonsCoverDiagnostic {
                 guard let self = self else { return }
                 switch result {
                 case .success(let manga):
-                    self.probe("Capa dos detalhes", url: manga.cover) { [weak self] _ in
-                        self?.finish()
+                    // Only inspect the metadata cached by the same details()
+                    // request; no second HTML GET or per-title background scan.
+                    if self.inspectSource {
+                        self.runtime.callDecoded(
+                            "inspectDetailsCover",
+                            arguments: [first.id],
+                            as: WebtoonsDetailsCoverTrace.self
+                        ) { [weak self] detailResult in
+                            guard let self = self else { return }
+                            switch detailResult {
+                            case .success(let trace):
+                                self.lines.append("og:image encontrado: " +
+                                    (trace.metaPresent ? "SIM" : "NÃO"))
+                                self.lines.append("og:image content presente: " +
+                                    (trace.contentPresent ? "SIM" : "NÃO"))
+                                self.lines.append("og:image tipo: " + trace.contentClass)
+                                self.lines.append("og:image resolvido pelo JS: " +
+                                    (trace.resolvedFound ? "SIM" : "NÃO"))
+                                self.lines.append("og:image URL de saída: " + trace.resolvedClass)
+                            case .failure:
+                                self.lines.append("Inspeção do og:image indisponível (requer fonte 0.1.5).")
+                            }
+                            self.probe("Capa dos detalhes", url: manga.cover) { [weak self] _ in
+                                self?.finish()
+                            }
+                        }
+                    } else {
+                        self.probe("Capa dos detalhes", url: manga.cover) { [weak self] _ in
+                            self?.finish()
+                        }
                     }
                 case .failure(let error):
                     self.lines.append("Obtenção dos detalhes: " + error.localizedDescription)
@@ -489,10 +537,35 @@ private final class WebtoonsCoverDiagnostic {
         url: String?,
         completion: @escaping (Bool) -> Void
     ) {
-        guard let raw = url, !raw.isEmpty,
-              let parsed = URL(string: raw), parsed.scheme?.lowercased() == "https",
-              let host = parsed.host else {
-            lines.append(label + ": URL HTTPS ausente ou inválida")
+        guard let raw = url else {
+            lines.append(label + ": URL ausente (nil no modelo Swift)")
+            completion(false)
+            return
+        }
+        guard !raw.isEmpty else {
+            lines.append(label + ": URL vazia (string no modelo Swift)")
+            completion(false)
+            return
+        }
+        // Report only structural properties; never log the source URL,
+        // including its query, path, or any embedded credentials.
+        let sizeInfo = ", caracteres=" + String(raw.count)
+        let unsafePercent = raw.range(
+            of: "%(?![0-9A-Fa-f]{2})", options: .regularExpression
+        ) != nil
+        guard let parsed = URL(string: raw) else {
+            lines.append(label + ": URL rejeitada por Foundation" + sizeInfo +
+                ", percentual inválido=" + (unsafePercent ? "SIM" : "NÃO"))
+            completion(false)
+            return
+        }
+        guard parsed.scheme?.lowercased() == "https" else {
+            lines.append(label + ": esquema diferente de HTTPS" + sizeInfo)
+            completion(false)
+            return
+        }
+        guard let host = parsed.host, !host.isEmpty else {
+            lines.append(label + ": host ausente ou inválido" + sizeInfo)
             completion(false)
             return
         }
