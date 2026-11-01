@@ -530,58 +530,92 @@ final class DownloadsViewController: UITableViewController {
     private func open(_ record: DownloadListRecord) {
         guard record.state == "completed" else { return }
 
+        // A completed download is an independent local reading entry point.
+        // Do not load the JavaScript source or refresh remote details/chapters:
+        // those requests fail with -1009 in airplane mode even though the
+        // downloaded pages are present on disk.
+        guard let manager = manager else {
+            showMessage(
+                title: "Leitura offline",
+                message: "Não foi possível abrir o gerenciador de downloads."
+            )
+            return
+        }
+
         do {
             let lifecycle = try SourceLifecycleManager.defaultManager()
-            guard let sourceRecord = try lifecycle.installedSources().first(where: {
+            guard let source = try lifecycle.installedSources().first(where: {
                 $0.manifest.id == record.sourceID
             }) else {
                 showMessage(
-                    title: "Source ausente",
-                    message: "A source usada por este download não está instalada."
+                    title: "Fonte não instalada",
+                    message: "Reinstale a fonte para abrir este download. Os arquivos locais não foram apagados."
                 )
                 return
             }
 
-            guard sourceRecord.enabled else {
+            guard let pages = try manager.localPages(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            ), !pages.isEmpty else {
                 showMessage(
-                    title: "Source desativada",
-                    message: "Ative \(sourceRecord.manifest.name) em Explorar para abrir os detalhes."
+                    title: "Arquivos indisponíveis",
+                    message: "Este capítulo está marcado como baixado, mas suas páginas não foram encontradas. Os outros downloads foram preservados."
                 )
                 return
             }
 
-            navigationItem.prompt = "Carregando source…"
-            let loader = try InstalledSourceRuntimeLoader.defaultLoader()
+            let manga = Manga(
+                id: record.sourceMangaID, title: record.mangaTitle,
+                altTitles: [], cover: record.cover,
+                author: nil, artist: nil, description: nil,
+                status: .unknown, genres: [], url: record.sourceMangaID
+            )
+            let chapter = Chapter(
+                id: record.sourceChapterID, name: record.chapterName,
+                number: nil, volume: nil, date: nil, scanlator: nil,
+                language: nil, url: record.sourceChapterID
+            )
+            // Only completed downloads for the exact same source and series
+            // can appear as adjacent chapters while reading offline.
+            let chapters = records.filter {
+                $0.sourceID == record.sourceID &&
+                $0.sourceMangaID == record.sourceMangaID &&
+                $0.state == "completed"
+            }.map {
+                Chapter(
+                    id: $0.sourceChapterID, name: $0.chapterName,
+                    number: nil, volume: nil, date: nil, scanlator: nil,
+                    language: nil, url: $0.sourceChapterID
+                )
+            }
 
-            loader.load(sourceID: record.sourceID) { [weak self] result in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    self.navigationItem.prompt = nil
-
-                    switch result {
-                    case .success(let runtime):
-                        let summary = SourceMangaSummary(
-                            id: record.sourceMangaID,
-                            title: record.mangaTitle,
-                            cover: nil,
-                            url: nil,
-                            coverDiagnostic: nil
-                        )
-
-                        self.navigationController?.pushViewController(
-                            MangaDetailsViewController(
-                                sourceRecord: sourceRecord,
-                                runtime: runtime,
-                                summary: summary
-                            ),
-                            animated: true
-                        )
-
-                    case .failure(let error):
-                        self.showError(error)
+            let reader = ReaderViewController(
+                sourceID: source.manifest.id,
+                manga: manga,
+                chapter: chapter,
+                pages: pages,
+                manifest: source.manifest,
+                chapters: chapters,
+                resolvePages: { target, completion in
+                    do {
+                        guard let local = try manager.localPages(
+                            sourceID: record.sourceID,
+                            mangaID: record.sourceMangaID,
+                            chapterID: target.id
+                        ), !local.isEmpty else {
+                            completion(.failure(ReaderError.noPages))
+                            return
+                        }
+                        completion(.success(local))
+                    } catch {
+                        completion(.failure(error))
                     }
                 }
-            }
+            )
+            reader.hidesBottomBarWhenPushed = true
+            navigationController?.pushViewController(reader, animated: true)
         } catch {
             showError(error)
         }
