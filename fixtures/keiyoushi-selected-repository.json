@@ -35,7 +35,7 @@
     {
       "id": "kei.webtoons.en",
       "name": "Webtoons.com EN (experimental)",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "lang": "en",
       "author": "Unofficial port by MangaReader12; upstream Keiyoushi (Apache-2.0)",
       "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-webtoons-en.js",
@@ -46,7 +46,7 @@
         "pstatic.net"
       ],
       "nsfw": false,
-      "sha256": "3218997e6d28d82099f5477a6458bfc23084c236c90a16314b52dd097c4e4963"
+      "sha256": "26061eb78b5303119377fb9c961474211fb6a99a8ffd66647d814c4b00e98c2b"
     }
   ]
 }
