@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.2');
+      assert.equal(source.version,'0.1.3');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -172,6 +172,42 @@ async function testWebtoons() {
   assert.equal(lazyResult.items.length,2);
   assert.equal(lazyResult.items[0].cover,'https://swebtoon-phinf.pstatic.net/real-cover.jpg?type=q90');
   assert.equal(lazyResult.items[1].cover,'https://swebtoon-phinf.pstatic.net/cover-1.jpg');
+  // Build32 physical report: adjacent list covers returned HTTP200 while a
+  // middle card had no HTTPS URL. Cover fallbacks must stay within the card.
+  const variants=runtime('keiyoushi-webtoons-en.js',{
+    http() {return 'LIST';},
+    dom(html,specs) {
+      assert(specs.items);
+      assert(specs.items.fields.coverHost && specs.items.fields.coverPicture);
+      return {items:[
+        node('',{href:root},{title:node('Second image lazy'),
+          cover:node('',{src:'data:image/gif;base64,AA=='}),
+          coverLazy:node('',{'data-src':'//webtoon-phinf.pstatic.net/second.jpg?type=q90'})}),
+        node('',{href:'https://www.webtoons.com/en/original/c/list?title_no=43'},
+          {title:node('Picture srcset'),
+          cover:node('',{src:'data:image/gif;base64,AA=='}),
+          coverPicture:node('',{srcset:'https://webtoon-phinf.pstatic.net/picture.jpg 1x'})}),
+        node('',{href:'https://www.webtoons.com/en/original/d/list?title_no=44'},
+          {title:node('CSS background'),
+          coverStyle:node('',{style:'background-image: url("https://webtoon-phinf.pstatic.net/css.jpg?type=q90")'})}),
+        node('',{href:'https://www.webtoons.com/en/original/e/list?title_no=45',
+          'data-cover':'https://webtoon-phinf.pstatic.net/anchor.jpg'},
+          {title:node('Card data cover')}),
+        node('',{href:'https://www.webtoons.com/en/original/f/list?title_no=46',
+          'data-cover':'http://webtoon-phinf.pstatic.net/unsafe.jpg'},
+          {title:node('Unsafe cover'),cover:node('',{src:'https://not-allowed.example/out.jpg'})})
+      ],next:[]};
+    }
+  });
+  const variantsResult=await variants.call('popular',1);
+  assert.equal(variantsResult.items.length,5);
+  assert.equal(variantsResult.items[0].cover,'https://swebtoon-phinf.pstatic.net/second.jpg?type=q90');
+  assert.equal(variantsResult.items[1].cover,'https://swebtoon-phinf.pstatic.net/picture.jpg');
+  assert.equal(variantsResult.items[2].cover,'https://swebtoon-phinf.pstatic.net/css.jpg?type=q90');
+  assert.equal(variantsResult.items[3].cover,'https://swebtoon-phinf.pstatic.net/anchor.jpg');
+  assert.equal(variantsResult.items[4].cover,null);
+  assert.equal(variants.calls.length,1,'cover fallback must not trigger extra HTTP requests');
+  console.log('PASS Webtoons EN: same-card lazy/picture/background fallbacks and unsafe URL rejection');
   console.log('PASS Webtoons EN: list cover URLs normalized to permitted image CDN');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
 }
