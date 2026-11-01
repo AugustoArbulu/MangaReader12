@@ -529,3 +529,9 @@ Test acceptance: user installs verified Build31 on iOS12.5.8, enters Webtoons.co
 - Build 31's Testar capas remains available for an explicitly initiated comparison if particular images still fail; retain host/status/error reports rather than repeatedly retrying server denials.
 
 - The existing explicit Webtoons "Testar capas" device tool is extended to sample up to three *visible* listing covers sequentially (user can scroll to failing rows before pressing it), report elapsed time and HTTP/error/host metadata, then compare the first sample's details cover. It never logs titles or full URLs; stops on 429, with at most four image GETs only when the user taps the button. No automated site polling.
+
+## Build 32 packaging version correction (2026-11-01)
+
+- The verified Build32 cover-pipeline commit was merged in PR #38, but the Xcode project still declared `CURRENT_PROJECT_VERSION = 31`. The corresponding PR #38 unsigned IPA is therefore **not to be labeled Build32**.
+- Update both Debug and Release project configurations to `CURRENT_PROJECT_VERSION = 32` in a separate version-only release-gate PR. No source/network behavior changes, preserve marketing version 0.1.0 and iOS 12 target.
+- Only send the user the artifact from the version-corrected green CI, not the stale version-31 artifact.
