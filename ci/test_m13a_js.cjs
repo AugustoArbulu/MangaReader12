@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.3');
+      assert.equal(source.version,'0.1.4');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -207,6 +207,18 @@ async function testWebtoons() {
   assert.equal(variantsResult.items[3].cover,'https://swebtoon-phinf.pstatic.net/anchor.jpg');
   assert.equal(variantsResult.items[4].cover,null);
   assert.equal(variants.calls.length,1,'cover fallback must not trigger extra HTTP requests');
+  const trace=await variants.call('inspectCover',
+    'https://www.webtoons.com/en/original/f/list?title_no=46');
+  assert.equal(trace.matched,true);
+  assert.equal(trace.coverFound,false);
+  assert(trace.attributes.includes('card.data-cover'));
+  assert(trace.kinds.includes('card.data-cover=http'));
+  const missing=await variants.call('inspectCover','https://www.webtoons.com/en/unknown/list?title_no=47');
+  assert.equal(missing.matched,false);
+  assert.equal(variants.calls.length,1,'diagnostic must not make extra HTTP requests');
+  const positive=await variants.call('inspectCover',root);
+  assert.equal(positive.coverFound,true);
+  assert(positive.kinds.includes('coverLazy.data-src=protocol-relative'));
   console.log('PASS Webtoons EN: same-card lazy/picture/background fallbacks and unsafe URL rejection');
   console.log('PASS Webtoons EN: list cover URLs normalized to permitted image CDN');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
