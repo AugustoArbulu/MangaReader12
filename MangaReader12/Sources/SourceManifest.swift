@@ -134,11 +134,41 @@ struct SourceMetadata: Codable, Equatable {
     let version: String
 }
 
+// Optional source-local observation captured at the same instant as a
+// specific listing row, not retrieved later by a potentially duplicate ID.
+// Values contain metadata only: no URLs, titles or raw HTML attributes.
+struct SourceCoverObservation: Codable, Equatable {
+    let matched: Bool
+    let coverFound: Bool
+    let fields: [String]
+    let attributes: [String]
+    let kinds: [String]
+    let outputClass: String?
+    let outputLength: Int?
+}
+
 struct SourceMangaSummary: Codable, Equatable {
     let id: String
     let title: String
     let cover: String?
     let url: String?
+    let coverDiagnostic: SourceCoverObservation?
+
+    // Keep existing Library/History/Updates/Downloads call sites source
+    // compatible; diagnostic data only exists for newly decoded source rows.
+    init(
+        id: String,
+        title: String,
+        cover: String?,
+        url: String?,
+        coverDiagnostic: SourceCoverObservation? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.cover = cover
+        self.url = url
+        self.coverDiagnostic = coverDiagnostic
+    }
 }
 
 struct SourcePagedMangaResult: Codable, Equatable {

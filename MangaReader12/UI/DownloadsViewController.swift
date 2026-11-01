@@ -564,7 +564,8 @@ final class DownloadsViewController: UITableViewController {
                             id: record.sourceMangaID,
                             title: record.mangaTitle,
                             cover: nil,
-                            url: nil
+                            url: nil,
+                            coverDiagnostic: nil
                         )
 
                         self.navigationController?.pushViewController(

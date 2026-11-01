@@ -47,11 +47,13 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.4';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.5';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
   var traceOrder = [];
+  var detailTrace = {};
+  var detailOrder = [];
   function kindOf(value) {
     if(!value)return 'empty';
     if(/^data:/i.test(value))return 'data';
@@ -66,7 +68,7 @@ var H = (function () {
     if(/background/i.test(value))return 'css';
     return 'other';
   }
-  function rememberTrace(id, card, coverPresent) {
+  function rememberTrace(id, card, coverURL) {
     var names=['cover','coverLazy','coverSrcset','coverHost','coverPicture','coverData','coverStyle'];
     var fields=[], attrNames=[], kinds=[], seen={};
     function inspect(node, origin) {
@@ -89,9 +91,25 @@ var H = (function () {
       traceOrder.push(id);
       if(traceOrder.length>200)delete coverTrace[traceOrder.shift()];
     }
-    coverTrace[id]={
-      matched:true,coverFound:!!coverPresent,fields:fields.slice(0,12),
-      attributes:attrNames,kinds:kinds
+    // This row keeps its own immutable snapshot: a lookup by ID later might
+    // retrieve a different ranking occurrence of the same series.
+    var trace={
+      matched:true,coverFound:!!coverURL,fields:fields.slice(0,12),
+      attributes:attrNames,kinds:kinds,
+      outputClass:kindOf(coverURL),outputLength:coverURL?coverURL.length:0
+    };
+    coverTrace[id]=trace;
+    return trace;
+  }
+  function rememberDetail(id, node, rawContent, resolvedURL) {
+    if(!Object.prototype.hasOwnProperty.call(detailTrace,id)){
+      detailOrder.push(id);
+      if(detailOrder.length>50)delete detailTrace[detailOrder.shift()];
+    }
+    detailTrace[id]={
+      matched:true,metaPresent:!!node,contentPresent:!!rawContent,
+      contentClass:kindOf(rawContent),resolvedFound:!!resolvedURL,
+      resolvedClass:kindOf(resolvedURL)
     };
   }
   // The listing's webtoon-phinf host returned 403 on physical iOS 12.5.8.
@@ -176,8 +194,8 @@ var H = (function () {
           var u=H.cleanURL(base,H.attr(x,'href')),title=H.text(H.field(x,'title'));
           var img=listCardCover(x);
           if(!u||!title||seen[u])return null; seen[u]=true;
-          rememberTrace(u,x,!!img);
-          return {id:u,title:title,cover:img,url:u};
+          var diagnostic=rememberTrace(u,x,img);
+          return {id:u,title:title,cover:img,url:u,coverDiagnostic:diagnostic};
         }).filter(Boolean);
         done({items:entries,hasNextPage:hasNext===null?H.items(res,'next').length>0:hasNext});
       });
@@ -193,7 +211,14 @@ var H = (function () {
     // swipes a selected manga row. No fresh website request.
     inspectCover:function(mangaId) {
       return coverTrace[mangaId] || {
-        matched:false,coverFound:false,fields:[],attributes:[],kinds:[]
+        matched:false,coverFound:false,fields:[],attributes:[],kinds:[],
+        outputClass:'empty',outputLength:0
+      };
+    },
+    inspectDetailsCover:function(mangaId) {
+      return detailTrace[mangaId] || {
+        matched:false,metaPresent:false,contentPresent:false,
+        contentClass:'empty',resolvedFound:false,resolvedClass:'empty'
       };
     },
     metadata:function(){return {id:id,name:'Webtoons.com EN (experimental)',lang:'en',version:version};},
@@ -219,8 +244,11 @@ var H = (function () {
           var item=H.items(res,'body')[0]||{},title=H.text(H.field(item,'title'));
           if(!title){H.fail(done,'Webtoons title not found');return;}
           var st=H.text(H.field(item,'status')).toUpperCase();
+          var meta=H.items(res,'coverMeta')[0],rawMeta=H.attr(meta,'content');
+          var detailsCover=H.cleanURL(base,rawMeta);
+          rememberDetail(mangaId,meta,rawMeta,detailsCover);
           done({id:mangaId,title:title,altTitles:[],
-            cover:H.cleanURL(base,H.attr(H.items(res,'coverMeta')[0],'content')),
+            cover:detailsCover,
             author:H.text(H.field(item,'author'))||null,
             artist:H.text(H.field(item,'artist'))||null,
             description:H.text(H.field(item,'description')),
