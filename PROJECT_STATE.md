@@ -517,3 +517,15 @@ Test acceptance: user installs verified Build31 on iOS12.5.8, enters Webtoons.co
 - Increment only Webtoons source manifest/script version to 0.1.2; pin SHA-256 and offline regression tests. No new IPA needed; update source from repository after merge.
 - Physical gate: update the selected source and reopen Popular list; confirm covers render, then verify details image and one previously working chapter. If still blank, the alternate host asset may not exist; stop and report without adding broad retries.
 - No change to HotComics HTTP403, Manhwa18.net, paused MangaDex, the remaining M13 ports, or deployment target iOS 12.0.
+
+## Build 32 — bounded cover requests and background thumbnail caching (2026-11-01)
+
+- User physically confirms Webtoons EN 0.1.2 shows listing covers, but loading is slow and some covers fail. This establishes **partial physical progress**, not full source acceptance.
+- Code review found the global CoverImageLoader starts one ephemeral URLSession/HTTPClient for every visible cover without an application-level concurrency limit; each cache miss also reads disk and decodes a JPEG synchronously along the UITableView cell configuration path.
+- Build 32 changes **only the native cover pipeline**: max three in-flight cover transfers app-wide, identical URL requests coalesced under matching host allowlists, image disk work off-main, ImageIO thumbnails capped at 420 pixels, and a 24 MiB decoded memory-cache cost budget.
+- Failures and 403/429 remain failures; no retries, invented image URLs, credential alterations, redirect exceptions, bypass, or source script/catalog changes. Validation of each requested HTTPS URL precedes cache and coalescing.
+- Clearing cover cache increments a generation so old in-flight network responses cannot re-populate a cleared cache.
+- Build checks and device acceptance are separate. Grouped physical gate: compare initial vs repeat Popular loading for Webtoons EN, scroll through multiple cover rows, note whether blanks persist; ensure Manhwa18.net and source icons still display, details/chapter reading works, source tab remains responsive. Do not assert CDN availability or an absolute speedup without on-device measurement.
+- Build 31's Testar capas remains available for an explicitly initiated comparison if particular images still fail; retain host/status/error reports rather than repeatedly retrying server denials.
+
+- The existing explicit Webtoons "Testar capas" device tool is extended to sample up to three *visible* listing covers sequentially (user can scroll to failing rows before pressing it), report elapsed time and HTTP/error/host metadata, then compare the first sample's details cover. It never logs titles or full URLs; stops on 429, with at most four image GETs only when the user taps the button. No automated site polling.

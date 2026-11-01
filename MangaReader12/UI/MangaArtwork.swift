@@ -1,23 +1,35 @@
 import UIKit
+import ImageIO
 
+// A bounded thumbnail pipeline for older iOS devices. One HTTP client per
+// active transfer is retained until completion; at most three are active.
+// Identical URLs under identical host policies share a single fetch.
 final class CoverImageLoader {
     static let shared = CoverImageLoader()
+
+    private struct PendingCover {
+        let key: String
+        let url: String
+        let policy: HTTPPolicy
+        let generation: UInt64
+    }
 
     private let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager: FileManager
     private let cacheDirectory: URL?
-    private let queue = DispatchQueue(label: "com.mangareader12.cover-cache", qos: .utility)
+    private let workQueue = DispatchQueue(label: "com.mangareader12.cover-cache", qos: .utility)
+    private let maxConcurrentTransfers = 3
 
-    // The image HTTPClient owns an ephemeral URLSession and cancels it during
-    // deinit. Keep each client strongly referenced until its callback finishes.
-    // Previously the method-local client was released after send(), so most
-    // cover requests were cancelled before any image bytes arrived.
-    private let inFlightLock = NSLock()
-    private var inFlightClients: [UUID: HTTPClient] = [:]
+    // All mutable scheduling state belongs exclusively to workQueue.
+    private var pending: [PendingCover] = []
+    private var activeClients: [String: HTTPClient] = [:]
+    private var waiting: [String: [(UIImage?) -> Void]] = [:]
+    private var cacheGeneration: UInt64 = 0
 
     private init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         memoryCache.countLimit = 120
+        memoryCache.totalCostLimit = 24 * 1024 * 1024
 
         if let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
             let directory = base
@@ -43,12 +55,13 @@ final class CoverImageLoader {
         guard let raw = urlString,
               let url = URL(string: raw),
               let host = url.host else {
-            completion(nil)
+            DispatchQueue.main.async { completion(nil) }
             return
         }
 
-        // Enforce the source's HTTPS host allowlist even for cached covers.
-        // An empty allowlist is reserved for the source-icon loader.
+        // Validate every caller before looking up any cache or joining
+        // an existing request. The policy scope is part of the cache key,
+        // so permissive sources cannot populate stricter sources' caches.
         let domains = allowedDomains.isEmpty ? [host] : allowedDomains
         let policy = HTTPPolicy(
             allowedDomains: domains,
@@ -57,73 +70,138 @@ final class CoverImageLoader {
             maxResponseBytes: 6 * 1024 * 1024
         )
         guard policy.isURLAllowed(url) else {
-            completion(nil)
+            DispatchQueue.main.async { completion(nil) }
             return
         }
 
-        let key = raw as NSString
-
-        if let image = memoryCache.object(forKey: key) {
-            completion(image)
+        let key = cacheKey(for: raw, domains: domains)
+        if let image = memoryCache.object(forKey: key as NSString) {
+            DispatchQueue.main.async { completion(image) }
             return
         }
 
-        if let diskURL = cacheURL(for: raw),
-           let data = try? Data(contentsOf: diskURL),
-           let image = UIImage(data: data) {
-            memoryCache.setObject(image, forKey: key)
-            completion(image)
-            return
+        // Avoid Data(contentsOf:), JPEG decode, and cache file operations on
+        // the UIKit table-view path; these can stall scrolling on iOS 12.
+        workQueue.async {
+            if let image = self.memoryCache.object(forKey: key as NSString) {
+                self.deliver(image, completions: [completion])
+                return
+            }
+
+            if let diskURL = self.cacheURL(for: key),
+               let data = try? Data(contentsOf: diskURL),
+               let image = self.decodeCover(data) {
+                self.remember(image, for: key)
+                self.deliver(image, completions: [completion])
+                return
+            }
+
+            if self.waiting[key] != nil {
+                self.waiting[key]?.append(completion)
+                return
+            }
+
+            self.waiting[key] = [completion]
+            self.pending.append(PendingCover(
+                key: key,
+                url: raw,
+                policy: policy,
+                generation: self.cacheGeneration
+            ))
+            self.startPendingTransfers()
         }
+    }
 
-        let client = HTTPClient(policy: policy)
-        let requestID = UUID()
+    // Called only on workQueue. No unbounded independent URLSession bursts.
+    private func startPendingTransfers() {
+        while activeClients.count < maxConcurrentTransfers && !pending.isEmpty {
+            let next = pending.removeFirst()
+            let client = HTTPClient(policy: next.policy)
+            activeClients[next.key] = client
 
-        // URLSessionDataTask does not guarantee retention of the HTTPClient
-        // object wrapping it. A local variable alone cannot keep the session
-        // alive for an asynchronous image request.
-        inFlightLock.lock()
-        inFlightClients[requestID] = client
-        inFlightLock.unlock()
-
-        client.send(HTTPRequest(url: raw)) { [weak self] result in
-            guard let self = self else { return }
-            self.inFlightLock.lock()
-            self.inFlightClients.removeValue(forKey: requestID)
-            self.inFlightLock.unlock()
-
-            switch result {
-            case .success(let response):
-                guard (200..<300).contains(response.statusCode),
-                      let image = UIImage(data: response.data) else {
-                    DispatchQueue.main.async { completion(nil) }
-                    return
-                }
-
-                self.memoryCache.setObject(image, forKey: key)
-
-                if let diskURL = self.cacheURL(for: raw) {
-                    self.queue.async {
-                        try? response.data.write(to: diskURL, options: .atomic)
-                    }
-                }
-
-                DispatchQueue.main.async {
-                    completion(image)
-                }
-
-            case .failure:
-                DispatchQueue.main.async {
-                    completion(nil)
+            client.send(HTTPRequest(url: next.url)) { [weak self] result in
+                guard let self = self else { return }
+                self.workQueue.async {
+                    self.finish(next, result: result)
                 }
             }
         }
     }
 
-    func clearDiskCache() {
-        guard let directory = cacheDirectory else { return }
+    // Called only on workQueue. Failed/403/429 responses are never cached as
+    // images, and there are no automatic retries or alternate-host requests.
+    private func finish(
+        _ request: PendingCover,
+        result: Result<HTTPResponse, Error>
+    ) {
+        activeClients.removeValue(forKey: request.key)
+        var image: UIImage?
 
-        queue.async {
+        if case .success(let response) = result,
+           (200..<300).contains(response.statusCode) {
+            image = decodeCover(response.data)
+            if let image = image, request.generation == cacheGeneration {
+                remember(image, for: request.key)
+                if let diskURL = cacheURL(for: request.key) {
+                    try? response.data.write(to: diskURL, options: .atomic)
+                }
+            }
+        }
+
+        if let completions = waiting.removeValue(forKey: request.key) {
+            deliver(image, completions: completions)
+        }
+        startPendingTransfers()
+    }
+
+    // Draw only a thumbnail. A single full-size cover image can otherwise
+    // consume substantial RAM after decompression on older devices.
+    private func decodeCover(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return UIImage(data: data)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: 420
+        ]
+        if let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            source, 0, options as CFDictionary
+        ) {
+            return UIImage(cgImage: cgImage)
+        }
+        return UIImage(data: data)
+    }
+
+    private func remember(_ image: UIImage, for key: String) {
+        let width = min(5000, max(1, Int(image.size.width * image.scale)))
+        let height = min(5000, max(1, Int(image.size.height * image.scale)))
+        memoryCache.setObject(
+            image,
+            forKey: key as NSString,
+            cost: width * height * 4
+        )
+    }
+
+    private func deliver(
+        _ image: UIImage?,
+        completions: [(UIImage?) -> Void]
+    ) {
+        DispatchQueue.main.async {
+            for completion in completions {
+                completion(image)
+            }
+        }
+    }
+
+    func clearDiskCache() {
+        workQueue.async {
+            // Prevent a request that predates cache clearing from repopulating
+            // it after the user explicitly cleared all covers.
+            self.cacheGeneration &+= 1
+            self.memoryCache.removeAllObjects()
+            guard let directory = self.cacheDirectory else { return }
             if let files = try? self.fileManager.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil,
@@ -133,13 +211,17 @@ final class CoverImageLoader {
                     try? self.fileManager.removeItem(at: file)
                 }
             }
-            self.memoryCache.removeAllObjects()
         }
     }
 
     private func cacheURL(for value: String) -> URL? {
         guard let directory = cacheDirectory else { return nil }
         return directory.appendingPathComponent(stableKey(value) + ".bin")
+    }
+
+    private func cacheKey(for url: String, domains: [String]) -> String {
+        let scope = domains.map { $0.lowercased() }.sorted().joined(separator: ",")
+        return url + "\u{0}" + scope
     }
 
     private func stableKey(_ value: String) -> String {
