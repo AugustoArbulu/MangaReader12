@@ -630,3 +630,9 @@ Source 0.1.3 candidate extracts additional same-card image attributes and elemen
 - Atualiza o pin de integridade SHA256 para `d6b0956b88b3a8fcde19ab013178b22044479d9c693df37775dd096920ac3041`. Testes offline verificam rota, lista de dias, categoria declarada, ausência de página artificial, sem GET para modo inválido; sem requisição ao site durante CI.
 - **Não precisa de novo IPA**: Build37 é necessário para exibir o novo menu; fonte Webtoons EN deve ser atualizada de 0.1.8 para 0.1.9 pelo catálogo após CI/merge.
 - Teste físico pendente: Populares, Tendências, Recentes (Originals do dia), gêneros e leitura normal em iOS12.5.8. Nenhuma alegação de funcionamento real de Recentes/gêneros sem o retorno do usuário.
+
+## Handoff consolidado após sessão longa — 2026-11-01
+
+- Handoff de retomada atual: **docs/HANDOFF_BUILD37_WEBTOONS019_R2_2026-11-01.md**, com PRs #49 (Build37), #50 (monitor read-only upstream), #52 (fonte Webtoons EN 0.1.9), hashes, limites do escopo, roteiro de QA em iOS12.5.8 e lista do que ainda não foi validado fisicamente.
+- O handoff original **docs/HANDOFF_ROADMAP_MANGAREADER12_2026-11-01.md** ganhou aviso de execução parcial; mantém o planejamento completo R0–R8 como referência.
+- Não foi produzida nova versão nativa após Build37. Release de fonte 0.1.9 é atualização via catálogo, sem novo IPA. Build36 + Webtoons EN 0.1.7 permanece baseline comprovada até retorno físico.
