@@ -796,34 +796,13 @@ final class MangaDetailsViewController: UITableViewController {
     // the source. A disconnected Library can still open the local pages.
     private func loadCachedOfflineChapters() {
         guard let repository = try? DownloadRepository.defaultRepository(),
-              let records = try? repository.listDownloads() else { return }
-        let available = records.filter {
-            $0.sourceID == sourceRecord.manifest.id &&
-            $0.sourceMangaID == summary.id &&
-            $0.state == "completed"
-        }
-        guard !available.isEmpty else { return }
+              let snapshot = try? repository.completedOfflineSnapshot(
+                  sourceID: sourceRecord.manifest.id,
+                  sourceMangaID: summary.id
+              ) else { return }
 
-        let stored = try? libraryRepository?.find(
-            sourceID: sourceRecord.manifest.id,
-            sourceMangaID: summary.id
-        )
-        manga = Manga(
-            id: summary.id,
-            title: stored?.title ?? summary.title,
-            altTitles: [], cover: stored?.cover ?? summary.cover,
-            author: nil, artist: nil,
-            description: stored?.description,
-            status: stored?.status ?? .unknown,
-            genres: [], url: stored?.url ?? summary.url
-        )
-        chapters = available.map {
-            Chapter(
-                id: $0.sourceChapterID, name: $0.chapterName,
-                number: nil, volume: nil, date: nil, scanlator: nil,
-                language: nil, url: $0.sourceChapterID
-            )
-        }
+        manga = snapshot.manga
+        chapters = snapshot.chapters
         hasCachedOfflineManga = true
         hasCachedOfflineChapters = true
         tableView.reloadData()
