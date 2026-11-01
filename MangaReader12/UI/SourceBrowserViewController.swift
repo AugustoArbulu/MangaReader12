@@ -84,10 +84,27 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             .prefix(3)
             .map { items[$0.row] }
         let samples = visible.isEmpty ? Array(items.prefix(3)) : visible
+        startCoverDiagnostic(samples: samples, chosenDirectly: false)
+    }
+
+    private func startCoverDiagnostic(
+        samples: [SourceMangaSummary],
+        chosenDirectly: Bool
+    ) {
+        guard sourceRecord.manifest.id == "kei.webtoons.en",
+              let runtime = runtime, coverDiagnostic == nil,
+              !samples.isEmpty else { return }
+
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        navigationItem.prompt = chosenDirectly
+            ? "Diagnosticando a capa selecionada…"
+            : "Testando capas visíveis e os detalhes…"
+
         let diagnostic = WebtoonsCoverDiagnostic(
             summaries: samples,
             runtime: runtime,
-            allowedDomains: sourceRecord.manifest.domains
+            allowedDomains: sourceRecord.manifest.domains,
+            inspectSource: chosenDirectly
         )
         coverDiagnostic = diagnostic
         diagnostic.run { [weak self] report in
@@ -285,6 +302,28 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 
     override func tableView(
         _ tableView: UITableView,
+        editActionsForRowAt indexPath: IndexPath
+    ) -> [UITableViewRowAction]? {
+        guard sourceRecord.manifest.id == "kei.webtoons.en",
+              indexPath.section == 0, indexPath.row < items.count else {
+            return nil
+        }
+        let action = UITableViewRowAction(style: .normal, title: "Testar capa") {
+            [weak self] _, selected in
+            guard let self = self, selected.row < self.items.count else {
+                return
+            }
+            // Explicit swipe action selects the exact requested manga.
+            self.startCoverDiagnostic(
+                samples: [self.items[selected.row]],
+                chosenDirectly: true
+            )
+        }
+        return [action]
+    }
+
+    override func tableView(
+        _ tableView: UITableView,
         didSelectRowAt indexPath: IndexPath
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
@@ -324,8 +363,17 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 // URLs may contain tokens or reveal the manga title. The copied report
 // includes only the host and safe format metadata, never URL path/query,
 // authentication headers, HTML, cookies or response body.
+private struct WebtoonsCoverTrace: Decodable {
+    let matched: Bool
+    let coverFound: Bool
+    let fields: [String]
+    let attributes: [String]
+    let kinds: [String]
+}
+
 private final class WebtoonsCoverDiagnostic {
     private let summaries: [SourceMangaSummary]
+    private let inspectSource: Bool
     private let runtime: JavaScriptSourceRuntime
     private let domains: [String]
     private var client: HTTPClient?
@@ -335,9 +383,11 @@ private final class WebtoonsCoverDiagnostic {
     init(
         summaries: [SourceMangaSummary],
         runtime: JavaScriptSourceRuntime,
-        allowedDomains: [String]
+        allowedDomains: [String],
+        inspectSource: Bool = false
     ) {
         self.summaries = Array(summaries.prefix(3))
+        self.inspectSource = inspectSource
         self.runtime = runtime
         self.domains = allowedDomains
     }
@@ -348,10 +398,42 @@ private final class WebtoonsCoverDiagnostic {
             "iOS: " + UIDevice.current.systemVersion,
             "App: " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"),
             "Fonte: Webtoons.com EN",
-            "Amostras: até 3 capas visíveis (sem títulos no relatório)",
+            inspectSource
+                ? "Amostra: 1 capa escolhida pelo usuário (sem título no relatório)"
+                : "Amostras: até 3 capas visíveis (sem títulos no relatório)",
             "HTTPS padrão; sem login, bypass ou exceções de certificado",
             "Domínios permitidos: " + domains.joined(separator: ", ")
         ]
+        if inspectSource, let selected = summaries.first {
+            runtime.callDecoded(
+                "inspectCover",
+                arguments: [selected.id],
+                as: WebtoonsCoverTrace.self
+            ) { [weak self] outcome in
+                guard let self = self else { return }
+                switch outcome {
+                case .success(let trace):
+                    self.lines.append("Registro da ficha: " +
+                        (trace.matched ? "SIM" : "NÃO"))
+                    self.lines.append("URL reconhecida pelo adaptador: " +
+                        (trace.coverFound ? "SIM" : "NÃO"))
+                    self.lines.append("Elementos encontrados: " +
+                        (trace.fields.isEmpty ? "(nenhum)" : trace.fields.joined(separator: ", ")))
+                    self.lines.append("Atributos presentes: " +
+                        (trace.attributes.isEmpty ? "(nenhum)" : trace.attributes.joined(separator: ", ")))
+                    self.lines.append("Tipos de valores: " +
+                        (trace.kinds.isEmpty ? "(nenhum)" : trace.kinds.joined(separator: ", ")))
+                case .failure:
+                    self.lines.append("Inspeção de atributos indisponível. Atualize Webtoons EN para 0.1.4.")
+                }
+                self.runImageProbes()
+            }
+        } else {
+            runImageProbes()
+        }
+    }
+
+    private func runImageProbes() {
         probeVisibleCover(at: 0) { [weak self] rateLimited in
             guard let self = self else { return }
             if rateLimited {
