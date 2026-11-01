@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.7';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.8';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -205,8 +205,8 @@ var H = (function () {
   function listing(path,hasNext,done){
     H.get(base+path,function(resp){
       if(resp.__sourceError){done(resp);return;}
-      H.select(resp.body,{items:{selector:'.webtoon_list li a',
-        fields:{title:'.title',cover:'img',
+      H.select(resp.body,{items:{selector:'.webtoon_list li a, .card_list li a, .genre_list li a',
+        fields:{title:'.title, .subj',cover:'img',
           coverLazy:'img[data-src],img[data-original],img[data-lazy-src],img[data-url]',
           coverSrcset:'img[srcset],img[data-srcset]',
           coverHost:'img[src*="pstatic.net"],img[src*="webtoons.com"]',
@@ -247,10 +247,42 @@ var H = (function () {
       };
     },
     metadata:function(){return {id:id,name:'Webtoons.com EN (experimental)',lang:'en',version:version};},
+    // Optional discovery API. Rankings are *categories*, not page 1..4.
+    // Genre pages are real site listings, but their DOM shape still needs
+    // physical iOS12 QA. An unsupported "latest" view is NOT advertised.
+    browseCategories:function(){
+      return [
+        {id:'trending',title:'Tendências',kind:'ranking'},
+        {id:'originals',title:'Originals',kind:'ranking'},
+        {id:'canvas',title:'Canvas',kind:'ranking'},
+        {id:'romance',title:'Romance',kind:'genre'},
+        {id:'fantasy',title:'Fantasia',kind:'genre'},
+        {id:'action',title:'Ação',kind:'genre'},
+        {id:'drama',title:'Drama',kind:'genre'},
+        {id:'comedy',title:'Comédia',kind:'genre'},
+        {id:'thriller',title:'Suspense',kind:'genre'},
+        {id:'mystery',title:'Mistério',kind:'genre'}
+      ];
+    },
+    // The v1 popular(page) method now serves a single ranking rather than
+    // treating each integer page as an unrelated category. All rankings
+    // have a bounded first page unless the adapter verifies true pagination.
     popular:function(page,done){
-      var ranks=['trending','popular','originals','canvas'];
-      if(page<1||page>4){done(H.noNext());return;}
-      listing('/en/ranking/'+ranks[page-1],page!==4,done);
+      if(page!==1){done(H.noNext());return;}
+      listing('/en/ranking/popular',false,done);
+    },
+    browse:function(mode,page,done){
+      if(page!==1){done(H.noNext());return;}
+      var rankings={trending:1,originals:1,canvas:1};
+      var genres={romance:1,fantasy:1,action:1,drama:1,
+                  comedy:1,thriller:1,mystery:1};
+      if(Object.prototype.hasOwnProperty.call(rankings,mode)){
+        listing('/en/ranking/'+mode,false,done);
+      } else if(Object.prototype.hasOwnProperty.call(genres,mode)){
+        listing('/en/genres/'+mode,false,done);
+      } else {
+        H.fail(done,'Unsupported discovery category');
+      }
     },
     search:function(query,page,filters,done){
       var path='/en/search?keyword='+encodeURIComponent(String(query||''));

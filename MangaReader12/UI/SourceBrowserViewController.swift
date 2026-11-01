@@ -8,6 +8,15 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var hasNextPage = false
     private var loading = false
     private var currentQuery: String?
+    private var browseCategories: [SourceBrowseCategory] = []
+    private var selectedCategory: SourceBrowseCategory?
+    // A category can change while the previous asynchronous source request
+    // is running. Ignore old responses and execute the newest request.
+    private var requestEpoch = 0
+    private var pendingReload = false
+    private let browseHeader = UIView()
+    private let browseHeaderButton = UIButton(type: .system)
+    private let browseHeaderHint = UILabel()
     private var coverDiagnostic: WebtoonsCoverDiagnostic?
 
     private lazy var sourceSearchController: UISearchController = {
@@ -41,6 +50,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         navigationItem.searchController = sourceSearchController
         navigationItem.hidesSearchBarWhenScrolling = false
         definesPresentationContext = true
+        configureBrowseHeader()
         applyTheme()
 
         if sourceRecord.manifest.id == "kei.webtoons.en" {
@@ -60,6 +70,135 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         )
 
         loadRuntime()
+    }
+
+    // A small, explicit source-backed discovery menu. Empty categories
+    // mean a legacy API v1 adapter; Popular and search continue to work.
+    private func configureBrowseHeader() {
+        browseHeader.frame = CGRect(
+            x: 0, y: 0, width: tableView.bounds.width, height: 68
+        )
+        browseHeader.autoresizingMask = [.flexibleWidth]
+
+        browseHeaderButton.frame = CGRect(
+            x: 16, y: 6, width: max(1, tableView.bounds.width - 32), height: 36
+        )
+        browseHeaderButton.autoresizingMask = [.flexibleWidth]
+        browseHeaderButton.contentHorizontalAlignment = .left
+        browseHeaderButton.titleLabel?.font = UIFont.systemFont(
+            ofSize: 16, weight: .semibold
+        )
+        browseHeaderButton.addTarget(
+            self, action: #selector(showBrowseMenu), for: .touchUpInside
+        )
+        browseHeader.addSubview(browseHeaderButton)
+
+        browseHeaderHint.frame = CGRect(
+            x: 16, y: 41, width: max(1, tableView.bounds.width - 32), height: 19
+        )
+        browseHeaderHint.autoresizingMask = [.flexibleWidth]
+        browseHeaderHint.font = UIFont.systemFont(ofSize: 12)
+        browseHeaderHint.textColor = .gray
+        browseHeader.addSubview(browseHeaderHint)
+        tableView.tableHeaderView = browseHeader
+        updateBrowseHeader()
+    }
+
+    private func updateBrowseHeader() {
+        let title = currentQuery != nil
+            ? "Busca por título"
+            : (selectedCategory?.title ?? "Populares")
+        browseHeaderButton.setTitle("Explorar: " + title + "  ▾", for: .normal)
+
+        if let category = selectedCategory {
+            browseHeaderHint.text = category.kind == "genre"
+                ? "Gênero da fonte • resultados do site"
+                : (category.kind == "latest"
+                    ? "Atualizações recentes da fonte"
+                    : "Ranking da fonte")
+        } else {
+            browseHeaderHint.text = currentQuery != nil
+                ? "Resultados da busca nesta fonte"
+                : "Populares da fonte • outras seções no menu"
+        }
+    }
+
+    private func loadBrowseCategories() {
+        guard let runtime = runtime else { return }
+        runtime.callDecoded(
+            "browseCategories",
+            as: [SourceBrowseCategory].self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch result {
+                case .success(let candidates):
+                    var seen = Set<String>()
+                    self.browseCategories = Array(candidates.prefix(32))
+                        .filter { category in
+                            category.isValid &&
+                            category.id != "popular" &&
+                            seen.insert(category.id).inserted
+                        }
+                        .prefix(24)
+                        .map { $0 }
+                case .failure:
+                    // Missing optional function on old source scripts is fine.
+                    self.browseCategories = []
+                }
+                self.updateBrowseHeader()
+            }
+        }
+    }
+
+    @objc private func showBrowseMenu() {
+        let menu = UIAlertController(
+            title: "Descobrir obras",
+            message: "Cada seção usa somente recursos que a fonte oferece.",
+            preferredStyle: .actionSheet
+        )
+        let popularTitle = selectedCategory == nil && currentQuery == nil
+            ? "✓ Populares" : "Populares"
+        menu.addAction(UIAlertAction(
+            title: popularTitle, style: .default
+        ) { [weak self] _ in
+            self?.selectBrowseCategory(nil)
+        })
+
+        for category in browseCategories {
+            let marked = selectedCategory?.id == category.id && currentQuery == nil
+            let prefix = category.kind == "genre" ? "Gênero: " : ""
+            menu.addAction(UIAlertAction(
+                title: (marked ? "✓ " : "") + prefix + category.title,
+                style: .default
+            ) { [weak self] _ in
+                self?.selectBrowseCategory(category)
+            })
+        }
+
+        if !browseCategories.contains(where: { $0.kind == "latest" }) {
+            let unsupported = UIAlertAction(
+                title: "Recentes — indisponível nesta fonte",
+                style: .default, handler: nil
+            )
+            unsupported.isEnabled = false
+            menu.addAction(unsupported)
+        }
+        menu.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        if let popover = menu.popoverPresentationController {
+            popover.sourceView = browseHeaderButton
+            popover.sourceRect = browseHeaderButton.bounds
+        }
+        present(menu, animated: true)
+    }
+
+    private func selectBrowseCategory(_ category: SourceBrowseCategory?) {
+        selectedCategory = category
+        currentQuery = nil
+        sourceSearchController.searchBar.text = nil
+        sourceSearchController.searchBar.resignFirstResponder()
+        updateBrowseHeader()
+        loadFirstPage()
     }
 
     @objc private func diagnoseCoverTapped() {
@@ -158,6 +297,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                         self.runtime = runtime
                         self.loading = false
                         self.navigationItem.prompt = nil
+                        self.loadBrowseCategories()
                         self.loadFirstPage()
 
                     case .failure(let error):
@@ -181,12 +321,16 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             refreshControl?.endRefreshing()
             return
         }
-
+        requestEpoch += 1
         currentPage = 1
         items = []
         hasNextPage = false
         tableView.reloadData()
-        loadPage(1)
+        if loading {
+            pendingReload = true
+        } else {
+            loadPage(1)
+        }
     }
 
     private func loadPage(_ page: Int) {
@@ -195,25 +339,41 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             return
         }
 
+        let epoch = requestEpoch
+        let query = currentQuery
+        let category = selectedCategory
         loading = true
-        navigationItem.prompt = currentQuery == nil
-            ? "Carregando populares…"
-            : "Buscando…"
+        navigationItem.prompt = query != nil ? "Buscando…" :
+            (category?.kind == "genre" ? "Filtrando gênero…" :
+                (category?.kind == "latest" ? "Carregando recentes…" :
+                    "Carregando listagem…"))
 
-        let completion: (Result<SourcePagedMangaResult, Error>) -> Void = { [weak self] result in
+        let completion: (Result<SourcePagedMangaResult, Error>) -> Void = {
+            [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-
                 self.loading = false
                 self.navigationItem.prompt = nil
                 self.refreshControl?.endRefreshing()
+
+                // Never allow an in-flight response for a previous category,
+                // query or pagination sequence to overwrite the current UI.
+                if epoch != self.requestEpoch || self.pendingReload {
+                    self.pendingReload = false
+                    self.loadPage(1)
+                    return
+                }
 
                 switch result {
                 case .success(let pageResult):
                     if page == 1 {
                         self.items = pageResult.items
                     } else {
-                        self.items.append(contentsOf: pageResult.items)
+                        let known = Set(self.items.map { $0.id })
+                        var seen = known
+                        self.items.append(contentsOf: pageResult.items.filter {
+                            seen.insert($0.id).inserted
+                        })
                     }
 
                     self.currentPage = page
@@ -226,10 +386,17 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             }
         }
 
-        if let query = currentQuery, !query.isEmpty {
+        if let query = query, !query.isEmpty {
             runtime.callDecoded(
                 "search",
                 arguments: [query, page, [] as [Any]],
+                as: SourcePagedMangaResult.self,
+                completion: completion
+            )
+        } else if let category = category {
+            runtime.callDecoded(
+                "browse",
+                arguments: [category.id, page],
                 as: SourcePagedMangaResult.self,
                 completion: completion
             )
@@ -246,14 +413,15 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         let query = (searchBar.text ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-
         currentQuery = query.isEmpty ? nil : query
         searchBar.resignFirstResponder()
+        updateBrowseHeader()
         loadFirstPage()
     }
 
     func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
         currentQuery = nil
+        updateBrowseHeader()
         loadFirstPage()
     }
 

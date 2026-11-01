@@ -176,6 +176,28 @@ struct SourcePagedMangaResult: Codable, Equatable {
     let hasNextPage: Bool
 }
 
+// Optional discovery capability. Existing Source API v1's six required
+// methods are unchanged; older adapters simply expose no extra categories.
+// "ranking" is a listing, "genre" is a source-supported remote genre
+// listing, and "latest" is permitted only for real recent-update feeds.
+struct SourceBrowseCategory: Codable, Equatable {
+    let id: String
+    let title: String
+    let kind: String
+
+    var isValid: Bool {
+        guard id.range(
+            of: "^[a-z0-9][a-z0-9_-]{0,31}$",
+            options: .regularExpression
+        ) != nil,
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        title.count <= 48 else {
+            return false
+        }
+        return ["ranking", "genre", "latest"].contains(kind)
+    }
+}
+
 // MARK: - Repository catalog v1
 
 struct RepositoryCatalog: Codable, Equatable {

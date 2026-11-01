@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.7');
+      assert.equal(source.version,'0.1.8');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -148,6 +148,31 @@ async function testWebtoons() {
   assert.equal((await r.call('metadata')).id,'kei.webtoons.en');
   const initialListing=await r.call('popular',1);
   assert.equal(initialListing.items.length,1);
+  assert.equal(initialListing.hasNextPage,false,'rankings must not fake pagination');
+  assert(r.calls.includes('https://www.webtoons.com/en/ranking/popular'));
+  const requestsBeforePage2=r.calls.length;
+  assert.equal((await r.call('popular',2)).items.length,0);
+  assert.equal(r.calls.length,requestsBeforePage2,'page 2 must not become another ranking');
+  const available=await r.call('browseCategories');
+  assert(available.some(x=>x.kind==='ranking'&&x.id==='trending'));
+  assert(available.some(x=>x.kind==='genre'&&x.id==='romance'));
+  assert(!available.some(x=>x.kind==='latest'),'do not invent recent-updates support');
+  for(const mode of ['trending','originals','canvas','romance','fantasy','action','drama','comedy','thriller','mystery']) {
+    const before=r.calls.length;
+    const page=await r.call('browse',mode,1);
+    assert.equal(page.items.length,1);
+    assert.equal(page.hasNextPage,false);
+    const section=available.find(x=>x.id===mode);
+    const endpoint=section.kind==='ranking'?'/en/ranking/':'/en/genres/';
+    assert.equal(r.calls[before],'https://www.webtoons.com'+endpoint+mode);
+    assert.equal(r.calls.length,before+1,'one GET for selected category');
+    assert.equal((await r.call('browse',mode,2)).items.length,0);
+    assert.equal(r.calls.length,before+1,'category page 2 cannot fetch a different category');
+  }
+  const beforeInvalid=r.calls.length;
+  const rejected=await r.call('browse','https://other.example',1);
+  assert(rejected.__sourceError);
+  assert.equal(r.calls.length,beforeInvalid,'unknown category must not issue a GET');
   assert.equal(initialListing.items[0].cover,'https://swebtoon-phinf.pstatic.net/cover.jpg');
   assert.equal(initialListing.items[0].coverDiagnostic.coverFound,true);
   assert.equal(initialListing.items[0].coverDiagnostic.outputClass,'pstatic-https');
@@ -246,7 +271,7 @@ async function testWebtoons() {
   });
   const original=(await duplicate.call('popular',1)).items[0];
   assert.equal(original.coverDiagnostic.coverFound,true);
-  const duplicateLatest=(await duplicate.call('popular',2)).items[0];
+  const duplicateLatest=(await duplicate.call('browse','trending',1)).items[0];
   assert.equal(duplicateLatest.coverDiagnostic.coverFound,false);
   assert.equal(original.coverDiagnostic.coverFound,true,'snapshot of original row must be preserved');
   assert.equal((await duplicate.call('inspectCover',root)).coverFound,false,
@@ -362,6 +387,30 @@ async function testWebtoons() {
 // Structural regression gate for the offline UI entry point. Xcode validates
 // Swift syntax; physical iOS12 airplane-mode reading remains the acceptance
 // test because this is not an XCTest runtime/simulator harness.
+// Native discovery surface must be an optional extension of source API v1.
+// Ensure changing sections while a request is pending does not reuse the
+// previous category/search result, and old sources still call popular().
+function testDiscoveryNativeWiring() {
+  const root=path.join(__dirname,'../MangaReader12');
+  const manifest=fs.readFileSync(path.join(root,'Sources/SourceManifest.swift'),'utf8');
+  assert(manifest.includes('struct SourceBrowseCategory: Codable'));
+  assert(manifest.includes('let kind: String'));
+  const browser=fs.readFileSync(path.join(root,'UI/SourceBrowserViewController.swift'),'utf8');
+  const section=browser.split('// An explicitly initiated, bounded cover probe.')[0];
+  assert(section.includes('func loadBrowseCategories()'));
+  assert(section.includes('"browseCategories"'));
+  assert(section.includes('browseCategories = []'),'missing v1 source fallback');
+  assert(section.includes('requestEpoch += 1'));
+  assert(section.includes('epoch != self.requestEpoch'));
+  assert(section.includes('self.loadPage(1)'));
+  assert(section.includes('browseHeaderButton'));
+  assert(section.includes('"browse"'));
+  assert(section.includes('"popular"'));
+  assert(section.includes('"search"'));
+  assert(section.includes('unsupported.isEnabled = false'));
+  console.log('PASS native discovery: optional browse, v1 fallback and stale request protection');
+}
+
 function testOfflineReaderRouting() {
   const root=path.join(__dirname,'../MangaReader12');
   const downloads=fs.readFileSync(path.join(root,'UI/DownloadsViewController.swift'),'utf8');
@@ -399,5 +448,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();testDiscoveryNativeWiring();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});
