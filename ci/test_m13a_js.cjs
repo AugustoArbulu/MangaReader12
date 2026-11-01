@@ -134,9 +134,8 @@ async function testWebtoons() {
       })],next:[]};
       if(specs.body)return {body:[node('',{},{
         title:node('Webtoon A'),author:node('Creator'),
-        description:node('Description'),status:node('EVERY MONDAY'),
-        thumb:node('',{content:'https://webtoon-phinf.pstatic.net/cover.jpg'})
-      })]};
+        description:node('Description'),status:node('EVERY MONDAY')
+      })],coverMeta:[node('',{content:'https://webtoon-phinf.pstatic.net/cover.jpg'})]};
       if(specs.images)return {images:[node('',{'data-url':'https://webtoon-phinf.pstatic.net/page1.jpg'})]};
       throw Error('unknown DOM');
     }
