@@ -387,6 +387,30 @@ async function testWebtoons() {
 // Structural regression gate for the offline UI entry point. Xcode validates
 // Swift syntax; physical iOS12 airplane-mode reading remains the acceptance
 // test because this is not an XCTest runtime/simulator harness.
+// Native discovery surface must be an optional extension of source API v1.
+// Ensure changing sections while a request is pending does not reuse the
+// previous category/search result, and old sources still call popular().
+function testDiscoveryNativeWiring() {
+  const root=path.join(__dirname,'../MangaReader12');
+  const manifest=fs.readFileSync(path.join(root,'Sources/SourceManifest.swift'),'utf8');
+  assert(manifest.includes('struct SourceBrowseCategory: Codable'));
+  assert(manifest.includes('let kind: String'));
+  const browser=fs.readFileSync(path.join(root,'UI/SourceBrowserViewController.swift'),'utf8');
+  const section=browser.split('// An explicitly initiated, bounded cover probe.')[0];
+  assert(section.includes('func loadBrowseCategories()'));
+  assert(section.includes('"browseCategories"'));
+  assert(section.includes('browseCategories = []'),'missing v1 source fallback');
+  assert(section.includes('requestEpoch += 1'));
+  assert(section.includes('epoch != self.requestEpoch'));
+  assert(section.includes('self.loadPage(1)'));
+  assert(section.includes('browseHeaderButton'));
+  assert(section.includes('"browse"'));
+  assert(section.includes('"popular"'));
+  assert(section.includes('"search"'));
+  assert(section.includes('unsupported.isEnabled = false'));
+  console.log('PASS native discovery: optional browse, v1 fallback and stale request protection');
+}
+
 function testOfflineReaderRouting() {
   const root=path.join(__dirname,'../MangaReader12');
   const downloads=fs.readFileSync(path.join(root,'UI/DownloadsViewController.swift'),'utf8');
@@ -424,5 +448,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();testDiscoveryNativeWiring();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});
