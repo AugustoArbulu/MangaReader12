@@ -1,0 +1,50 @@
+name: Review Keiyoushi upstream changes
+
+on:
+  schedule:
+    # GitHub scheduled Actions are best-effort; this is not a precise timer.
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-selected-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check monitor invariants without network
+        run: python3 ci/test_monitor_keiyoushi_upstream.py
+
+      - name: Fetch upstream latest commits and render review report
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 ci/monitor_keiyoushi_upstream.py \
+            --baseline ci/keiyoushi-upstream-baseline.json \
+            --markdown keiyoushi-upstream-report.md \
+            --json keiyoushi-upstream-report.json
+
+      - name: Publish summary for GitHub Actions
+        if: always()
+        run: |
+          if test -f keiyoushi-upstream-report.md; then
+            cat keiyoushi-upstream-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report generated; check job logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload read-only reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keiyoushi-upstream-review
+          path: |
+            keiyoushi-upstream-report.md
+            keiyoushi-upstream-report.json
+          if-no-files-found: warn
+          retention-days: 30
