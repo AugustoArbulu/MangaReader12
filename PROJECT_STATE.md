@@ -614,3 +614,11 @@ Source 0.1.3 candidate extracts additional same-card image attributes and elemen
 - ci/test_m13a_js.cjs testa integridade SHA, separação dos rankings, modo gênero, validade do caminho, apenas um GET, falta de paginação artificial, recusa de categorias desconhecidas e contrato de UI nativa. Os testes usam mocks, sem confirmar DOM vivo ou endpoint de recência.
 - Build37 é nativo por acrescentar UI/DTO Swift; **novo IPA necessário**. Instalar sobre Build36 (preservar dados); atualizar fonte Webtoons EN para 0.1.8 separadamente pelo catálogo; testar Populares, menu Tendências/Originals/Canvas, gêneros Romance/Fantasia/Ação, busca, detalhes, capítulos, leitura e downloads offline. Registrar os casos que retornarem zero itens ou erro.
 - Baseline preservada: Build36 + Webtoons EN 0.1.7 permanece referência até aceite físico. CI Debug/Release, checagem binária 37 e testes JS são gate antes do merge.
+
+## R2-A — monitoramento somente de leitura do Keiyoushi (2026-11-01)
+
+- Referência de 12 paths no upstream (9 fontes + 3 engines), em ci/keiyoushi-upstream-baseline.json; commits obtidos via API oficial GitHub em 2026-11-01.
+- .github/workflows/keiyoushi-upstream.yml: semanal segunda 07:17 UTC (best-effort) + workflow_dispatch. Actions read-only token e artefatos Markdown/JSON em cada execução; sem PR ou atualização automática de scripts e sem visitas aos sites das fontes.
+- Script ci/monitor_keiyoushi_upstream.py: valida paths e commits, consulta último commit de cada diretório via API GitHub, compara com baseline, marca changed/review, unchanged, erro; falha visivelmente se API indisponível.
+- Teste offline ci/test_monitor_keiyoushi_upstream.py incorporado à pipeline de build. Documentação em docs/R2_KEIYOUSHI_UPSTREAM_MONITOR_2026-11-01.md.
+- Um commit novo demanda revisão humana e port explícito. Não implica compatibilidade com iOS12 nem autoriza contornar restrições. Este PR de monitoramento **não modifica o aplicativo** e não gera nova versão.
