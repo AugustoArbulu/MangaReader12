@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.8');
+      assert.equal(source.version,'0.1.9');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -156,7 +156,8 @@ async function testWebtoons() {
   const available=await r.call('browseCategories');
   assert(available.some(x=>x.kind==='ranking'&&x.id==='trending'));
   assert(available.some(x=>x.kind==='genre'&&x.id==='romance'));
-  assert(!available.some(x=>x.kind==='latest'),'do not invent recent-updates support');
+  assert(available.some(x=>x.kind==='latest'&&x.id==='latest'),
+    'recent updates must have explicit supported category');
   for(const mode of ['trending','originals','canvas','romance','fantasy','action','drama','comedy','thriller','mystery']) {
     const before=r.calls.length;
     const page=await r.call('browse',mode,1);
@@ -169,6 +170,15 @@ async function testWebtoons() {
     assert.equal((await r.call('browse',mode,2)).items.length,0);
     assert.equal(r.calls.length,before+1,'category page 2 cannot fetch a different category');
   }
+  const beforeLatest=r.calls.length;
+  const latest=await r.call('browse','latest',1);
+  assert.equal(latest.items.length,1);
+  assert.equal(latest.hasNextPage,false);
+  assert.match(r.calls[beforeLatest],
+    /^https:\/\/www\.webtoons\.com\/en\/originals\/(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\?sortOrder=UPDATE$/);
+  assert.equal(r.calls.length,beforeLatest+1,'latest should make exactly one GET');
+  assert.equal((await r.call('browse','latest',2)).items.length,0);
+  assert.equal(r.calls.length,beforeLatest+1,'latest must not issue synthetic page 2');
   const beforeInvalid=r.calls.length;
   const rejected=await r.call('browse','https://other.example',1);
   assert(rejected.__sourceError);
