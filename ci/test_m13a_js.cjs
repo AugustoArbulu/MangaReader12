@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.5');
+      assert.equal(source.version,'0.1.6');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -29,10 +29,15 @@ function verifyPinnedCatalog() {
 
 function node(text='', attrs={}, fields={}) { return {text,attrs,fields}; }
 function enc(o) { return JSON.stringify(o).replace(/"/g,'&quot;'); }
-function runtime(filename, respond) {
+function runtime(filename, respond, preserveInvalidAbsoluteURL=false) {
   const calls=[];
   const Native={
-    resolveUrl(base,part) { return new URL(part,base).href; },
+    resolveUrl(base,part) {
+      // iOS 12 NSURL may reject a literal Unicode, whitespace, or bracket
+      // in an absolute URL and the native bridge then returns raw input.
+      if(preserveInvalidAbsoluteURL && /^https:\/\//i.test(part))return part;
+      return new URL(part,base).href;
+    },
     httpRequest(raw,callback) {
       const req=JSON.parse(raw); calls.push(req.url);
       const val=respond.http(req.url);
@@ -271,6 +276,50 @@ async function testWebtoons() {
   assert.equal(originalDetailsTrace.metaPresent,true);
   assert.equal(originalDetailsTrace.contentClass,'pstatic-https');
   assert.equal(originalDetailsTrace.resolvedFound,true);
+
+  // iOS12 regressions: native NSURL rejects some unescaped literal bytes
+  // (unlike the modern WHATWG URL test helper). Normalize permitted image
+  // hosts without modifying URL delimiters or double-encoding valid escapes.
+  const badImage='https://webtoon-phinf.pstatic.net/Manga [한글].jpg?type=q90&x=a';
+  const expectedImage='https://swebtoon-phinf.pstatic.net/Manga%20%5B%ED%95%9C%EA%B8%80%5D.jpg?type=q90&x=a';
+  const encodedURL='https://webtoon-phinf.pstatic.net/already%20encoded%2Fpart.jpg?type=q90';
+  const unsafeURL='https://webtoon-phinf.pstatic.net/bad%XZ.jpg';
+  const unicode=runtime('keiyoushi-webtoons-en.js',{
+    http(url){return url.includes('title_no=42')?'DETAILS':'LIST';},
+    dom(html,specs){
+      if(specs.items)return {items:[
+        node('',{href:root},{title:node('Unescaped image'),
+          cover:node('',{src:badImage})}),
+        node('',{href:'https://www.webtoons.com/en/original/b/list?title_no=43'},
+          {title:node('Already encoded'),cover:node('',{src:encodedURL})}),
+        node('',{href:'https://www.webtoons.com/en/original/c/list?title_no=44'},
+          {title:node('Malformed percent'),cover:node('',{src:unsafeURL})}),
+        node('',{href:'https://www.webtoons.com/en/original/d/list?title_no=45'},
+          {title:node('Off domain'),cover:node('',{src:'https://other.example/x [bad].jpg'})}),
+        node('',{href:'https://www.webtoons.com/en/original/e/list?title_no=46'},
+          {title:node('Control characters'),
+            cover:node('',{src:'https://webtoon-phinf.pstatic.net/control\n.jpg'})})
+      ],next:[]};
+      if(specs.body)return {
+        body:[node('',{}, {title:node('Unescaped image')})],
+        coverMeta:[node('',{content:badImage})]
+      };
+      throw Error('unexpected selector');
+    }
+  },true);
+  const repaired=await unicode.call('popular',1);
+  assert.equal(repaired.items[0].cover,expectedImage);
+  assert.equal(repaired.items[0].coverDiagnostic.outputClass,'pstatic-https');
+  assert.equal(repaired.items[1].cover,
+    'https://swebtoon-phinf.pstatic.net/already%20encoded%2Fpart.jpg?type=q90');
+  assert.equal(repaired.items[2].cover,null);
+  assert.equal(repaired.items[3].cover,null);
+  assert.equal(repaired.items[4].cover,null);
+  const repairedDetails=await unicode.call('details',root);
+  assert.equal(repairedDetails.cover,expectedImage);
+  assert.equal((await unicode.call('inspectDetailsCover',root)).resolvedFound,true);
+  assert.equal(unicode.calls.length,2,'URL normalization must not add HTTP requests');
+  console.log('PASS Webtoons EN: strict iOS12 image URL encoding, existing percent escapes and domain guard');
 
   console.log('PASS Webtoons EN: exact row snapshots survive duplicate ranking and details meta check');
   console.log('PASS Webtoons EN: same-card lazy/picture/background fallbacks and unsafe URL rejection');
