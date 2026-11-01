@@ -1,0 +1,80 @@
+{
+  "upstream": "keiyoushi/extensions-source",
+  "base_branch": "main",
+  "snapshot_date": "2026-11-01",
+  "note": "Manual baseline, from GitHub's latest path-specific commits. Do not auto-update it in CI.",
+  "entries": [
+    {
+      "name": "Comix",
+      "path": "src/en/comix",
+      "sha": "5240ce7bec6e0dfbc871318f19884961bc1032e9",
+      "commit_date": "2026-10-31T06:44:55Z"
+    },
+    {
+      "name": "Asura Scans",
+      "path": "src/en/asurascans",
+      "sha": "b60c3831f78156fbd375eb239140976a3020a429",
+      "commit_date": "2026-10-27T04:59:04Z"
+    },
+    {
+      "name": "Webtoons",
+      "path": "src/all/webtoons",
+      "sha": "58bceb5eae45dc68b7d009d3180b9237291575c0",
+      "commit_date": "2026-10-02T18:18:09Z"
+    },
+    {
+      "name": "Vortex Scans",
+      "path": "src/en/vortexscans",
+      "sha": "8b553294eea8d16f01d2aa893622e91fbe46db5a",
+      "commit_date": "2026-10-23T05:15:19Z"
+    },
+    {
+      "name": "MadaraDex",
+      "path": "src/en/madaradex",
+      "sha": "1c4d7a3f7fd552adb1970f816414969c059f4c8e",
+      "commit_date": "2026-10-24T05:36:33Z"
+    },
+    {
+      "name": "HotComics",
+      "path": "src/en/hotcomics",
+      "sha": "58bceb5eae45dc68b7d009d3180b9237291575c0",
+      "commit_date": "2026-10-02T18:18:09Z"
+    },
+    {
+      "name": "Manhwa18.net",
+      "path": "src/all/manhwa18net",
+      "sha": "b415ae31cb8a7a3d43aafd697a7897421f95ada7",
+      "commit_date": "2026-09-05T08:40:03Z"
+    },
+    {
+      "name": "ToonGod",
+      "path": "src/en/toongod",
+      "sha": "66535bd04bec51a1063532cc72fb5e25de30effd",
+      "commit_date": "2026-08-23T12:48:14Z"
+    },
+    {
+      "name": "Manhwa18.cc",
+      "path": "src/all/manhwa18cc",
+      "sha": "98714b0e856b4d970d349d7f5bb48d68cec2301d",
+      "commit_date": "2026-10-16T16:02:06Z"
+    },
+    {
+      "name": "Iken shared engine",
+      "path": "lib-multisrc/iken",
+      "sha": "8b553294eea8d16f01d2aa893622e91fbe46db5a",
+      "commit_date": "2026-10-23T05:15:19Z"
+    },
+    {
+      "name": "Madara shared engine",
+      "path": "lib-multisrc/madara",
+      "sha": "5240ce7bec6e0dfbc871318f19884961bc1032e9",
+      "commit_date": "2026-10-31T06:44:55Z"
+    },
+    {
+      "name": "YiiMadara shared engine",
+      "path": "lib-multisrc/yiimadara",
+      "sha": "98714b0e856b4d970d349d7f5bb48d68cec2301d",
+      "commit_date": "2026-10-16T16:02:06Z"
+    }
+  ]
+}
