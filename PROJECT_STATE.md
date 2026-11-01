@@ -535,3 +535,9 @@ Test acceptance: user installs verified Build31 on iOS12.5.8, enters Webtoons.co
 - The verified Build32 cover-pipeline commit was merged in PR #38, but the Xcode project still declared `CURRENT_PROJECT_VERSION = 31`. The corresponding PR #38 unsigned IPA is therefore **not to be labeled Build32**.
 - Update both Debug and Release project configurations to `CURRENT_PROJECT_VERSION = 32` in a separate version-only release-gate PR. No source/network behavior changes, preserve marketing version 0.1.0 and iOS 12 target.
 - Only send the user the artifact from the version-corrected green CI, not the stale version-31 artifact.
+
+## Webtoons EN 0.1.3 source-only cover fallback (2026-11-01)
+
+Physical App32 iOS 12.5.8 diagnostic: first listing cover HTTP 200 JPEG 391ms, second listing cover missing valid URL, third cover HTTP 200 JPEG 169ms; details cover HTTP 200 JPEG 130ms. No HTTP denial observed for sampled covers; no request was made for the missing URL.
+
+Source 0.1.3 candidate extracts additional same-card image attributes and elements when the first img is empty or placeholder, including lazy fields, srcset, picture source, explicit image host, container background-image, and card attributes. Keep HTTPS validation, source domain restrictions and exact CDN normalization. No per-card details calls or extra requests. Source-only; no new IPA. CI fixtures verify recognized shapes and reject invalid URLs. Effect on the missing physical card is unverified until re-test.
