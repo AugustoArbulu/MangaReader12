@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.5';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.6';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -120,6 +120,32 @@ var H = (function () {
     return url.replace(/^https:\/\/webtoon-phinf\.pstatic\.net(?=[\/?#]|$)/i,
       'https://swebtoon-phinf.pstatic.net');
   }
+  // NSURL on iOS 12 rejects literal characters that modern iOS versions
+  // may automatically percent-encode. Restrict the authority to the source's
+  // existing allowlist, then encode only the path/query/fragment portion.
+  // Preserve reserved URL delimiters and existing valid %HH sequences.
+  // Never modify other hosts, credentials, schemes, or malformed escapes.
+  function normalizeWebtoonsImageURL(value) {
+    if(!value || typeof value !== 'string')return null;
+    var match=/^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?=\/|\?|#|$)/i.exec(value);
+    if(!match)return null;
+    var host=match[1].toLowerCase();
+    var allowed=host==='webtoons.com' || host.slice(-13)==='.webtoons.com' ||
+      host==='pstatic.net' || host.slice(-12)==='.pstatic.net';
+    if(!allowed)return null;
+    var rest=value.substring(match[0].length);
+    // Do not repair controls, bidi formatting, bad percent escapes, or any
+    // unexpected credentials/port/host syntax.
+    if(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(rest) ||
+       /%(?![a-f0-9]{2})/i.test(rest))return null;
+    var encoded;
+    try {
+      encoded=encodeURI(rest).replace(/%25(?=[a-f0-9]{2})/ig,'%');
+    } catch(e) {
+      return null; // e.g. malformed surrogate pair
+    }
+    return canonicalListCoverURL(match[0]+encoded);
+  }
   // The episode/series page uses og:image, but list cards can use lazy image
   // attributes and an inert data: placeholder in src. Prefer source-provided
   // actual HTTPS image URLs rather than trying to download the placeholder.
@@ -159,10 +185,8 @@ var H = (function () {
     var bg=/\bbackground(?:-image)?\s*:\s*url\(\s*(?:"([^"]+)"|'([^']+)'|([^)]*))\s*\)/i.exec(style);
     if(bg)choices.push((bg[1]||bg[2]||bg[3]||'').trim());
     for(var k=0;k<choices.length;k++){
-      var u=H.cleanURL(base,choices[k]);
-      if(u && /^https:\/\/(?:[a-z0-9-]+\.)*(?:webtoons\.com|pstatic\.net)(?:[/:?#]|$)/i.test(u)){
-        return canonicalListCoverURL(u);
-      }
+      var u=normalizeWebtoonsImageURL(H.cleanURL(base,choices[k]));
+      if(u)return u;
     }
     return null;
   }
@@ -245,7 +269,7 @@ var H = (function () {
           if(!title){H.fail(done,'Webtoons title not found');return;}
           var st=H.text(H.field(item,'status')).toUpperCase();
           var meta=H.items(res,'coverMeta')[0],rawMeta=H.attr(meta,'content');
-          var detailsCover=H.cleanURL(base,rawMeta);
+          var detailsCover=normalizeWebtoonsImageURL(H.cleanURL(base,rawMeta));
           rememberDetail(mangaId,meta,rawMeta,detailsCover);
           done({id:mangaId,title:title,altTitles:[],
             cover:detailsCover,
