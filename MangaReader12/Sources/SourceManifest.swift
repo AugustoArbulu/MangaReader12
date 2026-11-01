@@ -153,6 +153,22 @@ struct SourceMangaSummary: Codable, Equatable {
     let cover: String?
     let url: String?
     let coverDiagnostic: SourceCoverObservation?
+
+    // Keep existing Library/History/Updates/Downloads call sites source
+    // compatible; diagnostic data only exists for newly decoded source rows.
+    init(
+        id: String,
+        title: String,
+        cover: String?,
+        url: String?,
+        coverDiagnostic: SourceCoverObservation? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.cover = cover
+        self.url = url
+        self.coverDiagnostic = coverDiagnostic
+    }
 }
 
 struct SourcePagedMangaResult: Codable, Equatable {
