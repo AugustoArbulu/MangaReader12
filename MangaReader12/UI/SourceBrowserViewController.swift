@@ -834,7 +834,8 @@ final class MangaDetailsViewController: UITableViewController {
         // Suppress only disconnected-network error when a local copy is
         // available. Other server failures and invalid data remain visible.
         if hasOfflineFallback,
-           case SourceRuntimeError.remoteError(let reason) = error,
+           let sourceError = error as? SourceRuntimeError,
+           case .remoteError(let reason) = sourceError,
            reason.contains("-1009") {
             return
         }
