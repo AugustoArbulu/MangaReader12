@@ -349,7 +349,7 @@ async function testWebtoons() {
     'https://webtoon-phinf.pstatic.net/encoded%20panel.png?x=%2F');
   assert.equal(chapterPages[2].imageUrl,'https://webtoon-phinf.pstatic.net/relative-protocol.jpg');
   assert.equal(chapterPages[3].imageUrl,'https://www.webtoons.com/en/images/same-origin.jpg');
-  assert.deepEqual(chapterPages.map(p=>p.index),[0,1,2,3]);
+  assert.equal(chapterPages.map(p=>p.index).join(','),'0,1,2,3');
   assert(chapterPages.every(p=>p.headers.Referer==='https://www.webtoons.com/'));
   assert.equal(chapterFixture.calls.length,1,'no per-image probe or extra chapter request');
   console.log('PASS Webtoons EN: iOS12-safe chapter page URLs, unchanged CDN host and order');
