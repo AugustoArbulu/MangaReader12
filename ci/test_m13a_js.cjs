@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.4');
+      assert.equal(source.version,'0.1.5');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -145,6 +145,9 @@ async function testWebtoons() {
   const initialListing=await r.call('popular',1);
   assert.equal(initialListing.items.length,1);
   assert.equal(initialListing.items[0].cover,'https://swebtoon-phinf.pstatic.net/cover.jpg');
+  assert.equal(initialListing.items[0].coverDiagnostic.coverFound,true);
+  assert.equal(initialListing.items[0].coverDiagnostic.outputClass,'pstatic-https');
+  assert(initialListing.items[0].coverDiagnostic.outputLength>0);
   assert.equal((await r.call('search','a',1,[])).items.length,1);
   assert.equal((await r.call('details',root)).status,'ongoing');
   const chapters=await r.call('chapters',root);
@@ -206,6 +209,10 @@ async function testWebtoons() {
   assert.equal(variantsResult.items[2].cover,'https://swebtoon-phinf.pstatic.net/css.jpg?type=q90');
   assert.equal(variantsResult.items[3].cover,'https://swebtoon-phinf.pstatic.net/anchor.jpg');
   assert.equal(variantsResult.items[4].cover,null);
+  assert.equal(variantsResult.items[4].coverDiagnostic.coverFound,false);
+  assert.equal(variantsResult.items[4].coverDiagnostic.outputClass,'empty');
+  assert.equal(variantsResult.items[4].coverDiagnostic.outputLength,0);
+  assert(variantsResult.items[4].coverDiagnostic.attributes.includes('card.data-cover'));
   assert.equal(variants.calls.length,1,'cover fallback must not trigger extra HTTP requests');
   const trace=await variants.call('inspectCover',
     'https://www.webtoons.com/en/original/f/list?title_no=46');
@@ -218,7 +225,55 @@ async function testWebtoons() {
   assert.equal(variants.calls.length,1,'diagnostic must not make extra HTTP requests');
   const positive=await variants.call('inspectCover',root);
   assert.equal(positive.coverFound,true);
+  assert.equal(positive.outputClass,'pstatic-https');
   assert(positive.kinds.includes('coverLazy.data-src=protocol-relative'));
+  // Same series may appear twice in separate ranking pages with different
+  // image markup. The first row's observation must survive a later lookup.
+  let rankingVisit=0;
+  const duplicate=runtime('keiyoushi-webtoons-en.js',{
+    http() {rankingVisit++;return 'LIST';},
+    dom(html,specs) {
+      if(!specs.items)throw Error('unexpected selector');
+      return {items:[node('',{href:root},{title:node('Duplicate ranking entry'),
+        cover:rankingVisit===1
+          ?node('',{src:'https://webtoon-phinf.pstatic.net/valid.jpg'})
+          :node('',{src:'data:image/svg+xml;base64,AA=='})})],next:[]};
+    }
+  });
+  const original=(await duplicate.call('popular',1)).items[0];
+  assert.equal(original.coverDiagnostic.coverFound,true);
+  const duplicateLatest=(await duplicate.call('popular',2)).items[0];
+  assert.equal(duplicateLatest.coverDiagnostic.coverFound,false);
+  assert.equal(original.coverDiagnostic.coverFound,true,'snapshot of original row must be preserved');
+  assert.equal((await duplicate.call('inspectCover',root)).coverFound,false,
+    'legacy map by id can be overwritten');
+  assert.equal(duplicate.calls.length,2,'snapshot must not trigger extra HTTP');
+
+  // Details diagnostic observes og:image presence using exactly the
+  // details() request; absence must not be mistaken for an HTTP image error.
+  const noMeta=runtime('keiyoushi-webtoons-en.js',{
+    http(){return 'DETAILS';},
+    dom(html,specs) {
+      assert(specs.coverMeta);
+      return {body:[node('',{},{
+        title:node('Missing meta'),status:node('COMPLETE')
+      })],coverMeta:[]};
+    }
+  });
+  const emptyDetails=await noMeta.call('details',root);
+  assert.equal(emptyDetails.cover,null);
+  const detailsTrace=await noMeta.call('inspectDetailsCover',root);
+  assert.equal(detailsTrace.matched,true);
+  assert.equal(detailsTrace.metaPresent,false);
+  assert.equal(detailsTrace.contentPresent,false);
+  assert.equal(detailsTrace.resolvedFound,false);
+  assert.equal(noMeta.calls.length,1,'metadata inspection must not fetch details twice');
+  const originalDetailsTrace=await r.call('inspectDetailsCover',root);
+  assert.equal(originalDetailsTrace.metaPresent,true);
+  assert.equal(originalDetailsTrace.contentClass,'pstatic-https');
+  assert.equal(originalDetailsTrace.resolvedFound,true);
+
+  console.log('PASS Webtoons EN: exact row snapshots survive duplicate ranking and details meta check');
   console.log('PASS Webtoons EN: same-card lazy/picture/background fallbacks and unsafe URL rejection');
   console.log('PASS Webtoons EN: list cover URLs normalized to permitted image CDN');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
