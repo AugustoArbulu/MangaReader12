@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.2';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.3';
   // The listing's webtoon-phinf host returned 403 on physical iOS 12.5.8.
   // The official alternate image host swebtoon-phinf served the details image
   // with normal HTTPS. Try that exact host for listing covers, preserving the
@@ -60,24 +60,40 @@ var H = (function () {
   // attributes and an inert data: placeholder in src. Prefer source-provided
   // actual HTTPS image URLs rather than trying to download the placeholder.
   function listCover(image) {
+    if(!image)return null;
     var choices=[
       H.attr(image,'data-src'),
       H.attr(image,'data-original'),
       H.attr(image,'data-lazy-src'),
-      H.attr(image,'data-url')
+      H.attr(image,'data-src-lazy'),
+      H.attr(image,'data-url'),
+      H.attr(image,'data-image'),
+      H.attr(image,'data-image-url'),
+      H.attr(image,'data-thumbnail'),
+      H.attr(image,'data-thumbnail-url'),
+      H.attr(image,'data-thumb'),
+      H.attr(image,'data-thumb-url'),
+      H.attr(image,'data-cover'),
+      H.attr(image,'data-cover-url'),
+      H.attr(image,'data-background'),
+      H.attr(image,'data-background-image'),
+      H.attr(image,'data-bg')
     ];
     function appendSrcSet(value) {
       if(!value)return;
-      // HTML srcset is a comma-delimited list of URLs + width/density.
       var entries=value.split(',');
       for(var i=0;i<entries.length;i++){
         var token=entries[i].trim().split(/\s+/)[0];
-        if(token) choices.push(token);
+        if(token)choices.push(token);
       }
     }
     appendSrcSet(H.attr(image,'data-srcset'));
     appendSrcSet(H.attr(image,'srcset'));
     choices.push(H.attr(image,'src'));
+    // Read only inert attributes. Never execute inline CSS or site scripts.
+    var style=H.attr(image,'style');
+    var bg=/\bbackground(?:-image)?\s*:\s*url\(\s*(?:"([^"]+)"|'([^']+)'|([^)]*))\s*\)/i.exec(style);
+    if(bg)choices.push((bg[1]||bg[2]||bg[3]||'').trim());
     for(var k=0;k<choices.length;k++){
       var u=H.cleanURL(base,choices[k]);
       if(u && /^https:\/\/(?:[a-z0-9-]+\.)*(?:webtoons\.com|pstatic\.net)(?:[/:?#]|$)/i.test(u)){
@@ -86,16 +102,33 @@ var H = (function () {
     }
     return null;
   }
+  function listCardCover(card) {
+    // Scan bounded alternatives within the same series card. No per-item
+    // details() or extra HTTP calls for empty thumbnails.
+    var fields=['cover','coverLazy','coverSrcset','coverHost','coverPicture',
+                'coverData','coverStyle'];
+    for(var i=0;i<fields.length;i++){
+      var u=listCover(H.field(card,fields[i]));
+      if(u)return u;
+    }
+    return listCover(card);
+  }
   function listing(path,hasNext,done){
     H.get(base+path,function(resp){
       if(resp.__sourceError){done(resp);return;}
       H.select(resp.body,{items:{selector:'.webtoon_list li a',
-        fields:{title:'.title',cover:'img'}},
+        fields:{title:'.title',cover:'img',
+          coverLazy:'img[data-src],img[data-original],img[data-lazy-src],img[data-url]',
+          coverSrcset:'img[srcset],img[data-srcset]',
+          coverHost:'img[src*="pstatic.net"],img[src*="webtoons.com"]',
+          coverPicture:'picture source[srcset],picture source[data-srcset]',
+          coverData:'[data-thumbnail],[data-cover],[data-image],[data-bg]',
+          coverStyle:'[style*="background-image"],[style*="background:"]'}},
         next:{selector:'a.pagination[aria-current=true] + a'}},function(res){
         if(res.__sourceError){done(res);return;}
         var seen={},entries=H.items(res,'items').map(function(x){
           var u=H.cleanURL(base,H.attr(x,'href')),title=H.text(H.field(x,'title'));
-          var cover=H.field(x,'cover'),img=listCover(cover);
+          var img=listCardCover(x);
           if(!u||!title||seen[u])return null; seen[u]=true;
           return {id:u,title:title,cover:img,url:u};
         }).filter(Boolean);
