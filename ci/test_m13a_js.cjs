@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.6');
+      assert.equal(source.version,'0.1.7');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -320,6 +320,39 @@ async function testWebtoons() {
   assert.equal((await unicode.call('inspectDetailsCover',root)).resolvedFound,true);
   assert.equal(unicode.calls.length,2,'URL normalization must not add HTTP requests');
   console.log('PASS Webtoons EN: strict iOS12 image URL encoding, existing percent escapes and domain guard');
+
+  // Regression: Webtoons episode `data-url` images must receive the same
+  // legacy-safe encoding as covers, without rewriting the chapter image CDN
+  // to the alternate thumbnail host or triggering additional requests.
+  const chapterURL='https://www.webtoons.com/en/original/series/viewer?title_no=42&episode_no=1';
+  const chapterMedia='https://webtoon-phinf.pstatic.net/Panel [한글].jpg?type=q90&x=1';
+  const chapterFixture=runtime('keiyoushi-webtoons-en.js',{
+    http(url){assert.equal(url,chapterURL);return 'PAGES';},
+    dom(html,specs){
+      assert(specs.images,'single expected chapter DOM selection');
+      return {images:[
+        node('',{'data-url':chapterMedia}),
+        node('',{'data-url':'https://webtoon-phinf.pstatic.net/encoded%20panel.png?x=%2F'}),
+        node('',{'data-url':'//webtoon-phinf.pstatic.net/relative-protocol.jpg'}),
+        node('',{'data-url':'/en/images/same-origin.jpg'}),
+        node('',{'data-url':'https://other.example/forbidden.jpg'}),
+        node('',{'data-url':'https://webtoon-phinf.pstatic.net/bad%GG.jpg'}),
+        node('',{'data-url':'https://webtoon-phinf.pstatic.net/control\n.jpg'})
+      ]};
+    }
+  },true);
+  const chapterPages=await chapterFixture.call('pages',chapterURL);
+  assert.equal(chapterPages.length,4,'unsafe URLs must be dropped, preserving valid sequence');
+  assert.equal(chapterPages[0].imageUrl,
+    'https://webtoon-phinf.pstatic.net/Panel%20%5B%ED%95%9C%EA%B8%80%5D.jpg?type=q90&x=1');
+  assert.equal(chapterPages[1].imageUrl,
+    'https://webtoon-phinf.pstatic.net/encoded%20panel.png?x=%2F');
+  assert.equal(chapterPages[2].imageUrl,'https://webtoon-phinf.pstatic.net/relative-protocol.jpg');
+  assert.equal(chapterPages[3].imageUrl,'https://www.webtoons.com/en/images/same-origin.jpg');
+  assert.deepEqual(chapterPages.map(p=>p.index),[0,1,2,3]);
+  assert(chapterPages.every(p=>p.headers.Referer==='https://www.webtoons.com/'));
+  assert.equal(chapterFixture.calls.length,1,'no per-image probe or extra chapter request');
+  console.log('PASS Webtoons EN: iOS12-safe chapter page URLs, unchanged CDN host and order');
 
   console.log('PASS Webtoons EN: exact row snapshots survive duplicate ranking and details meta check');
   console.log('PASS Webtoons EN: same-card lazy/picture/background fallbacks and unsafe URL rejection');
