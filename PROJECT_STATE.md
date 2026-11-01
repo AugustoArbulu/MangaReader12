@@ -614,3 +614,19 @@ Source 0.1.3 candidate extracts additional same-card image attributes and elemen
 - ci/test_m13a_js.cjs testa integridade SHA, separação dos rankings, modo gênero, validade do caminho, apenas um GET, falta de paginação artificial, recusa de categorias desconhecidas e contrato de UI nativa. Os testes usam mocks, sem confirmar DOM vivo ou endpoint de recência.
 - Build37 é nativo por acrescentar UI/DTO Swift; **novo IPA necessário**. Instalar sobre Build36 (preservar dados); atualizar fonte Webtoons EN para 0.1.8 separadamente pelo catálogo; testar Populares, menu Tendências/Originals/Canvas, gêneros Romance/Fantasia/Ação, busca, detalhes, capítulos, leitura e downloads offline. Registrar os casos que retornarem zero itens ou erro.
 - Baseline preservada: Build36 + Webtoons EN 0.1.7 permanece referência até aceite físico. CI Debug/Release, checagem binária 37 e testes JS são gate antes do merge.
+
+## R2-A — monitoramento somente de leitura do Keiyoushi (2026-11-01)
+
+- Referência de 12 paths no upstream (9 fontes + 3 engines), em ci/keiyoushi-upstream-baseline.json; commits obtidos via API oficial GitHub em 2026-11-01.
+- .github/workflows/keiyoushi-upstream.yml: semanal segunda 07:17 UTC (best-effort) + workflow_dispatch. Actions read-only token e artefatos Markdown/JSON em cada execução; sem PR ou atualização automática de scripts e sem visitas aos sites das fontes.
+- Script ci/monitor_keiyoushi_upstream.py: valida paths e commits, consulta último commit de cada diretório via API GitHub, compara com baseline, marca changed/review, unchanged, erro; falha visivelmente se API indisponível.
+- Teste offline ci/test_monitor_keiyoushi_upstream.py incorporado à pipeline de build. Documentação em docs/R2_KEIYOUSHI_UPSTREAM_MONITOR_2026-11-01.md.
+- Um commit novo demanda revisão humana e port explícito. Não implica compatibilidade com iOS12 nem autoriza contornar restrições. Este PR de monitoramento **não modifica o aplicativo** e não gera nova versão.
+
+## Webtoons EN 0.1.9 — Recentes legítimos sem novo IPA (2026-11-01)
+
+- Revisado upstream oficial Webtoons.kt: getLatestUpdates(page=1) usa a listagem de Originals **do dia da semana local**, com query `sortOrder=UPDATE`, e hasNextPage=false. Não é um feed de todos os capítulos de Canvas ou de todos os dias. URL de origem: https://github.com/keiyoushi/extensions-source/blob/main/src/all/webtoons/src/eu/kanade/tachiyomi/extension/all/webtoons/Webtoons.kt .
+- O JS da nossa fonte 0.1.9 passa a declarar categoria opcional `{id:'latest', title:'Recentes (Originals do dia)', kind:'latest'}` e consultar exclusivamente `/en/originals/<dia>?sortOrder=UPDATE`, com nomes de dias fixos e página 2 vazia. Usa o mesmo parser .webtoon_list da implementação upstream e um GET por consulta; sem mudar allowlist/TLS/hosts.
+- Atualiza o pin de integridade SHA256 para `d6b0956b88b3a8fcde19ab013178b22044479d9c693df37775dd096920ac3041`. Testes offline verificam rota, lista de dias, categoria declarada, ausência de página artificial, sem GET para modo inválido; sem requisição ao site durante CI.
+- **Não precisa de novo IPA**: Build37 é necessário para exibir o novo menu; fonte Webtoons EN deve ser atualizada de 0.1.8 para 0.1.9 pelo catálogo após CI/merge.
+- Teste físico pendente: Populares, Tendências, Recentes (Originals do dia), gêneros e leitura normal em iOS12.5.8. Nenhuma alegação de funcionamento real de Recentes/gêneros sem o retorno do usuário.
