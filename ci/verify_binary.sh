@@ -27,8 +27,8 @@ fi
 echo "PASS: Mach-O minimum OS is iOS 12.0."
 
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
-if [[ "$VERSION" != "35" ]]; then
-  echo "ERROR: wrong embedded CFBundleVersion: $VERSION (expected 35)" >&2
+if [[ "$VERSION" != "36" ]]; then
+  echo "ERROR: wrong embedded CFBundleVersion: $VERSION (expected 36)" >&2
   exit 4
 fi
-echo "PASS: embedded CFBundleVersion is 35."
+echo "PASS: embedded CFBundleVersion is 36."
