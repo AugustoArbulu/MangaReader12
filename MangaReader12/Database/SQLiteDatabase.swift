@@ -1858,6 +1858,14 @@ final class ReadingProgressRepository {
     }
 }
 
+// Snapshot of persisted metadata and completed local chapters. Reusing the
+// original metadata prevents offline reading-progress writes from replacing
+// saved number, cover, description, status or canonical URL with placeholders.
+struct OfflineReaderSnapshot {
+    let manga: Manga
+    let chapters: [Chapter]
+}
+
 final class DownloadRepository {
     private let database: SQLiteDatabase
 
@@ -1869,6 +1877,81 @@ final class DownloadRepository {
         let database = try SQLiteDatabase.defaultDatabase()
         try database.openAndMigrate()
         return DownloadRepository(database: database)
+    }
+
+    // Read-only and entirely local. No source runtime or HTTP request.
+    // Lists only completed downloads for the exact source + manga identity.
+    func completedOfflineSnapshot(
+        sourceID: String,
+        sourceMangaID: String
+    ) throws -> OfflineReaderSnapshot? {
+        try database.openAndMigrate()
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.title, m.cover, m.description, m.status, m.url,
+                    c.source_chapter_id, c.name, c.number, c.volume, c.url
+                FROM downloads d
+                JOIN chapters c ON c.internal_id = d.chapter_id
+                JOIN manga m ON m.internal_id = c.manga_id
+                WHERE m.source_id = ?
+                  AND m.source_manga_id = ?
+                  AND d.state = 'completed'
+                ORDER BY c.number DESC, c.internal_id DESC;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+            try bindText(sourceID, index: 1, statement: statement)
+            try bindText(sourceMangaID, index: 2, statement: statement)
+
+            var manga: Manga?
+            var chapters: [Chapter] = []
+            while true {
+                let result = sqlite3_step(statement)
+                if result == SQLITE_DONE { break }
+                guard result == SQLITE_ROW,
+                      let title = columnText(statement, index: 0),
+                      let chapterID = columnText(statement, index: 5),
+                      let chapterName = columnText(statement, index: 6) else {
+                    throw sqliteError(handle)
+                }
+                if manga == nil {
+                    let status = MangaStatus(
+                        rawValue: columnText(statement, index: 3) ?? ""
+                    ) ?? .unknown
+                    manga = Manga(
+                        id: sourceMangaID,
+                        title: title,
+                        altTitles: [],
+                        cover: columnText(statement, index: 1),
+                        author: nil,
+                        artist: nil,
+                        description: columnText(statement, index: 2),
+                        status: status,
+                        genres: [],
+                        url: columnText(statement, index: 4)
+                    )
+                }
+                let number: Double? = sqlite3_column_type(statement, 7) == SQLITE_NULL
+                    ? nil : sqlite3_column_double(statement, 7)
+                let volume: Double? = sqlite3_column_type(statement, 8) == SQLITE_NULL
+                    ? nil : sqlite3_column_double(statement, 8)
+                chapters.append(Chapter(
+                    id: chapterID,
+                    name: chapterName,
+                    number: number,
+                    volume: volume,
+                    date: nil,
+                    scanlator: nil,
+                    language: nil,
+                    url: columnText(statement, index: 9)
+                ))
+            }
+            guard let manga = manga, !chapters.isEmpty else { return nil }
+            return OfflineReaderSnapshot(manga: manga, chapters: chapters)
+        }
     }
 
     // Queued/running NSURLSession work from a previous app process cannot

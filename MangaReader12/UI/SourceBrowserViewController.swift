@@ -639,6 +639,10 @@ final class MangaDetailsViewController: UITableViewController {
     private var downloadManager: ChapterDownloadManager?
     private var chapterStates: [String: ChapterReadingState] = [:]
     private var isInLibrary = false
+    private var hasCachedOfflineManga = false
+    private var hasCachedOfflineChapters = false
+    private var receivedRemoteDetails = false
+    private var receivedRemoteChapters = false
 
     init(
         sourceRecord: InstalledSourceRecord,
@@ -704,6 +708,7 @@ final class MangaDetailsViewController: UITableViewController {
         readingRepository = try? ReadingProgressRepository.defaultRepository()
         downloadManager = try? ChapterDownloadManager.defaultManager()
 
+        loadCachedOfflineChapters()
         loadDetailsAndChapters()
     }
 
@@ -787,10 +792,41 @@ final class MangaDetailsViewController: UITableViewController {
         items[2].isEnabled = isInLibrary
     }
 
+    // Use downloaded chapters already persisted in SQLite before refreshing
+    // the source. A disconnected Library can still open the local pages.
+    private func loadCachedOfflineChapters() {
+        guard let repository = try? DownloadRepository.defaultRepository(),
+              let snapshot = try? repository.completedOfflineSnapshot(
+                  sourceID: sourceRecord.manifest.id,
+                  sourceMangaID: summary.id
+              ) else { return }
+
+        manga = snapshot.manga
+        chapters = snapshot.chapters
+        hasCachedOfflineManga = true
+        hasCachedOfflineChapters = true
+        tableView.reloadData()
+        reloadReadingStates()
+    }
+
+    private func reportSourceFailure(_ error: Error, hasOfflineFallback: Bool) {
+        // Suppress only disconnected-network error when a local copy is
+        // available. Other server failures and invalid data remain visible.
+        if hasOfflineFallback,
+           let sourceError = error as? SourceRuntimeError,
+           case .remoteError(let reason) = sourceError,
+           reason.contains("-1009") {
+            return
+        }
+        showError(error)
+    }
+
     private func loadDetailsAndChapters() {
         guard pendingRequests == 0 else { return }
 
         pendingRequests = 2
+        receivedRemoteDetails = false
+        receivedRemoteChapters = false
         navigationItem.prompt = "Carregando detalhes e capítulos…"
         navigationItem.rightBarButtonItems?.first?.isEnabled = false
 
@@ -804,6 +840,7 @@ final class MangaDetailsViewController: UITableViewController {
 
                 switch result {
                 case .success(let manga):
+                    self.receivedRemoteDetails = true
                     self.manga = manga
                     self.title = manga.title
                     self.tableView.reloadSections(
@@ -812,7 +849,7 @@ final class MangaDetailsViewController: UITableViewController {
                     )
 
                 case .failure(let error):
-                    self.showError(error)
+                    self.reportSourceFailure(error, hasOfflineFallback: self.hasCachedOfflineManga)
                 }
 
                 self.finishRequest()
@@ -829,6 +866,7 @@ final class MangaDetailsViewController: UITableViewController {
 
                 switch result {
                 case .success(let chapters):
+                    self.receivedRemoteChapters = true
                     self.chapters = chapters
                     self.reloadReadingStates()
                     self.tableView.reloadSections(
@@ -837,7 +875,7 @@ final class MangaDetailsViewController: UITableViewController {
                     )
 
                 case .failure(let error):
-                    self.showError(error)
+                    self.reportSourceFailure(error, hasOfflineFallback: self.hasCachedOfflineChapters)
                 }
 
                 self.finishRequest()
@@ -852,7 +890,10 @@ final class MangaDetailsViewController: UITableViewController {
             navigationItem.prompt = nil
             navigationItem.rightBarButtonItems?.first?.isEnabled = true
 
-            if isInLibrary,
+            // A partial offline snapshot must never replace a complete
+            // previously persisted Library chapter list.
+            if receivedRemoteDetails && receivedRemoteChapters &&
+               isInLibrary,
                let manga = manga,
                let repository = libraryRepository {
                 do {

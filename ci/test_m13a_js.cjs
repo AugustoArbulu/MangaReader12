@@ -359,6 +359,37 @@ async function testWebtoons() {
   console.log('PASS Webtoons EN: list cover URLs normalized to permitted image CDN');
   console.log('PASS Webtoons EN: 6 source methods, chapter JSON/pages');
 }
+// Structural regression gate for the offline UI entry point. Xcode validates
+// Swift syntax; physical iOS12 airplane-mode reading remains the acceptance
+// test because this is not an XCTest runtime/simulator harness.
+function testOfflineReaderRouting() {
+  const root=path.join(__dirname,'../MangaReader12');
+  const downloads=fs.readFileSync(path.join(root,'UI/DownloadsViewController.swift'),'utf8');
+  const open=downloads.slice(
+    downloads.indexOf('    private func open(_ record: DownloadListRecord) {'),
+    downloads.indexOf('    private func stateText(',downloads.indexOf('    private func open(_ record: DownloadListRecord) {'))
+  );
+  assert(open.includes('manager.localPages('));
+  assert(open.includes('.completedOfflineSnapshot('));
+  assert(open.includes('ReaderViewController('));
+  assert(!open.includes('InstalledSourceRuntimeLoader'),'completed download must not load source');
+  assert(!open.includes('runtime.callDecoded('),'completed download must not fetch remote details');
+  assert(open.includes('record.state == "completed"'));
+  const db=fs.readFileSync(path.join(root,'Database/SQLiteDatabase.swift'),'utf8');
+  const start=db.indexOf('func completedOfflineSnapshot(');
+  const query=db.slice(start,start+4600);
+  assert(query.includes("d.state = 'completed'"));
+  assert(query.includes('m.source_id = ?'));
+  assert(query.includes('m.source_manga_id = ?'));
+  assert(query.includes('c.number'),'existing chapter numbering must be preserved');
+  assert(query.includes('m.cover'),'existing cover metadata must be preserved');
+  const details=fs.readFileSync(path.join(root,'UI/SourceBrowserViewController.swift'),'utf8');
+  assert(details.includes('loadCachedOfflineChapters()'));
+  assert(details.includes('receivedRemoteDetails && receivedRemoteChapters'));
+  assert(details.includes('reason.contains("-1009")'));
+  console.log('PASS offline entry route: completed downloads use local pages, metadata and no source runtime');
+}
+
 async function testSecurity() {
   const r=runtime('keiyoushi-hotcomics.js',{http(){throw Error('unsafe request')},dom(){throw Error('unsafe DOM')}});
   const res=await r.call('pages','http://hotcomics.io/chapter/1');
@@ -368,5 +399,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{verifyPinnedCatalog();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});
