@@ -566,38 +566,31 @@ final class DownloadsViewController: UITableViewController {
                 return
             }
 
-            let manga = Manga(
-                id: record.sourceMangaID, title: record.mangaTitle,
-                altTitles: [], cover: record.cover,
-                author: nil, artist: nil, description: nil,
-                status: .unknown, genres: [], url: record.sourceMangaID
-            )
-            let chapter = Chapter(
-                id: record.sourceChapterID, name: record.chapterName,
-                number: nil, volume: nil, date: nil, scanlator: nil,
-                language: nil, url: record.sourceChapterID
-            )
-            // Only completed downloads for the exact same source and series
-            // can appear as adjacent chapters while reading offline.
-            let chapters = records.filter {
-                $0.sourceID == record.sourceID &&
-                $0.sourceMangaID == record.sourceMangaID &&
-                $0.state == "completed"
-            }.map {
-                Chapter(
-                    id: $0.sourceChapterID, name: $0.chapterName,
-                    number: nil, volume: nil, date: nil, scanlator: nil,
-                    language: nil, url: $0.sourceChapterID
+            // Read the exact persisted manga/chapter metadata. Synthetic
+            // placeholder objects can erase valid chapter numbers and cover
+            // metadata when the reader records progress in SQLite.
+            guard let snapshot = try DownloadRepository.defaultRepository()
+                .completedOfflineSnapshot(
+                    sourceID: record.sourceID,
+                    sourceMangaID: record.sourceMangaID
+                ),
+                let chapter = snapshot.chapters.first(where: {
+                    $0.id == record.sourceChapterID
+                }) else {
+                showMessage(
+                    title: "Metadados offline indisponíveis",
+                    message: "Não foi possível localizar os metadados locais deste capítulo. Os arquivos não foram alterados."
                 )
+                return
             }
 
             let reader = ReaderViewController(
                 sourceID: source.manifest.id,
-                manga: manga,
+                manga: snapshot.manga,
                 chapter: chapter,
                 pages: pages,
                 manifest: source.manifest,
-                chapters: chapters,
+                chapters: snapshot.chapters,
                 resolvePages: { target, completion in
                     do {
                         guard let local = try manager.localPages(
