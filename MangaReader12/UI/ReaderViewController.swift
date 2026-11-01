@@ -236,8 +236,11 @@ final class ReaderImageLoader {
 
     private func remember(_ image: UIImage, for key: String) {
         // Even a small compressed JPEG may expand to tens of MB of pixels.
-        let width = max(1, min(32_000, Int(image.size.width * image.scale)))
-        let height = max(1, min(32_000, Int(image.size.height * image.scale)))
+        let pixelWidth = image.size.width * image.scale
+        let pixelHeight = image.size.height * image.scale
+        guard pixelWidth.isFinite, pixelHeight.isFinite else { return }
+        let width = Int(max(1, min(32_000, pixelWidth)))
+        let height = Int(max(1, min(32_000, pixelHeight)))
         memoryCache.setObject(
             image, forKey: key as NSString, cost: width * height * 4
         )
