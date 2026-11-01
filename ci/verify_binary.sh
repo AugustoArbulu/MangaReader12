@@ -25,3 +25,10 @@ if ! otool -l "$BIN" | grep -A8 LC_BUILD_VERSION | grep -q 'minos 12\.0'; then
 fi
 
 echo "PASS: Mach-O minimum OS is iOS 12.0."
+
+VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
+if [[ "$VERSION" != "32" ]]; then
+  echo "ERROR: wrong embedded CFBundleVersion: $VERSION (expected 32)" >&2
+  exit 4
+fi
+echo "PASS: embedded CFBundleVersion is 32."
