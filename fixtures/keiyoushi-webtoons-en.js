@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.6';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.7';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -125,7 +125,7 @@ var H = (function () {
   // existing allowlist, then encode only the path/query/fragment portion.
   // Preserve reserved URL delimiters and existing valid %HH sequences.
   // Never modify other hosts, credentials, schemes, or malformed escapes.
-  function normalizeWebtoonsImageURL(value) {
+  function normalizeWebtoonsImageURL(value, preserveHost) {
     if(!value || typeof value !== 'string')return null;
     var match=/^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?=\/|\?|#|$)/i.exec(value);
     if(!match)return null;
@@ -144,7 +144,8 @@ var H = (function () {
     } catch(e) {
       return null; // e.g. malformed surrogate pair
     }
-    return canonicalListCoverURL(match[0]+encoded);
+    var normalized=match[0]+encoded;
+    return preserveHost ? normalized : canonicalListCoverURL(normalized);
   }
   // The episode/series page uses og:image, but list cards can use lazy image
   // attributes and an inert data: placeholder in src. Prefer source-provided
@@ -310,7 +311,12 @@ var H = (function () {
         H.select(resp.body,{images:{selector:'div#_imageList > img'}},function(res){
           if(res.__sourceError){done(res);return;}
           var imgs=H.items(res,'images').map(function(x){
-            return H.cleanURL(base,H.attr(x,'data-url'));
+            // Chapter media may use a different CDN path than thumbnail
+            // covers. Preserve the original allowed host and image order.
+            // Resolve relative media links against the loaded chapter page,
+            // not against the catalog home page.
+            var resolved=H.cleanURL(resp.url || u,H.attr(x,'data-url'));
+            return normalizeWebtoonsImageURL(resolved,true);
           }).filter(Boolean);
           if(!imgs.length){H.fail(done,'No standard images (motion toon may not be supported)');return;}
           done(imgs.map(function(url,i){
