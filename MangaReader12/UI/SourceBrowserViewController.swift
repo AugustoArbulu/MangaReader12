@@ -65,7 +65,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     @objc private func diagnoseCoverTapped() {
         guard sourceRecord.manifest.id == "kei.webtoons.en",
               coverDiagnostic == nil else { return }
-        guard let runtime = runtime, let first = items.first else {
+        guard let runtime = runtime, !items.isEmpty else {
             showMessage(
                 title: "Diagnóstico de capas",
                 message: "Abra Populares e carregue pelo menos uma obra antes do teste."
@@ -74,10 +74,18 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         }
 
         navigationItem.rightBarButtonItem?.isEnabled = false
-        navigationItem.prompt = "Testando uma capa da lista e dos detalhes…"
+        navigationItem.prompt = "Testando capas visíveis e os detalhes…"
 
+        // Sample at most three currently visible rows so the user can scroll
+        // to a failed cover before explicitly running this bounded test.
+        let visible = (tableView.indexPathsForVisibleRows ?? [])
+            .filter { $0.section == 0 && $0.row < items.count }
+            .sorted { $0.row < $1.row }
+            .prefix(3)
+            .map { items[$0.row] }
+        let samples = visible.isEmpty ? Array(items.prefix(3)) : visible
         let diagnostic = WebtoonsCoverDiagnostic(
-            summary: first,
+            summaries: samples,
             runtime: runtime,
             allowedDomains: sourceRecord.manifest.domains
         )
@@ -308,16 +316,16 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 }
 
-// An explicitly initiated, bounded cover probe. It performs at most one
-// normal GET for a popular-list thumbnail, one regular source details call,
-// and one normal GET for that work's details cover. No automated retries,
+// An explicitly initiated, bounded cover probe. It tests at most three
+// visible thumbnails, one regular details() call, and one details cover GET,
+// all sequentially; stop on HTTP 429. No automated retries,
 // cross-host exceptions, certificate overrides or background monitoring.
 //
 // URLs may contain tokens or reveal the manga title. The copied report
 // includes only the host and safe format metadata, never URL path/query,
 // authentication headers, HTML, cookies or response body.
 private final class WebtoonsCoverDiagnostic {
-    private let summary: SourceMangaSummary
+    private let summaries: [SourceMangaSummary]
     private let runtime: JavaScriptSourceRuntime
     private let domains: [String]
     private var client: HTTPClient?
@@ -325,11 +333,11 @@ private final class WebtoonsCoverDiagnostic {
     private var finishCallback: ((String) -> Void)?
 
     init(
-        summary: SourceMangaSummary,
+        summaries: [SourceMangaSummary],
         runtime: JavaScriptSourceRuntime,
         allowedDomains: [String]
     ) {
-        self.summary = summary
+        self.summaries = Array(summaries.prefix(3))
         self.runtime = runtime
         self.domains = allowedDomains
     }
@@ -340,20 +348,25 @@ private final class WebtoonsCoverDiagnostic {
             "iOS: " + UIDevice.current.systemVersion,
             "App: " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"),
             "Fonte: Webtoons.com EN",
-            "Amostra: primeira obra da lista (sem título no relatório)",
+            "Amostras: até 3 capas visíveis (sem títulos no relatório)",
             "HTTPS padrão; sem login, bypass ou exceções de certificado",
             "Domínios permitidos: " + domains.joined(separator: ", ")
         ]
-        probe("Capa da lista", url: summary.cover) { [weak self] rateLimited in
+        probeVisibleCover(at: 0) { [weak self] rateLimited in
             guard let self = self else { return }
             if rateLimited {
                 self.lines.append("Detalhes: não testados após HTTP 429")
                 self.finish()
                 return
             }
+
+            guard let first = self.summaries.first else {
+                self.finish()
+                return
+            }
             self.runtime.callDecoded(
                 "details",
-                arguments: [self.summary.id],
+                arguments: [first.id],
                 as: Manga.self
             ) { [weak self] result in
                 guard let self = self else { return }
@@ -366,6 +379,25 @@ private final class WebtoonsCoverDiagnostic {
                     self.lines.append("Obtenção dos detalhes: " + error.localizedDescription)
                     self.finish()
                 }
+            }
+        }
+    }
+
+    private func probeVisibleCover(
+        at index: Int,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard index < summaries.count else {
+            completion(false)
+            return
+        }
+        probe("Capa da lista " + String(index + 1), url: summaries[index].cover) {
+            [weak self] rateLimited in
+            guard let self = self else { return }
+            if rateLimited {
+                completion(true)
+            } else {
+                self.probeVisibleCover(at: index + 1, completion: completion)
             }
         }
     }
@@ -399,14 +431,17 @@ private final class WebtoonsCoverDiagnostic {
             return
         }
 
+        let startedAt = Date()
         let currentClient = HTTPClient(policy: policy)
         client = currentClient // Retain URLSession until asynchronous completion.
         currentClient.send(HTTPRequest(url: raw)) { [weak self] outcome in
             guard let self = self else { return }
             self.client = nil
+            let elapsedMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
+            let latency = ", ms=" + String(max(0, elapsedMilliseconds))
             switch outcome {
             case .failure(let error):
-                self.lines.append(label + ": " + error.localizedDescription)
+                self.lines.append(label + ": " + error.localizedDescription + latency)
                 completion(false)
             case .success(let response):
                 let contentType = response.headers.first {
@@ -420,7 +455,7 @@ private final class WebtoonsCoverDiagnostic {
                     ", tipo=" + String(mime.prefix(64)) +
                     ", bytes=" + String(response.data.count) +
                     ", UIImage=" + (decoded ? "SIM" : "NÃO") +
-                    ", host final=" + finalHost
+                    ", host final=" + finalHost + latency
                 )
                 completion(response.statusCode == 429)
             }
