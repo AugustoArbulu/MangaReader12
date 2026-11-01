@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.8';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.9';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -248,13 +248,14 @@ var H = (function () {
     },
     metadata:function(){return {id:id,name:'Webtoons.com EN (experimental)',lang:'en',version:version};},
     // Optional discovery API. Rankings are *categories*, not page 1..4.
-    // Genre pages are real site listings, but their DOM shape still needs
-    // physical iOS12 QA. An unsupported "latest" view is NOT advertised.
+    // Genre pages are real site listings; their DOM still needs iOS12 QA.
+    // Latest is restricted to today's Originals updates (Keiyoushi route).
     browseCategories:function(){
       return [
         {id:'trending',title:'Tendências',kind:'ranking'},
         {id:'originals',title:'Originals',kind:'ranking'},
         {id:'canvas',title:'Canvas',kind:'ranking'},
+        {id:'latest',title:'Recentes (Originals do dia)',kind:'latest'},
         {id:'romance',title:'Romance',kind:'genre'},
         {id:'fantasy',title:'Fantasia',kind:'genre'},
         {id:'action',title:'Ação',kind:'genre'},
@@ -276,7 +277,15 @@ var H = (function () {
       var rankings={trending:1,originals:1,canvas:1};
       var genres={romance:1,fantasy:1,action:1,drama:1,
                   comedy:1,thriller:1,mystery:1};
-      if(Object.prototype.hasOwnProperty.call(rankings,mode)){
+      if(mode==='latest'){
+        // Mirrors Keiyoushi Webtoons.getLatestUpdates(): the site's
+        // current weekday Originals listing ordered by chapter updates.
+        // It is NOT a claim to list all updates across Canvas or all days.
+        var days=['sunday','monday','tuesday','wednesday',
+                  'thursday','friday','saturday'];
+        var day=days[(new Date()).getDay()];
+        listing('/en/originals/'+day+'?sortOrder=UPDATE',false,done);
+      } else if(Object.prototype.hasOwnProperty.call(rankings,mode)){
         listing('/en/ranking/'+mode,false,done);
       } else if(Object.prototype.hasOwnProperty.call(genres,mode)){
         listing('/en/genres/'+mode,false,done);
