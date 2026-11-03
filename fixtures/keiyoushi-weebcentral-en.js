@@ -10,7 +10,10 @@
   var version = '0.1.2';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
-  var imageHostRE = /^https:\/\/(?:[a-z0-9-]+\.)*weebcentral\.com(?=\/|[?#]|$)/i;
+  // Exact media CDN hosts are grounded in public offline WeebCentral HTML
+  // fixtures (covers: temp.compsci88.com; chapter PNGs: hot.planeptune.us).
+  // This is not a wildcard permission for arbitrary third-party CDNs.
+  var imageHostRE = /^https:\/\/(?:(?:[a-z0-9-]+\.)*weebcentral\.com|temp\.compsci88\.com|hot\.planeptune\.us)(?=\/|[?#]|$)/i;
   var seriesRE = /^https:\/\/(?:www\.)?weebcentral\.com\/series\/([^\/?#]+)(?:\/[^\/?#]+)?\/?(?:[?#].*)?$/i;
   var chapterRE = /^https:\/\/(?:www\.)?weebcentral\.com\/(?:chapters?\/[^?#]+|series\/[^?#]+\/chapter\/[^?#]+)(?:[?#].*)?$/i;
 
@@ -90,14 +93,17 @@
   }
   function coverInfo(baseURL, parent) {
     if (!parent) return {url: null, host: null};
+    // UIImage/ImageIO on iOS 12 cannot be assumed to decode WebP covers.
+    // WeebCentral's public HTML has a JPG fallback on <picture><img>,
+    // while <source> typically points to WebP. Prefer the explicit JPG.
     return imageChoice(baseURL, [
-      firstSrcset(attr(fld(parent, 'source'), 'srcset')),
       attr(fld(parent, 'image'), 'data-src'),
       attr(fld(parent, 'image'), 'data-original'),
       attr(fld(parent, 'image'), 'data-lazy-src'),
-      firstSrcset(attr(fld(parent, 'image'), 'srcset')),
       attr(fld(parent, 'image'), 'src'),
-      attr(parent, 'src')
+      attr(parent, 'src'),
+      firstSrcset(attr(fld(parent, 'source'), 'srcset')),
+      firstSrcset(attr(fld(parent, 'image'), 'srcset'))
     ]);
   }
   function coverDiagnostic(info) {
@@ -259,9 +265,9 @@
       // querySelectorAll use the CSS substring operator [attr*="..."].
       // Count nearby inert DOM elements for a zero-match diagnostic only.
       select(resp.body, {
-        images: {selector: 'section[x-data*="scroll"] > img'},
-        scrollSections: {selector: 'section[x-data*="scroll"]'},
-        nestedImages: {selector: 'section[x-data*="scroll"] img'},
+        images: {selector: 'section#chapter-images > img, section[x-data*="scroll"] > img'},
+        scrollSections: {selector: 'section#chapter-images, section[x-data*="scroll"]'},
+        nestedImages: {selector: 'section#chapter-images img, section[x-data*="scroll"] img'},
         allImages: {selector: 'img[src], img[data-src], img[data-original]'}
       }, function (dom) {
         if (dom.__sourceError) { done(dom); return; }
