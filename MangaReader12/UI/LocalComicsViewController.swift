@@ -344,7 +344,7 @@ final class LocalComicsViewController:
         present(alert, animated: true)
     }
 
-    private func applyTheme() {
+    func applyTheme() {
         ThemeManager.shared.style(tableView: tableView)
         subtitle.textColor = ThemeManager.shared.palette.secondaryText
         tableView.tableHeaderView?.backgroundColor =
@@ -352,3 +352,5 @@ final class LocalComicsViewController:
         tableView.reloadData()
     }
 }
+
+extension LocalComicsViewController: ThemeApplicable {}
