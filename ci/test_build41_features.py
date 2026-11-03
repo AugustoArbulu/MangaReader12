@@ -40,7 +40,7 @@ class Build41ReaderLibraryTests(unittest.TestCase):
         self.assertIn("HistoryViewController: UITableViewController", history)
         self.assertIn("init(resumeLatest: Bool = false)", history)
         self.assertIn("records.first(where: { $0.sourceChapterID != nil })", history)
-        self.assertIn("resumeChapterID: resumeLatestOnOpen", history)
+        self.assertIn("resumeChapterID: self.resumeLatestOnOpen", history)
 
     def test_grid_is_opt_in_with_list_fallback(self):
         library = read("MangaReader12/UI/LibraryViewController.swift")
