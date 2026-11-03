@@ -235,6 +235,11 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                     self.remoteFilterOptions = options
                     self.remoteFilters = self.remoteFilters.sanitized(for: options)
                     self.updateBrowseHeader()
+                    // Saved filters must apply to the very first visible
+                    // page; ignore the unfiltered in-flight response.
+                    if self.remoteFilters.hasActiveFilters {
+                        self.loadFirstPage()
+                    }
                 default:
                     // Optional capability: legacy sources remain unchanged.
                     self.remoteFilterOptions = nil
