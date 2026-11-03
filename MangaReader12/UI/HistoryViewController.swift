@@ -4,7 +4,7 @@ final class HistoryViewController: UITableViewController {
     private var records: [HistoryRecord] = []
     private var repository: ReadingProgressRepository?
     private var startupError: Error?
-    private let resumeLatestOnOpen: Bool
+    private var resumeLatestOnOpen = false
     private var didAttemptResume = false
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
