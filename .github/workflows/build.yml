@@ -48,6 +48,9 @@ jobs:
       - name: Test Build46 ImageIO offline image integrity (Swift)
         run: python3 ci/test_build46_download_integrity.py
 
+      - name: Probe Asura native tile permutations (offline Swift)
+        run: xcrun swift ci/asura_coregraphics_tiles_probe.swift
+
       - name: Validate read-only upstream monitor (offline)
         run: python3 ci/test_monitor_keiyoushi_upstream.py
 
