@@ -48,6 +48,9 @@ jobs:
       - name: Verify Build42 local archive and reader contracts
         run: python3 ci/test_build42_contract.py
 
+      - name: Verify Build43 Comix C2 safety contract (offline)
+        run: python3 ci/test_comix_c2_contract.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

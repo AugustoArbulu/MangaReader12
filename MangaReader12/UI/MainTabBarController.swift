@@ -1682,7 +1682,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 7
+        return 8
     }
 
     override func tableView(
@@ -1758,9 +1758,16 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = toggle
             cell.selectionStyle = .none
 
+        case 6:
+            cell.textLabel?.text = "Comix • teste do navegador"
+            cell.detailTextLabel?.text = "Abrir manualmente o site em WebKit (iOS 12)"
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Build 41 • compatível com iOS 12.0"
+            cell.detailTextLabel?.text = "Build 43 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
@@ -1804,6 +1811,12 @@ final class SettingsViewController: UITableViewController {
         case 4:
             navigationController?.pushViewController(
                 RootViewController(),
+                animated: true
+            )
+
+        case 6:
+            navigationController?.pushViewController(
+                ComixBrowserProbeViewController(),
                 animated: true
             )
 
