@@ -37,7 +37,8 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 4. `GET /search/data` aceita 32 cards por página conforme Keiyoushi; a paginação de continuar depende da existência do botão retornado no HTML. Isso não foi validado contra HTML vivo.
 5. Em detalhes, os dados são extraídos por rótulos textuais comuns de campos HTML; a semântica exata dos rótulos e a imagem de capa ainda dependem de QA físico. Não declarar cobertura de filtros avançados.
 6. A taxa de requisições do upstream é limitada; o adaptador deve ser usado apenas por testes manuais de baixa frequência quando o acesso for autorizado. Não alterar o `HTTPClient` nem introduzir bypass.
-7. Sem nova IPA: scripts podem ser distribuídos por catálogo **apenas após revisão, SHA-256 do arquivo e autorização do teste físico**. Este PR não adiciona a fonte ao catálogo principal.
+7. Sem nova IPA: a fonte está disponível **somente por um catálogo piloto separado**, `fixtures/weebcentral-pilot-repository.json`, com SHA-256 fixado. Não entra no catálogo principal nem é marcada como funcional. A instalação deve ser manual/opt-in **após CI verde e merge**; serve exclusivamente para obter evidência de compatibilidade no iPhone.
+8. O manifesto piloto marca `nsfw: true` por cautela, pois o upstream declara `ContentWarning.MIXED`; isso não implica que todo título contenha material adulto.
 
 ## Testes offline
 
@@ -45,7 +46,7 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 
 ## Critérios de QA físico (somente após aprovação do candidato)
 
-1. Em iOS 12.5.8, instalar a fonte por um catálogo isolado de testes com script hash fixado, sem alterar Biblioteca Webtoons.
+1. Em iOS 12.5.8, após aprovação do PR/CI, abrir `Explorar → + → Inserir URL HTTPS` e adicionar o catálogo piloto: `https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/weebcentral-pilot-repository.json`. Instalar manualmente **WeebCentral EN (experimental)**, sem alterar Biblioteca Webtoons.
 2. Abrir a lista Popular: anotar erro HTTP, títulos e se as capas aparecem. Em caso de 403/429/rejeição, **interromper** sem contornar.
 3. Buscar título permitido, abrir detalhes, capítulo e verificar URLs HTTPS. Em caso de CDN legítima ausente na allowlist, registrar **somente o hostname**, sem cookies/URLs assinadas, e passar por revisão.
 4. Baixar um capítulo pequeno e confirmar leitura offline após modo avião/reinício; atualizar capítulos da Biblioteca e examinar o feed de Atualizações.
@@ -55,4 +56,4 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 
 A Asura mantém API JSON, propriedades do Astro embutidas no HTML e imagens de capítulos potencialmente divididas em tiles. Precisa de um adaptador e testes próprios; não usar este código nem declarar que a Asura já está implementada.
 
-**Status final desta fase:** candidato source-only de WeebCentral, CI/contrato offline; **nenhum recurso de acesso remoto ou download fisicamente validado**.
+**Status final desta fase:** candidato source-only de WeebCentral com catálogo experimental separado e checksum; **nenhum recurso de acesso remoto ou download fisicamente validado**. Não confundir testes offline com liberação de uso em produção.
