@@ -228,6 +228,12 @@ enum SafeCBZArchive {
         }
         guard offset == index.count else { throw SafeCBZError.invalidArchive }
         guard !entries.isEmpty else { throw SafeCBZError.noImages }
+        if let free = try? directory.resourceValues(
+            forKeys: [.volumeAvailableCapacityKey]
+        ).volumeAvailableCapacity,
+           free < totalExpanded + 64 * 1024 * 1024 {
+            throw SafeCBZError.tooLarge
+        }
         entries.sort {
             $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
