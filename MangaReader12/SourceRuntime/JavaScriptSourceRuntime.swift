@@ -334,8 +334,21 @@ private final class HTMLSelectorService: NSObject, WKNavigationDelegate {
             if (!config || typeof config.selector !== "string" ||
                 config.selector.length > 500) throw new Error("Invalid selector");
             var matches = doc.querySelectorAll(config.selector);
+            // Chapter lists can contain thousands of entries in a single
+            // HTML response (e.g. >1,000 on One Piece). The old 200-item
+            // ceiling silently removed older chapters. Keep a tighter
+            // ceiling for catalog/diagnostic selectors on iOS 12.
+            var maxItems = name === "chapters" ? 4000 :
+                           (name === "images" ? 1500 : 200);
+            // Never claim a complete chapter or page list if it was cut.
+            if ((name === "chapters" || name === "images") &&
+                matches.length > maxItems) {
+              throw new Error("HTML selector " + name + " found " +
+                matches.length + " elements; limit " + maxItems +
+                ". Refusing an incomplete list.");
+            }
             var array = [];
-            for (var i = 0; i < Math.min(200, matches.length); i++) {
+            for (var i = 0; i < Math.min(maxItems, matches.length); i++) {
               var node = matches[i];
               var item = info(node);
               item.fields = {};
