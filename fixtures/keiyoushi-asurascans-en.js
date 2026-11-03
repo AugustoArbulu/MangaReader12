@@ -116,7 +116,18 @@
     }
     var output = {}, keys = Object.keys(node);
     if (keys.length > 3000) throw new Error('Astro object too large');
-    keys.forEach(function (key) { output[key] = unAstro(node[key], depth + 1); });
+    keys.forEach(function (key) {
+      // A two-integer permutation [1,0] is valid tile metadata, NOT an
+      // Astro tagged pair. Preserve it so pages() always fails closed.
+      var value = node[key];
+      if (key === 'tiles' &&
+          Object.prototype.toString.call(value) === '[object Array]' &&
+          value.every(function (v) {return typeof v === 'number';})) {
+        output[key] = value.slice();
+      } else {
+        output[key] = unAstro(value, depth + 1);
+      }
+    });
     return output;
   }
   function astroProp(item) {
@@ -316,8 +327,11 @@
             if(!page || typeof page.url!=='string') {
               fail(done,'Invalid Asura public page record');return;
             }
-            if(page.tiles && page.tiles.length){
-              // Never deliver scrambled images as if readable or downloadable.
+            if (page.tiles !== undefined && page.tiles !== null &&
+                (Object.prototype.toString.call(page.tiles) !== '[object Array]' ||
+                page.tiles.length > 0)) {
+              // Never deliver scrambled or ambiguously parsed image tiles
+              // as if readable or downloadable.
               // Processing the documented tile permutation needs a separate,
               // bounded native CoreGraphics implementation and fixture QA.
               fail(done,'Asura chapter uses tiled images; native unscrambling not yet implemented');return;
