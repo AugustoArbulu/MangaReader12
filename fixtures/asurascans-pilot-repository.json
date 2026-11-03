@@ -5,7 +5,7 @@
     {
       "id": "kei.asurascans.en",
       "name": "Asura Scans EN (experimental)",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "lang": "en",
       "author": "MangaReader12 non-official port; upstream reference Keiyoushi (Apache-2.0)",
       "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-asurascans-en.js",
@@ -16,7 +16,7 @@
         "api.asurascans.com"
       ],
       "nsfw": false,
-      "sha256": "af5ce3f435e59468db17e2435fd98af6a5ac701fb21772e87bf2270b363cf7c7"
+      "sha256": "b4d69dd159d8499c641e54f651f4abbe6ff7c3264db734a845fcf4c62d0fe004"
     }
   ]
 }
