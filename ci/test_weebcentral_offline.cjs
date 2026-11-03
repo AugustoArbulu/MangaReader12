@@ -13,7 +13,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.1');
+assert.equal(candidate.version, '0.1.2');
 assert.deepEqual(candidate.domains, ['weebcentral.com']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
@@ -120,7 +120,12 @@ function mock() {
         ]};
       }
       if (html === 'PAGES') {
-        assert.equal(spec.images.selector, 'section[x-data~=scroll] > img');
+        // Keiyoushi uses Jsoup's regex operator [attr~=regex]; WebKit
+        // interprets [attr~=word] as a whitespace-token test, not regex.
+        assert.equal(spec.images.selector, 'section[x-data*="scroll"] > img');
+        assert.equal(spec.scrollSections.selector, 'section[x-data*="scroll"]');
+        assert.equal(spec.nestedImages.selector, 'section[x-data*="scroll"] img');
+        assert.equal(spec.allImages.selector, 'img[src], img[data-src], img[data-original]');
         return {images: [
           item('', {src: '/images/page-1.jpg'}),
           item('', {src: 'data:image/gif;base64,AA==',
@@ -140,7 +145,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.1');
+  assert.equal(meta.version, '0.1.2');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -225,7 +230,28 @@ async function main() {
     http() {return 'EMPTY';},
     dom() {return {images:[]};}
   });
-  assert((await empty.call('pages',CH1)).__sourceError.includes('no page images matched'));
+  const emptyResult = await empty.call('pages',CH1);
+  assert(emptyResult.__sourceError.includes('no direct chapter images found'));
+  assert(emptyResult.__sourceError.includes('scroll sections=0'));
+  // A container can be found but its images may be nested rather than direct
+  // children; this is a diagnostic, NOT permission to scrape unrelated imgs.
+  const nestedOnly = runtime({
+    http() {return 'NESTED';},
+    dom(html,spec) {
+      assert.equal(spec.images.selector,'section[x-data*="scroll"] > img');
+      return {
+        images:[], scrollSections:[item()], nestedImages:[item()],
+        allImages:[item(),item()]
+      };
+    }
+  });
+  const nestedResult = await nestedOnly.call('pages',CH1);
+  assert(nestedResult.__sourceError.includes('scroll sections=1'));
+  assert(nestedResult.__sourceError.includes('nested images=1'));
+  assert(nestedResult.__sourceError.includes('document images=2'));
+  assert.equal(nestedOnly.calls.length,1,'diagnostics must use same HTML response only');
+  // A selector regression must never restore Jsoup [attr~=regex].
+  assert.equal(script.includes('section[x-data~=scroll] > img'),false);
   const foreignCovers = runtime({
     http() {return 'COVER_HTML';},
     dom(html, spec) {
