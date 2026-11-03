@@ -549,6 +549,404 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 }
 
+// Content exclusions use only a source-provided classification label. Titles,
+// covers, URL slugs, character names, and images are never used to infer genre.
+private enum SourceTagMatcher {
+    static func matches(_ tag: String, exclusion: String) -> Bool {
+        let normalized = tag.folding(
+            options: [.diacriticInsensitive, .caseInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        .lowercased()
+        .replacingOccurrences(
+            of: "[^a-z0-9]+", with: " ", options: .regularExpression
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch exclusion {
+        case "bl":
+            return ["bl", "boys love", "boy s love", "yaoi", "shounen ai",
+                    "shonen ai"].contains(normalized)
+        case "gl":
+            return ["gl", "girls love", "girl s love", "yuri", "shoujo ai",
+                    "shojo ai"].contains(normalized)
+        case "lgbtq":
+            return ["lgbt", "lgbtq", "lgbtqia", "lgbtqia plus", "queer"]
+                .contains(normalized)
+        case "harem":
+            return ["harem", "reverse harem", "harém"].contains(normalized)
+        case "horror":
+            return ["horror", "terror"].contains(normalized)
+        default:
+            return false
+        }
+    }
+}
+
+// A custom iOS 12 UIKit bottom sheet replaces UIAlertController actionSheet.
+// It is full-screen dimmed even on iPad, and its content is vertically scrollable
+// on older 4-inch devices. Categories come solely from optional source metadata.
+private final class SourceDiscoverySheetViewController: UIViewController {
+    typealias FilterCallback = (String?, Set<String>, Bool) -> Void
+    var onApply: FilterCallback?
+
+    private let categories: [SourceBrowseCategory]
+    private var selectedID: String?
+    private var exclusions: Set<String>
+    private var hideUnknown: Bool
+
+    private let backdrop = UIControl()
+    private let sheet = UIView()
+    private let scroller = UIScrollView()
+    private let content = UIStackView()
+    private let footer = UIView()
+    private let infoLabel = UILabel()
+    private let unknownToggle = UISwitch()
+    private var categoryChips: [String: UIButton] = [:]
+    private var exclusionChips: [String: UIButton] = [:]
+
+    private let exclusionChoices: [(id: String, label: String)] = [
+        ("bl", "BL (Boys' Love)"),
+        ("gl", "GL (Girls' Love)"),
+        ("lgbtq", "LGBTQ+"),
+        ("harem", "Harém"),
+        ("horror", "Terror")
+    ]
+
+    init(
+        categories: [SourceBrowseCategory],
+        selectedID: String?,
+        exclusions: Set<String>,
+        hideUnknown: Bool
+    ) {
+        self.categories = categories
+        self.selectedID = selectedID
+        self.exclusions = exclusions
+        self.hideUnknown = hideUnknown
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let palette = ThemeManager.shared.palette
+        view.backgroundColor = .clear
+
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.backgroundColor = UIColor.black.withAlphaComponent(0.62)
+        backdrop.addTarget(
+            self, action: #selector(closeTapped), for: .touchUpInside
+        )
+        view.addSubview(backdrop)
+
+        sheet.translatesAutoresizingMaskIntoConstraints = false
+        sheet.backgroundColor = palette.background
+        sheet.layer.cornerRadius = 22
+        sheet.layer.masksToBounds = true
+        view.addSubview(sheet)
+
+        let preferredWidth = sheet.widthAnchor.constraint(equalToConstant: 560)
+        preferredWidth.priority = UILayoutPriority(750)
+        NSLayoutConstraint.activate([
+            backdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            sheet.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            sheet.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor),
+            sheet.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+            preferredWidth,
+            sheet.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            sheet.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.88)
+        ])
+
+        let heading = UILabel()
+        heading.translatesAutoresizingMaskIntoConstraints = false
+        heading.text = "Explorar"
+        heading.font = UIFont.systemFont(ofSize: 23, weight: .bold)
+        heading.textColor = palette.primaryText
+        sheet.addSubview(heading)
+
+        let close = UIButton(type: .system)
+        close.translatesAutoresizingMaskIntoConstraints = false
+        close.setTitle("✕", for: .normal)
+        close.setTitleColor(palette.secondaryText, for: .normal)
+        close.titleLabel?.font = UIFont.systemFont(ofSize: 19, weight: .medium)
+        close.accessibilityLabel = "Fechar filtros"
+        close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        sheet.addSubview(close)
+
+        scroller.translatesAutoresizingMaskIntoConstraints = false
+        scroller.alwaysBounceVertical = true
+        scroller.showsVerticalScrollIndicator = true
+        scroller.keyboardDismissMode = .onDrag
+        sheet.addSubview(scroller)
+
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.axis = .vertical
+        content.spacing = 14
+        content.alignment = .fill
+        scroller.addSubview(content)
+
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        footer.backgroundColor = palette.barBackground
+        sheet.addSubview(footer)
+
+        NSLayoutConstraint.activate([
+            heading.leadingAnchor.constraint(equalTo: sheet.leadingAnchor, constant: 22),
+            heading.topAnchor.constraint(equalTo: sheet.topAnchor, constant: 19),
+            heading.trailingAnchor.constraint(lessThanOrEqualTo: close.leadingAnchor, constant: -8),
+
+            close.trailingAnchor.constraint(equalTo: sheet.trailingAnchor, constant: -17),
+            close.topAnchor.constraint(equalTo: sheet.topAnchor, constant: 12),
+            close.widthAnchor.constraint(equalToConstant: 44),
+            close.heightAnchor.constraint(equalToConstant: 44),
+
+            scroller.topAnchor.constraint(equalTo: sheet.topAnchor, constant: 65),
+            scroller.leadingAnchor.constraint(equalTo: sheet.leadingAnchor),
+            scroller.trailingAnchor.constraint(equalTo: sheet.trailingAnchor),
+            scroller.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            content.topAnchor.constraint(equalTo: scroller.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: scroller.leadingAnchor, constant: 18),
+            content.trailingAnchor.constraint(equalTo: scroller.trailingAnchor, constant: -18),
+            content.bottomAnchor.constraint(equalTo: scroller.bottomAnchor, constant: -22),
+            content.widthAnchor.constraint(equalTo: scroller.widthAnchor, constant: -36),
+
+            footer.leadingAnchor.constraint(equalTo: sheet.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: sheet.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: 74)
+        ])
+
+        createSections()
+        createFooter()
+        refreshSelections()
+    }
+
+    private func createSections() {
+        let rankings = categories.filter { $0.kind != "genre" }
+        let genres = categories.filter { $0.kind == "genre" }
+        let normal = SourceBrowseCategory(
+            id: "popular", title: "Populares", kind: "ranking"
+        )
+        addSection(
+            title: "DESCUBRA",
+            subtitle: "Selecione uma lista da fonte.",
+            choices: [(normal.id, normal.title)] +
+                rankings.map { ($0.id, $0.id == "latest" ? "Recentes" : $0.title) },
+            selection: .category
+        )
+        if !genres.isEmpty {
+            addSection(
+                title: "GÊNERO",
+                subtitle: "Uma categoria remota por vez, conforme a fonte.",
+                choices: genres.map { ($0.id, $0.title) },
+                selection: .category
+            )
+        }
+
+        addSection(
+            title: "EXCLUIR TAGS",
+            subtitle: "Oculta obras com tags explícitas correspondentes.",
+            choices: exclusionChoices.map { ($0.id, $0.label) },
+            selection: .exclusion
+        )
+
+        let unknownRow = UIStackView()
+        unknownRow.axis = .horizontal
+        unknownRow.alignment = .center
+        unknownRow.spacing = 12
+        let unknownLabel = UILabel()
+        unknownLabel.text = "Ocultar obras sem tags"
+        unknownLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        unknownLabel.textColor = ThemeManager.shared.palette.primaryText
+        unknownLabel.numberOfLines = 2
+        unknownRow.addArrangedSubview(unknownLabel)
+        unknownToggle.onTintColor = ThemeManager.shared.palette.accent
+        unknownToggle.addTarget(
+            self, action: #selector(unknownChanged), for: .valueChanged
+        )
+        unknownRow.addArrangedSubview(unknownToggle)
+        content.addArrangedSubview(unknownRow)
+
+        infoLabel.numberOfLines = 0
+        infoLabel.textColor = ThemeManager.shared.palette.secondaryText
+        infoLabel.font = UIFont.systemFont(ofSize: 12)
+        infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
+            "listagem da fonte. A ausência de tags não comprova que a obra " +
+            "não contém o tema excluído. Não analisamos títulos ou imagens."
+        content.addArrangedSubview(infoLabel)
+    }
+
+    private enum ChoiceKind { case category, exclusion }
+
+    private func addSection(
+        title: String,
+        subtitle: String,
+        choices: [(String, String)],
+        selection: ChoiceKind
+    ) {
+        let header = UILabel()
+        header.text = title
+        header.textColor = ThemeManager.shared.palette.secondaryText
+        header.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+        content.addArrangedSubview(header)
+
+        let detail = UILabel()
+        detail.text = subtitle
+        detail.numberOfLines = 0
+        detail.textColor = ThemeManager.shared.palette.secondaryText
+        detail.font = UIFont.systemFont(ofSize: 12)
+        content.addArrangedSubview(detail)
+
+        for start in stride(from: 0, to: choices.count, by: 2) {
+            let row = UIStackView()
+            row.axis = .horizontal
+            row.spacing = 8
+            row.distribution = .fillEqually
+            let end = min(start + 2, choices.count)
+            for index in start..<end {
+                let choice = choices[index]
+                let button = UIButton(type: .system)
+                button.setTitle(choice.1, for: .normal)
+                button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+                button.titleLabel?.numberOfLines = 2
+                button.titleLabel?.textAlignment = .center
+                button.layer.cornerRadius = 12
+                button.layer.borderWidth = 1
+                button.contentEdgeInsets = UIEdgeInsets(
+                    top: 7, left: 7, bottom: 7, right: 7
+                )
+                button.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
+                button.accessibilityIdentifier =
+                    (selection == .category ? "discover.category." : "discover.exclude.") + choice.0
+                if selection == .category {
+                    categoryChips[choice.0] = button
+                    button.addTarget(
+                        self, action: #selector(categoryTapped(_:)), for: .touchUpInside
+                    )
+                } else {
+                    exclusionChips[choice.0] = button
+                    button.addTarget(
+                        self, action: #selector(exclusionTapped(_:)), for: .touchUpInside
+                    )
+                }
+                row.addArrangedSubview(button)
+            }
+            if end == start + 1 {
+                row.addArrangedSubview(UIView())
+            }
+            content.addArrangedSubview(row)
+        }
+    }
+
+    private func createFooter() {
+        let clear = UIButton(type: .system)
+        clear.translatesAutoresizingMaskIntoConstraints = false
+        clear.setTitle("Limpar", for: .normal)
+        clear.setTitleColor(ThemeManager.shared.palette.primaryText, for: .normal)
+        clear.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        clear.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        clear.layer.cornerRadius = 12
+        clear.addTarget(self, action: #selector(clearTapped), for: .touchUpInside)
+
+        let apply = UIButton(type: .system)
+        apply.translatesAutoresizingMaskIntoConstraints = false
+        apply.setTitle("Aplicar filtros", for: .normal)
+        apply.setTitleColor(.white, for: .normal)
+        apply.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        apply.backgroundColor = ThemeManager.shared.palette.accent
+        apply.layer.cornerRadius = 12
+        apply.addTarget(self, action: #selector(applyTapped), for: .touchUpInside)
+
+        footer.addSubview(clear)
+        footer.addSubview(apply)
+        NSLayoutConstraint.activate([
+            clear.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 18),
+            clear.topAnchor.constraint(equalTo: footer.topAnchor, constant: 10),
+            clear.bottomAnchor.constraint(equalTo: footer.bottomAnchor, constant: -10),
+            clear.widthAnchor.constraint(equalToConstant: 94),
+
+            apply.leadingAnchor.constraint(equalTo: clear.trailingAnchor, constant: 10),
+            apply.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -18),
+            apply.topAnchor.constraint(equalTo: clear.topAnchor),
+            apply.bottomAnchor.constraint(equalTo: clear.bottomAnchor)
+        ])
+    }
+
+    private func refreshSelections() {
+        let palette = ThemeManager.shared.palette
+        for (key, button) in categoryChips {
+            let selected = key == (selectedID ?? "popular")
+            button.backgroundColor = selected
+                ? palette.accent.withAlphaComponent(0.17)
+                : palette.secondaryBackground
+            button.layer.borderColor = (selected ? palette.accent : palette.separator).cgColor
+            button.setTitleColor(
+                selected ? palette.accent : palette.primaryText, for: .normal
+            )
+        }
+        for (key, button) in exclusionChips {
+            let selected = exclusions.contains(key)
+            button.backgroundColor = selected
+                ? palette.accent.withAlphaComponent(0.17)
+                : palette.secondaryBackground
+            button.layer.borderColor = (selected ? palette.accent : palette.separator).cgColor
+            button.setTitleColor(
+                selected ? palette.accent : palette.primaryText, for: .normal
+            )
+        }
+        unknownToggle.isOn = hideUnknown
+        unknownToggle.isEnabled = !exclusions.isEmpty
+    }
+
+    @objc private func categoryTapped(_ button: UIButton) {
+        guard let key = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.category.", with: "") else { return }
+        selectedID = key == "popular" ? nil : key
+        refreshSelections()
+    }
+
+    @objc private func exclusionTapped(_ button: UIButton) {
+        guard let key = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.exclude.", with: "") else { return }
+        if exclusions.contains(key) {
+            exclusions.remove(key)
+        } else {
+            exclusions.insert(key)
+        }
+        refreshSelections()
+    }
+
+    @objc private func unknownChanged() {
+        hideUnknown = unknownToggle.isOn
+    }
+
+    @objc private func clearTapped() {
+        selectedID = nil
+        exclusions.removeAll()
+        hideUnknown = false
+        refreshSelections()
+        scroller.setContentOffset(.zero, animated: true)
+    }
+
+    @objc private func closeTapped() {
+        dismiss(animated: true)
+    }
+
+    @objc private func applyTapped() {
+        let callback = onApply
+        dismiss(animated: true) {
+            callback?(self.selectedID, self.exclusions, self.hideUnknown)
+        }
+    }
+}
+
 // An explicitly initiated, bounded cover probe. It tests at most three
 // visible thumbnails, one regular details() call, and one details cover GET,
 // all sequentially; stop on HTTP 429. No automated retries,
