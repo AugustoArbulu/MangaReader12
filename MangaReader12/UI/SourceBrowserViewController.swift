@@ -131,7 +131,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             for: .normal
         )
 
-        if let category = selectedCategory {
+        if !excludedTags.isEmpty {
+            browseHeaderHint.text = "Exclusões por tags declaradas • obras sem tags podem permanecer"
+        } else if let category = selectedCategory {
             browseHeaderHint.text = category.kind == "genre"
                 ? "Gênero da fonte • resultados do site"
                 : (category.kind == "latest"
@@ -179,7 +181,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             exclusions: excludedTags,
             hideUnknown: hideUnclassified
         )
-        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown in
+        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection in
             guard let self = self else { return }
             let previousID = self.selectedCategory?.id
             let wasSearching = self.currentQuery != nil
@@ -192,7 +194,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             UserDefaults.standard.set(hideUnknown, forKey: key + ".hideUnknown")
             self.updateBrowseHeader()
 
-            if previousID != self.selectedCategory?.id || (wasSearching && selectedID != nil) {
+            if previousID != self.selectedCategory?.id || (wasSearching && didChooseSection) {
                 self.currentQuery = nil
                 self.sourceSearchController.searchBar.text = nil
                 self.sourceSearchController.searchBar.resignFirstResponder()
@@ -587,13 +589,14 @@ private enum SourceTagMatcher {
 // It is full-screen dimmed even on iPad, and its content is vertically scrollable
 // on older 4-inch devices. Categories come solely from optional source metadata.
 private final class SourceDiscoverySheetViewController: UIViewController {
-    typealias FilterCallback = (String?, Set<String>, Bool) -> Void
+    typealias FilterCallback = (String?, Set<String>, Bool, Bool) -> Void
     var onApply: FilterCallback?
 
     private let categories: [SourceBrowseCategory]
     private var selectedID: String?
     private var exclusions: Set<String>
     private var hideUnknown: Bool
+    private var didChooseSection = false
 
     private let backdrop = UIControl()
     private let sheet = UIView()
@@ -909,6 +912,7 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         guard let key = button.accessibilityIdentifier?
             .replacingOccurrences(of: "discover.category.", with: "") else { return }
         selectedID = key == "popular" ? nil : key
+        didChooseSection = true
         refreshSelections()
     }
 
@@ -929,6 +933,7 @@ private final class SourceDiscoverySheetViewController: UIViewController {
 
     @objc private func clearTapped() {
         selectedID = nil
+        didChooseSection = true
         exclusions.removeAll()
         hideUnknown = false
         refreshSelections()
@@ -942,7 +947,9 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     @objc private func applyTapped() {
         let callback = onApply
         dismiss(animated: true) {
-            callback?(self.selectedID, self.exclusions, self.hideUnknown)
+            callback?(
+                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+            )
         }
     }
 }
