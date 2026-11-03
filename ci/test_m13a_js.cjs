@@ -169,7 +169,7 @@ async function testWebtoons() {
   const sample=await canvasSample.call('classificationSample');
   assert.equal(sample.source,'canvas-blgl-first-page');
   assert.equal(sample.complete,false,'one page must never claim entire catalog');
-  assert.deepEqual(sample.titleNumbers,['1234','5678']);
+  assert.deepEqual(Array.from(sample.titleNumbers),['1234','5678']);
   assert.equal(canvasSample.calls.length,1,'one explicit first-page request only');
 
   const sampleMissing=runtime('keiyoushi-webtoons-en.js',{
