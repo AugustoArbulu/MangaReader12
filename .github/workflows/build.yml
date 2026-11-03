@@ -33,6 +33,9 @@ jobs:
       - name: Test selected Keiyoushi JS source contract (offline)
         run: node ci/test_m13a_js.cjs
 
+      - name: Test WeebCentral EN source contract (offline)
+        run: node ci/test_weebcentral_offline.cjs
+
       - name: Validate read-only upstream monitor (offline)
         run: python3 ci/test_monitor_keiyoushi_upstream.py
 
