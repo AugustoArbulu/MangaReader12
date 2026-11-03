@@ -50,7 +50,7 @@ enum AsuraTileReassemblyProbe {
         guard let context = CGContext(
             data: nil,
             width: image.width, height: image.height,
-            bitsPerComponent: 8, bytesPerRow: 0,
+            bitsPerComponent: 8, bytesPerRow: image.width * 4,
             space: colorSpace, bitmapInfo: info
         ) else { return nil }
 
