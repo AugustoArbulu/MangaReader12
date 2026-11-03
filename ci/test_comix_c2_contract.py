@@ -45,6 +45,7 @@ class ComixC2Contract(unittest.TestCase):
         self.assertIn("decisionHandler(.cancel)", s)
         self.assertIn("decisionHandler(.allow)", s)
         self.assertIn("navigationResponse.isForMainFrame", s)
+        self.assertIn("navigationResponse.response.url", s)
 
     def test_report_does_not_copy_site_data(self):
         s = read("MangaReader12/UI/ComixBrowserProbeViewController.swift")
