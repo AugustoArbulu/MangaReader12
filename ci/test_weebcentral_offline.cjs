@@ -3,10 +3,22 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const vm = require('node:vm');
 const path = require('node:path');
 
 const script = fs.readFileSync(path.join(__dirname, '../fixtures/keiyoushi-weebcentral-en.js'), 'utf8');
+const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
+  '../fixtures/weebcentral-pilot-repository.json'), 'utf8'));
+assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
+const candidate = catalog.sources[0];
+assert.equal(candidate.id, 'kei.weebcentral.en');
+assert.equal(candidate.version, '0.1.0');
+assert.deepEqual(candidate.domains, ['weebcentral.com']);
+assert.equal(candidate.script,
+  'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
+assert.equal(crypto.createHash('sha256').update(script, 'utf8').digest('hex'),
+  candidate.sha256, 'script and pilot manifest integrity mismatch');
 const BASE = 'https://weebcentral.com';
 const SERIES = BASE + '/series/series-42/alpha';
 const CH1 = BASE + '/chapters/chapter-01';
