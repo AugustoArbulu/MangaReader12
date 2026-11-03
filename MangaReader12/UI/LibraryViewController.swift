@@ -47,10 +47,16 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         definesPresentationContext = true
         applyTheme()
 
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            title: "Categorias", style: .plain,
-            target: self, action: #selector(categoriesTapped)
-        )
+        navigationItem.leftBarButtonItems = [
+            UIBarButtonItem(
+                title: "Categorias", style: .plain,
+                target: self, action: #selector(categoriesTapped)
+            ),
+            UIBarButtonItem(
+                title: "Arquivos", style: .plain,
+                target: self, action: #selector(localComicsTapped)
+            )
+        ]
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(
                 title: "Grade",
@@ -365,6 +371,12 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         }
 
         return [remove, categories]
+    }
+
+    @objc private func localComicsTapped() {
+        navigationController?.pushViewController(
+            LocalComicsViewController(), animated: true
+        )
     }
 
     @objc private func categoriesTapped() {
