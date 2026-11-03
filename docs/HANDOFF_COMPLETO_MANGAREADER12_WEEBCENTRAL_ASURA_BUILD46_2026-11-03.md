@@ -88,7 +88,7 @@ https://github.com/AugustoArbulu/MangaReader12/pull/74
 - Reordena tiles por permutação `srcIndex → tiles[srcIndex]`, conforme algoritmo público Keiyoushi.
 - Limites de memória/dimensões, índice único e válido, grade divisível, imagens sintéticas com cores e 4×5.
 - Não modifica `Page`, não liga o decodificador ao leitor ou downloads e não faz requisições.
-- **Estado deste item deve ser confirmado no CI/PR antes de tratá-lo como concluído.** Um teste de tipagem do Swift 5.10 foi corrigido; falta a validação visual/matemática definitiva dos pixels.
+- **CI aprovado e PR #74 integrado em `main`**. Os testes sintéticos de identidade 4×5 e permutações horizontais/verticais de pixels passaram com Swift 5.10. Isso valida a geometria no protótipo, **não** a integração no leitor, memória de produção ou imagens reais da Asura.
 
 ## 3. Infraestrutura existente e testes
 
@@ -182,6 +182,7 @@ https://github.com/AugustoArbulu/MangaReader12/pull/74
 - [IPA Build46, CI verde](https://github.com/AugustoArbulu/MangaReader12/actions/runs/41599907817/artifacts/13213783471)
 - [WeebCentral 0.1.5](https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/WEEBCENTRAL_V015_CHAPTER_DATES_2026-11-03.md)
 - [Asura 0.1.1](https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/ASURA_V011_STABLE_IDS_2026-11-03.md)
+- [Protótipo offline de tiles CoreGraphics](https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/ASURA_COREGRAPHICS_TILES_OFFLINE_PROBE_2026-11-03.md)
 - [Build46](https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/BUILD46_DOWNLOAD_IMAGE_INTEGRITY_2026-11-03.md)
 
-**Estado ao encerrar esta rodada:** WeebCentral observavelmente funcional para leitura online e filtros/detalhes no iOS12.5.8; downloads offline e atualização de Biblioteca ainda pendentes de QA. Asura experimental com arquitetura pública preparada, mas leitores de tiles não publicados. Build46 disponível para teste. Não transformar protótipo de tiles em recurso sem validação adequada.
+**Estado ao encerrar esta rodada:** WeebCentral observavelmente funcional para leitura online e filtros/detalhes no iOS12.5.8; downloads offline e atualização de Biblioteca ainda pendentes de QA. Asura experimental com arquitetura pública e **protótipo geométrico de tiles testado em CI**, mas leitores de tiles ainda não publicados. Build46 disponível para teste. Não transformar protótipo de tiles em recurso sem validação adequada.
