@@ -21,6 +21,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
     private var categories: [CategoryRecord] = []
     private var selectedCategoryID: Int64?
     private var startupError: Error?
+    private var latestReading: HistoryRecord?
 
     init() {
         super.init(style: .plain)
@@ -46,12 +47,16 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         definesPresentationContext = true
         applyTheme()
 
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            title: "Categorias", style: .plain,
+            target: self, action: #selector(categoriesTapped)
+        )
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(
-                title: "Categorias",
+                title: "Grade",
                 style: .plain,
                 target: self,
-                action: #selector(categoriesTapped)
+                action: #selector(gridTapped)
             ),
             UIBarButtonItem(
                 title: "Filtrar",
@@ -79,6 +84,14 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         reloadLibrary()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if UserDefaults.standard.string(forKey: "library.layout") == "grid",
+           navigationController?.topViewController === self {
+            showGrid()
+        }
+    }
+
     private func reloadLibrary() {
         guard let repository = repository else {
             tableView.reloadData()
@@ -95,6 +108,13 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
                 allRecords = try repository.list()
             }
             metrics = try repository.readingMetrics()
+            if let progress = try? ReadingProgressRepository.defaultRepository(),
+               let history = try? progress.history() {
+                latestReading = history.first(where: { $0.sourceChapterID != nil })
+            } else {
+                latestReading = nil
+            }
+            configureContinueReadingHeader()
             startupError = nil
             applyLocalFilters()
         } catch {
@@ -103,6 +123,63 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             tableView.backgroundView = nil
             tableView.reloadData()
         }
+    }
+
+    private func configureContinueReadingHeader() {
+        guard let saved = latestReading else {
+            tableView.tableHeaderView = nil
+            return
+        }
+        let header = UIView(frame: CGRect(
+            x: 0, y: 0, width: max(1, tableView.bounds.width), height: 74
+        ))
+        header.backgroundColor = ThemeManager.shared.palette.background
+        let action = UIButton(type: .system)
+        action.frame = header.bounds.insetBy(dx: 12, dy: 7)
+        action.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        action.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        action.layer.cornerRadius = 12
+        action.contentHorizontalAlignment = .left
+        action.contentEdgeInsets = UIEdgeInsets(top: 9, left: 14, bottom: 9, right: 12)
+        action.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        action.titleLabel?.numberOfLines = 2
+        action.setTitleColor(ThemeManager.shared.palette.primaryText, for: .normal)
+        let chapter = saved.chapterName ?? "Capítulo salvo"
+        let shortTitle = String(saved.mangaTitle.prefix(48))
+        action.setTitle("▶ Continuar lendo\n" + shortTitle + " • " +
+            String(chapter.prefix(40)), for: .normal)
+        action.accessibilityLabel = "Continuar lendo " + saved.mangaTitle
+        action.addTarget(
+            self, action: #selector(resumeReadingTapped), for: .touchUpInside
+        )
+        header.addSubview(action)
+        tableView.tableHeaderView = header
+    }
+
+    @objc private func resumeReadingTapped() {
+        navigationController?.pushViewController(
+            HistoryViewController(resumeLatest: true),
+            animated: true
+        )
+    }
+
+    @objc private func gridTapped() {
+        showGrid()
+    }
+
+    private func showGrid() {
+        UserDefaults.standard.set("grid", forKey: "library.layout")
+        let grid = LibraryGridViewController(
+            snapshot: { [weak self] in
+                guard let self = self else { return ([], [:]) }
+                self.reloadLibrary()
+                return (self.records, self.metrics)
+            },
+            open: { [weak self] record in
+                self?.open(record: record)
+            }
+        )
+        navigationController?.pushViewController(grid, animated: true)
     }
 
     private func applyLocalFilters() {
