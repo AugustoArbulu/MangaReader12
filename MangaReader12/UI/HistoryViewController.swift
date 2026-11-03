@@ -211,7 +211,7 @@ final class HistoryViewController: UITableViewController {
                                 sourceRecord: sourceRecord,
                                 runtime: runtime,
                                 summary: summary,
-                                resumeChapterID: resumeLatestOnOpen
+                                resumeChapterID: self.resumeLatestOnOpen
                                     ? record.sourceChapterID : nil
                             ),
                             animated: true
