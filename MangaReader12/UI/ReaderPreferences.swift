@@ -60,6 +60,7 @@ final class ReaderPreferences {
     private let webtoonGapKey = "reader.webtoonGap"
     private let doubleTapZoomKey = "reader.doubleTapZoom"
     private let scaleModeKey = "reader.scaleMode"
+    private let trimMarginsKey = "reader.trimMargins"
     private let preloadNextChapterKey = "reader.preloadNextChapter"
 
     init(defaults: UserDefaults = .standard) {
@@ -130,6 +131,12 @@ final class ReaderPreferences {
                 ?? .fitScreen
         }
         set { defaults.set(newValue.rawValue, forKey: scaleModeKey) }
+    }
+
+    // Opt-in 3% border trim; original image files remain untouched.
+    var trimMargins: Bool {
+        get { return bool(forKey: trimMarginsKey, defaultValue: false) }
+        set { defaults.set(newValue, forKey: trimMarginsKey) }
     }
 
     var preloadNextChapter: Bool {
