@@ -537,6 +537,9 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
     private var activeQuery: String?
     private var generation = 0
     private var failedSources = 0
+    private var failedSourceNames: [String] = []
+    private var titleSourceIndex: [String: Set<String>] = [:]
+    private var failuresButton: UIBarButtonItem?
     private var loading = false
 
     private lazy var globalSearchController: UISearchController = {
@@ -565,10 +568,17 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         )
         navigationItem.searchController = globalSearchController
         navigationItem.hidesSearchBarWhenScrolling = false
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let sourceButton = UIBarButtonItem(
             title: "Fontes", style: .plain,
             target: self, action: #selector(filterTapped)
         )
+        let failureButton = UIBarButtonItem(
+            title: "Falhas", style: .plain,
+            target: self, action: #selector(showSourceFailures)
+        )
+        failureButton.isEnabled = false
+        failuresButton = failureButton
+        navigationItem.rightBarButtonItems = [sourceButton, failureButton]
         definesPresentationContext = true
         applyTheme()
         showEmptyState("Digite um título e toque em Buscar.")
@@ -585,6 +595,44 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         label.numberOfLines = 0
         label.textColor = ThemeManager.shared.palette.secondaryText
         tableView.backgroundView = label
+    }
+
+    private func normalizedTitleKey(_ title: String) -> String {
+        return title.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        .lowercased()
+        .replacingOccurrences(
+            of: "[^a-z0-9]+", with: " ", options: .regularExpression
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func noteSourceFailure(_ source: InstalledSourceRecord) {
+        let name = source.manifest.name
+        if !failedSourceNames.contains(name) {
+            failedSourceNames.append(name)
+        }
+        failedSources = failedSourceNames.count
+        failuresButton?.title = "Falhas (\(failedSources))"
+        failuresButton?.isEnabled = true
+    }
+
+    @objc private func showSourceFailures() {
+        guard !failedSourceNames.isEmpty else { return }
+        let names = Array(failedSourceNames.prefix(12))
+        let extra = failedSourceNames.count > names.count
+            ? "\n…e mais \(failedSourceNames.count - names.count) fontes." : ""
+        let alert = UIAlertController(
+            title: "Fontes indisponíveis nesta busca",
+            message: names.joined(separator: "\n") + extra +
+                "\nOs demais resultados continuam disponíveis. " +
+                "A lista não garante que uma fonte sem resultados tenha sido consultada com sucesso.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+        present(alert, animated: true)
     }
 
     @objc private func filterTapped() {
@@ -632,6 +680,10 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         loading = false
         activeQuery = nil
         failedSources = 0
+        failedSourceNames = []
+        titleSourceIndex = [:]
+        failuresButton?.title = "Falhas"
+        failuresButton?.isEnabled = false
         matches = []
         seenIDs = []
         sourcePages = [:]
@@ -699,7 +751,11 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
             navigationItem.prompt = "\(matches.count) resultados • \(searchSources.count) fontes" +
                 (failedSources > 0 ? " • \(failedSources) falhas" : "")
             if matches.isEmpty {
-                showEmptyState("Nenhum resultado encontrado.")
+                showEmptyState(failedSources == 0
+                    ? "Nenhum resultado encontrado."
+                    : "Sem resultados nas fontes respondentes. " +
+                        String(failedSources) + " fonte(s) falharam nesta busca."
+                )
             }
             updateLoadMoreFooter()
             return
@@ -714,7 +770,7 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
                 guard let self = self, token == self.generation else { return }
                 switch loaded {
                 case .failure:
-                    self.failedSources += 1
+                    self.noteSourceFailure(source)
                     self.sourcePages[id] = PageState(nextPage: pageNumber, hasMore: false)
                     self.fetchNext(
                         index: index + 1, sources: sources, loader: loader,
@@ -731,7 +787,7 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
                             guard let self = self, token == self.generation else { return }
                             switch response {
                             case .failure:
-                                self.failedSources += 1
+                                self.noteSourceFailure(source)
                                 self.sourcePages[id] = PageState(
                                     nextPage: pageNumber, hasMore: false
                                 )
@@ -742,6 +798,11 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
                                         self.matches.append(
                                             SearchMatch(source: source, manga: item)
                                         )
+                                        let titleKey = self.normalizedTitleKey(item.title)
+                                        if titleKey.count >= 3 {
+                                            self.titleSourceIndex[titleKey, default: []]
+                                                .insert(id)
+                                        }
                                     }
                                 }
                                 self.sourcePages[id] = PageState(
@@ -805,11 +866,19 @@ final class GlobalSourceSearchViewController: UITableViewController, UISearchBar
         ) as? MangaCoverCell else { return UITableViewCell() }
 
         let match = matches[indexPath.row]
+        let titleKey = normalizedTitleKey(match.manga.title)
+        let similarSources = titleSourceIndex[titleKey]?.count ?? 0
+        let subtitle = match.source.manifest.name + " • " +
+            match.source.manifest.lang +
+            (similarSources > 1
+                ? " • título semelhante em \(similarSources) fontes"
+                : "")
         cell.configure(
             title: match.manga.title,
-            subtitle: "\(match.source.manifest.name) • \(match.source.manifest.lang)",
+            subtitle: subtitle,
             coverURL: match.manga.cover,
-            allowedDomains: match.source.manifest.domains
+            allowedDomains: match.source.manifest.domains,
+            badge: similarSources > 1 ? "≈ \(similarSources) fontes" : nil
         )
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -1613,7 +1682,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 6
+        return 7
     }
 
     override func tableView(
@@ -1677,9 +1746,21 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = nil
             cell.selectionStyle = .default
 
+        case 5:
+            cell.textLabel?.text = "Biblioteca em grade"
+            cell.detailTextLabel?.text = "Usar capas em grade como visualização preferida"
+            cell.accessoryType = .none
+            let toggle = UISwitch()
+            toggle.isOn = UserDefaults.standard.string(forKey: "library.layout") == "grid"
+            toggle.addTarget(
+                self, action: #selector(gridPreferenceChanged(_:)), for: .valueChanged
+            )
+            cell.accessoryView = toggle
+            cell.selectionStyle = .none
+
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M7C–M9A hardening • iOS 12.0"
+            cell.detailTextLabel?.text = "Build 41 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
@@ -1693,6 +1774,12 @@ final class SettingsViewController: UITableViewController {
 
     @objc private func backgroundUpdatesChanged(_ sender: UISwitch) {
         BackgroundLibraryUpdateManager.shared.isEnabled = sender.isOn
+    }
+
+    @objc private func gridPreferenceChanged(_ sender: UISwitch) {
+        UserDefaults.standard.set(
+            sender.isOn ? "grid" : "list", forKey: "library.layout"
+        )
     }
 
     override func tableView(

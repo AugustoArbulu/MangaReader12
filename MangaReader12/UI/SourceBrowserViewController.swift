@@ -1457,6 +1457,12 @@ final class MangaDetailsViewController: UITableViewController {
     private var hasCachedOfflineChapters = false
     private var receivedRemoteDetails = false
     private var receivedRemoteChapters = false
+    private let batchButton = UIButton(type: .system)
+    private var batchQueue: [Chapter] = []
+    private var batchIndex = 0
+    private var batchSucceeded = 0
+    private var batchFailed = 0
+    private var batchRunning = false
 
     init(
         sourceRecord: InstalledSourceRecord,
@@ -1485,6 +1491,7 @@ final class MangaDetailsViewController: UITableViewController {
             MangaDetailsHeaderCell.self,
             forCellReuseIdentifier: MangaDetailsHeaderCell.reuseIdentifier
         )
+        configureBatchHeader()
         applyTheme()
 
         let refreshButton = UIBarButtonItem(
@@ -1955,6 +1962,156 @@ final class MangaDetailsViewController: UITableViewController {
         }
     }
 
+    private func configureBatchHeader() {
+        let header = UIView(frame: CGRect(
+            x: 0, y: 0, width: max(1, tableView.bounds.width), height: 56
+        ))
+        header.autoresizingMask = [.flexibleWidth]
+        header.backgroundColor = ThemeManager.shared.palette.background
+        batchButton.frame = header.bounds.insetBy(dx: 12, dy: 6)
+        batchButton.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        batchButton.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        batchButton.layer.cornerRadius = 11
+        batchButton.setTitleColor(ThemeManager.shared.palette.accent, for: .normal)
+        batchButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+        batchButton.setTitle("Selecionar capítulos para download (até 5)", for: .normal)
+        batchButton.accessibilityLabel = "Selecionar vários capítulos para download"
+        batchButton.addTarget(
+            self, action: #selector(selectBatchChapters), for: .touchUpInside
+        )
+        header.addSubview(batchButton)
+        tableView.tableHeaderView = header
+    }
+
+    @objc private func selectBatchChapters() {
+        guard !batchRunning else {
+            showMessage(
+                title: "Lote em andamento",
+                message: "Conclua o lote atual antes de iniciar outro."
+            )
+            return
+        }
+        guard !chapters.isEmpty, manga != nil, downloadManager != nil else {
+            showMessage(
+                title: "Capítulos indisponíveis",
+                message: "Abra uma obra com capítulos carregados antes de iniciar um lote."
+            )
+            return
+        }
+        let offlineIDs = Set(
+            chapters.filter { chapterStates[$0.id]?.downloaded == true }.map { $0.id }
+        )
+        let picker = ChapterBatchPickerViewController(
+            chapters: chapters, offlineIDs: offlineIDs
+        ) { [weak self] selected in
+            self?.startDownloadBatch(selected)
+        }
+        navigationController?.pushViewController(picker, animated: true)
+    }
+
+    private func startDownloadBatch(_ selected: [Chapter]) {
+        guard !batchRunning, !selected.isEmpty, selected.count <= 5,
+              manga != nil, downloadManager != nil else { return }
+        batchQueue = selected
+        batchIndex = 0
+        batchSucceeded = 0
+        batchFailed = 0
+        batchRunning = true
+        batchButton.isEnabled = false
+        prepareNextBatchChapter()
+    }
+
+    private func finishDownloadBatch(reason: String? = nil) {
+        let count = batchQueue.count
+        batchQueue = []
+        batchRunning = false
+        batchButton.isEnabled = true
+        navigationItem.prompt = nil
+        reloadReadingStates()
+        showMessage(
+            title: reason == nil ? "Lote concluído" : "Lote interrompido",
+            message: "\(batchSucceeded) de \(count) capítulos concluídos, " +
+                "\(batchFailed) com falha." +
+                (reason.map { "\n" + $0 } ?? "")
+        )
+    }
+
+    private func prepareNextBatchChapter() {
+        guard batchRunning, let manga = manga,
+              let manager = downloadManager else { return }
+        guard batchIndex < batchQueue.count else {
+            finishDownloadBatch()
+            return
+        }
+        let chapter = batchQueue[batchIndex]
+        batchIndex += 1
+        let currentIndex = batchIndex
+        let total = batchQueue.count
+        navigationItem.prompt = "Lote \(currentIndex)/\(total): preparando…"
+        // One pages() source call at a time, followed by one download job.
+        // This protects older iPads and avoids a burst of requests to sites.
+        runtime.callDecoded(
+            "pages", arguments: [chapter.id], as: [Page].self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self, self.batchRunning else { return }
+                switch result {
+                case .failure(let error):
+                    self.batchFailed += 1
+                    if error.localizedDescription.contains("429") {
+                        self.finishDownloadBatch(
+                            reason: "A fonte limitou as solicitações (HTTP 429). " +
+                                "Não foram feitas novas tentativas."
+                        )
+                    } else {
+                        self.prepareNextBatchChapter()
+                    }
+                case .success(let pages):
+                    guard !pages.isEmpty else {
+                        self.batchFailed += 1
+                        self.prepareNextBatchChapter()
+                        return
+                    }
+                    manager.download(
+                        sourceID: self.sourceRecord.manifest.id,
+                        manga: manga,
+                        chapter: chapter,
+                        pages: pages,
+                        manifest: self.sourceRecord.manifest,
+                        progress: { [weak self] value in
+                            DispatchQueue.main.async {
+                                guard let self = self, self.batchRunning else { return }
+                                self.navigationItem.prompt = String(
+                                    format: "Lote %d/%d • %.0f%%",
+                                    currentIndex, total, value * 100
+                                )
+                            }
+                        },
+                        completion: { [weak self] outcome in
+                            DispatchQueue.main.async {
+                                guard let self = self, self.batchRunning else { return }
+                                switch outcome {
+                                case .success:
+                                    self.batchSucceeded += 1
+                                    self.prepareNextBatchChapter()
+                                case .failure(let error):
+                                    self.batchFailed += 1
+                                    if error.localizedDescription.contains("429") {
+                                        self.finishDownloadBatch(
+                                            reason: "A fonte limitou os downloads (HTTP 429)."
+                                        )
+                                    } else {
+                                        self.prepareNextBatchChapter()
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     private func downloadChapter(_ chapter: Chapter) {
         guard let manga = manga,
               let manager = downloadManager else {
@@ -2120,6 +2277,101 @@ final class MangaDetailsViewController: UITableViewController {
 }
 
 
+
+// A deliberately bounded, user-selected chapter list. There is no implicit
+// "download all" action, no background scraping, and no additional requests
+// before tapping Enfileirar. Cap limit protects iOS12 memory and source limits.
+private final class ChapterBatchPickerViewController: UITableViewController {
+    private let chapters: [Chapter]
+    private let offlineIDs: Set<String>
+    private let onConfirm: ([Chapter]) -> Void
+    private var selectedIDs: Set<String> = []
+
+    init(
+        chapters: [Chapter],
+        offlineIDs: Set<String>,
+        onConfirm: @escaping ([Chapter]) -> Void
+    ) {
+        self.chapters = chapters
+        self.offlineIDs = offlineIDs
+        self.onConfirm = onConfirm
+        super.init(style: .plain)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "Baixar capítulos"
+        tableView.tableFooterView = UIView()
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Enfileirar 0/5", style: .done,
+            target: self, action: #selector(confirmTapped)
+        )
+        navigationItem.rightBarButtonItem?.isEnabled = false
+        ThemeManager.shared.style(tableView: tableView)
+    }
+
+    override func tableView(
+        _ tableView: UITableView, numberOfRowsInSection section: Int
+    ) -> Int { return chapters.count }
+
+    override func tableView(
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ChapterBatch")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ChapterBatch")
+        ThemeManager.shared.style(cell: cell)
+        let chapter = chapters[indexPath.row]
+        cell.textLabel?.text = chapter.name
+        if offlineIDs.contains(chapter.id) {
+            cell.detailTextLabel?.text = "Já disponível offline"
+            cell.selectionStyle = .none
+            cell.accessoryType = .checkmark
+        } else {
+            cell.detailTextLabel?.text = nil
+            cell.selectionStyle = .default
+            cell.accessoryType = selectedIDs.contains(chapter.id)
+                ? .checkmark : .none
+        }
+        return cell
+    }
+
+    override func tableView(
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let id = chapters[indexPath.row].id
+        guard !offlineIDs.contains(id) else { return }
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else if selectedIDs.count < 5 {
+            selectedIDs.insert(id)
+        } else {
+            let alert = UIAlertController(
+                title: "Limite de 5 capítulos",
+                message: "Inicie o lote selecionado antes de escolher mais.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+            present(alert, animated: true)
+        }
+        navigationItem.rightBarButtonItem?.title =
+            "Enfileirar \(selectedIDs.count)/5"
+        navigationItem.rightBarButtonItem?.isEnabled = !selectedIDs.isEmpty
+        tableView.reloadRows(at: [indexPath], with: .none)
+    }
+
+    @objc private func confirmTapped() {
+        let selected = chapters.filter { selectedIDs.contains($0.id) }
+        guard !selected.isEmpty, selected.count <= 5 else { return }
+        navigationController?.popViewController(animated: true)
+        onConfirm(selected)
+    }
+}
+
 extension SourceBrowserViewController: ThemeApplicable {
     func applyTheme() {
         ThemeManager.shared.style(tableView: tableView)
@@ -2134,6 +2386,9 @@ extension SourceBrowserViewController: ThemeApplicable {
 
 extension MangaDetailsViewController: ThemeApplicable {
     func applyTheme() {
+        batchButton.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        batchButton.setTitleColor(ThemeManager.shared.palette.accent, for: .normal)
+        tableView.tableHeaderView?.backgroundColor = ThemeManager.shared.palette.background
         ThemeManager.shared.style(tableView: tableView)
         tableView.visibleCells.compactMap { $0 as? MangaDetailsHeaderCell }.forEach {
             $0.applyPalette()
