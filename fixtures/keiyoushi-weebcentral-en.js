@@ -10,6 +10,7 @@
   var version = '0.1.0';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
+  var imageHostRE = /^https:\/\/(?:[a-z0-9-]+\.)*weebcentral\.com(?=\/|[?#]|$)/i;
   var seriesRE = /^https:\/\/(?:www\.)?weebcentral\.com\/series\/([^\/?#]+)(?:\/[^\/?#]+)?\/?(?:[?#].*)?$/i;
   var chapterRE = /^https:\/\/(?:www\.)?weebcentral\.com\/(?:chapters?\/[^?#]+|series\/[^?#]+\/chapter\/[^?#]+)(?:[?#].*)?$/i;
 
@@ -68,7 +69,7 @@
     var url = resolve(baseURL, part);
     // The actual host list needs a physical test: do NOT silently trust
     // third-party CDN domains not yet audited in the source manifest.
-    return url && hostRE.test(url) ? url : null;
+    return url && imageHostRE.test(url) ? url : null;
   }
   function firstSrcset(value) {
     return String(value || '').split(',')[0].trim().split(/\s+/)[0];
