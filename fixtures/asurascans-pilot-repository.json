@@ -1,0 +1,22 @@
+{
+  "name": "MangaReader12 — Asura Scans EN (public-only isolated pilot, iOS12 QA pending)",
+  "apiVersion": 1,
+  "sources": [
+    {
+      "id": "kei.asurascans.en",
+      "name": "Asura Scans EN (experimental)",
+      "version": "0.1.0",
+      "lang": "en",
+      "author": "MangaReader12 non-official port; upstream reference Keiyoushi (Apache-2.0)",
+      "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-asurascans-en.js",
+      "apiVersion": 1,
+      "minAppVersion": "0.1.0",
+      "domains": [
+        "asurascans.com",
+        "api.asurascans.com"
+      ],
+      "nsfw": false,
+      "sha256": "af5ce3f435e59468db17e2435fd98af6a5ac701fb21772e87bf2270b363cf7c7"
+    }
+  ]
+}
