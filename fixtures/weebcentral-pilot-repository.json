@@ -12,10 +12,12 @@
       "apiVersion": 1,
       "minAppVersion": "0.1.0",
       "domains": [
-        "weebcentral.com"
+        "weebcentral.com",
+        "temp.compsci88.com",
+        "hot.planeptune.us"
       ],
       "nsfw": true,
-      "sha256": "112731be463d3396b5c6ec6a313f45db2a35d66286e2936c31ab6fe391b20194"
+      "sha256": "3691dc6433b5045f14399be8180a0036b1127ba7ae25f86069164b10a033901c"
     }
   ]
 }
