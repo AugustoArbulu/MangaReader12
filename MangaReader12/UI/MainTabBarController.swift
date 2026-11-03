@@ -1682,7 +1682,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 6
+        return 7
     }
 
     override func tableView(
@@ -1746,9 +1746,21 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = nil
             cell.selectionStyle = .default
 
+        case 5:
+            cell.textLabel?.text = "Biblioteca em grade"
+            cell.detailTextLabel?.text = "Usar capas em grade como visualização preferida"
+            cell.accessoryType = .none
+            let toggle = UISwitch()
+            toggle.isOn = UserDefaults.standard.string(forKey: "library.layout") == "grid"
+            toggle.addTarget(
+                self, action: #selector(gridPreferenceChanged(_:)), for: .valueChanged
+            )
+            cell.accessoryView = toggle
+            cell.selectionStyle = .none
+
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Batch M7C–M9A hardening • iOS 12.0"
+            cell.detailTextLabel?.text = "Build 41 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
@@ -1762,6 +1774,12 @@ final class SettingsViewController: UITableViewController {
 
     @objc private func backgroundUpdatesChanged(_ sender: UISwitch) {
         BackgroundLibraryUpdateManager.shared.isEnabled = sender.isOn
+    }
+
+    @objc private func gridPreferenceChanged(_ sender: UISwitch) {
+        UserDefaults.standard.set(
+            sender.isOn ? "grid" : "list", forKey: "library.layout"
+        )
     }
 
     override func tableView(
