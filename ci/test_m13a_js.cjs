@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.9');
+      assert.equal(source.version,'0.1.10');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -185,6 +185,8 @@ async function testWebtoons() {
   assert.equal(r.calls.length,beforeInvalid,'unknown category must not issue a GET');
   assert.equal(initialListing.items[0].cover,'https://swebtoon-phinf.pstatic.net/cover.jpg');
   assert.equal(initialListing.items[0].coverDiagnostic.coverFound,true);
+  assert.equal(initialListing.items[0].tags,null,
+    'missing explicit card classification remains unknown (not negative)');
   assert.equal(initialListing.items[0].coverDiagnostic.outputClass,'pstatic-https');
   assert(initialListing.items[0].coverDiagnostic.outputLength>0);
   assert.equal((await r.call('search','a',1,[])).items.length,1);
@@ -210,6 +212,28 @@ async function testWebtoons() {
       ],next:[]};
     }
   });
+  // Explicit list card tags can support a conservative local exclusion.
+  // Title/cover text is never classified. Blank tag means unknown.
+  const tagged=runtime('keiyoushi-webtoons-en.js',{
+    http(){return 'LIST';},
+    dom(html,specs){
+      assert(specs.items.fields.genre,'tag extraction must use explicit card metadata');
+      return {items:[
+        node('',{href:root},{title:node('Explicit genre'),genre:node('BL / Romance'),
+          cover:node('',{src:'https://webtoon-phinf.pstatic.net/cover.jpg'})}),
+        node('',{href:'https://www.webtoons.com/en/original/unknown/list?title_no=43'},
+          {title:node('LGBTQ+ title without classification')})
+      ],next:[]};
+    }
+  });
+  const taggedPage=await tagged.call('popular',1);
+  assert.equal(taggedPage.items.length,2);
+  assert.equal(taggedPage.items[0].tags.join(','),'BL,Romance');
+  assert.equal(taggedPage.items[1].tags,null,
+    'titles must not be interpreted as classification tags');
+  assert.equal(tagged.calls.length,1,
+    'tag extraction must not fetch each manga detail');
+
   const lazyResult=await lazy.call('popular',1);
   assert.equal(lazyResult.items.length,2);
   assert.equal(lazyResult.items[0].cover,'https://swebtoon-phinf.pstatic.net/real-cover.jpg?type=q90');
@@ -400,6 +424,33 @@ async function testWebtoons() {
 // Native discovery surface must be an optional extension of source API v1.
 // Ensure changing sections while a request is pending does not reuse the
 // previous category/search result, and old sources still call popular().
+function testModernDiscoveryUI() {
+  const root=path.join(__dirname,'../MangaReader12');
+  const swift=fs.readFileSync(path.join(root,'UI/SourceBrowserViewController.swift'),'utf8');
+  const models=fs.readFileSync(path.join(root,'Sources/SourceManifest.swift'),'utf8');
+  assert(models.includes('let tags: [String]?'),
+    'legacy source DTO needs optional list classification');
+  assert(swift.includes('SourceDiscoverySheetViewController('));
+  assert(swift.includes('controller.modalPresentationStyle = .overFullScreen'));
+  assert(swift.includes('class SourceDiscoverySheetViewController: UIViewController'));
+  assert(swift.includes('SourceTagMatcher.matches(label, exclusion: $0)'));
+  assert(swift.includes('guard let tags = item.tags, !tags.isEmpty'));
+  assert(swift.includes('return !hideUnclassified'),
+    'unknown content policy must be explicit');
+  assert(swift.includes('var displayedItems: [SourceMangaSummary]'));
+  assert(swift.includes('return displayedItems.count'));
+  assert(swift.includes('summary: displayedItems[indexPath.row]'));
+  assert(swift.includes('exclusions.sorted()'),
+    'filter exclusions should persist per-source');
+  assert(swift.includes('theme.shared')===false); // ThemeManager accessed explicitly
+  assert(!swift.includes('UIAlertController(\n            title: "Descobrir obras"'),
+    'remove iPad-looking native action sheet');
+  assert(swift.includes('As exclusões só')===false);
+  assert(swift.includes('A ausência de tags não comprova'),
+    'honest limitation should be visible in UI');
+  console.log('PASS modern discovery UI: custom iOS12 sheet, source-only tag filtering and metadata limits');
+}
+
 function testDiscoveryNativeWiring() {
   const root=path.join(__dirname,'../MangaReader12');
   const manifest=fs.readFileSync(path.join(root,'Sources/SourceManifest.swift'),'utf8');
@@ -417,7 +468,10 @@ function testDiscoveryNativeWiring() {
   assert(section.includes('"browse"'));
   assert(section.includes('"popular"'));
   assert(section.includes('"search"'));
-  assert(section.includes('unsupported.isEnabled = false'));
+  assert(section.includes('let rankings = categories.filter { $0.kind != "genre" }'),
+    'the modern picker may only present advertised source ranking/latest categories');
+  assert(section.includes('if !genres.isEmpty'),
+    'empty source genre list must not show invented filters');
   console.log('PASS native discovery: optional browse, v1 fallback and stale request protection');
 }
 
@@ -458,5 +512,5 @@ async function testSecurity() {
   assert(bad.__sourceError,'invalid chapter ID must fail');
   console.log('PASS rejected malformed / non-HTTPS paths');
 }
-(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();testDiscoveryNativeWiring();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
+(async()=>{verifyPinnedCatalog();testOfflineReaderRouting();testDiscoveryNativeWiring();testModernDiscoveryUI();await testManhwa18();await testHotcomics();await testWebtoons();await testSecurity();})()
   .catch(error=>{console.error(error);process.exitCode=1;});
