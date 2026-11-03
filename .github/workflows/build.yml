@@ -42,6 +42,12 @@ jobs:
       - name: Verify Build41 reader and library contracts (offline)
         run: python3 ci/test_build41_features.py
 
+      - name: Test native CBZ parser and adversarial archives
+        run: python3 ci/test_safe_cbz.py
+
+      - name: Verify Build42 local archive and reader contracts
+        run: python3 ci/test_build42_contract.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
