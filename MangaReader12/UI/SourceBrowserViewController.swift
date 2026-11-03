@@ -6,6 +6,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var items: [SourceMangaSummary] = []
     private var excludedTags: Set<String> = []
     private var hideUnclassified = false
+    // Optional source-backed filters. They are applied by the source's
+    // search endpoint before pagination; local exclusions remain separate.
+    private var remoteFilterOptions: SourceRemoteFilterOptions?
+    private var remoteFilters = SourceRemoteFilterSelection()
     private var manuallyHiddenIDs: Set<String> = []
     // On-demand, one-page snapshot. It never claims coverage of all Canvas
     // titles and is intentionally not persisted across app sessions.
@@ -69,6 +73,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let key = "explore.filters." + sourceRecord.manifest.id
         self.excludedTags = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
         self.hideUnclassified = UserDefaults.standard.bool(forKey: key + ".hideUnknown")
+        if let saved = UserDefaults.standard.data(forKey: "explore.remote." + sourceRecord.manifest.id),
+           let selected = try? JSONDecoder().decode(SourceRemoteFilterSelection.self, from: saved) {
+            self.remoteFilters = selected
+        }
         self.manuallyHiddenIDs = Set(
             UserDefaults.standard.stringArray(forKey: "explore.hidden." + sourceRecord.manifest.id) ?? []
         )
@@ -152,15 +160,23 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             ? "Busca por título"
             : (selectedCategory?.title ?? "Populares")
         let active = excludedTags.count
+        let remoteCount = remoteFilters.includedTags.count +
+            remoteFilters.excludedTags.count + remoteFilters.types.count +
+            remoteFilters.statuses.count + (remoteFilters.sort == nil ? 0 : 1) +
+            (remoteFilters.order == nil ? 0 : 1)
         browseHeaderButton.setTitle(
             "Explorar: " + title +
-                (active > 0 ? "   • " + String(active) + " exclusões" : "") +
+                (remoteFilterOptions != nil && remoteCount > 0
+                    ? "   • " + String(remoteCount) + " filtros da fonte" : "") +
+                (active > 0 ? "   • " + String(active) + " exclusões locais" : "") +
                 (!manuallyHiddenIDs.isEmpty ? "   • " + String(manuallyHiddenIDs.count) + " ocultas" : "") +
                 "  ▾",
             for: .normal
         )
 
-        if !canvasBLGLSampleIDs.isEmpty &&
+        if remoteFilterOptions != nil && remoteCount > 0 {
+            browseHeaderHint.text = "Tags, tipo e status filtrados pelo site • paginação remota"
+        } else if !canvasBLGLSampleIDs.isEmpty &&
             !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
             browseHeaderHint.text = "Tags + amostra CANVAS BL/GL de 1 página • cobertura parcial"
         } else if !excludedTags.isEmpty {
@@ -206,19 +222,50 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         }
     }
 
+    private func loadRemoteFilterOptions() {
+        guard let runtime = runtime else { return }
+        runtime.callDecoded(
+            "filterOptions",
+            as: SourceRemoteFilterOptions.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch result {
+                case .success(let options) where options.isValid:
+                    self.remoteFilterOptions = options
+                    self.remoteFilters = self.remoteFilters.sanitized(for: options)
+                    self.updateBrowseHeader()
+                default:
+                    // Optional capability: legacy sources remain unchanged.
+                    self.remoteFilterOptions = nil
+                }
+            }
+        }
+    }
+
     @objc private func showBrowseMenu() {
         let controller = SourceDiscoverySheetViewController(
             categories: browseCategories,
             selectedID: selectedCategory?.id,
             exclusions: excludedTags,
             hideUnknown: hideUnclassified,
+            remoteOptions: remoteFilterOptions,
+            remoteSelection: remoteFilters,
             hiddenCount: manuallyHiddenIDs.count,
             allowsCanvasSample: sourceRecord.manifest.id == "kei.webtoons.en"
         )
-        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection in
+        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection, remoteSelection in
             guard let self = self else { return }
             let previousID = self.selectedCategory?.id
             let wasSearching = self.currentQuery != nil
+            let remoteChanged = self.remoteFilterOptions != nil &&
+                self.remoteFilters != remoteSelection
+            self.remoteFilters = remoteSelection
+            if let data = try? JSONEncoder().encode(remoteSelection) {
+                UserDefaults.standard.set(
+                    data, forKey: "explore.remote." + self.sourceRecord.manifest.id
+                )
+            }
             self.selectedCategory = self.browseCategories.first { $0.id == selectedID }
             self.excludedTags = exclusions
             self.hideUnclassified = hideUnknown
@@ -228,7 +275,8 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             UserDefaults.standard.set(hideUnknown, forKey: key + ".hideUnknown")
             self.updateBrowseHeader()
 
-            if previousID != self.selectedCategory?.id || (wasSearching && didChooseSection) {
+            if previousID != self.selectedCategory?.id ||
+                (wasSearching && didChooseSection) || remoteChanged {
                 self.currentQuery = nil
                 self.sourceSearchController.searchBar.text = nil
                 self.sourceSearchController.searchBar.resignFirstResponder()
@@ -450,6 +498,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                         self.loading = false
                         self.navigationItem.prompt = nil
                         self.loadBrowseCategories()
+                        self.loadRemoteFilterOptions()
                         self.loadFirstPage()
 
                     case .failure(let error):
@@ -540,7 +589,23 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             }
         }
 
-        if let query = query, !query.isEmpty {
+        if remoteFilterOptions != nil && remoteFilters.hasActiveFilters {
+            // Remote filters must be applied at the source, before paging.
+            // Using source.search for empty queries avoids the unfiltered
+            // popular/browse paths and works with existing API v1.
+            let categorySort = category?.kind == "latest"
+                ? "Latest Updates" : "Popularity"
+            let fallbackSort = query == nil ? categorySort : "Best Match"
+            runtime.callDecoded(
+                "search",
+                arguments: [
+                    query ?? "", page,
+                    remoteFilters.arguments(fallbackSort: fallbackSort)
+                ] as [Any],
+                as: SourcePagedMangaResult.self,
+                completion: completion
+            )
+        } else if let query = query, !query.isEmpty {
             runtime.callDecoded(
                 "search",
                 arguments: [query, page, [] as [Any]],
