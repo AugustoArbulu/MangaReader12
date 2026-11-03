@@ -840,3 +840,211 @@ private final class LibraryFilterSheetViewController: UIViewController {
     }
 }
 
+
+
+// Optional visual grid for the currently filtered/sorted Library snapshot.
+// Its cover pipeline reuses the existing bounded CoverImageLoader; it never
+// fetches chapters or modifies the Library database.
+private final class LibraryGridCoverCell: UICollectionViewCell {
+    static let reuseID = "LibraryGridCoverCell"
+    private let cover = UIImageView()
+    private let name = UILabel()
+    private let detail = UILabel()
+    private var representedURL: String?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentView.layer.cornerRadius = 9
+        contentView.layer.masksToBounds = true
+        cover.contentMode = .scaleAspectFill
+        cover.clipsToBounds = true
+        name.numberOfLines = 2
+        name.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        detail.numberOfLines = 1
+        detail.font = UIFont.systemFont(ofSize: 11, weight: .medium)
+        contentView.addSubview(cover)
+        contentView.addSubview(name)
+        contentView.addSubview(detail)
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        representedURL = nil
+        cover.image = nil
+        name.text = nil
+        detail.text = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = max(1, contentView.bounds.width)
+        let coverHeight = width * 1.40
+        cover.frame = CGRect(x: 0, y: 0, width: width, height: coverHeight)
+        name.frame = CGRect(
+            x: 7, y: coverHeight + 6, width: max(1, width - 14), height: 38
+        )
+        detail.frame = CGRect(
+            x: 7, y: coverHeight + 44, width: max(1, width - 14), height: 18
+        )
+    }
+
+    func configure(record: LibraryMangaRecord, metrics: LibraryMangaMetrics?) {
+        let palette = ThemeManager.shared.palette
+        contentView.backgroundColor = palette.secondaryBackground
+        cover.backgroundColor = palette.separator
+        name.textColor = palette.primaryText
+        detail.textColor = palette.secondaryText
+        name.text = record.title
+        var parts: [String] = []
+        if let unread = metrics?.unreadChapters, unread > 0 {
+            parts.append(String(unread) + " não lidos")
+        }
+        if metrics?.hasCompletedDownload == true {
+            parts.append("Offline")
+        }
+        if parts.isEmpty { parts.append(record.status.rawValue) }
+        detail.text = parts.joined(separator: " • ")
+        accessibilityLabel = record.title + ". " + (detail.text ?? "")
+        representedURL = record.cover
+        cover.image = nil
+        guard let url = record.cover else { return }
+        CoverImageLoader.shared.load(urlString: url, allowedDomains: []) {
+            [weak self] image in
+            guard let self = self, self.representedURL == url else { return }
+            self.cover.image = image
+        }
+    }
+}
+
+final class LibraryGridViewController:
+    UICollectionViewController, UICollectionViewDelegateFlowLayout {
+
+    typealias Snapshot = ([LibraryMangaRecord], [Int64: LibraryMangaMetrics])
+    private let snapshot: () -> Snapshot
+    private let openRecord: (LibraryMangaRecord) -> Void
+    private var entries: [LibraryMangaRecord] = []
+    private var metrics: [Int64: LibraryMangaMetrics] = [:]
+
+    init(
+        snapshot: @escaping () -> Snapshot,
+        open: @escaping (LibraryMangaRecord) -> Void
+    ) {
+        self.snapshot = snapshot
+        self.openRecord = open
+        let layout = UICollectionViewFlowLayout()
+        layout.minimumInteritemSpacing = 10
+        layout.minimumLineSpacing = 14
+        layout.sectionInset = UIEdgeInsets(top: 12, left: 12, bottom: 18, right: 12)
+        super.init(collectionViewLayout: layout)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "Biblioteca • Grade"
+        collectionView.backgroundColor = ThemeManager.shared.palette.background
+        collectionView.alwaysBounceVertical = true
+        collectionView.register(
+            LibraryGridCoverCell.self,
+            forCellWithReuseIdentifier: LibraryGridCoverCell.reuseID
+        )
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Lista", style: .plain,
+            target: self, action: #selector(listTapped)
+        )
+        refreshSnapshot()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refreshSnapshot()
+        collectionView.backgroundColor = ThemeManager.shared.palette.background
+        ThemeManager.shared.styleBars(for: navigationController ?? self)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if isMovingFromParent {
+            UserDefaults.standard.set("list", forKey: "library.layout")
+        }
+    }
+
+    private func refreshSnapshot() {
+        let current = snapshot()
+        entries = current.0
+        metrics = current.1
+        collectionView?.reloadData()
+        if entries.isEmpty {
+            let label = UILabel(frame: CGRect(
+                x: 20, y: 0,
+                width: max(1, view.bounds.width - 40),
+                height: max(1, view.bounds.height)
+            ))
+            label.text = "Nenhuma obra neste filtro.\nVolte à lista para alterar os filtros."
+            label.numberOfLines = 0
+            label.textColor = ThemeManager.shared.palette.secondaryText
+            label.textAlignment = .center
+            collectionView.backgroundView = label
+        } else {
+            collectionView.backgroundView = nil
+        }
+    }
+
+    @objc private func listTapped() {
+        UserDefaults.standard.set("list", forKey: "library.layout")
+        navigationController?.popViewController(animated: true)
+    }
+
+    override func collectionView(
+        _ collectionView: UICollectionView,
+        numberOfItemsInSection section: Int
+    ) -> Int {
+        return entries.count
+    }
+
+    override func collectionView(
+        _ collectionView: UICollectionView,
+        cellForItemAt indexPath: IndexPath
+    ) -> UICollectionViewCell {
+        guard let cell = collectionView.dequeueReusableCell(
+            withReuseIdentifier: LibraryGridCoverCell.reuseID,
+            for: indexPath
+        ) as? LibraryGridCoverCell else {
+            return UICollectionViewCell()
+        }
+        let record = entries[indexPath.item]
+        cell.configure(record: record, metrics: metrics[record.internalID])
+        return cell
+    }
+
+    override func collectionView(
+        _ collectionView: UICollectionView,
+        didSelectItemAt indexPath: IndexPath
+    ) {
+        collectionView.deselectItem(at: indexPath, animated: true)
+        guard entries.indices.contains(indexPath.item) else { return }
+        openRecord(entries[indexPath.item])
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        sizeForItemAt indexPath: IndexPath
+    ) -> CGSize {
+        let width = max(1, collectionView.bounds.width)
+        let columns = max(2, min(5, Int((width - 14) / 145)))
+        let cardWidth = max(1, floor(
+            (width - 24 - CGFloat(columns - 1) * 10) / CGFloat(columns)
+        ))
+        return CGSize(width: cardWidth, height: cardWidth * 1.4 + 68)
+    }
+}
