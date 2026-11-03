@@ -7,7 +7,7 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.3';
+  var version = '0.1.4';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
   // Exact media CDN hosts are grounded in public offline WeebCentral HTML
@@ -259,18 +259,39 @@
     if (!url) { fail(done, 'Invalid WeebCentral series URL'); return; }
     request(url, done);
   }
-  function parseInfoRow(row, map) {
+  function addGenre(target, value) {
+    var name = String(value || '').replace(/\s+/g, ' ').trim();
+    // Only copy source-declared category labels; never guess by title/cover.
+    if (name && name.length <= 80 && target.indexOf(name) < 0) target.push(name);
+  }
+  function parseInfoRow(row, info) {
+    // The actual site uses <strong>Author(s):</strong> and
+    // <strong>Tags(s):</strong>, not just "Author:" and "Tag:".
+    // Description may have no colon: <strong>Description</strong><p>...
+    var label = txt(fld(row, 'label'));
     var value = txt(row).replace(/\s+/g, ' ').trim();
-    var match = /^(Author|Artist|Tag|Type|Status|Description|Associated Name|Associated Names)\s*:\s*(.*)$/i.exec(value);
-    if (!match) return;
-    var key = match[1].toLowerCase(), body = match[2];
-    if (key === 'author') map.author = body;
-    if (key === 'artist') map.artist = body;
-    if (key === 'status') map.status = body;
-    if (key === 'description') map.description = body;
-    if (key === 'associated name' || key === 'associated names') map.alt = body;
-    if (key === 'tag' || key === 'type') {
-      if (body) map.genres.push(body);
+    if (!label) {
+      var m = /^(Author(?:\(s\)|s)?|Artist(?:\(s\)|s)?|Tags?(?:\(s\))?|Type|Status|Description|Associated Names?(?:\(s\))?)\s*:?\s*(.*)$/i.exec(value);
+      if (!m) return;
+      label = m[1];
+      value = m[2].trim();
+    } else {
+      var prefix = label.replace(/\s+/g, ' ').trim();
+      if (value.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return;
+      value = value.slice(prefix.length).replace(/^\s*:\s*/, '').trim();
+    }
+    var key = label.replace(/:\s*$/, '').trim().toLowerCase();
+    if (/^authors?(?:\(s\))?$/.test(key)) info.author = value;
+    else if (/^artists?(?:\(s\))?$/.test(key)) info.artist = value;
+    else if (key === 'status') info.status = value;
+    else if (key === 'description') info.description = value;
+    else if (/^associated names?(?:\(s\))?$/.test(key)) info.alt = value;
+    else if (/^tags?(?:\(s\))?$/.test(key)) {
+      value.split(/\s*[,;]\s*/).forEach(function (name) {
+        addGenre(info.fallbackTags, name);
+      });
+    } else if (key === 'type') {
+      addGenre(info.fallbackTypes, value);
     }
   }
   function getDetails(mangaId, done) {
@@ -278,7 +299,14 @@
       if (resp.__sourceError) { done(resp); return; }
       select(resp.body, {
         title: {selector: 'section[x-data] h1'},
-        rows: {selector: 'section[x-data] ul > li'},
+        rows: {selector: 'section[x-data] > section ul > li', fields: {
+          label: 'strong'
+        }},
+        // The canonical genre labels are the individually linked tags and
+        // type from WeebCentral's own search criteria, not inferred keywords.
+        tagLinks: {selector: 'section[x-data] > section:first-child ul > li a[href*="included_tag="]'},
+        typeLinks: {selector: 'section[x-data] > section:first-child ul > li a[href*="included_type="]'},
+        description: {selector: 'section[x-data] > section:nth-child(2) li p'},
         poster: {selector: 'section[x-data] > section', fields: {
           source: 'source', image: 'img'
         }},
@@ -287,8 +315,21 @@
         if (dom.__sourceError) { done(dom); return; }
         var title = txt(entries(dom, 'title')[0]);
         if (!title) { fail(done, 'Series title missing from HTML'); return; }
-        var info = {genres: []};
+        var info = {genres: [], fallbackTags: [], fallbackTypes: []};
         entries(dom, 'rows').forEach(function (row) { parseInfoRow(row, info); });
+        var tags = entries(dom, 'tagLinks'), types = entries(dom, 'typeLinks');
+        if (tags.length) {
+          tags.forEach(function (link) { addGenre(info.genres, txt(link)); });
+        } else {
+          info.fallbackTags.forEach(function (name) { addGenre(info.genres, name); });
+        }
+        if (types.length) {
+          types.forEach(function (link) { addGenre(info.genres, txt(link)); });
+        } else {
+          info.fallbackTypes.forEach(function (name) { addGenre(info.genres, name); });
+        }
+        var description = txt(entries(dom, 'description')[0]);
+        if (description) info.description = description;
         var posterCover = coverInfo(resp.finalURL, entries(dom, 'poster')[0]);
         var metaCover = imageChoice(resp.finalURL, [attr(entries(dom, 'meta')[0], 'content')]);
         var cover = posterCover.url || metaCover.url;
