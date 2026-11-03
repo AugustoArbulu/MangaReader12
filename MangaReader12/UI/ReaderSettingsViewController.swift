@@ -28,7 +28,7 @@ final class ReaderSettingsViewController: UITableViewController {
     ) -> Int {
         switch section {
         case 0: return 3
-        case 1: return 4
+        case 1: return 5
         case 2: return 2
         default: return 1
         }
@@ -108,6 +108,15 @@ final class ReaderSettingsViewController: UITableViewController {
                 action: #selector(keepScreenOnChanged(_:))
             )
 
+        case (1, 4):
+            configureSwitch(
+                cell,
+                title: "Recortar bordas (3%)",
+                subtitle: "Somente modo Páginas; não modifica os arquivos nem o Webtoon.",
+                isOn: preferences.trimMargins,
+                action: #selector(trimMarginsChanged(_:))
+            )
+
         case (2, 0):
             configureSwitch(
                 cell,
@@ -174,6 +183,10 @@ final class ReaderSettingsViewController: UITableViewController {
         toggle.isOn = isOn
         toggle.addTarget(self, action: action, for: .valueChanged)
         cell.accessoryView = toggle
+    }
+
+    @objc private func trimMarginsChanged(_ sender: UISwitch) {
+        preferences.trimMargins = sender.isOn
     }
 
     @objc private func showPageNumberChanged(_ sender: UISwitch) {
