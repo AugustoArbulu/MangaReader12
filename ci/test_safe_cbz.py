@@ -36,11 +36,13 @@ class ArchiveTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.binary = pathlib.Path(cls.tmp.name) / "safe-cbz-test"
-        subprocess.run(
+        build = subprocess.run(
             ["swiftc", "-O", str(ROOT / "MangaReader12/Core/SafeCBZArchive.swift"),
              str(ROOT / "ci/validate_cbz.swift"), "-o", str(cls.binary)],
-            check=True, capture_output=True, text=True,
+            capture_output=True, text=True,
         )
+        if build.returncode != 0:
+            raise AssertionError("swiftc failed:\n" + build.stdout + build.stderr)
 
     @classmethod
     def tearDownClass(cls):
