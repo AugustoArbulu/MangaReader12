@@ -5,7 +5,7 @@
     {
       "id": "kei.weebcentral.en",
       "name": "WeebCentral EN (experimental)",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "lang": "en",
       "author": "Unofficial MangaReader12 port; reference: Keiyoushi (Apache-2.0)",
       "script": "https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js",
@@ -17,7 +17,7 @@
         "hot.planeptune.us"
       ],
       "nsfw": true,
-      "sha256": "3691dc6433b5045f14399be8180a0036b1127ba7ae25f86069164b10a033901c"
+      "sha256": "53889cc781de90231a3b389408db04f9c2d08b66203e9ce826f8101514f1cb46"
     }
   ]
 }
