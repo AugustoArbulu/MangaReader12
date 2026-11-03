@@ -40,6 +40,16 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 7. Sem nova IPA: a fonte está disponível **somente por um catálogo piloto separado**, `fixtures/weebcentral-pilot-repository.json`, com SHA-256 fixado. Não entra no catálogo principal nem é marcada como funcional. A instalação deve ser manual/opt-in **após CI verde e merge**; serve exclusivamente para obter evidência de compatibilidade no iPhone.
 8. O manifesto piloto marca `nsfw: true` por cautela, pois o upstream declara `ContentWarning.MIXED`; isso não implica que todo título contenha material adulto.
 
+## QA físico 0.1.0 — resultado e revisão 0.1.1 (2026-11-03)
+
+**Evidência do usuário em iOS 12.5.8:** Populares mostra títulos, mas **nenhuma capa**; detalhes também sem capa; ao abrir capítulo, o adaptador retorna `Source failed: No permitted page-image hosts found; CDN requires review`. Portanto, **listagem, rota da obra e chegada até o leitor funcionam parcialmente**. Não afirmar que a imagem foi bloqueada pelo servidor: a própria versão 0.1.0 eliminava URLs fora de `weebcentral.com` (e também produzia a mesma mensagem se o seletor não retornasse imagens).
+
+**Adaptação 0.1.1:** manter a lista de domínios estrita, sem tentar baixar hosts desconhecidos; incluir `coverDiagnostic` opcional com **apenas hostnames** nos cards; tratar `data-src` e `data-original` antes de placeholder `src`; separar os erros de zero elementos, URL ausente e hostname externo. Se apenas parte das páginas for permitida, **falhar o capítulo inteiro** em vez de permitir download/leitura incompleta.
+
+**Novo teste após atualizar a fonte (não precisa de nova IPA):** atualizar o repositório piloto em Explorar e instalar/atualizar `WeebCentral EN (experimental)` para versão `0.1.1`. Abrir **um capítulo já listado**. Copiar o texto do erro: se contiver `Blocked image hostnames: exemplo.tld`, reportar somente esses hostnames. Se apontar `no page images matched` ou `No usable HTTPS image URL`, investigar seletor/atributo sem tocar na allowlist. Não fornecer URL de imagem completa, caminhos, query, cookies ou credenciais. **Não** continuar a repetição de requests se aparecer 403/429 ou recusa do serviço.
+
+**Depois do relato:** somente incluir um domínio externo de CDN após confirmar sua vinculação à fonte e revisar a política de segurança do cliente HTTP. Permanecem pendentes testes reais de leitura integral, capas, atualização de capítulos e download offline. A Asura permanece fora do escopo deste patch.
+
 ## Testes offline
 
 `node ci/test_weebcentral_offline.cjs` valida: seis funções obrigatórias + descoberta; formato de resultados, URLs, contagem/paginação, ordenação, campos de detalhes, IDs estáveis, ordem/scanlator dos capítulos, imagens, ausência de hosts externos, rejeição de URLs não HTTPS, resposta 403 sem retry, rejeição de redirect externo. Estes testes usam HTML simulado e não constituem prova de funcionamento real.
