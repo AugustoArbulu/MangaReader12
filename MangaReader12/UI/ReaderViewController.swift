@@ -472,10 +472,26 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         layoutImage(resetZoom: true)
     }
 
-    func toggleZoom() {
+    func toggleZoom(at point: CGPoint) {
         guard zoomScrollView.maximumZoomScale > 1 else { return }
-        let target: CGFloat = zoomScrollView.zoomScale > 1.05 ? 1 : 2.5
-        zoomScrollView.setZoomScale(target, animated: true)
+        if zoomScrollView.zoomScale > 1.05 {
+            zoomScrollView.setZoomScale(1, animated: true)
+            return
+        }
+        // Focus on the actual double-tap location, not always image center.
+        // No new full-resolution image is decoded for this zoom operation.
+        let target: CGFloat = 2.5
+        let focus = zoomScrollView.convert(point, from: contentView)
+        let targetSize = CGSize(
+            width: zoomScrollView.bounds.width / target,
+            height: zoomScrollView.bounds.height / target
+        )
+        let rect = CGRect(
+            x: focus.x - targetSize.width / 2,
+            y: focus.y - targetSize.height / 2,
+            width: targetSize.width, height: targetSize.height
+        )
+        zoomScrollView.zoom(to: rect, animated: true)
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -509,6 +525,12 @@ final class ReaderViewController: UIViewController,
     )
     private let modeControl = UISegmentedControl(items: ["Páginas", "Webtoon"])
     private let controlsView = UIView()
+    private let pageNavigationView = UIView()
+    private let pageNavigationSlider = UISlider()
+    private let pageNavigationLabel = UILabel()
+    private let previousChapterButton = UIButton(type: .system)
+    private let nextChapterButton = UIButton(type: .system)
+    private var isScrubbingPage = false
     private let brightnessSlider = UISlider()
     private let brightnessLabel = UILabel()
     private let directionButton = UIButton(type: .system)
@@ -595,6 +617,7 @@ final class ReaderViewController: UIViewController,
         view.addSubview(collectionView)
 
         configureControls()
+        configurePageNavigation()
         configureScaleComparison()
         configureGestures()
 
@@ -609,9 +632,45 @@ final class ReaderViewController: UIViewController,
             controlsView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             controlsView.heightAnchor.constraint(equalToConstant: 48),
 
+            pageNavigationView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pageNavigationView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pageNavigationView.bottomAnchor.constraint(equalTo: controlsView.topAnchor),
+            pageNavigationView.heightAnchor.constraint(equalToConstant: 50),
+
+            previousChapterButton.leadingAnchor.constraint(
+                equalTo: pageNavigationView.leadingAnchor, constant: 8
+            ),
+            previousChapterButton.centerYAnchor.constraint(
+                equalTo: pageNavigationView.centerYAnchor
+            ),
+            previousChapterButton.widthAnchor.constraint(equalToConstant: 54),
+            nextChapterButton.trailingAnchor.constraint(
+                equalTo: pageNavigationView.trailingAnchor, constant: -8
+            ),
+            nextChapterButton.centerYAnchor.constraint(
+                equalTo: pageNavigationView.centerYAnchor
+            ),
+            nextChapterButton.widthAnchor.constraint(equalToConstant: 54),
+            pageNavigationLabel.trailingAnchor.constraint(
+                equalTo: nextChapterButton.leadingAnchor, constant: -6
+            ),
+            pageNavigationLabel.centerYAnchor.constraint(
+                equalTo: pageNavigationView.centerYAnchor
+            ),
+            pageNavigationLabel.widthAnchor.constraint(equalToConstant: 56),
+            pageNavigationSlider.leadingAnchor.constraint(
+                equalTo: previousChapterButton.trailingAnchor, constant: 9
+            ),
+            pageNavigationSlider.trailingAnchor.constraint(
+                equalTo: pageNavigationLabel.leadingAnchor, constant: -8
+            ),
+            pageNavigationSlider.centerYAnchor.constraint(
+                equalTo: pageNavigationView.centerYAnchor
+            ),
+
             scaleComparisonView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scaleComparisonView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scaleComparisonView.bottomAnchor.constraint(equalTo: controlsView.topAnchor),
+            scaleComparisonView.bottomAnchor.constraint(equalTo: pageNavigationView.topAnchor),
             scaleComparisonView.heightAnchor.constraint(equalToConstant: 84),
 
             scaleComparisonLabel.leadingAnchor.constraint(
@@ -743,6 +802,8 @@ final class ReaderViewController: UIViewController,
         let location = touch.location(in: view)
         if (!scaleComparisonView.isHidden &&
             scaleComparisonView.frame.contains(location)) ||
+           (!pageNavigationView.isHidden &&
+            pageNavigationView.frame.contains(location)) ||
            (!controlsView.isHidden &&
             controlsView.frame.contains(location)) {
             return false
@@ -773,7 +834,7 @@ final class ReaderViewController: UIViewController,
             return
         }
 
-        cell.toggleZoom()
+        cell.toggleZoom(at: gesture.location(in: cell.contentView))
     }
 
     @objc private func handleReaderTap(_ gesture: UITapGestureRecognizer) {
@@ -863,6 +924,7 @@ final class ReaderViewController: UIViewController,
         if controlsHidden {
             controlsHidden = false
             controlsView.isHidden = false
+            pageNavigationView.isHidden = false
             navigationController?.setNavigationBarHidden(false, animated: true)
         }
         scaleComparisonControl.selectedSegmentIndex = scaleMode.rawValue
@@ -900,6 +962,7 @@ final class ReaderViewController: UIViewController,
 
         isChangingChapter = true
         navigationItem.rightBarButtonItem?.isEnabled = false
+        updatePageNavigation()
         navigationItem.prompt = "Carregando capítulo…"
         resolve(newChapter) { [weak self] result in
             DispatchQueue.main.async {
@@ -1000,6 +1063,7 @@ final class ReaderViewController: UIViewController,
     private func toggleControls() {
         controlsHidden.toggle()
         controlsView.isHidden = controlsHidden
+        pageNavigationView.isHidden = controlsHidden
         if controlsHidden {
             scaleComparisonView.isHidden = true
         }
@@ -1008,6 +1072,113 @@ final class ReaderViewController: UIViewController,
             controlsHidden,
             animated: true
         )
+    }
+
+    private func configurePageNavigation() {
+        pageNavigationView.translatesAutoresizingMaskIntoConstraints = false
+        pageNavigationView.backgroundColor = UIColor(white: 0.09, alpha: 0.93)
+        view.addSubview(pageNavigationView)
+
+        pageNavigationSlider.translatesAutoresizingMaskIntoConstraints = false
+        pageNavigationSlider.minimumValue = 0
+        pageNavigationSlider.maximumValue = Float(max(0, pages.count - 1))
+        pageNavigationSlider.value = 0
+        pageNavigationSlider.tintColor = UIColor(red: 0.38, green: 0.67, blue: 1, alpha: 1)
+        pageNavigationSlider.accessibilityLabel = "Ir para página"
+        pageNavigationSlider.addTarget(
+            self, action: #selector(pageScrubBegan), for: .touchDown
+        )
+        pageNavigationSlider.addTarget(
+            self, action: #selector(pageScrubChanged), for: .valueChanged
+        )
+        pageNavigationSlider.addTarget(
+            self, action: #selector(pageScrubEnded),
+            for: [.touchUpInside, .touchUpOutside, .touchCancel]
+        )
+        pageNavigationView.addSubview(pageNavigationSlider)
+
+        pageNavigationLabel.translatesAutoresizingMaskIntoConstraints = false
+        pageNavigationLabel.textColor = .white
+        pageNavigationLabel.font = UIFont.monospacedDigitSystemFont(
+            ofSize: 12, weight: .medium
+        )
+        pageNavigationLabel.textAlignment = .center
+        pageNavigationView.addSubview(pageNavigationLabel)
+
+        for button in [previousChapterButton, nextChapterButton] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+            button.setTitleColor(.white, for: .normal)
+            pageNavigationView.addSubview(button)
+        }
+        previousChapterButton.setTitle("‹ Cap.", for: .normal)
+        nextChapterButton.setTitle("Cap. ›", for: .normal)
+        previousChapterButton.accessibilityLabel = "Capítulo anterior"
+        nextChapterButton.accessibilityLabel = "Próximo capítulo"
+        previousChapterButton.addTarget(
+            self, action: #selector(previousChapterTapped), for: .touchUpInside
+        )
+        nextChapterButton.addTarget(
+            self, action: #selector(nextChapterTapped), for: .touchUpInside
+        )
+        updatePageNavigation()
+    }
+
+    private func updatePageNavigation() {
+        guard !isScrubbingPage else { return }
+        let count = pages.count
+        let index = count > 0 ? min(max(0, currentPageIndex()), count - 1) : 0
+        pageNavigationSlider.maximumValue = Float(max(0, count - 1))
+        pageNavigationSlider.value = Float(index)
+        pageNavigationSlider.isEnabled = count > 1 && !isChangingChapter
+        pageNavigationLabel.text = count == 0
+            ? "0 / 0" : String(index + 1) + " / " + String(count)
+        previousChapterButton.isEnabled = !isChangingChapter &&
+            pageResolver != nil && adjacentChapter(forward: false) != nil
+        nextChapterButton.isEnabled = !isChangingChapter &&
+            pageResolver != nil && adjacentChapter(forward: true) != nil
+        previousChapterButton.alpha = previousChapterButton.isEnabled ? 1 : 0.35
+        nextChapterButton.alpha = nextChapterButton.isEnabled ? 1 : 0.35
+    }
+
+    @objc private func pageScrubBegan() {
+        isScrubbingPage = true
+    }
+
+    @objc private func pageScrubChanged() {
+        let index = min(max(0, Int(pageNavigationSlider.value.rounded())), max(0, pages.count - 1))
+        pageNavigationLabel.text = pages.isEmpty
+            ? "0 / 0" : String(index + 1) + " / " + String(pages.count)
+    }
+
+    @objc private func pageScrubEnded() {
+        isScrubbingPage = false
+        guard !pages.isEmpty, !isChangingChapter else {
+            updatePageNavigation()
+            return
+        }
+        let index = min(max(0, Int(pageNavigationSlider.value.rounded())), pages.count - 1)
+        collectionView.layoutIfNeeded()
+        collectionView.scrollToItem(
+            at: IndexPath(item: index, section: 0),
+            at: displayMode == .pages ? .centeredHorizontally : .top,
+            animated: false
+        )
+        persistProgress(index: index)
+        prefetchUpcomingChapterIfNeeded(for: index)
+        updatePagePrompt()
+    }
+
+    @objc private func previousChapterTapped() {
+        if let chapter = adjacentChapter(forward: false) {
+            changeChapter(to: chapter)
+        }
+    }
+
+    @objc private func nextChapterTapped() {
+        if let chapter = adjacentChapter(forward: true) {
+            changeChapter(to: chapter)
+        }
     }
 
     private func configureScaleComparison() {
@@ -1289,6 +1460,7 @@ final class ReaderViewController: UIViewController,
     }
 
     private func updatePagePrompt() {
+        updatePageNavigation()
         guard preferences.showPageNumber else {
             navigationItem.prompt = nil
             return

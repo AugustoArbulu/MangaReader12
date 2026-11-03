@@ -39,6 +39,9 @@ jobs:
       - name: Test library filters and SQLite reading metrics (offline)
         run: python3 ci/test_library_filters.py
 
+      - name: Verify Build41 reader and library contracts (offline)
+        run: python3 ci/test_build41_features.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

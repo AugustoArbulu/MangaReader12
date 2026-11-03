@@ -1442,6 +1442,8 @@ final class MangaDetailsViewController: UITableViewController {
     private let sourceRecord: InstalledSourceRecord
     private let runtime: JavaScriptSourceRuntime
     private let summary: SourceMangaSummary
+    private let resumeChapterID: String?
+    private var attemptedResume = false
 
     private var manga: Manga?
     private var chapters: [Chapter] = []
@@ -1459,11 +1461,13 @@ final class MangaDetailsViewController: UITableViewController {
     init(
         sourceRecord: InstalledSourceRecord,
         runtime: JavaScriptSourceRuntime,
-        summary: SourceMangaSummary
+        summary: SourceMangaSummary,
+        resumeChapterID: String? = nil
     ) {
         self.sourceRecord = sourceRecord
         self.runtime = runtime
         self.summary = summary
+        self.resumeChapterID = resumeChapterID
         super.init(style: .grouped)
     }
 
@@ -1720,7 +1724,22 @@ final class MangaDetailsViewController: UITableViewController {
                     // persistence errors to the user.
                 }
             }
+            resumeSavedChapterIfAvailable()
         }
+    }
+
+    // Only the history-initiated path attempts automatic navigation.
+    // Cached offline chapter lists are acceptable if the source is offline.
+    // Never fall back to an arbitrary chapter when the saved ID is absent.
+    private func resumeSavedChapterIfAvailable() {
+        guard !attemptedResume,
+              let chapterID = resumeChapterID,
+              manga != nil,
+              let chapter = chapters.first(where: { $0.id == chapterID }) else {
+            return
+        }
+        attemptedResume = true
+        loadPages(for: chapter)
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
