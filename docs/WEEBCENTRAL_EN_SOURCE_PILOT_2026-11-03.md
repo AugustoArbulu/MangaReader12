@@ -58,9 +58,14 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 
 **Diagnóstico sem novos pedidos HTTP:** o mesmo retorno HTML do capítulo agora é avaliado também com seletores estruturais que contam `section[x-data*="scroll"]`, imagens aninhadas nesse container e imagens da página inteira. Se não houver imagem direta, o erro informa somente as três contagens — nunca HTML, caminho, token, cookies ou URLs assinadas. Não usar HTML de outras seções como fallback automático, pois isso poderia misturar imagens que não são páginas do capítulo.
 
-**Capas:** continuam não validadas; seu problema pode ser um hostname de CDN não permitido ou um atributo `srcset` com formato/tamanho distinto. Esta correção de capítulo **não altera a allowlist de CDN**, nem afirma resolver as capas.
+**Capas e CDNs:** exemplos públicos de HTML da WeebCentral, mantidos em outros projetos, identificam `temp.compsci88.com` servindo capas em WebP e fallback JPEG; um fixture de páginas identifica `hot.planeptune.us` servindo PNG. A revisão 0.1.2 **adiciona exclusivamente esses dois hosts** à allowlist do catálogo, sem permissões genéricas para CDNs externos. Prioriza o `<img src="...jpg">` de fallback para capas no iOS 12, porque o decodificador nativo de WebP não é garantido nesse sistema. Evidências:
+- https://github.com/tiagohs/hqr-comics-reader/blob/main/sources/weebcentral/src/commonTest/kotlin/com/tiagohs/hqr/sources/weebcentral/WeebCentralSourceTest.kt
+- https://github.com/serplay/manhwa-downloader/blob/main/server/src/sources/fixtures/weebcentral_search.html
+- https://github.com/readah/lnreader-ios/blob/main/Services/Sources/Native/WeebCentralSource.swift
 
-**Teste recomendado:** atualizar manualmente o catálogo piloto e instalar a fonte `WeebCentral EN (experimental)` versão **0.1.2** pelo mesmo endereço HTTPS; a compilação do app/IPA não precisa mudar. Abrir **um capítulo já visível** e enviar a nova mensagem. Se indicar `Blocked image hostnames`, enviar apenas o hostname; se indicar `no direct chapter images`, enviar as contagens. Não insistir se houver HTTP 403/429/aviso de bloqueio. Aguardar comprovação de capas, leitura completa, atualização na biblioteca e download offline antes de marcar a fonte funcional.
+Os exemplos são **fixtures históricas públicas**, não resposta HTTP recente da WeebCentral. Os domínios poderão mudar; essa atribuição precisa de verificação no iPhone. O parser agora aceita também `section#chapter-images > img`, identificado nos exemplos, além do seletor `x-data` compatível com CSS.
+
+**Teste recomendado:** atualizar manualmente o catálogo piloto e instalar a fonte `WeebCentral EN (experimental)` versão **0.1.2** pelo mesmo endereço HTTPS; a compilação do app/IPA não precisa mudar. Em Populares, verificar as **capas JPEG** e abrir uma obra. Em seguida abrir **um capítulo já visível**: testar se todas as páginas aparecem e se é possível percorrer até o fim, sem download ainda. Se indicar `Blocked image hostnames`, enviar apenas o hostname; se indicar `no direct chapter images`, enviar as contagens. Não insistir se houver HTTP 403/429/aviso de bloqueio. Somente depois de visualização completa testar um download pequeno, atualização na Biblioteca e uso offline. Nenhum funcionamento foi declarado validado por esses testes offline.
 
 ## Testes offline
 
