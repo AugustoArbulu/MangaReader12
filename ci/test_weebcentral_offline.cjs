@@ -13,7 +13,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.2');
+assert.equal(candidate.version, '0.1.3');
 assert.deepEqual(candidate.domains, ['weebcentral.com', 'temp.compsci88.com', 'hot.planeptune.us']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
@@ -148,7 +148,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.2');
+  assert.equal(meta.version, '0.1.3');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -158,6 +158,14 @@ async function main() {
   assert.match(r.calls[0].url,/sort=Popularity/);
   assert.match(r.calls[0].url,/offset=0/);
 
+  const options = await r.call('filterOptions');
+  assert.equal(options.tags.length,38);
+  assert(options.tags.includes('Romance'));
+  assert(options.tags.includes('Yuri'));
+  assert(options.tags.includes('Yaoi'));
+  assert(options.tags.includes('Horror'));
+  assert.deepEqual(Array.from(options.types), ['Manga','Manhwa','Manhua','OEL']);
+
   const searched = await r.call('search', 'Alpha', 2, []);
   assert.equal(searched.items.length, 2);
   assert.match(r.calls[1].url,/text=Alpha/);
@@ -165,12 +173,56 @@ async function main() {
   assert.match(r.calls[1].url,/offset=32/);
   assert.equal(r.calls[1].method, 'GET');
   assert.equal(r.calls[1].headers.Accept, 'text/html');
+  // Server-side tri-state filters operate on the full remote catalog,
+  // rather than dropping tagged rows after paginating the search result.
+  const beforeFilters = r.calls.length;
+  const selected = {
+    includedTags:['Romance','Fantasy'],
+    excludedTags:['Horror','Yaoi','Yuri','Hentai','Shoujo Ai'],
+    types:['Manhwa','Manga'],
+    statuses:['Ongoing','Hiatus'],
+    sort:'Latest Updates',
+    order:'Ascending'
+  };
+  const filtered = await r.call('search','',2,selected);
+  assert.equal(filtered.items.length,2);
+  assert.equal(r.calls.length,beforeFilters+1);
+  const filteredURL = new URL(r.calls[beforeFilters].url);
+  assert.equal(filteredURL.hostname,'weebcentral.com');
+  assert.equal(filteredURL.searchParams.get('sort'),'Latest Updates');
+  assert.equal(filteredURL.searchParams.get('order'),'Ascending');
+  assert.equal(filteredURL.searchParams.get('offset'),'32');
+  assert.deepEqual(filteredURL.searchParams.getAll('included_tag'),['Romance','Fantasy']);
+  assert.deepEqual(filteredURL.searchParams.getAll('excluded_tag'),
+    ['Horror','Yaoi','Yuri','Hentai','Shoujo Ai']);
+  assert.deepEqual(filteredURL.searchParams.getAll('included_type'),['Manhwa','Manga']);
+  assert.deepEqual(filteredURL.searchParams.getAll('included_status'),['Ongoing','Hiatus']);
+  assert.equal(filteredURL.searchParams.has('included_tags'),false);
+  const beforeInvalid = r.calls.length;
+  const invalidCases = [
+    {excludedTags:['InvalidTag']},
+    {includedTags:['Romance'],excludedTags:['Romance']},
+    {excludedTags:['Horror','Horror']},
+    {sort:'custom-url'},
+    {order:'Reverse'},
+    {types:['Invalid']},
+    {statuses:['Unknown']},
+    {evil:'https://external.example'},
+    {excludedTags:'Yaoi'},
+    ['Horror']
+  ];
+  for (const bad of invalidCases) {
+    const rejected = await r.call('search','',1,bad);
+    assert(rejected.__sourceError,'invalid filter must fail: '+JSON.stringify(bad));
+  }
+  assert.equal(r.calls.length,beforeInvalid,'invalid filters must cause zero requests');
 
   const cats = await r.call('browseCategories');
   assert.deepEqual(Array.from(cats).map(x=>x.id), ['popular','latest']);
+  const beforeBrowse = r.calls.length;
   await r.call('browse','latest',3);
-  assert.match(r.calls[2].url,/sort=Latest%20Updates/);
-  assert.match(r.calls[2].url,/offset=64/);
+  assert.match(r.calls[beforeBrowse].url,/sort=Latest%20Updates/);
+  assert.match(r.calls[beforeBrowse].url,/offset=64/);
   const beforeUnknown = r.calls.length;
   const unknown = await r.call('browse','random',1);
   assert(unknown.__sourceError);
