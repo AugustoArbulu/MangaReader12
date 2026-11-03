@@ -29,9 +29,9 @@ echo "PASS: Mach-O minimum OS is iOS 12.0."
 # Derive the expected version from both Xcode target configurations.
 # A hardcoded check would reject every legitimate future build increment.
 PROJECT="MangaReader12.xcodeproj/project.pbxproj"
-CONFIG_VERSIONS="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \\([0-9][0-9]*\\);/\\1/p' "$PROJECT")"
-CONFIG_COUNT="$(printf '%s\\n' "$CONFIG_VERSIONS" | wc -l | tr -d ' ')"
-EXPECTED_VERSION="$(printf '%s\\n' "$CONFIG_VERSIONS" | sort -u)"
+CONFIG_VERSIONS="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([0-9][0-9]*\);/\1/p' "$PROJECT")"
+CONFIG_COUNT="$(printf '%s\n' "$CONFIG_VERSIONS" | wc -l | tr -d ' ')"
+EXPECTED_VERSION="$(printf '%s\n' "$CONFIG_VERSIONS" | sort -u)"
 if [[ "$CONFIG_COUNT" != "2" || ! "$EXPECTED_VERSION" =~ ^[0-9]+$ ]]; then
   echo "ERROR: Debug/Release CURRENT_PROJECT_VERSION is missing or inconsistent" >&2
   exit 4
