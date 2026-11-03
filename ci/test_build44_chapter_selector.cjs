@@ -106,7 +106,8 @@ assert(swift.includes('html.utf8.count <= 3 * 1024 * 1024'),
 
 const pbx = fs.readFileSync(path.join(__dirname,
   '../MangaReader12.xcodeproj/project.pbxproj'),'utf8');
-assert.equal((pbx.match(/CURRENT_PROJECT_VERSION = 44;/g)||[]).length,2,
-  'both Debug and Release must be Build 44');
+const appBuilds = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map(x=>Number(x[1]));
+assert.equal(appBuilds.length,2,'both build configurations must declare a version');
+assert(appBuilds.every(x=>x>=44),'Build44 chapter fix must remain in later builds');
 
 console.log('PASS Build44 offline: 1197 chapters, 350 images, normal 200 cap, explicit overflow, iOS12 input/output bounds');

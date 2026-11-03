@@ -7,7 +7,7 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.2';
+  var version = '0.1.3';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
   // Exact media CDN hosts are grounded in public offline WeebCentral HTML
@@ -123,13 +123,105 @@
     return isFinite(num) && num >= 1 && num <= 10000 && Math.floor(num) === num
       ? num : 1;
   }
-  function listing(page, searchText, sort, done) {
+
+  // Keiyoushi Filters.kt (2026-11-03): public server-side search filters.
+  // All values are enumerated; never send arbitrary user-provided parameters.
+  var filterTags = [
+    'Action', 'Adult', 'Adventure', 'Comedy', 'Doujinshi', 'Drama',
+    'Ecchi', 'Fantasy', 'Gender Bender', 'Harem', 'Hentai', 'Historical',
+    'Horror', 'Isekai', 'Josei', 'Lolicon', 'Martial Arts', 'Mature',
+    'Mecha', 'Mystery', 'Psychological', 'Romance', 'School Life',
+    'Sci-fi', 'Seinen', 'Shotacon', 'Shoujo', 'Shoujo Ai', 'Shounen',
+    'Shounen Ai', 'Slice of Life', 'Smut', 'Sports', 'Supernatural',
+    'Tragedy', 'Yaoi', 'Yuri', 'Other'
+  ];
+  var filterTypes = ['Manga', 'Manhwa', 'Manhua', 'OEL'];
+  var filterStatuses = ['Ongoing', 'Complete', 'Hiatus', 'Canceled'];
+  var filterSorts = [
+    'Best Match', 'Alphabet', 'Popularity', 'Subscribers',
+    'Recently Added', 'Latest Updates'
+  ];
+  function filterOptions() {
+    return {
+      tags: filterTags.slice(), types: filterTypes.slice(),
+      statuses: filterStatuses.slice(), sorts: filterSorts.slice()
+    };
+  }
+  function parseFilterList(filter, name, allowed, max) {
+    var value = filter[name];
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value) || value.length > max) throw new Error('Invalid '+ name);
+    var result = [];
+    for (var i = 0; i < value.length; i++) {
+      if (typeof value[i] !== 'string' ||
+          allowed.indexOf(value[i]) === -1 ||
+          result.indexOf(value[i]) !== -1) {
+        throw new Error('Invalid '+ name);
+      }
+      result.push(value[i]);
+    }
+    return result;
+  }
+  function validatedFilters(filters) {
+    if (filters == null || Array.isArray(filters)) {
+      if (Array.isArray(filters) && filters.length) {
+        throw new Error('Legacy filter list is unsupported');
+      }
+      return {includedTags:[],excludedTags:[],types:[],statuses:[],sort:null,order:null};
+    }
+    if (typeof filters !== 'object') throw new Error('Invalid source filters');
+    var keys = Object.keys(filters);
+    var allowedKeys = ['includedTags','excludedTags','types','statuses','sort','order'];
+    for (var k = 0; k < keys.length; k++) {
+      if (allowedKeys.indexOf(keys[k]) < 0) throw new Error('Unknown filter: ' + keys[k]);
+    }
+    var result = {
+      includedTags:parseFilterList(filters,'includedTags',filterTags,filterTags.length),
+      excludedTags:parseFilterList(filters,'excludedTags',filterTags,filterTags.length),
+      types:parseFilterList(filters,'types',filterTypes,filterTypes.length),
+      statuses:parseFilterList(filters,'statuses',filterStatuses,filterStatuses.length),
+      sort:null, order:null
+    };
+    for (var i = 0; i < result.includedTags.length; i++) {
+      if (result.excludedTags.indexOf(result.includedTags[i]) >= 0) {
+        throw new Error('Tag cannot be included and excluded simultaneously');
+      }
+    }
+    if (filters.sort != null && filters.sort !== '') {
+      if (typeof filters.sort !== 'string' ||
+          filterSorts.indexOf(filters.sort) < 0) throw new Error('Invalid sort');
+      result.sort=filters.sort;
+    }
+    if (filters.order != null && filters.order !== '') {
+      if (filters.order !== 'Ascending' && filters.order !== 'Descending') {
+        throw new Error('Invalid sort order');
+      }
+      result.order=filters.order;
+    }
+    return result;
+  }
+  function appendSearchFilters(query, filters) {
+    function add(key, value) {
+      query += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(value);
+    }
+    filters.includedTags.forEach(function (tag) {add('included_tag',tag);});
+    filters.excludedTags.forEach(function (tag) {add('excluded_tag',tag);});
+    filters.types.forEach(function (type) {add('included_type',type);});
+    filters.statuses.forEach(function (status) {add('included_status',status);});
+    return query;
+  }
+
+  function listing(page, searchText, sort, done, rawFilters) {
+    var f;
+    try { f = validatedFilters(rawFilters); } catch (e) { fail(done,e); return; }
     var q = searchText == null ? '' : String(searchText);
     var query = '/search/data?text=' + encodeURIComponent(q.replace(/[!#:(),-]/g, ' ').trim()) +
-      '&sort=' + encodeURIComponent(sort) +
-      '&order=Descending&limit=' + FETCH_LIMIT +
+      '&sort=' + encodeURIComponent(f.sort || sort) +
+      '&order=' + encodeURIComponent(f.order || 'Descending') +
+      '&limit=' + FETCH_LIMIT +
       '&offset=' + ((pageNumber(page) - 1) * FETCH_LIMIT) +
       '&display_mode=' + encodeURIComponent('Full Display');
+    query = appendSearchFilters(query,f);
     request(base + query, function (resp) {
       if (resp.__sourceError) { done(resp); return; }
       select(resp.body, {
@@ -315,8 +407,10 @@
       return {id: sourceId, name: 'WeebCentral EN (experimental)', lang: 'en', version: version};
     },
     popular: function (page, done) { listing(page, '', 'Popularity', done); },
+    filterOptions: filterOptions,
     search: function (query, page, filters, done) {
-      listing(page, query, query && String(query).trim() ? 'Best Match' : 'Popularity', done);
+      listing(page, query,
+        query && String(query).trim() ? 'Best Match' : 'Popularity', done, filters);
     },
     browseCategories: function () {
       return [

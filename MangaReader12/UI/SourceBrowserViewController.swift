@@ -6,6 +6,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var items: [SourceMangaSummary] = []
     private var excludedTags: Set<String> = []
     private var hideUnclassified = false
+    // Optional source-backed filters. They are applied by the source's
+    // search endpoint before pagination; local exclusions remain separate.
+    private var remoteFilterOptions: SourceRemoteFilterOptions?
+    private var remoteFilters = SourceRemoteFilterSelection()
     private var manuallyHiddenIDs: Set<String> = []
     // On-demand, one-page snapshot. It never claims coverage of all Canvas
     // titles and is intentionally not persisted across app sessions.
@@ -69,6 +73,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let key = "explore.filters." + sourceRecord.manifest.id
         self.excludedTags = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
         self.hideUnclassified = UserDefaults.standard.bool(forKey: key + ".hideUnknown")
+        if let saved = UserDefaults.standard.data(forKey: "explore.remote." + sourceRecord.manifest.id),
+           let selected = try? JSONDecoder().decode(SourceRemoteFilterSelection.self, from: saved) {
+            self.remoteFilters = selected
+        }
         self.manuallyHiddenIDs = Set(
             UserDefaults.standard.stringArray(forKey: "explore.hidden." + sourceRecord.manifest.id) ?? []
         )
@@ -152,15 +160,23 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             ? "Busca por título"
             : (selectedCategory?.title ?? "Populares")
         let active = excludedTags.count
+        let remoteCount = remoteFilters.includedTags.count +
+            remoteFilters.excludedTags.count + remoteFilters.types.count +
+            remoteFilters.statuses.count + (remoteFilters.sort == nil ? 0 : 1) +
+            (remoteFilters.order == nil ? 0 : 1)
         browseHeaderButton.setTitle(
             "Explorar: " + title +
-                (active > 0 ? "   • " + String(active) + " exclusões" : "") +
+                (remoteFilterOptions != nil && remoteCount > 0
+                    ? "   • " + String(remoteCount) + " filtros da fonte" : "") +
+                (active > 0 ? "   • " + String(active) + " exclusões locais" : "") +
                 (!manuallyHiddenIDs.isEmpty ? "   • " + String(manuallyHiddenIDs.count) + " ocultas" : "") +
                 "  ▾",
             for: .normal
         )
 
-        if !canvasBLGLSampleIDs.isEmpty &&
+        if remoteFilterOptions != nil && remoteCount > 0 {
+            browseHeaderHint.text = "Tags, tipo e status filtrados pelo site • paginação remota"
+        } else if !canvasBLGLSampleIDs.isEmpty &&
             !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
             browseHeaderHint.text = "Tags + amostra CANVAS BL/GL de 1 página • cobertura parcial"
         } else if !excludedTags.isEmpty {
@@ -206,19 +222,55 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         }
     }
 
+    private func loadRemoteFilterOptions() {
+        guard let runtime = runtime else { return }
+        runtime.callDecoded(
+            "filterOptions",
+            as: SourceRemoteFilterOptions.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch result {
+                case .success(let options) where options.isValid:
+                    self.remoteFilterOptions = options
+                    self.remoteFilters = self.remoteFilters.sanitized(for: options)
+                    self.updateBrowseHeader()
+                    // Saved filters must apply to the very first visible
+                    // page; ignore the unfiltered in-flight response.
+                    if self.remoteFilters.hasActiveFilters {
+                        self.loadFirstPage()
+                    }
+                default:
+                    // Optional capability: legacy sources remain unchanged.
+                    self.remoteFilterOptions = nil
+                }
+            }
+        }
+    }
+
     @objc private func showBrowseMenu() {
         let controller = SourceDiscoverySheetViewController(
             categories: browseCategories,
             selectedID: selectedCategory?.id,
             exclusions: excludedTags,
             hideUnknown: hideUnclassified,
+            remoteOptions: remoteFilterOptions,
+            remoteSelection: remoteFilters,
             hiddenCount: manuallyHiddenIDs.count,
             allowsCanvasSample: sourceRecord.manifest.id == "kei.webtoons.en"
         )
-        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection in
+        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection, remoteSelection in
             guard let self = self else { return }
             let previousID = self.selectedCategory?.id
             let wasSearching = self.currentQuery != nil
+            let remoteChanged = self.remoteFilterOptions != nil &&
+                self.remoteFilters != remoteSelection
+            self.remoteFilters = remoteSelection
+            if let data = try? JSONEncoder().encode(remoteSelection) {
+                UserDefaults.standard.set(
+                    data, forKey: "explore.remote." + self.sourceRecord.manifest.id
+                )
+            }
             self.selectedCategory = self.browseCategories.first { $0.id == selectedID }
             self.excludedTags = exclusions
             self.hideUnclassified = hideUnknown
@@ -228,7 +280,8 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             UserDefaults.standard.set(hideUnknown, forKey: key + ".hideUnknown")
             self.updateBrowseHeader()
 
-            if previousID != self.selectedCategory?.id || (wasSearching && didChooseSection) {
+            if previousID != self.selectedCategory?.id ||
+                (wasSearching && didChooseSection) || remoteChanged {
                 self.currentQuery = nil
                 self.sourceSearchController.searchBar.text = nil
                 self.sourceSearchController.searchBar.resignFirstResponder()
@@ -450,6 +503,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                         self.loading = false
                         self.navigationItem.prompt = nil
                         self.loadBrowseCategories()
+                        self.loadRemoteFilterOptions()
                         self.loadFirstPage()
 
                     case .failure(let error):
@@ -540,7 +594,23 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             }
         }
 
-        if let query = query, !query.isEmpty {
+        if remoteFilterOptions != nil && remoteFilters.hasActiveFilters {
+            // Remote filters must be applied at the source, before paging.
+            // Using source.search for empty queries avoids the unfiltered
+            // popular/browse paths and works with existing API v1.
+            let categorySort = category?.kind == "latest"
+                ? "Latest Updates" : "Popularity"
+            let fallbackSort = query == nil ? categorySort : "Best Match"
+            runtime.callDecoded(
+                "search",
+                arguments: [
+                    query ?? "", page,
+                    remoteFilters.arguments(fallbackSort: fallbackSort)
+                ] as [Any],
+                as: SourcePagedMangaResult.self,
+                completion: completion
+            )
+        } else if let query = query, !query.isEmpty {
             runtime.callDecoded(
                 "search",
                 arguments: [query, page, [] as [Any]],
@@ -680,6 +750,72 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 }
 
+
+private struct SourceRemoteFilterOptions: Decodable {
+    let tags: [String]
+    let types: [String]
+    let statuses: [String]
+    let sorts: [String]
+
+    var isValid: Bool {
+        func clean(_ items: [String], maxCount: Int) -> Bool {
+            guard !items.isEmpty, items.count <= maxCount,
+                  Set(items).count == items.count else { return false }
+            return items.allSatisfy {
+                $0.range(
+                    of: "^[A-Za-z][A-Za-z0-9 .'-]{0,49}$",
+                    options: .regularExpression
+                ) != nil
+            }
+        }
+        return clean(tags, maxCount: 60) &&
+            clean(types, maxCount: 16) &&
+            clean(statuses, maxCount: 16) &&
+            clean(sorts, maxCount: 16)
+    }
+}
+
+// Generic optional Source API v1 filter values. Only values explicitly
+// advertised by filterOptions are kept, never arbitrary query parameters.
+private struct SourceRemoteFilterSelection: Codable, Equatable {
+    var includedTags: [String] = []
+    var excludedTags: [String] = []
+    var types: [String] = []
+    var statuses: [String] = []
+    var sort: String? = nil
+    var order: String? = nil
+
+    var hasActiveFilters: Bool {
+        return !includedTags.isEmpty || !excludedTags.isEmpty ||
+            !types.isEmpty || !statuses.isEmpty ||
+            sort != nil || order != nil
+    }
+
+    func sanitized(for options: SourceRemoteFilterOptions) -> SourceRemoteFilterSelection {
+        var cleaned = SourceRemoteFilterSelection()
+        cleaned.excludedTags = options.tags.filter { excludedTags.contains($0) }
+        cleaned.includedTags = options.tags.filter {
+            includedTags.contains($0) && !cleaned.excludedTags.contains($0)
+        }
+        cleaned.types = options.types.filter { types.contains($0) }
+        cleaned.statuses = options.statuses.filter { statuses.contains($0) }
+        cleaned.sort = options.sorts.contains(sort ?? "") ? sort : nil
+        cleaned.order = ["Ascending", "Descending"].contains(order ?? "") ? order : nil
+        return cleaned
+    }
+
+    func arguments(fallbackSort: String) -> [String: Any] {
+        return [
+            "includedTags": includedTags,
+            "excludedTags": excludedTags,
+            "types": types,
+            "statuses": statuses,
+            "sort": sort ?? fallbackSort,
+            "order": order ?? "Descending"
+        ]
+    }
+}
+
 private struct SourceCanvasClassificationSample: Decodable {
     let source: String
     let complete: Bool
@@ -724,7 +860,9 @@ private enum SourceTagMatcher {
 // It is full-screen dimmed even on iPad, and its content is vertically scrollable
 // on older 4-inch devices. Categories come solely from optional source metadata.
 private final class SourceDiscoverySheetViewController: UIViewController {
-    typealias FilterCallback = (String?, Set<String>, Bool, Bool) -> Void
+    typealias FilterCallback = (
+        String?, Set<String>, Bool, Bool, SourceRemoteFilterSelection
+    ) -> Void
     var onApply: FilterCallback?
     var onRestoreHidden: (() -> Void)?
     var onRequestCanvasSample: (() -> Void)?
@@ -734,6 +872,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     private var exclusions: Set<String>
     private var hideUnknown: Bool
     private var didChooseSection = false
+    private let remoteOptions: SourceRemoteFilterOptions?
+    private var remoteSelection: SourceRemoteFilterSelection
     private let hiddenCount: Int
     private let allowsCanvasSample: Bool
 
@@ -746,6 +886,11 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     private let unknownToggle = UISwitch()
     private var categoryChips: [String: UIButton] = [:]
     private var exclusionChips: [String: UIButton] = [:]
+    private var remoteTagChips: [String: UIButton] = [:]
+    private var remoteTypeChips: [String: UIButton] = [:]
+    private var remoteStatusChips: [String: UIButton] = [:]
+    private var remoteSortChips: [String: UIButton] = [:]
+    private var remoteOrderChips: [String: UIButton] = [:]
 
     private let exclusionChoices: [(id: String, label: String)] = [
         ("bl", "BL (Boys' Love)"),
@@ -760,6 +905,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         selectedID: String?,
         exclusions: Set<String>,
         hideUnknown: Bool,
+        remoteOptions: SourceRemoteFilterOptions?,
+        remoteSelection: SourceRemoteFilterSelection,
         hiddenCount: Int,
         allowsCanvasSample: Bool
     ) {
@@ -767,6 +914,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         self.selectedID = selectedID
         self.exclusions = exclusions
         self.hideUnknown = hideUnknown
+        self.remoteOptions = remoteOptions
+        self.remoteSelection = remoteSelection
         self.hiddenCount = hiddenCount
         self.allowsCanvasSample = allowsCanvasSample
         super.init(nibName: nil, bundle: nil)
@@ -896,12 +1045,52 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             )
         }
 
-        addSection(
-            title: "EXCLUIR TAGS",
-            subtitle: "Oculta obras com tags explícitas correspondentes.",
-            choices: exclusionChoices.map { ($0.id, $0.label) },
-            selection: .exclusion
-        )
+        if let options = remoteOptions {
+            addSection(
+                title: "GÊNEROS E TAGS DA FONTE",
+                subtitle: "1 toque: excluir (vermelho) • 2: incluir (azul) • 3: limpar. " +
+                    "O site aplica as escolhas em todas as páginas da busca.",
+                choices: options.tags.map { ($0, $0) },
+                selection: .remoteTag
+            )
+            addSection(
+                title: "TIPO DE OBRA",
+                subtitle: "Escolha os tipos aceitos. Nenhum marcado = todos.",
+                choices: options.types.map { ($0, $0) },
+                selection: .remoteType
+            )
+            addSection(
+                title: "STATUS",
+                subtitle: "Selecione um ou mais status. Nenhum = todos.",
+                choices: options.statuses.map { ($0, $0) },
+                selection: .remoteStatus
+            )
+            addSection(
+                title: "ORDENAR POR",
+                subtitle: "Sem seleção, use a ordenação da seção atual.",
+                choices: options.sorts.map { ($0, $0) },
+                selection: .remoteSort
+            )
+            addSection(
+                title: "ORDEM",
+                subtitle: "Sem seleção = decrescente.",
+                choices: [
+                    ("Ascending", "Crescente"), ("Descending", "Decrescente")
+                ],
+                selection: .remoteOrder
+            )
+        }
+
+        // Preserve older local exclusions if a source gains remote filters;
+        // otherwise show only the source-backed filter controls.
+        if remoteOptions == nil || !exclusions.isEmpty {
+            addSection(
+                title: remoteOptions == nil ? "EXCLUIR TAGS" : "EXCLUSÕES LOCAIS ANTIGAS",
+                subtitle: "Oculta obras com tags explícitas correspondentes.",
+                choices: exclusionChoices.map { ($0.id, $0.label) },
+                selection: .exclusion
+            )
+        }
 
         let unknownRow = UIStackView()
         unknownRow.axis = .horizontal
@@ -918,14 +1107,23 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             self, action: #selector(unknownChanged), for: .valueChanged
         )
         unknownRow.addArrangedSubview(unknownToggle)
-        content.addArrangedSubview(unknownRow)
+        if remoteOptions == nil || !exclusions.isEmpty {
+            content.addArrangedSubview(unknownRow)
+        }
 
         infoLabel.numberOfLines = 0
         infoLabel.textColor = ThemeManager.shared.palette.secondaryText
         infoLabel.font = UIFont.systemFont(ofSize: 12)
-        infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
-            "listagem da fonte. A ausência de tags não comprova que a obra " +
-            "não contém o tema excluído. Não analisamos títulos ou imagens."
+        if remoteOptions != nil {
+            infoLabel.text = "Filtros gerais enviados ao mecanismo de busca da fonte. " +
+                "Os resultados dependem das tags cadastradas no site; nenhuma classificação " +
+                "é inferida por título ou imagem. Filtros locais antigos, se presentes, " +
+                "podem continuar ocultando itens."
+        } else {
+            infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
+                "listagem da fonte. A ausência de tags não comprova que a obra " +
+                "não contém o tema excluído. Não analisamos títulos ou imagens."
+        }
         content.addArrangedSubview(infoLabel)
 
         if allowsCanvasSample {
@@ -993,13 +1191,17 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         let lookup = onRequestCanvasSample
         dismiss(animated: true) {
             applied?(
-                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+                self.selectedID, self.exclusions, self.hideUnknown,
+                self.didChooseSection, self.remoteSelection
             )
             lookup?()
         }
     }
 
-    private enum ChoiceKind { case category, exclusion }
+    private enum ChoiceKind {
+        case category, exclusion, remoteTag, remoteType, remoteStatus,
+             remoteSort, remoteOrder
+    }
 
     private func addSection(
         title: String,
@@ -1039,18 +1241,35 @@ private final class SourceDiscoverySheetViewController: UIViewController {
                     top: 7, left: 7, bottom: 7, right: 7
                 )
                 button.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
-                button.accessibilityIdentifier =
-                    (selection == .category ? "discover.category." : "discover.exclude.") + choice.0
-                if selection == .category {
+                switch selection {
+                case .category:
+                    button.accessibilityIdentifier = "discover.category." + choice.0
                     categoryChips[choice.0] = button
-                    button.addTarget(
-                        self, action: #selector(categoryTapped(_:)), for: .touchUpInside
-                    )
-                } else {
+                    button.addTarget(self, action: #selector(categoryTapped(_:)), for: .touchUpInside)
+                case .exclusion:
+                    button.accessibilityIdentifier = "discover.exclude." + choice.0
                     exclusionChips[choice.0] = button
-                    button.addTarget(
-                        self, action: #selector(exclusionTapped(_:)), for: .touchUpInside
-                    )
+                    button.addTarget(self, action: #selector(exclusionTapped(_:)), for: .touchUpInside)
+                case .remoteTag:
+                    button.accessibilityIdentifier = "discover.remote.tag." + choice.0
+                    remoteTagChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteTagTapped(_:)), for: .touchUpInside)
+                case .remoteType:
+                    button.accessibilityIdentifier = "discover.remote.type." + choice.0
+                    remoteTypeChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteTypeTapped(_:)), for: .touchUpInside)
+                case .remoteStatus:
+                    button.accessibilityIdentifier = "discover.remote.status." + choice.0
+                    remoteStatusChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteStatusTapped(_:)), for: .touchUpInside)
+                case .remoteSort:
+                    button.accessibilityIdentifier = "discover.remote.sort." + choice.0
+                    remoteSortChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteSortTapped(_:)), for: .touchUpInside)
+                case .remoteOrder:
+                    button.accessibilityIdentifier = "discover.remote.order." + choice.0
+                    remoteOrderChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteOrderTapped(_:)), for: .touchUpInside)
                 }
                 row.addArrangedSubview(button)
             }
@@ -1117,6 +1336,39 @@ private final class SourceDiscoverySheetViewController: UIViewController {
                 selected ? palette.accent : palette.primaryText, for: .normal
             )
         }
+        for (tag, button) in remoteTagChips {
+            let excluded = remoteSelection.excludedTags.contains(tag)
+            let included = remoteSelection.includedTags.contains(tag)
+            let color = excluded
+                ? UIColor(red: 0.83, green: 0.29, blue: 0.32, alpha: 1)
+                : palette.accent
+            button.setTitle((excluded ? "− " : (included ? "+ " : "")) + tag, for: .normal)
+            button.backgroundColor = (excluded || included)
+                ? color.withAlphaComponent(0.17) : palette.secondaryBackground
+            button.layer.borderColor =
+                ((excluded || included) ? color : palette.separator).cgColor
+            button.setTitleColor(
+                (excluded || included) ? color : palette.primaryText, for: .normal
+            )
+            button.accessibilityValue = excluded ? "Excluir" :
+                (included ? "Incluir" : "Sem filtro")
+        }
+        func styleRemote(_ chips: [String: UIButton], selected: [String]) {
+            for (value, button) in chips {
+                let active = selected.contains(value)
+                button.backgroundColor = active
+                    ? palette.accent.withAlphaComponent(0.17) : palette.secondaryBackground
+                button.layer.borderColor =
+                    (active ? palette.accent : palette.separator).cgColor
+                button.setTitleColor(
+                    active ? palette.accent : palette.primaryText, for: .normal
+                )
+            }
+        }
+        styleRemote(remoteTypeChips, selected: remoteSelection.types)
+        styleRemote(remoteStatusChips, selected: remoteSelection.statuses)
+        styleRemote(remoteSortChips, selected: remoteSelection.sort.map { [$0] } ?? [])
+        styleRemote(remoteOrderChips, selected: remoteSelection.order.map { [$0] } ?? [])
         unknownToggle.isOn = hideUnknown
         unknownToggle.isEnabled = !exclusions.isEmpty
     }
@@ -1140,6 +1392,61 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         refreshSelections()
     }
 
+    @objc private func remoteTagTapped(_ button: UIButton) {
+        guard let tag = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.tag.", with: ""),
+            remoteOptions?.tags.contains(tag) == true else { return }
+        remoteSelection.excludedTags.removeAll { $0 == tag }
+        if remoteSelection.includedTags.contains(tag) {
+            remoteSelection.includedTags.removeAll { $0 == tag }
+        } else if button.accessibilityValue == "Excluir" {
+            remoteSelection.includedTags.append(tag)
+        } else {
+            remoteSelection.excludedTags.append(tag)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteTypeTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.type.", with: ""),
+            remoteOptions?.types.contains(value) == true else { return }
+        if remoteSelection.types.contains(value) {
+            remoteSelection.types.removeAll { $0 == value }
+        } else {
+            remoteSelection.types.append(value)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteStatusTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.status.", with: ""),
+            remoteOptions?.statuses.contains(value) == true else { return }
+        if remoteSelection.statuses.contains(value) {
+            remoteSelection.statuses.removeAll { $0 == value }
+        } else {
+            remoteSelection.statuses.append(value)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteSortTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.sort.", with: ""),
+            remoteOptions?.sorts.contains(value) == true else { return }
+        remoteSelection.sort = remoteSelection.sort == value ? nil : value
+        refreshSelections()
+    }
+
+    @objc private func remoteOrderTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.order.", with: ""),
+            ["Ascending", "Descending"].contains(value) else { return }
+        remoteSelection.order = remoteSelection.order == value ? nil : value
+        refreshSelections()
+    }
+
     @objc private func unknownChanged() {
         hideUnknown = unknownToggle.isOn
     }
@@ -1149,6 +1456,7 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         didChooseSection = true
         exclusions.removeAll()
         hideUnknown = false
+        remoteSelection = SourceRemoteFilterSelection()
         refreshSelections()
         scroller.setContentOffset(.zero, animated: true)
     }
@@ -1161,7 +1469,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         let callback = onApply
         dismiss(animated: true) {
             callback?(
-                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+                self.selectedID, self.exclusions, self.hideUnknown,
+                self.didChooseSection, self.remoteSelection
             )
         }
     }
