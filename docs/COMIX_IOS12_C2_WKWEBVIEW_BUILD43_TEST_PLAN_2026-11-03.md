@@ -1,6 +1,6 @@
 # Comix C2 — WKWebView manual no iOS 12.5.8 (Build 43)
 
-> **Resultado físico registrado — 2026-11-03:** o usuário confirmou **HTTP principal 200** e **navegação WKWebView concluída**, porém a **página permaneceu branca/vazia** no iOS 12.5.8. A compatibilidade visual da Comix **não foi comprovada**, e nenhuma fonte Comix é considerada funcional. Detalhes e próximos controles offline em [COMIX_IOS12_C2_BUILD43_PHYSICAL_RESULT_2026-11-03.md](COMIX_IOS12_C2_BUILD43_PHYSICAL_RESULT_2026-11-03.md). Este documento abaixo permanece como **protocolo histórico**, não como pendência de primeira execução.
+> **Resultado físico registrado — 2026-11-03:** o usuário confirmou **HTTP principal 200** e **navegação WKWebView concluída**, porém a **página permaneceu branca/vazia** no iOS 12.5.8. O Safari **no mesmo iPhone** também ficou **preto/vazio**, segundo relato posterior. A compatibilidade visual da Comix **não foi comprovada**, e nenhuma fonte Comix é considerada funcional. Detalhes e próximos controles offline em [COMIX_IOS12_C2_BUILD43_PHYSICAL_RESULT_2026-11-03.md](COMIX_IOS12_C2_BUILD43_PHYSICAL_RESULT_2026-11-03.md). Este documento abaixo permanece como **protocolo histórico**, não como pendência de primeira execução.
 
 **Data:** 2026-11-03  
 **Repositório:** `AugustoArbulu/MangaReader12`  
