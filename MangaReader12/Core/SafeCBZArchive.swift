@@ -294,12 +294,12 @@ enum SafeCBZArchive {
                   isImage(output, ext: entry.imageExtension) else {
                 throw SafeCBZError.corruptedEntry
             }
-            let localName = String(format: "page-%05d.%@", index + 1, entry.imageExtension)
+            let outputName = String(format: "page-%05d.%@", index + 1, entry.imageExtension)
             try Data(output).write(
-                to: directory.appendingPathComponent(localName),
+                to: directory.appendingPathComponent(outputName),
                 options: .atomic
             )
-            outputs.append(localName)
+            outputs.append(outputName)
         }
         return outputs
     }
