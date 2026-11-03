@@ -2091,10 +2091,19 @@ final class MangaDetailsViewController: UITableViewController {
                             DispatchQueue.main.async {
                                 guard let self = self, self.batchRunning else { return }
                                 switch outcome {
-                                case .success: self.batchSucceeded += 1
-                                case .failure: self.batchFailed += 1
+                                case .success:
+                                    self.batchSucceeded += 1
+                                    self.prepareNextBatchChapter()
+                                case .failure(let error):
+                                    self.batchFailed += 1
+                                    if error.localizedDescription.contains("429") {
+                                        self.finishDownloadBatch(
+                                            reason: "A fonte limitou os downloads (HTTP 429)."
+                                        )
+                                    } else {
+                                        self.prepareNextBatchChapter()
+                                    }
                                 }
-                                self.prepareNextBatchChapter()
                             }
                         }
                     )
