@@ -173,6 +173,13 @@ async function main(){
  const scrambled=await tiled.call('pages',CH1);
  assert(scrambled.__sourceError.includes('tiled images'));
  assert.equal(tiled.calls.length,1);
+ const ambiguousTiles=createRuntime({select(){return {pages:[item({
+  props:JSON.stringify({pages:[{
+   url:'https://asurascans.com/garbled.jpg',tiles:0
+  }]})
+ })]};}});
+ assert((await ambiguousTiles.call('pages',CH1)).__sourceError.includes('tiled images'));
+ assert.equal(ambiguousTiles.calls.length,1);
  // Free public page list absent; no auth/cookie fallback or endpoint guesses.
  const premium=createRuntime({select(){return {pages:[item({
   props:JSON.stringify({pages:[]})
