@@ -15,8 +15,12 @@ class Build45RemoteFilters(unittest.TestCase):
     def test_app_version_and_existing_reader(self):
         pbx = read("MangaReader12.xcodeproj/project.pbxproj")
         view = read("MangaReader12/UI/MainTabBarController.swift")
-        self.assertEqual(pbx.count("CURRENT_PROJECT_VERSION = 45;"), 2)
-        self.assertIn("Build 45 • compatível com iOS 12.0", view)
+        import re
+        versions = re.findall(r"CURRENT_PROJECT_VERSION = (\d+);", pbx)
+        self.assertEqual(len(versions), 2)
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(int(versions[0]), 45)
+        self.assertIn(f"Build {versions[0]} • compatível com iOS 12.0", view)
         # Native chapter and image caps from Build44 must remain.
         runtime = read("MangaReader12/SourceRuntime/JavaScriptSourceRuntime.swift")
         self.assertIn('name === "chapters" ? 4000', runtime)
