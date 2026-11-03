@@ -6,10 +6,21 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var items: [SourceMangaSummary] = []
     private var excludedTags: Set<String> = []
     private var hideUnclassified = false
+    private var manuallyHiddenIDs: Set<String> = []
+    // On-demand, one-page snapshot. It never claims coverage of all Canvas
+    // titles and is intentionally not persisted across app sessions.
+    private var canvasBLGLSampleIDs: Set<String> = []
+    private var sampleLookupRunning = false
 
     private var displayedItems: [SourceMangaSummary] {
-        guard !excludedTags.isEmpty else { return items }
         return items.filter { item in
+            if manuallyHiddenIDs.contains(item.id) { return false }
+            if excludedTags.isEmpty { return true }
+            if let titleNo = canvasTitleNumber(item.id),
+               canvasBLGLSampleIDs.contains(titleNo),
+               !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
+                return false
+            }
             guard let tags = item.tags, !tags.isEmpty else {
                 return !hideUnclassified
             }
@@ -17,6 +28,18 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                 excludedTags.contains { SourceTagMatcher.matches(label, exclusion: $0) }
             }
         }
+    }
+
+    private func canvasTitleNumber(_ raw: String) -> String? {
+        guard let url = URLComponents(string: raw),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == "www.webtoons.com",
+              url.path.hasPrefix("/en/canvas/"),
+              let number = url.queryItems?.first(where: { $0.name == "title_no" })?.value,
+              number.range(of: "^[0-9]{1,12}$", options: .regularExpression) != nil else {
+            return nil
+        }
+        return number
     }
     private var currentPage = 1
     private var hasNextPage = false
@@ -46,6 +69,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let key = "explore.filters." + sourceRecord.manifest.id
         self.excludedTags = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
         self.hideUnclassified = UserDefaults.standard.bool(forKey: key + ".hideUnknown")
+        self.manuallyHiddenIDs = Set(
+            UserDefaults.standard.stringArray(forKey: "explore.hidden." + sourceRecord.manifest.id) ?? []
+        )
         super.init(style: .plain)
     }
 
@@ -127,7 +153,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             : (selectedCategory?.title ?? "Populares")
         let active = excludedTags.count
         browseHeaderButton.setTitle(
-            "Explorar: " + title + (active > 0 ? "   • " + String(active) + " exclusões" : "") + "  ▾",
+            "Explorar: " + title +
+                (active > 0 ? "   • " + String(active) + " exclusões" : "") +
+                (!manuallyHiddenIDs.isEmpty ? "   • " + String(manuallyHiddenIDs.count) + " ocultas" : "") +
+                "  ▾",
             for: .normal
         )
 
@@ -179,7 +208,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             categories: browseCategories,
             selectedID: selectedCategory?.id,
             exclusions: excludedTags,
-            hideUnknown: hideUnclassified
+            hideUnknown: hideUnclassified,
+            hiddenCount: manuallyHiddenIDs.count,
+            allowsCanvasSample: sourceRecord.manifest.id == "kei.webtoons.en"
         )
         controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection in
             guard let self = self else { return }
@@ -204,9 +235,91 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                 self.updateEmptyState()
             }
         }
+        controller.onRestoreHidden = { [weak self] in
+            self?.restoreAllHiddenWorks()
+        }
+        controller.onRequestCanvasSample = { [weak self] in
+            self?.verifyCanvasBLGLSample()
+        }
         controller.modalPresentationStyle = .overFullScreen
         controller.modalTransitionStyle = .crossDissolve
         present(controller, animated: true)
+    }
+
+    private func persistHiddenIDs() {
+        // Personal preference only; never deletes library/reader/download files.
+        UserDefaults.standard.set(
+            manuallyHiddenIDs.sorted(),
+            forKey: "explore.hidden." + sourceRecord.manifest.id
+        )
+        updateBrowseHeader()
+        tableView.reloadData()
+        updateEmptyState()
+    }
+
+    private func hideWork(_ summary: SourceMangaSummary) {
+        guard !summary.id.isEmpty else { return }
+        manuallyHiddenIDs.insert(summary.id)
+        persistHiddenIDs()
+    }
+
+    private func restoreAllHiddenWorks() {
+        manuallyHiddenIDs.removeAll()
+        persistHiddenIDs()
+    }
+
+    private func verifyCanvasBLGLSample() {
+        guard sourceRecord.manifest.id == "kei.webtoons.en",
+              !sampleLookupRunning,
+              let runtime = runtime else { return }
+        sampleLookupRunning = true
+        // Do not leave stale positives after a failed or partial refresh.
+        canvasBLGLSampleIDs.removeAll()
+        tableView.reloadData()
+        runtime.callDecoded(
+            "classificationSample",
+            as: SourceCanvasClassificationSample.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.sampleLookupRunning = false
+                switch result {
+                case .success(let payload):
+                    guard payload.source == "canvas-blgl-first-page",
+                          payload.complete == false else {
+                        self.showMessage(
+                            title: "Amostra BL/GL",
+                            message: "A fonte retornou um formato de classificação inesperado."
+                        )
+                        return
+                    }
+                    self.canvasBLGLSampleIDs = Set(
+                        payload.titleNumbers.prefix(60).filter {
+                            $0.range(
+                                of: "^[0-9]{1,12}$",
+                                options: .regularExpression
+                            ) != nil
+                        }
+                    )
+                    self.tableView.reloadData()
+                    self.updateEmptyState()
+                    self.showMessage(
+                        title: "Amostra BL/GL consultada",
+                        message: "Foram reconhecidas " +
+                            String(self.canvasBLGLSampleIDs.count) +
+                            " obras da primeira página da categoria CANVAS BL/GL. " +
+                            "As exclusões BL, GL ou LGBTQ+ usam essas correspondências " +
+                            "somente nesta sessão. Isto não cobre o catálogo inteiro."
+                    )
+                case .failure(let error):
+                    self.showMessage(
+                        title: "Amostra BL/GL indisponível",
+                        message: error.localizedDescription +
+                            "\nNenhuma obra será excluída por esse cruzamento."
+                    )
+                }
+            }
+        }
     }
 
     private func updateEmptyState() {
@@ -219,9 +332,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         label.textAlignment = .center
         label.font = UIFont.systemFont(ofSize: 14)
         label.textColor = ThemeManager.shared.palette.secondaryText
-        label.text = excludedTags.isEmpty
+        label.text = excludedTags.isEmpty && manuallyHiddenIDs.isEmpty
             ? "Nenhuma obra encontrada nesta seção."
-            : "Nenhuma obra corresponde aos filtros nesta lista.\nSe a fonte não informar tags, experimente permitir obras sem classificação."
+            : "Nenhuma obra visível após aplicar suas preferências.\n" +
+                "Desative exclusões ou restaure as obras ocultas em Explorar."
         label.frame = tableView.bounds.insetBy(dx: 28, dy: 20)
         tableView.backgroundView = label
     }
@@ -500,22 +614,25 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         _ tableView: UITableView,
         editActionsForRowAt indexPath: IndexPath
     ) -> [UITableViewRowAction]? {
-        guard sourceRecord.manifest.id == "kei.webtoons.en",
-              indexPath.section == 0, indexPath.row < displayedItems.count else {
+        guard indexPath.section == 0, indexPath.row < displayedItems.count else {
             return nil
         }
-        let action = UITableViewRowAction(style: .normal, title: "Testar capa") {
-            [weak self] _, selected in
-            guard let self = self, selected.row < self.displayedItems.count else {
-                return
-            }
-            // Explicit swipe action selects the exact requested manga.
-            self.startCoverDiagnostic(
-                samples: [self.displayedItems[selected.row]],
-                chosenDirectly: true
-            )
+        // Capture the exact work before async swipe actions or reloads shift
+        // the row. Do not delete it from Library, history or downloads.
+        let work = displayedItems[indexPath.row]
+        let hide = UITableViewRowAction(style: .normal, title: "Ocultar") {
+            [weak self] _, _ in
+            self?.hideWork(work)
         }
-        return [action]
+        hide.backgroundColor = ThemeManager.shared.palette.secondaryText
+        guard sourceRecord.manifest.id == "kei.webtoons.en" else {
+            return [hide]
+        }
+        let coverProbe = UITableViewRowAction(style: .normal, title: "Testar capa") {
+            [weak self] _, _ in
+            self?.startCoverDiagnostic(samples: [work], chosenDirectly: true)
+        }
+        return [hide, coverProbe]
     }
 
     override func tableView(
@@ -549,6 +666,12 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
+}
+
+private struct SourceCanvasClassificationSample: Decodable {
+    let source: String
+    let complete: Bool
+    let titleNumbers: [String]
 }
 
 // Content exclusions use only a source-provided classification label. Titles,
