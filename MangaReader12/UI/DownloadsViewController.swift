@@ -7,6 +7,7 @@ final class DownloadsViewController: UITableViewController {
     private var startupError: Error?
     private var refreshTimer: Timer?
     private var retryInFlight = Set<String>()
+    private let queueSummaryLabel = UILabel()
 
     init() {
         super.init(style: .plain)
@@ -28,6 +29,7 @@ final class DownloadsViewController: UITableViewController {
             MangaCoverCell.self,
             forCellReuseIdentifier: MangaCoverCell.reuseIdentifier
         )
+        configureQueueSummary()
         refreshControl = UIRefreshControl()
         refreshControl?.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
         applyTheme()
@@ -62,15 +64,113 @@ final class DownloadsViewController: UITableViewController {
         let enabled = UserDefaults.standard.bool(
             forKey: ChapterDownloadManager.demoSlowModeKey
         )
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let demo = UIBarButtonItem(
             title: enabled ? "Teste 8s: ON" : "Teste 8s: OFF",
-            style: .plain,
-            target: self,
-            action: #selector(toggleDemoTestMode)
+            style: .plain, target: self, action: #selector(toggleDemoTestMode)
         )
-        navigationItem.rightBarButtonItem?.accessibilityLabel =
-            enabled ? "Desativar espera de teste da fonte Demo" :
-                "Ativar espera de teste da fonte Demo"
+        demo.accessibilityLabel = enabled
+            ? "Desativar espera de teste da fonte Demo"
+            : "Ativar espera de teste da fonte Demo"
+        let queue = UIBarButtonItem(
+            title: "Fila", style: .plain,
+            target: self, action: #selector(queueTapped)
+        )
+        navigationItem.rightBarButtonItems = [queue, demo]
+    }
+
+    private func configureQueueSummary() {
+        let header = UIView(frame: CGRect(
+            x: 0, y: 0, width: max(1, tableView.bounds.width), height: 56
+        ))
+        header.autoresizingMask = [.flexibleWidth]
+        header.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        queueSummaryLabel.frame = header.bounds.insetBy(dx: 14, dy: 7)
+        queueSummaryLabel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        queueSummaryLabel.font = UIFont.systemFont(ofSize: 12, weight: .medium)
+        queueSummaryLabel.textColor = ThemeManager.shared.palette.secondaryText
+        queueSummaryLabel.numberOfLines = 2
+        queueSummaryLabel.text = "Fila de downloads"
+        header.addSubview(queueSummaryLabel)
+        tableView.tableHeaderView = header
+    }
+
+    private func updateQueueSummary() {
+        let downloading = records.filter { $0.state == "downloading" }.count
+        let queued = records.filter { $0.state == "queued" }.count
+        let paused = records.filter { $0.state == "paused" }.count
+        let failed = records.filter { $0.state == "failed" }.count
+        let complete = records.filter { $0.state == "completed" }.count
+        queueSummaryLabel.text = "Baixando: \(downloading)  •  Na fila: \(queued)  •  Pausados: \(paused)\n" +
+            "Concluídos: \(complete)  •  Com falha: \(failed)"
+    }
+
+    @objc private func queueTapped() {
+        let active = records.filter {
+            $0.state == "downloading" || $0.state == "queued"
+        }
+        let paused = records.filter { $0.state == "paused" }
+        let alert = UIAlertController(
+            title: "Controle da fila",
+            message: (queueSummaryLabel.text ?? "") + "\n" +
+                "As ações em lote não removem capítulos nem downloads concluídos.",
+            preferredStyle: .alert
+        )
+        if !active.isEmpty {
+            alert.addAction(UIAlertAction(
+                title: "Pausar \(active.count) ativos", style: .default
+            ) { [weak self] _ in self?.pauseActiveBatch(active) })
+        }
+        if !paused.isEmpty {
+            alert.addAction(UIAlertAction(
+                title: "Retomar pausados (até 12)", style: .default
+            ) { [weak self] _ in self?.resumePausedBatch(Array(paused.prefix(12))) })
+        }
+        alert.addAction(UIAlertAction(title: "Fechar", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func pauseActiveBatch(_ snapshot: [DownloadListRecord]) {
+        guard let manager = manager else { return }
+        var changed = 0
+        for record in snapshot {
+            if (try? manager.pause(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            )) == true {
+                changed += 1
+            }
+        }
+        reloadDownloads()
+        showMessage(
+            title: "Fila pausada",
+            message: "\(changed) tarefas pausadas. As demais podem ter concluído ou mudado de estado."
+        )
+    }
+
+    private func resumePausedBatch(_ snapshot: [DownloadListRecord]) {
+        guard let manager = manager else { return }
+        var changed = 0
+        var needsManualRetry = 0
+        for record in snapshot {
+            if (try? manager.resume(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            )) == true {
+                changed += 1
+            } else {
+                // Never automatically refetch source URLs after app restart.
+                needsManualRetry += 1
+            }
+        }
+        reloadDownloads()
+        showMessage(
+            title: "Fila retomada",
+            message: "\(changed) retomados com páginas já resolvidas. " +
+                "\(needsManualRetry) exigem ação individual para reobter URLs. " +
+                "No máximo 12 tarefas são consideradas por vez."
+        )
     }
 
     @objc private func toggleDemoTestMode() {
@@ -138,6 +238,7 @@ final class DownloadsViewController: UITableViewController {
         }
 
         refreshControl?.endRefreshing()
+        updateQueueSummary()
         // Do not close swipe-action menus every 1.5 seconds when the list did
         // not actually change (needed for Pause/Resume/Prioritize to be usable).
         if records != previousRecords ||
@@ -650,6 +751,9 @@ extension DownloadsViewController: ThemeApplicable {
     func applyTheme() {
         ThemeManager.shared.style(tableView: tableView)
         tableView.backgroundView?.backgroundColor = ThemeManager.shared.palette.background
+        tableView.tableHeaderView?.backgroundColor =
+            ThemeManager.shared.palette.secondaryBackground
+        queueSummaryLabel.textColor = ThemeManager.shared.palette.secondaryText
         tableView.reloadData()
     }
 }
