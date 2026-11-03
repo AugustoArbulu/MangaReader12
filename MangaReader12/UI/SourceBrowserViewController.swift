@@ -160,7 +160,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             for: .normal
         )
 
-        if !excludedTags.isEmpty {
+        if !canvasBLGLSampleIDs.isEmpty &&
+            !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
+            browseHeaderHint.text = "Tags + amostra CANVAS BL/GL de 1 página • cobertura parcial"
+        } else if !excludedTags.isEmpty {
             browseHeaderHint.text = "Exclusões por tags declaradas • obras sem tags podem permanecer"
         } else if let category = selectedCategory {
             browseHeaderHint.text = category.kind == "genre"
@@ -272,9 +275,17 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         guard sourceRecord.manifest.id == "kei.webtoons.en",
               !sampleLookupRunning,
               let runtime = runtime else { return }
+        guard !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) else {
+            showMessage(
+                title: "Amostra BL/GL",
+                message: "Marque BL, GL ou LGBTQ+ nas exclusões antes de consultar a lista."
+            )
+            return
+        }
         sampleLookupRunning = true
         // Do not leave stale positives after a failed or partial refresh.
         canvasBLGLSampleIDs.removeAll()
+        updateBrowseHeader()
         tableView.reloadData()
         runtime.callDecoded(
             "classificationSample",
@@ -302,6 +313,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                         }
                     )
                     self.tableView.reloadData()
+                    self.updateBrowseHeader()
                     self.updateEmptyState()
                     self.showMessage(
                         title: "Amostra BL/GL consultada",
