@@ -550,8 +550,7 @@ private final class LibraryFilterSheetViewController: UIViewController {
                 ("last-read", "Última leitura"),
                 ("unread", "Mais não lidos")
             ],
-            prefix: "sort",
-            buttons: &sortButtons
+            prefix: "sort"
         )
         addChips(
             title: "STATUS",
@@ -563,8 +562,7 @@ private final class LibraryFilterSheetViewController: UIViewController {
                 ("cancelled", "Cancelados"),
                 ("unknown", "Desconhecido")
             ],
-            prefix: "status",
-            buttons: &statusButtons
+            prefix: "status"
         )
 
         var categoryOptions: [(String, String)] = [("all", "Todas as categorias")]
@@ -574,8 +572,7 @@ private final class LibraryFilterSheetViewController: UIViewController {
         addChips(
             title: "CATEGORIAS",
             options: categoryOptions,
-            prefix: "category",
-            buttons: &categoryButtons
+            prefix: "category"
         )
 
         addSwitch(
@@ -603,7 +600,7 @@ private final class LibraryFilterSheetViewController: UIViewController {
     // Buttons are two per row for comfortable use on small iOS 12 screens.
     private func addChips(
         title: String, options: [(String, String)],
-        prefix: String, buttons: inout [String: UIButton]
+        prefix: String
     ) {
         let caption = UILabel()
         caption.font = UIFont.systemFont(ofSize: 11, weight: .bold)
@@ -631,7 +628,12 @@ private final class LibraryFilterSheetViewController: UIViewController {
                 button.heightAnchor.constraint(greaterThanOrEqualToConstant: 42).isActive = true
                 button.accessibilityIdentifier = prefix + "." + choice.0
                 button.addTarget(self, action: #selector(chipTapped(_:)), for: .touchUpInside)
-                buttons[choice.0] = button
+                switch prefix {
+                case "sort": sortButtons[choice.0] = button
+                case "status": statusButtons[choice.0] = button
+                case "category": categoryButtons[choice.0] = button
+                default: break
+                }
                 row.addArrangedSubview(button)
             }
             if options.count - start == 1 {
