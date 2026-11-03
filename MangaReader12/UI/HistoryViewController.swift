@@ -55,7 +55,7 @@ final class HistoryViewController: UITableViewController {
         didAttemptResume = true
         // A saved chapter ID is needed for a genuine "Continuar lendo".
         // Without one, retain normal History navigation for the user.
-        if let saved = records.first, saved.sourceChapterID != nil {
+        if let saved = records.first(where: { $0.sourceChapterID != nil }) {
             open(saved)
         }
     }
