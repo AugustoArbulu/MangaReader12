@@ -38,5 +38,5 @@ O arquivo ci/test_build44_chapter_selector.cjs extrai e executa o JavaScript do 
 ## Estado atual
 
 - WeebCentral 0.1.2: **capítulos e imagens confirmados pelo usuário**.
-- Build 44: **correção nativa implementada e verificação física ainda pendente**.
+- Build 44: **correção nativa validada no iOS 12.5.8 — o usuário confirmou que One Piece mostra o capítulo 1 como mais antigo**.
 - Atualização de Biblioteca e download offline com esta fonte: **ainda sem QA físico**.
