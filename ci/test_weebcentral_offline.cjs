@@ -13,7 +13,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.4');
+assert.equal(candidate.version, '0.1.5');
 assert.deepEqual(candidate.domains, ['weebcentral.com', 'temp.compsci88.com', 'hot.planeptune.us']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
@@ -121,8 +121,10 @@ function mock() {
         assert.equal(spec.chapters.selector, 'div[x-data] > a');
         return {chapters: [
           item('', {href: '/chapters/chapter-02'}, {name: item('Chapter 2'),
+            date:item('2026-10-29',{datetime:'2026-10-29T20:05:15.069Z'}),
             official:item('',{src:'/official-badge.png'})}),
-          item('', {href: '/chapters/chapter-01'}, {name: item('Chapter 1')}),
+          item('', {href: '/chapters/chapter-01'}, {name: item('Chapter 1'),
+            date:item('',{datetime:'2024-09-07T17:04:15.717343Z'})}),
           item('', {href: 'https://evil.example/chapters/1'}, {name:item('Bad')})
         ]};
       }
@@ -155,7 +157,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.4');
+  assert.equal(meta.version, '0.1.5');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -324,6 +326,8 @@ async function main() {
   assert.equal(chapterList.length,2);
   assert.equal(chapterList[0].id,CH1);
   assert.equal(chapterList[0].number,1);
+  assert.equal(chapterList[0].date,'2024-09-07T17:04:15.717343Z');
+  assert.equal(chapterList[1].date,'2026-10-29T20:05:15.069Z');
   assert.equal(chapterList[1].scanlator,'Official');
   assert(r.calls.some(x=>x.url===BASE+'/series/series-42/full-chapter-list'));
 

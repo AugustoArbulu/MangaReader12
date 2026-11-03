@@ -7,7 +7,7 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.4';
+  var version = '0.1.5';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
   // Exact media CDN hosts are grounded in public offline WeebCentral HTML
@@ -374,11 +374,16 @@
           var name = txt(fld(raw, 'name')) || 'Chapter ' + (found.length - i);
           var numberMatch = /(?:chapter|ch\.?)\s*([0-9]+(?:\.[0-9]+)?)/i.exec(name);
           var official = /official/i.test(attr(fld(raw, 'official'), 'src'));
+          // The page exposes an ISO-8601 datetime. Retain the original
+          // declared instant without inventing upload dates when absent.
+          var declaredDate = attr(fld(raw, 'date'), 'datetime');
+          var chapterDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(declaredDate)
+            ? declaredDate : null;
           chapters.push({
             id: path,
             name: name,
             number: numberMatch ? Number(numberMatch[1]) : null,
-            volume: null, date: null,
+            volume: null, date: chapterDate,
             scanlator: official ? 'Official' : null,
             language: 'en', url: path
           });
