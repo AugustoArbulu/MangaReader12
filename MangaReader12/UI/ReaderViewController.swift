@@ -434,7 +434,9 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         let x = max(1, Int(Double(cg.width) * 0.03))
         let y = max(1, Int(Double(cg.height) * 0.03))
         let rect = CGRect(
-            x: x, y: y, width: cg.width - 2 * x, height: cg.height - 2 * y
+            x: CGFloat(x), y: CGFloat(y),
+            width: CGFloat(cg.width - 2 * x),
+            height: CGFloat(cg.height - 2 * y)
         )
         guard let cropped = cg.cropping(to: rect) else { return image }
         return UIImage(cgImage: cropped, scale: image.scale,
