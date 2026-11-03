@@ -50,6 +50,18 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 
 **Depois do relato:** somente incluir um domínio externo de CDN após confirmar sua vinculação à fonte e revisar a política de segurança do cliente HTTP. Permanecem pendentes testes reais de leitura integral, capas, atualização de capítulos e download offline. A Asura permanece fora do escopo deste patch.
 
+## QA físico 0.1.1 e ajuste 0.1.2 — seletor Jsoup/WebKit (2026-11-03)
+
+**Relato novo do usuário, iOS 12.5.8, fonte 0.1.1:** as capas continuam ausentes, e a abertura de um capítulo retornou `Source failed: WeebCentral: no page images matched the chapter HTML selector`. A requisição de capítulo alcançou a fase de parsing, porém a extração de páginas retornou zero elementos.
+
+**Causa encontrada no código da adaptação:** o Keiyoushi usa Jsoup `section[x-data~=scroll] > img`. Em **Jsoup**, `[attr~=regex]` significa expressão regular. Em **CSS/WebKit**, `[attr~=word]` significa uma palavra separada por espaços. Copiar literalmente o seletor alterou sua semântica. Para o parser DOM do iOS, a versão 0.1.2 usa `section[x-data*="scroll"] > img`, que faz a comparação de substring do atributo. A correção é fundamentada nas semânticas documentadas dos dois parsers, mas **ainda precisa de teste físico**; não implica automaticamente que os URLs/imagens funcionarão.
+
+**Diagnóstico sem novos pedidos HTTP:** o mesmo retorno HTML do capítulo agora é avaliado também com seletores estruturais que contam `section[x-data*="scroll"]`, imagens aninhadas nesse container e imagens da página inteira. Se não houver imagem direta, o erro informa somente as três contagens — nunca HTML, caminho, token, cookies ou URLs assinadas. Não usar HTML de outras seções como fallback automático, pois isso poderia misturar imagens que não são páginas do capítulo.
+
+**Capas:** continuam não validadas; seu problema pode ser um hostname de CDN não permitido ou um atributo `srcset` com formato/tamanho distinto. Esta correção de capítulo **não altera a allowlist de CDN**, nem afirma resolver as capas.
+
+**Teste recomendado:** atualizar manualmente o catálogo piloto e instalar a fonte `WeebCentral EN (experimental)` versão **0.1.2** pelo mesmo endereço HTTPS; a compilação do app/IPA não precisa mudar. Abrir **um capítulo já visível** e enviar a nova mensagem. Se indicar `Blocked image hostnames`, enviar apenas o hostname; se indicar `no direct chapter images`, enviar as contagens. Não insistir se houver HTTP 403/429/aviso de bloqueio. Aguardar comprovação de capas, leitura completa, atualização na biblioteca e download offline antes de marcar a fonte funcional.
+
 ## Testes offline
 
 `node ci/test_weebcentral_offline.cjs` valida: seis funções obrigatórias + descoberta; formato de resultados, URLs, contagem/paginação, ordenação, campos de detalhes, IDs estáveis, ordem/scanlator dos capítulos, imagens, ausência de hosts externos, rejeição de URLs não HTTPS, resposta 403 sem retry, rejeição de redirect externo. Estes testes usam HTML simulado e não constituem prova de funcionamento real.
