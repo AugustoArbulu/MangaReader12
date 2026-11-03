@@ -312,6 +312,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
     private let errorLabel = UILabel()
     private var representedURL: String?
     private var scaleMode: ReaderScaleMode = .fitScreen
+    private var trimMargins = false
+    private var originalImage: UIImage?
     private var lastViewportSize: CGSize = .zero
 
     override init(frame: CGRect) {
@@ -350,6 +352,7 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         super.prepareForReuse()
         representedURL = nil
         imageView.image = nil
+        originalImage = nil
         errorLabel.isHidden = true
         errorLabel.text = nil
         zoomScrollView.zoomScale = 1
@@ -377,12 +380,15 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         loader: ReaderImageLoader,
         zoomEnabled: Bool,
         scaleMode: ReaderScaleMode,
+        trimMargins: Bool,
         backgroundColor: UIColor,
         foregroundColor: UIColor,
         imageLoaded: @escaping (UIImage) -> Void
     ) {
         representedURL = page.imageUrl
         self.scaleMode = scaleMode
+        self.trimMargins = trimMargins
+        originalImage = nil
         imageView.image = nil
         errorLabel.isHidden = true
         zoomScrollView.zoomScale = 1
@@ -405,7 +411,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
 
                 switch result {
                 case .success(let image):
-                    self.imageView.image = image
+                    self.originalImage = image
+                    self.imageView.image = self.transformedImage()
                     self.layoutImage(resetZoom: true)
                     imageLoaded(image)
 
@@ -415,6 +422,23 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
                 }
             }
         }
+    }
+
+    // CGImage cropping is a view-only operation; original local/remote
+    // images and the page cache are never rewritten. Disable for Webtoon,
+    // where a crop could remove meaningful art at strip boundaries.
+    private func transformedImage() -> UIImage? {
+        guard let image = originalImage else { return nil }
+        guard trimMargins, let cg = image.cgImage,
+              cg.width >= 80, cg.height >= 80 else { return image }
+        let x = max(1, Int(Double(cg.width) * 0.03))
+        let y = max(1, Int(Double(cg.height) * 0.03))
+        let rect = CGRect(
+            x: x, y: y, width: cg.width - 2 * x, height: cg.height - 2 * y
+        )
+        guard let cropped = cg.cropping(to: rect) else { return image }
+        return UIImage(cgImage: cropped, scale: image.scale,
+                       orientation: image.imageOrientation)
     }
 
     private func layoutImage(resetZoom: Bool) {
@@ -1364,6 +1388,7 @@ final class ReaderViewController: UIViewController,
             loader: imageLoader,
             zoomEnabled: displayMode == .pages,
             scaleMode: displayMode == .webtoon ? .fitWidth : scaleMode,
+            trimMargins: displayMode == .pages && preferences.trimMargins,
             backgroundColor: readerBackgroundColor(),
             foregroundColor: readerForegroundColor()
         ) { [weak self] image in
