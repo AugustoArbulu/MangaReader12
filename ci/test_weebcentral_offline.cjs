@@ -124,7 +124,7 @@ function mock() {
         return {images: [
           item('', {src: '/images/page-1.jpg'}),
           item('', {src: 'https://external-cdn.example/forbidden.jpg'}),
-          item('', {src: 'https://weebcentral.com/images/page-2.jpg'})
+          item('', {src: 'https://cdn.weebcentral.com/images/page-2.jpg'})
         ]};
       }
       throw Error('Unsupported mock HTML: '+html);
@@ -188,7 +188,7 @@ async function main() {
   assert.equal(pages[0].index,0);
   assert.equal(pages[1].index,1);
   assert.equal(pages[0].headers.Referer,BASE+'/');
-  assert(pages[1].imageUrl.endsWith('page-2.jpg'));
+  assert.equal(pages[1].imageUrl,'https://cdn.weebcentral.com/images/page-2.jpg');
 
   const count = r.calls.length;
   assert((await r.call('details','https://weebcentral.com.evil.example/series/123/x')).__sourceError);
