@@ -6,10 +6,21 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private var items: [SourceMangaSummary] = []
     private var excludedTags: Set<String> = []
     private var hideUnclassified = false
+    private var manuallyHiddenIDs: Set<String> = []
+    // On-demand, one-page snapshot. It never claims coverage of all Canvas
+    // titles and is intentionally not persisted across app sessions.
+    private var canvasBLGLSampleIDs: Set<String> = []
+    private var sampleLookupRunning = false
 
     private var displayedItems: [SourceMangaSummary] {
-        guard !excludedTags.isEmpty else { return items }
         return items.filter { item in
+            if manuallyHiddenIDs.contains(item.id) { return false }
+            if excludedTags.isEmpty { return true }
+            if let titleNo = canvasTitleNumber(item.id),
+               canvasBLGLSampleIDs.contains(titleNo),
+               !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
+                return false
+            }
             guard let tags = item.tags, !tags.isEmpty else {
                 return !hideUnclassified
             }
@@ -17,6 +28,18 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                 excludedTags.contains { SourceTagMatcher.matches(label, exclusion: $0) }
             }
         }
+    }
+
+    private func canvasTitleNumber(_ raw: String) -> String? {
+        guard let url = URLComponents(string: raw),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == "www.webtoons.com",
+              url.path.hasPrefix("/en/canvas/"),
+              let number = url.queryItems?.first(where: { $0.name == "title_no" })?.value,
+              number.range(of: "^[0-9]{1,12}$", options: .regularExpression) != nil else {
+            return nil
+        }
+        return number
     }
     private var currentPage = 1
     private var hasNextPage = false
@@ -46,6 +69,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let key = "explore.filters." + sourceRecord.manifest.id
         self.excludedTags = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
         self.hideUnclassified = UserDefaults.standard.bool(forKey: key + ".hideUnknown")
+        self.manuallyHiddenIDs = Set(
+            UserDefaults.standard.stringArray(forKey: "explore.hidden." + sourceRecord.manifest.id) ?? []
+        )
         super.init(style: .plain)
     }
 
@@ -127,11 +153,17 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             : (selectedCategory?.title ?? "Populares")
         let active = excludedTags.count
         browseHeaderButton.setTitle(
-            "Explorar: " + title + (active > 0 ? "   • " + String(active) + " exclusões" : "") + "  ▾",
+            "Explorar: " + title +
+                (active > 0 ? "   • " + String(active) + " exclusões" : "") +
+                (!manuallyHiddenIDs.isEmpty ? "   • " + String(manuallyHiddenIDs.count) + " ocultas" : "") +
+                "  ▾",
             for: .normal
         )
 
-        if !excludedTags.isEmpty {
+        if !canvasBLGLSampleIDs.isEmpty &&
+            !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) {
+            browseHeaderHint.text = "Tags + amostra CANVAS BL/GL de 1 página • cobertura parcial"
+        } else if !excludedTags.isEmpty {
             browseHeaderHint.text = "Exclusões por tags declaradas • obras sem tags podem permanecer"
         } else if let category = selectedCategory {
             browseHeaderHint.text = category.kind == "genre"
@@ -179,7 +211,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             categories: browseCategories,
             selectedID: selectedCategory?.id,
             exclusions: excludedTags,
-            hideUnknown: hideUnclassified
+            hideUnknown: hideUnclassified,
+            hiddenCount: manuallyHiddenIDs.count,
+            allowsCanvasSample: sourceRecord.manifest.id == "kei.webtoons.en"
         )
         controller.onApply = { [weak self] selectedID, exclusions, hideUnknown, didChooseSection in
             guard let self = self else { return }
@@ -204,9 +238,100 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                 self.updateEmptyState()
             }
         }
+        controller.onRestoreHidden = { [weak self] in
+            self?.restoreAllHiddenWorks()
+        }
+        controller.onRequestCanvasSample = { [weak self] in
+            self?.verifyCanvasBLGLSample()
+        }
         controller.modalPresentationStyle = .overFullScreen
         controller.modalTransitionStyle = .crossDissolve
         present(controller, animated: true)
+    }
+
+    private func persistHiddenIDs() {
+        // Personal preference only; never deletes library/reader/download files.
+        UserDefaults.standard.set(
+            manuallyHiddenIDs.sorted(),
+            forKey: "explore.hidden." + sourceRecord.manifest.id
+        )
+        updateBrowseHeader()
+        tableView.reloadData()
+        updateEmptyState()
+    }
+
+    private func hideWork(_ summary: SourceMangaSummary) {
+        guard !summary.id.isEmpty else { return }
+        manuallyHiddenIDs.insert(summary.id)
+        persistHiddenIDs()
+    }
+
+    private func restoreAllHiddenWorks() {
+        manuallyHiddenIDs.removeAll()
+        persistHiddenIDs()
+    }
+
+    private func verifyCanvasBLGLSample() {
+        guard sourceRecord.manifest.id == "kei.webtoons.en",
+              !sampleLookupRunning,
+              let runtime = runtime else { return }
+        guard !excludedTags.isDisjoint(with: ["bl", "gl", "lgbtq"]) else {
+            showMessage(
+                title: "Amostra BL/GL",
+                message: "Marque BL, GL ou LGBTQ+ nas exclusões antes de consultar a lista."
+            )
+            return
+        }
+        sampleLookupRunning = true
+        // Do not leave stale positives after a failed or partial refresh.
+        canvasBLGLSampleIDs.removeAll()
+        updateBrowseHeader()
+        tableView.reloadData()
+        runtime.callDecoded(
+            "classificationSample",
+            as: SourceCanvasClassificationSample.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.sampleLookupRunning = false
+                switch result {
+                case .success(let payload):
+                    guard payload.source == "canvas-blgl-first-page",
+                          payload.complete == false else {
+                        self.showMessage(
+                            title: "Amostra BL/GL",
+                            message: "A fonte retornou um formato de classificação inesperado."
+                        )
+                        return
+                    }
+                    self.canvasBLGLSampleIDs = Set(
+                        payload.titleNumbers.prefix(60).filter {
+                            $0.range(
+                                of: "^[0-9]{1,12}$",
+                                options: .regularExpression
+                            ) != nil
+                        }
+                    )
+                    self.tableView.reloadData()
+                    self.updateBrowseHeader()
+                    self.updateEmptyState()
+                    self.showMessage(
+                        title: "Amostra BL/GL consultada",
+                        message: "Foram reconhecidas " +
+                            String(self.canvasBLGLSampleIDs.count) +
+                            " obras da primeira página da categoria CANVAS BL/GL. " +
+                            "As exclusões BL, GL ou LGBTQ+ usam essas correspondências " +
+                            "somente nesta sessão. Isto não cobre o catálogo inteiro."
+                    )
+                case .failure(let error):
+                    self.showMessage(
+                        title: "Amostra BL/GL indisponível",
+                        message: error.localizedDescription +
+                            "\nNenhuma obra será excluída por esse cruzamento."
+                    )
+                }
+            }
+        }
     }
 
     private func updateEmptyState() {
@@ -219,9 +344,10 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         label.textAlignment = .center
         label.font = UIFont.systemFont(ofSize: 14)
         label.textColor = ThemeManager.shared.palette.secondaryText
-        label.text = excludedTags.isEmpty
+        label.text = excludedTags.isEmpty && manuallyHiddenIDs.isEmpty
             ? "Nenhuma obra encontrada nesta seção."
-            : "Nenhuma obra corresponde aos filtros nesta lista.\nSe a fonte não informar tags, experimente permitir obras sem classificação."
+            : "Nenhuma obra visível após aplicar suas preferências.\n" +
+                "Desative exclusões ou restaure as obras ocultas em Explorar."
         label.frame = tableView.bounds.insetBy(dx: 28, dy: 20)
         tableView.backgroundView = label
     }
@@ -500,22 +626,25 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         _ tableView: UITableView,
         editActionsForRowAt indexPath: IndexPath
     ) -> [UITableViewRowAction]? {
-        guard sourceRecord.manifest.id == "kei.webtoons.en",
-              indexPath.section == 0, indexPath.row < displayedItems.count else {
+        guard indexPath.section == 0, indexPath.row < displayedItems.count else {
             return nil
         }
-        let action = UITableViewRowAction(style: .normal, title: "Testar capa") {
-            [weak self] _, selected in
-            guard let self = self, selected.row < self.displayedItems.count else {
-                return
-            }
-            // Explicit swipe action selects the exact requested manga.
-            self.startCoverDiagnostic(
-                samples: [self.displayedItems[selected.row]],
-                chosenDirectly: true
-            )
+        // Capture the exact work before async swipe actions or reloads shift
+        // the row. Do not delete it from Library, history or downloads.
+        let work = displayedItems[indexPath.row]
+        let hide = UITableViewRowAction(style: .normal, title: "Ocultar") {
+            [weak self] _, _ in
+            self?.hideWork(work)
         }
-        return [action]
+        hide.backgroundColor = ThemeManager.shared.palette.secondaryText
+        guard sourceRecord.manifest.id == "kei.webtoons.en" else {
+            return [hide]
+        }
+        let coverProbe = UITableViewRowAction(style: .normal, title: "Testar capa") {
+            [weak self] _, _ in
+            self?.startCoverDiagnostic(samples: [work], chosenDirectly: true)
+        }
+        return [hide, coverProbe]
     }
 
     override func tableView(
@@ -549,6 +678,12 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
+}
+
+private struct SourceCanvasClassificationSample: Decodable {
+    let source: String
+    let complete: Bool
+    let titleNumbers: [String]
 }
 
 // Content exclusions use only a source-provided classification label. Titles,
@@ -591,12 +726,16 @@ private enum SourceTagMatcher {
 private final class SourceDiscoverySheetViewController: UIViewController {
     typealias FilterCallback = (String?, Set<String>, Bool, Bool) -> Void
     var onApply: FilterCallback?
+    var onRestoreHidden: (() -> Void)?
+    var onRequestCanvasSample: (() -> Void)?
 
     private let categories: [SourceBrowseCategory]
     private var selectedID: String?
     private var exclusions: Set<String>
     private var hideUnknown: Bool
     private var didChooseSection = false
+    private let hiddenCount: Int
+    private let allowsCanvasSample: Bool
 
     private let backdrop = UIControl()
     private let sheet = UIView()
@@ -620,12 +759,16 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         categories: [SourceBrowseCategory],
         selectedID: String?,
         exclusions: Set<String>,
-        hideUnknown: Bool
+        hideUnknown: Bool,
+        hiddenCount: Int,
+        allowsCanvasSample: Bool
     ) {
         self.categories = categories
         self.selectedID = selectedID
         self.exclusions = exclusions
         self.hideUnknown = hideUnknown
+        self.hiddenCount = hiddenCount
+        self.allowsCanvasSample = allowsCanvasSample
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -784,6 +927,76 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             "listagem da fonte. A ausência de tags não comprova que a obra " +
             "não contém o tema excluído. Não analisamos títulos ou imagens."
         content.addArrangedSubview(infoLabel)
+
+        if allowsCanvasSample {
+            let separator = UILabel()
+            separator.text = "REFERÊNCIA OFICIAL (OPCIONAL)"
+            separator.textColor = ThemeManager.shared.palette.secondaryText
+            separator.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+            content.addArrangedSubview(separator)
+
+            let description = UILabel()
+            description.numberOfLines = 0
+            description.font = UIFont.systemFont(ofSize: 12)
+            description.textColor = ThemeManager.shared.palette.secondaryText
+            description.text = "Consulta somente a primeira página da categoria " +
+                "CANVAS BL/GL. Identifica algumas obras que não possuem tag na " +
+                "listagem atual, mas NÃO cobre todo o catálogo."
+            content.addArrangedSubview(description)
+
+            let verify = makeWideAction(
+                title: "Verificar 1 página do CANVAS BL/GL",
+                action: #selector(verifyCanvasSampleTapped)
+            )
+            content.addArrangedSubview(verify)
+        }
+
+        if hiddenCount > 0 {
+            let heading = UILabel()
+            heading.text = "OBRAS OCULTAS (" + String(hiddenCount) + ")"
+            heading.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+            heading.textColor = ThemeManager.shared.palette.secondaryText
+            content.addArrangedSubview(heading)
+
+            let restore = makeWideAction(
+                title: "Restaurar todas as obras ocultas",
+                action: #selector(restoreHiddenTapped(_:))
+            )
+            content.addArrangedSubview(restore)
+        }
+    }
+
+    private func makeWideAction(title: String, action: Selector) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle(title, for: .normal)
+        button.setTitleColor(ThemeManager.shared.palette.primaryText, for: .normal)
+        button.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        button.titleLabel?.numberOfLines = 2
+        button.layer.cornerRadius = 12
+        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 46).isActive = true
+        button.addTarget(self, action: action, for: .touchUpInside)
+        return button
+    }
+
+    @objc private func restoreHiddenTapped(_ sender: UIButton) {
+        onRestoreHidden?()
+        sender.setTitle("Obras restauradas", for: .normal)
+        sender.isEnabled = false
+    }
+
+    @objc private func verifyCanvasSampleTapped() {
+        // Save any changes to the filter sheet before the explicitly
+        // requested one-page network lookup begins.
+        let applied = onApply
+        let lookup = onRequestCanvasSample
+        dismiss(animated: true) {
+            applied?(
+                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+            )
+            lookup?()
+        }
     }
 
     private enum ChoiceKind { case category, exclusion }

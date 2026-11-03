@@ -21,7 +21,7 @@ function verifyPinnedCatalog() {
     const actual=crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(actual,source.sha256,'SHA-256 pin mismatch for '+source.id);
     if(source.id==='kei.webtoons.en') {
-      assert.equal(source.version,'0.1.10');
+      assert.equal(source.version,'0.1.11');
     }
   }
   console.log('PASS Keiyoushi catalog script SHA-256 integrity');
@@ -146,6 +146,41 @@ async function testWebtoons() {
     }
   });
   assert.equal((await r.call('metadata')).id,'kei.webtoons.en');
+  // A single opt-in first-page CANVAS BL/GL sample is supported, with
+  // stable title_no matching, exact source domain, and no detail GETs.
+  const canvasSample=runtime('keiyoushi-webtoons-en.js',{
+    http(url){
+      assert.equal(url,'https://www.webtoons.com/en/canvas/list?genreTab=BL_GL');
+      return 'CANVAS_BLG_LIST';
+    },
+    dom(html,specs){
+      assert(specs.entries,'sample must parse official category links');
+      assert.equal(html,'CANVAS_BLG_LIST');
+      return {entries:[
+        node('',{href:'https://www.webtoons.com/en/canvas/alpha/list?title_no=1234'}),
+        node('',{href:'/en/canvas/alpha/list?title_no=1234&foo=1'}),
+        node('',{href:'https://www.webtoons.com/en/canvas/beta/list?title_no=5678'}),
+        node('',{href:'https://www.webtoons.com/en/original/alpha/list?title_no=9000'}),
+        node('',{href:'https://evil.example/en/canvas/evil/list?title_no=2222'}),
+        node('',{href:'/en/canvas/invalid/list?title_no=12ab'})
+      ]};
+    }
+  });
+  const sample=await canvasSample.call('classificationSample');
+  assert.equal(sample.source,'canvas-blgl-first-page');
+  assert.equal(sample.complete,false,'one page must never claim entire catalog');
+  assert.deepEqual(Array.from(sample.titleNumbers),['1234','5678']);
+  assert.equal(canvasSample.calls.length,1,'one explicit first-page request only');
+
+  const sampleMissing=runtime('keiyoushi-webtoons-en.js',{
+    http(){return 'EMPTY';},
+    dom(html,specs){return {entries:[]};}
+  });
+  const missingSample=await sampleMissing.call('classificationSample');
+  assert(missingSample.__sourceError,'zero extracted IDs is an error, not a clean catalog');
+  assert.equal(sampleMissing.calls.length,1);
+  console.log('PASS Webtoons EN: opt-in CANVAS BL/GL first-page sample, safe IDs, bounded GET');
+
   const initialListing=await r.call('popular',1);
   assert.equal(initialListing.items.length,1);
   assert.equal(initialListing.hasNextPage,false,'rankings must not fake pagination');
@@ -448,6 +483,28 @@ function testModernDiscoveryUI() {
   assert(swift.includes('As exclusões só')===false);
   assert(swift.includes('A ausência de tags não comprova'),
     'honest limitation should be visible in UI');
+  assert(swift.includes('manuallyHiddenIDs: Set<String>'));
+  assert(swift.includes('UserDefaults.standard.stringArray(forKey: "explore.hidden."'));
+  assert(swift.includes('manuallyHiddenIDs.contains(item.id)'));
+  assert(swift.includes('manuallyHiddenIDs.insert(summary.id)'));
+  assert(swift.includes('manuallyHiddenIDs.removeAll()'));
+  assert(swift.includes('private func restoreAllHiddenWorks()'));
+  assert(swift.includes('title: "Ocultar"'));
+  assert(swift.includes('let work = displayedItems[indexPath.row]'),
+    'swipe action must capture stable exact work before row removal');
+  assert(swift.includes('private func verifyCanvasBLGLSample()'));
+  assert(swift.includes('"classificationSample"'));
+  assert(swift.includes('source == "canvas-blgl-first-page"') ||
+    swift.includes('payload.source == "canvas-blgl-first-page"'));
+  assert(swift.includes('url.path.hasPrefix("/en/canvas/")'),
+    'the official sample must never suppress unrelated Originals by title_no');
+  assert(swift.includes('sampleLookupRunning'));
+  assert(swift.includes('onRequestCanvasSample'));
+  assert(swift.includes('onRestoreHidden'));
+  assert(swift.includes('Verificar 1 página do CANVAS BL/GL'));
+  assert(swift.includes('Restaurar todas as obras ocultas'));
+  assert(swift.includes('Isto não cobre o catálogo inteiro.'),
+    'partial catalog coverage must be disclosed');
   console.log('PASS modern discovery UI: custom iOS12 sheet, source-only tag filtering and metadata limits');
 }
 

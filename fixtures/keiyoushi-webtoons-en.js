@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.10';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.11';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -260,6 +260,34 @@ var H = (function () {
     // Optional discovery API. Rankings are *categories*, not page 1..4.
     // Genre pages are real site listings; their DOM still needs iOS12 QA.
     // Latest is restricted to today's Originals updates (Keiyoushi route).
+    // A deliberately bounded, opt-in classification sample from the
+    // platform's public CANVAS BL/GL list. Only a single first-page GET
+    // happens after the user explicitly taps Verify in the app. This does
+    // not describe all BL/GL titles or Original works.
+    classificationSample:function(done){
+      H.get(base+'/en/canvas/list?genreTab=BL_GL',function(resp){
+        if(resp.__sourceError){done(resp);return;}
+        H.select(resp.body,{entries:{
+          selector:'.card_lst li a, .card_list li a, .webtoon_list li a, .genre_list li a, #_listUl li a'
+        }},function(res){
+          if(res.__sourceError){done(res);return;}
+          var seen={},numbers=[];
+          H.items(res,'entries').forEach(function(entry){
+            var link=H.cleanURL(base,H.attr(entry,'href'));
+            if(!link||link.indexOf(base+'/en/canvas/')!==0)return;
+            var found=/(?:[?&])title_no=([0-9]{1,12})(?:[&#]|$)/.exec(link);
+            if(!found||seen[found[1]]||numbers.length>=60)return;
+            seen[found[1]]=true;numbers.push(found[1]);
+          });
+          if(!numbers.length){
+            H.fail(done,'CANVAS BL/GL listing did not expose series IDs');
+            return;
+          }
+          done({source:'canvas-blgl-first-page',
+                complete:false,titleNumbers:numbers});
+        });
+      });
+    },
     browseCategories:function(){
       return [
         {id:'trending',title:'Tendências',kind:'ranking'},
