@@ -1,10 +1,12 @@
 import Foundation
+import ImageIO
 
 enum ChapterDownloadError: Error, LocalizedError {
     case applicationSupportUnavailable
     case emptyPages
     case httpStatus(Int)
     case missingCompletedFiles
+    case invalidImagePayload
     case alreadyScheduled
     case downloadInProgress
 
@@ -18,6 +20,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "Image server returned HTTP \(status) during download."
         case .missingCompletedFiles:
             return "The downloaded chapter files are missing."
+        case .invalidImagePayload:
+            return "O servidor retornou uma página inválida ou um documento HTML em vez de uma imagem. O capítulo não foi marcado como completo."
         case .alreadyScheduled:
             return "Este capítulo já está na fila de downloads."
         case .downloadInProgress:
@@ -25,6 +29,58 @@ enum ChapterDownloadError: Error, LocalizedError {
         }
     }
 }
+
+// BEGIN IMAGE_PAYLOAD_VALIDATOR
+// Validates page bytes before committing them to offline storage. A challenge
+// page may return HTTP 200 with HTML; never mark such files as downloaded.
+// ImageIO creates an image *source* without decoding full pixel buffers.
+enum ChapterDownloadImageValidator {
+    static func canStore(data: Data, headers: [String: String]) -> Bool {
+        guard !data.isEmpty else { return false }
+
+        for (name, value) in headers {
+            guard name.caseInsensitiveCompare("Content-Type") == .orderedSame else {
+                continue
+            }
+            let contentType = value.split(separator: ";", maxSplits: 1)
+                .first.map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                ?? ""
+            if contentType.hasPrefix("text/") ||
+                ["application/json", "application/javascript",
+                 "application/xml", "application/xhtml+xml"].contains(contentType) {
+                return false
+            }
+        }
+
+        // ImageIO may identify a truncated file from its header alone.
+        // PNG requires its final IEND chunk; JPEG needs its EOI marker
+        // near the end (some valid JPEGs contain a short trailing payload).
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+            let iend: [UInt8] = [
+                0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+                0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+            ]
+            guard data.count >= 20 && data.suffix(12).elementsEqual(iend) else {
+                return false
+            }
+        } else if data.starts(with: [0xFF, 0xD8, 0xFF]) {
+            let tail = Array(data.suffix(64))
+            guard tail.count >= 2,
+                  (1..<tail.count).contains(where: {
+                      tail[$0 - 1] == 0xFF && tail[$0] == 0xD9
+                  }) else {
+                return false
+            }
+        }
+
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0 else {
+            return false
+        }
+        return CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete
+    }
+}
+// END IMAGE_PAYLOAD_VALIDATOR
 
 // Private metadata saved next to each chapter's page files. The entire
 // operation stays within the app's Application Support sandbox.
@@ -466,6 +522,13 @@ final class ChapterDownloadManager {
                 case .success(let response):
                     guard (200..<300).contains(response.statusCode) else {
                         self.fail(job, error: ChapterDownloadError.httpStatus(response.statusCode))
+                        return
+                    }
+
+                    guard ChapterDownloadImageValidator.canStore(
+                        data: response.data, headers: response.headers
+                    ) else {
+                        self.fail(job, error: ChapterDownloadError.invalidImagePayload)
                         return
                     }
 
