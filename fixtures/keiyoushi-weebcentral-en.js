@@ -7,7 +7,7 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.1';
+  var version = '0.1.2';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
   var imageHostRE = /^https:\/\/(?:[a-z0-9-]+\.)*weebcentral\.com(?=\/|[?#]|$)/i;
@@ -255,7 +255,15 @@
     var imageList = url + '/images?is_prev=False&reading_style=long_strip';
     request(imageList, function (resp) {
       if (resp.__sourceError) { done(resp); return; }
-      select(resp.body, {images: {selector: 'section[x-data~=scroll] > img'}}, function (dom) {
+      // Jsoup [attr~=regex] is NOT CSS [attr~=word]. For WebKit's
+      // querySelectorAll use the CSS substring operator [attr*="..."].
+      // Count nearby inert DOM elements for a zero-match diagnostic only.
+      select(resp.body, {
+        images: {selector: 'section[x-data*="scroll"] > img'},
+        scrollSections: {selector: 'section[x-data*="scroll"]'},
+        nestedImages: {selector: 'section[x-data*="scroll"] img'},
+        allImages: {selector: 'img[src], img[data-src], img[data-original]'}
+      }, function (dom) {
         if (dom.__sourceError) { done(dom); return; }
         var found = entries(dom, 'images'), pages = [], deniedHosts = [];
         var missingCount = 0;
@@ -277,7 +285,11 @@
         }
         // Never deliver an incomplete chapter when any page was skipped.
         if (!found.length) {
-          fail(done, 'WeebCentral: no page images matched the chapter HTML selector.'); return;
+          fail(done, 'WeebCentral: no direct chapter images found (WebKit CSS).' +
+            ' scroll sections=' + entries(dom, 'scrollSections').length +
+            ', nested images=' + entries(dom, 'nestedImages').length +
+            ', document images=' + entries(dom, 'allImages').length +
+            '. No extra requests were made; selectors or HTML may have changed.'); return;
         }
         if (deniedHosts.length || missingCount || pages.length !== found.length) {
           var reason = deniedHosts.length ?
