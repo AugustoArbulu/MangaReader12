@@ -124,7 +124,7 @@ class Build41ReaderLibraryTests(unittest.TestCase):
         self.assertIn('cell.textLabel?.text = "Biblioteca em grade"', settings)
         self.assertIn("private func gridPreferenceChanged(_ sender: UISwitch)", settings)
         self.assertIn('forKey: "library.layout"', settings)
-        self.assertRegex(settings, r'Build [0-9]+ • compatível com iOS 12\\.0')
+        self.assertRegex(settings, r'Build [0-9]+ • compatível com iOS 12\.0')
 
 
 if __name__ == "__main__":
