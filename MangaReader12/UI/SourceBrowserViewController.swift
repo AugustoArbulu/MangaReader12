@@ -714,12 +714,16 @@ private enum SourceTagMatcher {
 private final class SourceDiscoverySheetViewController: UIViewController {
     typealias FilterCallback = (String?, Set<String>, Bool, Bool) -> Void
     var onApply: FilterCallback?
+    var onRestoreHidden: (() -> Void)?
+    var onRequestCanvasSample: (() -> Void)?
 
     private let categories: [SourceBrowseCategory]
     private var selectedID: String?
     private var exclusions: Set<String>
     private var hideUnknown: Bool
     private var didChooseSection = false
+    private let hiddenCount: Int
+    private let allowsCanvasSample: Bool
 
     private let backdrop = UIControl()
     private let sheet = UIView()
@@ -743,12 +747,16 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         categories: [SourceBrowseCategory],
         selectedID: String?,
         exclusions: Set<String>,
-        hideUnknown: Bool
+        hideUnknown: Bool,
+        hiddenCount: Int,
+        allowsCanvasSample: Bool
     ) {
         self.categories = categories
         self.selectedID = selectedID
         self.exclusions = exclusions
         self.hideUnknown = hideUnknown
+        self.hiddenCount = hiddenCount
+        self.allowsCanvasSample = allowsCanvasSample
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -907,6 +915,76 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             "listagem da fonte. A ausência de tags não comprova que a obra " +
             "não contém o tema excluído. Não analisamos títulos ou imagens."
         content.addArrangedSubview(infoLabel)
+
+        if allowsCanvasSample {
+            let separator = UILabel()
+            separator.text = "REFERÊNCIA OFICIAL (OPCIONAL)"
+            separator.textColor = ThemeManager.shared.palette.secondaryText
+            separator.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+            content.addArrangedSubview(separator)
+
+            let description = UILabel()
+            description.numberOfLines = 0
+            description.font = UIFont.systemFont(ofSize: 12)
+            description.textColor = ThemeManager.shared.palette.secondaryText
+            description.text = "Consulta somente a primeira página da categoria " +
+                "CANVAS BL/GL. Identifica algumas obras que não possuem tag na " +
+                "listagem atual, mas NÃO cobre todo o catálogo."
+            content.addArrangedSubview(description)
+
+            let verify = makeWideAction(
+                title: "Verificar 1 página do CANVAS BL/GL",
+                action: #selector(verifyCanvasSampleTapped)
+            )
+            content.addArrangedSubview(verify)
+        }
+
+        if hiddenCount > 0 {
+            let heading = UILabel()
+            heading.text = "OBRAS OCULTAS (" + String(hiddenCount) + ")"
+            heading.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+            heading.textColor = ThemeManager.shared.palette.secondaryText
+            content.addArrangedSubview(heading)
+
+            let restore = makeWideAction(
+                title: "Restaurar todas as obras ocultas",
+                action: #selector(restoreHiddenTapped(_:))
+            )
+            content.addArrangedSubview(restore)
+        }
+    }
+
+    private func makeWideAction(title: String, action: Selector) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle(title, for: .normal)
+        button.setTitleColor(ThemeManager.shared.palette.primaryText, for: .normal)
+        button.backgroundColor = ThemeManager.shared.palette.secondaryBackground
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        button.titleLabel?.numberOfLines = 2
+        button.layer.cornerRadius = 12
+        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 46).isActive = true
+        button.addTarget(self, action: action, for: .touchUpInside)
+        return button
+    }
+
+    @objc private func restoreHiddenTapped(_ sender: UIButton) {
+        onRestoreHidden?()
+        sender.setTitle("Obras restauradas", for: .normal)
+        sender.isEnabled = false
+    }
+
+    @objc private func verifyCanvasSampleTapped() {
+        // Save any changes to the filter sheet before the explicitly
+        // requested one-page network lookup begins.
+        let applied = onApply
+        let lookup = onRequestCanvasSample
+        dismiss(animated: true) {
+            applied?(
+                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+            )
+            lookup?()
+        }
     }
 
     private enum ChoiceKind { case category, exclusion }
