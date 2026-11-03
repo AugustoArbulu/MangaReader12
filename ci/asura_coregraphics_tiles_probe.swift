@@ -135,8 +135,12 @@ require(pixels(swapRows) == (blue + yellow + red + green),
     "vertical destination mapping was incorrect")
 
 // Public source's typical 4×5 tile layout: identity is lossless.
-let pixels20 = (0..<20).flatMap { slot -> [UInt8] in
-    return [UInt8(slot * 10), UInt8(255 - slot * 10), UInt8(slot), 255]
+var pixels20 = [UInt8]()
+for slot in 0..<20 {
+    let r = UInt8(slot * 10)
+    let g = UInt8(255 - slot * 10)
+    let b = UInt8(slot)
+    pixels20.append(contentsOf: [r, g, b, 255])
 }
 let image20 = rgbaImage(pixels20, width: 4, height: 5)
 let restored20 = AsuraTileReassemblyProbe.reorder(
