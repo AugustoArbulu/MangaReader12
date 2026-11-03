@@ -745,6 +745,72 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 }
 
+
+private struct SourceRemoteFilterOptions: Decodable {
+    let tags: [String]
+    let types: [String]
+    let statuses: [String]
+    let sorts: [String]
+
+    var isValid: Bool {
+        func clean(_ items: [String], maxCount: Int) -> Bool {
+            guard !items.isEmpty, items.count <= maxCount,
+                  Set(items).count == items.count else { return false }
+            return items.allSatisfy {
+                $0.range(
+                    of: "^[A-Za-z][A-Za-z0-9 .'-]{0,49}$",
+                    options: .regularExpression
+                ) != nil
+            }
+        }
+        return clean(tags, maxCount: 60) &&
+            clean(types, maxCount: 16) &&
+            clean(statuses, maxCount: 16) &&
+            clean(sorts, maxCount: 16)
+    }
+}
+
+// Generic optional Source API v1 filter values. Only values explicitly
+// advertised by filterOptions are kept, never arbitrary query parameters.
+private struct SourceRemoteFilterSelection: Codable, Equatable {
+    var includedTags: [String] = []
+    var excludedTags: [String] = []
+    var types: [String] = []
+    var statuses: [String] = []
+    var sort: String? = nil
+    var order: String? = nil
+
+    var hasActiveFilters: Bool {
+        return !includedTags.isEmpty || !excludedTags.isEmpty ||
+            !types.isEmpty || !statuses.isEmpty ||
+            sort != nil || order != nil
+    }
+
+    func sanitized(for options: SourceRemoteFilterOptions) -> SourceRemoteFilterSelection {
+        var cleaned = SourceRemoteFilterSelection()
+        cleaned.excludedTags = options.tags.filter { excludedTags.contains($0) }
+        cleaned.includedTags = options.tags.filter {
+            includedTags.contains($0) && !cleaned.excludedTags.contains($0)
+        }
+        cleaned.types = options.types.filter { types.contains($0) }
+        cleaned.statuses = options.statuses.filter { statuses.contains($0) }
+        cleaned.sort = options.sorts.contains(sort ?? "") ? sort : nil
+        cleaned.order = ["Ascending", "Descending"].contains(order ?? "") ? order : nil
+        return cleaned
+    }
+
+    func arguments(fallbackSort: String) -> [String: Any] {
+        return [
+            "includedTags": includedTags,
+            "excludedTags": excludedTags,
+            "types": types,
+            "statuses": statuses,
+            "sort": sort ?? fallbackSort,
+            "order": order ?? "Descending"
+        ]
+    }
+}
+
 private struct SourceCanvasClassificationSample: Decodable {
     let source: String
     let complete: Bool
