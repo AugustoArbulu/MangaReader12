@@ -207,7 +207,7 @@ var H = (function () {
     // route. Only use explicit classification shown on this listing card.
     var raw=H.text(H.field(card,'genre'));
     if(!raw)return null;
-    var tags=raw.split(/[,|/•]+/).map(function(t){return t.trim();})
+    var tags=raw.split(/[,|\/•]+/).map(function(t){return t.trim();})
       .filter(function(t){return t.length>0&&t.length<=48;}).slice(0,12);
     return tags.length?tags:null;
   }
