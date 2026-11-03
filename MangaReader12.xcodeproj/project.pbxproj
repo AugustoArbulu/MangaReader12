@@ -44,6 +44,7 @@
 		A10000000000000000000023 /* BackgroundLibraryUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* BackgroundLibraryUpdateManager.swift */; };
 		A10000000000000000000024 /* SafeCBZArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* SafeCBZArchive.swift */; };
 		A10000000000000000000025 /* LocalComicsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* LocalComicsViewController.swift */; };
+		A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ComixBrowserProbeViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +87,7 @@
 		A20000000000000000000024 /* BackgroundLibraryUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundLibraryUpdateManager.swift; sourceTree = "<group>"; };
 		A20000000000000000000025 /* SafeCBZArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeCBZArchive.swift; sourceTree = "<group>"; };
 		A20000000000000000000026 /* LocalComicsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalComicsViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000027 /* ComixBrowserProbeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComixBrowserProbeViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,6 +205,7 @@
 				A20000000000000000000021 /* MigrationViewController.swift */,
 				A20000000000000000000023 /* DataStorageViewController.swift */,
 				A20000000000000000000026 /* LocalComicsViewController.swift */,
+				A20000000000000000000027 /* ComixBrowserProbeViewController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -337,6 +340,7 @@
 				A10000000000000000000023 /* BackgroundLibraryUpdateManager.swift in Sources */,
 				A10000000000000000000024 /* SafeCBZArchive.swift in Sources */,
 				A10000000000000000000025 /* LocalComicsViewController.swift in Sources */,
+				A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -382,7 +386,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 42;
+				CURRENT_PROJECT_VERSION = 43;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
@@ -404,7 +408,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 42;
+				CURRENT_PROJECT_VERSION = 43;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
