@@ -1,12 +1,20 @@
 # M13 — Nine selected Keiyoushi extensions for MangaReader12
 
-Status: **source audit and scoped port plan only** (2026-10-30). The port is **not yet implemented**; do not mark these sources as working or build a public catalog from upstream Kotlin/APK files.
+Status: **historical inventory and original scoped plan** (2026-10-30); **not a current source-status ledger**. Some independent adapters have since been developed. For verified status, read `docs/HANDOFF_COMPLETO_MANGAREADER12_WEEBCENTRAL_ASURA_BUILD46_2026-11-03.md`. Never infer operational availability from upstream Kotlin/APK files.
 
 ## Project decision
 
-Convert **only these nine** user-selected sources. Do not attempt to execute Android APKs or mirror the entire Keiyoushi repository. The official upstream repository is https://github.com/keiyoushi/extensions-source (Apache-2.0). A converted source must instead ship a MangaReader12 API v1+ manifest JSON and HTTPS JavaScript file, with a reviewed per-source host allowlist, integrity hash and explicit iOS 12 device QA.
+The **original inventory** listed nine selected sources; on 2026-11-03 the user **explicitly added WeebCentral as a separate tenth source**, to be implemented alongside Asura Scans as a complete reader integration. Do not attempt to execute Android APKs or mirror the entire Keiyoushi repository. The official upstream repository is https://github.com/keiyoushi/extensions-source (Apache-2.0). A converted source must instead ship a MangaReader12 API v1+ manifest JSON and HTTPS JavaScript file, with a reviewed per-source host allowlist, integrity hash and explicit iOS 12 device QA.
 
 "Webtoon" is interpreted provisionally as **Webtoons.com** at upstream path `src/all/webtoons`; this is separate from `webtoonscan` and `webtoonxyz` sources. If the user meant one of those, change the mapping explicitly rather than silently replacing it.
+
+## Updated implementation state (2026-11-03)
+
+- **WeebCentral EN** (added by the user after this inventory): standalone script **0.1.5** in an isolated catalog. On iOS 12.5.8 the user physically confirmed chapter images, chapter 1 for One Piece after Build44's selector fix, and genre metadata; general filters appear to work. Source dates 0.1.5, library auto-updates and offline downloads still await physical QA.
+- **Asura Scans EN**: standalone **0.1.1 public-only pilot**, with API browse/search, inert Astro details/chapters and stable canonical IDs. No physical QA. Premium and image tiles intentionally unavailable; the offline-only CoreGraphics tile prototype has CI tests, not reader integration.
+- **HotComics / Manhwa18.net / Webtoons.com EN**: separate pilot adapters already exist in fixtures; use their own documentation and QA results rather than the original estimates here.
+- **Comix**: the iOS 12 WebKit/Safari blank rendering observation remains an unresolved separate investigation. Do not assume functionality or make automated requests.
+- **Release rule:** only checksum-pinned HTTPS JS manifests are installable; no Android APK execution and no unreviewed remote access workarounds.
 
 ## Exact upstream module inventory
 

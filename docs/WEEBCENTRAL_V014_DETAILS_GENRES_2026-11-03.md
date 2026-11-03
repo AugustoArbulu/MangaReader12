@@ -43,4 +43,4 @@ Referências públicas:
 5. Confirmar que capítulos e imagens continuam carregando e que os filtros gerais 0.1.3 seguem funcionando.
 6. Se gêneros ainda estiverem ausentes, reportar apenas a obra e se a descrição/status aparecem. Nenhum HTML privado, URL assinada ou token é necessário.
 
-**Status:** compatibilidade de parser coberta por fixtures offline; **QA físico de gêneros ainda não foi confirmado**.
+**Resultado físico em 2026-11-03:** o usuário confirmou que os gêneros passaram a aparecer corretamente nos detalhes após atualizar a WeebCentral. Extração de gêneros **validada no dispositivo real**. Biblioteca, atualizações e downloads offline continuam pendentes de teste específico.
