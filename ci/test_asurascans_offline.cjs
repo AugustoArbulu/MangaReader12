@@ -12,13 +12,16 @@ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,
 const manifest=catalog.sources[0];
 assert.equal(catalog.sources.length,1);
 assert.equal(manifest.id,'kei.asurascans.en');
-assert.equal(manifest.version,'0.1.0');
+assert.equal(manifest.version,'0.1.1');
 assert.deepEqual(manifest.domains,['asurascans.com','api.asurascans.com']);
 assert.equal(crypto.createHash('sha256').update(script).digest('hex'),manifest.sha256);
 assert(!/access_token|X-Page-Token|Authorization:|cloudflare|bypass|webdriver/i.test(script));
 const BASE='https://asurascans.com';
 const API='https://api.asurascans.com/api';
 const A=BASE+'/comics/sample-comic-zx91a2b3';
+const STABLE=BASE+'/series/sample-comic';
+const STABLE_CH1=STABLE+'/chapter/1';
+const STABLE_CH2=STABLE+'/chapter/2';
 const CH1=A+'/chapter/1';
 const CH2=A+'/chapter/2';
 const item=(attrs={})=>({text:'',attrs,fields:{}});
@@ -51,7 +54,7 @@ const pageInfo={pages:[
  {url:'https://api.asurascans.com/static/images/02.png'}
 ]};
 function createRuntime(config={}) {
- const calls=[], selectors=[], state={};
+ const calls=[], selectors=[], state=config.storage || {};
  const native={
   resolveUrl(base,ref){return new URL(ref,base).href;},
   storageGet(key){return state[key]||null;},
@@ -62,9 +65,10 @@ function createRuntime(config={}) {
    if(config.request) data=config.request(req);
    else if(req.url.startsWith(API+'/series?')) data={
     body:JSON.stringify({data:[
-      {title:'Sample Comic',public_url:'/comics/sample-comic-zx91a2b3',
+      {title:'Sample Comic',slug:'sample-comic',
+        public_url:'/comics/sample-comic-zx91a2b3',
         cover:'https://asurascans.com/covers/100.jpg'},
-      {title:'Ignored',public_url:'https://evil.invalid/comics/abc',
+      {title:'Ignored',slug:'evil-series',public_url:'https://evil.invalid/comics/abc',
         cover:'https://evil.invalid/cover.jpg'}
     ],meta:{has_more:true}})
    };
@@ -111,7 +115,9 @@ async function main(){
  assert.equal(meta.name,'Asura Scans EN (experimental)');
  const popular=await r.call('popular',1);
  assert.equal(popular.items.length,1);
- assert.equal(popular.items[0].id,A);
+ assert.equal(popular.items[0].id,STABLE);
+ assert.equal(popular.items[0].url,A);
+ assert.equal(r.state['asura-public-v1:sample-comic'],A);
  assert.equal(popular.items[0].cover,BASE+'/covers/100.jpg');
  assert.equal(popular.hasNextPage,true);
  assert.match(r.calls[0].url,/sort=popular/);
@@ -128,10 +134,11 @@ async function main(){
  const cats=await r.call('browseCategories');
  assert.deepEqual(Array.from(cats).map(c=>c.id),['popular','latest']);
  const before=r.calls.length;
- const pair=await Promise.all([r.call('details',A),r.call('chapters',A)]);
+ const pair=await Promise.all([r.call('details',STABLE),r.call('chapters',STABLE)]);
  const details=pair[0],chapters=pair[1];
  assert.equal(r.calls.length,before+1,'details and chapters should coalesce a single series GET');
- assert.equal(details.id,A);
+ assert.equal(details.id,STABLE);
+ assert.equal(details.url,A);
  assert.equal(details.title,'Sample Comic');
  assert.equal(details.author,'Sample Author');
  assert.equal(details.artist,'Sample Artist');
@@ -141,20 +148,55 @@ async function main(){
  assert.deepEqual(Array.from(details.altTitles),['Sample Alias','Test Alias']);
  assert.equal(details.cover,BASE+'/covers/100.jpg');
  assert.equal(chapters.length,2,'hide premium, early-access and invalid windows');
- assert.equal(chapters[0].id,CH1);
+ assert.equal(chapters[0].id,STABLE_CH1);
+ assert.equal(chapters[0].url,CH1);
  assert.equal(chapters[0].date,'2026-08-01T00:00:00Z');
- assert.equal(chapters[1].id,CH2);
+ assert.equal(chapters[1].id,STABLE_CH2);
+ assert.equal(chapters[1].url,CH2);
  assert.equal(chapters[1].name,'Chapter 2 - The Return');
  assert.equal(chapters[1].number,2);
  assert.equal(chapters[1].date,'2026-09-02T00:00:00Z');
  // Returning to details should reuse cached props, no new GET.
- await r.call('details',A);
+ await r.call('details',STABLE);
  assert.equal(r.calls.length,before+1);
- const pages=await r.call('pages',CH1);
+ const pages=await r.call('pages',STABLE_CH1);
  assert.equal(pages.length,2);
  assert.equal(pages[1].imageUrl,'https://api.asurascans.com/static/images/02.png');
  assert.equal(pages[0].headers.Referer,BASE+'/');
  assert.equal(pages[1].index,1);
+ assert.equal(r.calls[r.calls.length-1].url,CH1,
+   'stable chapter IDs must resolve via stored public alias');
+ // Existing test records using the old /comics URL remain readable.
+ const legacy=await r.call('chapters',A);
+ assert.equal(legacy[0].id,CH1);
+ assert.equal(legacy[0].url,CH1);
+ assert.equal(r.calls[r.calls.length-1].url,A);
+ // A fresh source runtime must recover the public alias from persisted
+ // source-only storage and keep the same canonical series/chapters.
+ const reopened=createRuntime({storage:r.state});
+ const reopenedDetails=await reopened.call('details',STABLE);
+ assert.equal(reopenedDetails.id,STABLE);
+ assert.equal(reopened.calls[0].url,A);
+ const reopenedChapters=await reopened.call('chapters',STABLE);
+ assert.equal(reopenedChapters[0].id,STABLE_CH1);
+ assert.equal(reopened.calls.length,1,'reused series props cache in the new runtime');
+ // If a public random suffix changes, the stable id must not change.
+ const newPublic=BASE+'/comics/sample-comic-new12345';
+ const aliasUpdate=createRuntime({
+  storage:r.state,
+  request(req) {
+   if(req.url.startsWith(API+'/series?'))return {
+    body:JSON.stringify({data:[{title:'Sample Comic',slug:'sample-comic',
+      public_url:'/comics/sample-comic-new12345',
+      cover:'https://asurascans.com/covers/100.jpg'}],meta:{has_more:false}})
+   };
+   throw Error('Should only refresh public API alias');
+  }
+ });
+ const rotated=await aliasUpdate.call('popular',1);
+ assert.equal(rotated.items[0].id,STABLE);
+ assert.equal(rotated.items[0].url,newPublic);
+ assert.equal(r.state['asura-public-v1:sample-comic'],newPublic);
  const prior=r.calls.length;
  for(const [method,arg] of [['details','https://evil.invalid/comics/xyz'],
    ['chapters','http://asurascans.com/comics/xyz'],
