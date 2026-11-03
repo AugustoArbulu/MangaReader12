@@ -53,7 +53,12 @@ class Build45RemoteFilters(unittest.TestCase):
 
     def test_source_support_is_server_side_only(self):
         source = read("fixtures/keiyoushi-weebcentral-en.js")
-        self.assertIn("var version = '0.1.3';", source)
+        version = re.search(r"var version = '(\d+)\.(\d+)\.(\d+)';", source)
+        self.assertIsNotNone(version, "WeebCentral version must be numeric")
+        self.assertGreaterEqual(tuple(map(int, version.groups())), (0, 1, 3))
+        import json
+        catalog = json.loads(read("fixtures/weebcentral-pilot-repository.json"))
+        self.assertEqual(catalog["sources"][0]["version"], ".".join(version.groups()))
         self.assertIn("filterOptions: filterOptions", source)
         for param in ("excluded_tag", "included_tag", "included_type", "included_status",
                       "sort", "order"):
