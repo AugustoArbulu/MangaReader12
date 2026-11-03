@@ -7,7 +7,7 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.0';
+  var version = '0.1.1';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
   var imageHostRE = /^https:\/\/(?:[a-z0-9-]+\.)*weebcentral\.com(?=\/|[?#]|$)/i;
@@ -65,21 +65,52 @@
     var url = siteURL(part);
     return url && chapterRE.test(url) ? url.replace(/[?#].*$/, '').replace(/\/$/, '') : null;
   }
-  function imageURL(baseURL, part) {
-    var url = resolve(baseURL, part);
-    // The actual host list needs a physical test: do NOT silently trust
-    // third-party CDN domains not yet audited in the source manifest.
-    return url && imageHostRE.test(url) ? url : null;
+  // Only hostnames (not full URLs or tokens) are retained for diagnostics.
+  // Do not fetch media from unknown CDN origins without a manifest review.
+  function hostname(url) {
+    var m = /^https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?=\/|[?#]|$)/i.exec(url || '');
+    return m ? m[1].toLowerCase() : null;
   }
   function firstSrcset(value) {
     return String(value || '').split(',')[0].trim().split(/\s+/)[0];
   }
-  function coverURL(baseURL, parent) {
-    if (!parent) return null;
-    return imageURL(baseURL, firstSrcset(attr(fld(parent, 'source'), 'srcset'))) ||
-      imageURL(baseURL, attr(fld(parent, 'image'), 'data-src')) ||
-      imageURL(baseURL, attr(fld(parent, 'image'), 'src')) ||
-      imageURL(baseURL, attr(parent, 'src'));
+  function imageChoice(baseURL, candidates) {
+    // Prefer explicit lazy image attributes. An external actual image must
+    // not silently fall back to a same-origin placeholder in the src attribute.
+    for (var i = 0; i < candidates.length; i++) {
+      var raw = String(candidates[i] || '').trim();
+      if (!raw || /^data:|^blob:/i.test(raw)) continue;
+      var url = resolve(baseURL, raw);
+      if (!url) continue;
+      var host = hostname(url);
+      if (!host) continue;
+      return {url: imageHostRE.test(url) ? url : null, host: host};
+    }
+    return {url: null, host: null};
+  }
+  function coverInfo(baseURL, parent) {
+    if (!parent) return {url: null, host: null};
+    return imageChoice(baseURL, [
+      firstSrcset(attr(fld(parent, 'source'), 'srcset')),
+      attr(fld(parent, 'image'), 'data-src'),
+      attr(fld(parent, 'image'), 'data-original'),
+      attr(fld(parent, 'image'), 'data-lazy-src'),
+      firstSrcset(attr(fld(parent, 'image'), 'srcset')),
+      attr(fld(parent, 'image'), 'src'),
+      attr(parent, 'src')
+    ]);
+  }
+  function coverDiagnostic(info) {
+    // The app already supports this optional field on list cards.
+    return {
+      matched: true,
+      coverFound: !!info.url,
+      fields: ['weebcentral-cover'],
+      attributes: info.host ? ['image-hostname'] : [],
+      kinds: info.host ? ['image-hostname=' + info.host] : [],
+      outputClass: info.url ? 'permitted-https' : (info.host ? 'host-not-allowed' : 'missing'),
+      outputLength: info.url ? info.url.length : 0
+    };
   }
   function pageNumber(value) {
     var num = Number(value);
@@ -111,7 +142,9 @@
           var title = txt(fld(item, 'title'));
           if (!url || !title || seen[url]) continue;
           seen[url] = true;
-          items.push({id: url, title: title, cover: coverURL(resp.finalURL, item), url: url});
+          var cover = coverInfo(resp.finalURL, item);
+          items.push({id: url, title: title, cover: cover.url, url: url,
+            coverDiagnostic: coverDiagnostic(cover)});
         }
         // Fail closed on changed templates rather than treating a broken DOM
         // as a legitimately empty catalog.
@@ -158,8 +191,9 @@
         if (!title) { fail(done, 'Series title missing from HTML'); return; }
         var info = {genres: []};
         entries(dom, 'rows').forEach(function (row) { parseInfoRow(row, info); });
-        var cover = coverURL(resp.finalURL, entries(dom, 'poster')[0]) ||
-          imageURL(resp.finalURL, attr(entries(dom, 'meta')[0], 'content'));
+        var posterCover = coverInfo(resp.finalURL, entries(dom, 'poster')[0]);
+        var metaCover = imageChoice(resp.finalURL, [attr(entries(dom, 'meta')[0], 'content')]);
+        var cover = posterCover.url || metaCover.url;
         var status = (info.status || '').toLowerCase();
         done({
           id: seriesURL(mangaId),
@@ -223,15 +257,36 @@
       if (resp.__sourceError) { done(resp); return; }
       select(resp.body, {images: {selector: 'section[x-data~=scroll] > img'}}, function (dom) {
         if (dom.__sourceError) { done(dom); return; }
-        var found = entries(dom, 'images'), pages = [];
+        var found = entries(dom, 'images'), pages = [], deniedHosts = [];
+        var missingCount = 0;
         for (var i = 0; i < found.length; i++) {
-          var item = found[i];
-          var url = imageURL(resp.finalURL, attr(item, 'src') || attr(item, 'data-src'));
-          if (!url) continue;
-          pages.push({index: pages.length, imageUrl: url, headers: {Referer: base + '/'}});
+          var el = found[i];
+          var image = imageChoice(resp.finalURL, [
+            attr(el, 'data-src'), attr(el, 'data-original'),
+            attr(el, 'data-lazy-src'), firstSrcset(attr(el, 'srcset')),
+            attr(el, 'src')
+          ]);
+          if (!image.url) {
+            if (image.host && deniedHosts.indexOf(image.host) < 0 &&
+                deniedHosts.length < 3) deniedHosts.push(image.host);
+            if (!image.host) missingCount++;
+          } else {
+            pages.push({index: pages.length, imageUrl: image.url,
+              headers: {Referer: base + '/'}});
+          }
         }
-        if (!pages.length) {
-          fail(done, 'No permitted page-image hosts found; CDN requires review'); return;
+        // Never deliver an incomplete chapter when any page was skipped.
+        if (!found.length) {
+          fail(done, 'WeebCentral: no page images matched the chapter HTML selector.'); return;
+        }
+        if (deniedHosts.length || missingCount || pages.length !== found.length) {
+          var reason = deniedHosts.length ?
+            'Blocked image hostnames: ' + deniedHosts.join(', ') + '.' :
+            'No usable HTTPS image URL in chapter image attributes.';
+          fail(done, 'WeebCentral: ' + reason + ' Images parsed: ' + found.length +
+            ', permitted: ' + pages.length + ', missing/unsupported: ' + missingCount +
+            '. Only hostnames are reported; no blocked images were downloaded.');
+          return;
         }
         done(pages);
       });
