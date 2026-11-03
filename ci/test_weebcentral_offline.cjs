@@ -13,7 +13,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.0');
+assert.equal(candidate.version, '0.1.1');
 assert.deepEqual(candidate.domains, ['weebcentral.com']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
@@ -123,7 +123,8 @@ function mock() {
         assert.equal(spec.images.selector, 'section[x-data~=scroll] > img');
         return {images: [
           item('', {src: '/images/page-1.jpg'}),
-          item('', {src: 'https://external-cdn.example/forbidden.jpg'}),
+          item('', {src: 'data:image/gif;base64,AA==',
+            'data-src': 'https://weebcentral.com/images/page-lazy.jpg'}),
           item('', {src: 'https://cdn.weebcentral.com/images/page-2.jpg'})
         ]};
       }
@@ -139,7 +140,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.0');
+  assert.equal(meta.version, '0.1.1');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -184,12 +185,62 @@ async function main() {
   assert(r.calls.some(x=>x.url===BASE+'/series/series-42/full-chapter-list'));
 
   const pages = await r.call('pages',CH1);
-  assert.equal(pages.length,2);
+  assert.equal(pages.length,3);
   assert.equal(pages[0].index,0);
   assert.equal(pages[1].index,1);
   assert.equal(pages[0].headers.Referer,BASE+'/');
-  assert.equal(pages[1].imageUrl,'https://cdn.weebcentral.com/images/page-2.jpg');
+  assert.equal(pages[1].imageUrl,'https://weebcentral.com/images/page-lazy.jpg');
+  assert.equal(pages[2].imageUrl,'https://cdn.weebcentral.com/images/page-2.jpg');
 
+  assert.equal(popular.items[0].coverDiagnostic.coverFound, true);
+  assert.equal(popular.items[0].coverDiagnostic.outputClass, 'permitted-https');
+  // Foreign CDN is recorded as HOSTNAME ONLY and never fetched; if any
+  // image is blocked, do not return a partial chapter (offline integrity).
+  const external = runtime({
+    http() { return 'FOREIGN_PAGE'; },
+    dom(html, spec) {
+      assert(spec.images);
+      return {images: [
+        item('',{src:'https://weebcentral.com/images/ok.jpg'}),
+        item('',{src:'https://images.example-cdn.invalid/secret.jpg?token=PRIVATE'}),
+        item('',{src:'https://images.example-cdn.invalid/again.jpg?token=ALSO_PRIVATE'}),
+        item('',{src:'http://unsafe.example/page.jpg'})
+      ]};
+    }
+  });
+  const blockedPage = await external.call('pages', CH1);
+  assert(blockedPage.__sourceError.includes('images.example-cdn.invalid'));
+  assert(blockedPage.__sourceError.includes('Images parsed: 4'));
+  assert(!blockedPage.__sourceError.includes('PRIVATE'));
+  assert(!blockedPage.__sourceError.includes('/secret.jpg'));
+  assert(!blockedPage.__sourceError.includes('http://unsafe.example'));
+  assert.equal(external.calls.length,1);
+  const missing = runtime({
+    http() {return 'PLACEHOLDER_ONLY';},
+    dom() {return {images:[item('',{src:'data:image/gif;base64,AA=='})]};}
+  });
+  const missingURL = await missing.call('pages', CH1);
+  assert(missingURL.__sourceError.includes('No usable HTTPS image URL'));
+  const empty = runtime({
+    http() {return 'EMPTY';},
+    dom() {return {images:[]};}
+  });
+  assert((await empty.call('pages',CH1)).__sourceError.includes('no page images matched'));
+  const foreignCovers = runtime({
+    http() {return 'COVER_HTML';},
+    dom(html, spec) {
+      assert(spec.items);
+      return {items:[item('',{href:'/series/series-42/alpha'}, {
+        title:item('Alpha'), source:item('',{srcset:'https://images.example-cdn.invalid/a.jpg?token=PRIVATE 1x'})
+      })],next:[]};
+    }
+  });
+  const coverPage = await foreignCovers.call('popular',1);
+  assert.equal(coverPage.items[0].cover,null);
+  assert.equal(coverPage.items[0].coverDiagnostic.outputClass,'host-not-allowed');
+  assert(coverPage.items[0].coverDiagnostic.kinds.includes(
+    'image-hostname=images.example-cdn.invalid'));
+  assert(!JSON.stringify(coverPage.items[0].coverDiagnostic).includes('PRIVATE'));
   const count = r.calls.length;
   assert((await r.call('details','https://weebcentral.com.evil.example/series/123/x')).__sourceError);
   assert((await r.call('chapters','../unsafe')).__sourceError);
