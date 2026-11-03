@@ -968,7 +968,9 @@ final class LibraryGridViewController:
         super.viewWillAppear(animated)
         refreshSnapshot()
         collectionView.backgroundColor = ThemeManager.shared.palette.background
-        ThemeManager.shared.styleBars(for: navigationController ?? self)
+        if let navigation = navigationController {
+            ThemeManager.shared.styleBars(for: navigation)
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
