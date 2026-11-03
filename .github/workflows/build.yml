@@ -36,6 +36,9 @@ jobs:
       - name: Validate read-only upstream monitor (offline)
         run: python3 ci/test_monitor_keiyoushi_upstream.py
 
+      - name: Test library filters and SQLite reading metrics (offline)
+        run: python3 ci/test_library_filters.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

@@ -748,6 +748,16 @@ struct LibraryMangaRecord: Equatable {
     let dateAdded: TimeInterval
 }
 
+// Counts and dates read strictly from the local SQLite snapshot. "Unread"
+// means indexed chapter rows not yet marked read, not every chapter that
+// might exist remotely. Downloaded means an actually completed local job.
+struct LibraryMangaMetrics: Equatable {
+    let knownChapters: Int
+    let unreadChapters: Int
+    let lastReadAt: TimeInterval?
+    let hasCompletedDownload: Bool
+}
+
 final class LibraryRepository {
     private let database: SQLiteDatabase
 
@@ -1007,6 +1017,55 @@ final class LibraryRepository {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw sqliteError(handle)
             }
+        }
+    }
+
+    // One bounded local query for the entire saved library, avoiding one
+    // network call or one SQLite query per displayed card. The history table
+    // has at most one row per manga; grouping cannot multiply chapter counts.
+    func readingMetrics() throws -> [Int64: LibraryMangaMetrics] {
+        try database.openAndMigrate()
+        return try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.internal_id,
+                    COUNT(c.internal_id),
+                    COALESCE(SUM(CASE WHEN c.is_read = 0 THEN 1 ELSE 0 END), 0),
+                    MAX(h.last_read_at),
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM downloads d
+                        JOIN chapters dc ON dc.internal_id = d.chapter_id
+                        WHERE dc.manga_id = m.internal_id AND d.state = 'completed'
+                    ) THEN 1 ELSE 0 END
+                FROM library l
+                JOIN manga m ON m.internal_id = l.manga_id
+                LEFT JOIN chapters c ON c.manga_id = m.internal_id
+                LEFT JOIN history h ON h.manga_id = m.internal_id
+                GROUP BY m.internal_id;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var metrics: [Int64: LibraryMangaMetrics] = [:]
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+                guard step == SQLITE_ROW else {
+                    throw sqliteError(handle)
+                }
+                let id = sqlite3_column_int64(statement, 0)
+                let lastRead = sqlite3_column_type(statement, 3) == SQLITE_NULL
+                    ? nil : Optional(sqlite3_column_double(statement, 3))
+                metrics[id] = LibraryMangaMetrics(
+                    knownChapters: Int(sqlite3_column_int(statement, 1)),
+                    unreadChapters: Int(sqlite3_column_int(statement, 2)),
+                    lastReadAt: lastRead,
+                    hasCompletedDownload: sqlite3_column_int(statement, 4) == 1
+                )
+            }
+            return metrics
         }
     }
 
