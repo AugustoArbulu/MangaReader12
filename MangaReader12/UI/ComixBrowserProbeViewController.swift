@@ -179,6 +179,18 @@ final class ComixBrowserProbeViewController: UIViewController, WKNavigationDeleg
         decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
+        if navigationResponse.isForMainFrame {
+            // A server redirect may not invoke the navigation-action callback
+            // again. Check the final main-frame response origin as well.
+            guard let url = navigationResponse.response.url,
+                  url.scheme?.lowercased() == "https",
+                  let host = url.host,
+                  Self.isAllowedMainFrameHost(host) else {
+                updateOutcome("Resposta de navegação principal fora dos domínios permitidos.")
+                decisionHandler(.cancel)
+                return
+            }
+        }
         if navigationResponse.isForMainFrame,
            let response = navigationResponse.response as? HTTPURLResponse {
             observedHTTPStatus = response.statusCode
