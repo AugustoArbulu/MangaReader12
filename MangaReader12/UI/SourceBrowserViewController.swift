@@ -4,6 +4,20 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     private let sourceRecord: InstalledSourceRecord
     private var runtime: JavaScriptSourceRuntime?
     private var items: [SourceMangaSummary] = []
+    private var excludedTags: Set<String> = []
+    private var hideUnclassified = false
+
+    private var displayedItems: [SourceMangaSummary] {
+        guard !excludedTags.isEmpty else { return items }
+        return items.filter { item in
+            guard let tags = item.tags, !tags.isEmpty else {
+                return !hideUnclassified
+            }
+            return !tags.contains { label in
+                excludedTags.contains { SourceTagMatcher.matches(label, exclusion: $0) }
+            }
+        }
+    }
     private var currentPage = 1
     private var hasNextPage = false
     private var loading = false
@@ -29,6 +43,9 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 
     init(sourceRecord: InstalledSourceRecord) {
         self.sourceRecord = sourceRecord
+        let key = "explore.filters." + sourceRecord.manifest.id
+        self.excludedTags = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+        self.hideUnclassified = UserDefaults.standard.bool(forKey: key + ".hideUnknown")
         super.init(style: .plain)
     }
 
@@ -108,7 +125,11 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         let title = currentQuery != nil
             ? "Busca por título"
             : (selectedCategory?.title ?? "Populares")
-        browseHeaderButton.setTitle("Explorar: " + title + "  ▾", for: .normal)
+        let active = excludedTags.count
+        browseHeaderButton.setTitle(
+            "Explorar: " + title + (active > 0 ? "   • " + String(active) + " exclusões" : "") + "  ▾",
+            for: .normal
+        )
 
         if let category = selectedCategory {
             browseHeaderHint.text = category.kind == "genre"
@@ -119,7 +140,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         } else {
             browseHeaderHint.text = currentQuery != nil
                 ? "Resultados da busca nesta fonte"
-                : "Populares da fonte • outras seções no menu"
+                : "Toque para escolher seção, gênero e exclusões"
         }
     }
 
@@ -152,53 +173,55 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 
     @objc private func showBrowseMenu() {
-        let menu = UIAlertController(
-            title: "Descobrir obras",
-            message: "Cada seção usa somente recursos que a fonte oferece.",
-            preferredStyle: .actionSheet
+        let controller = SourceDiscoverySheetViewController(
+            categories: browseCategories,
+            selectedID: selectedCategory?.id,
+            exclusions: excludedTags,
+            hideUnknown: hideUnclassified
         )
-        let popularTitle = selectedCategory == nil && currentQuery == nil
-            ? "✓ Populares" : "Populares"
-        menu.addAction(UIAlertAction(
-            title: popularTitle, style: .default
-        ) { [weak self] _ in
-            self?.selectBrowseCategory(nil)
-        })
+        controller.onApply = { [weak self] selectedID, exclusions, hideUnknown in
+            guard let self = self else { return }
+            let previousID = self.selectedCategory?.id
+            let wasSearching = self.currentQuery != nil
+            self.selectedCategory = self.browseCategories.first { $0.id == selectedID }
+            self.excludedTags = exclusions
+            self.hideUnclassified = hideUnknown
 
-        for category in browseCategories {
-            let marked = selectedCategory?.id == category.id && currentQuery == nil
-            let prefix = category.kind == "genre" ? "Gênero: " : ""
-            menu.addAction(UIAlertAction(
-                title: (marked ? "✓ " : "") + prefix + category.title,
-                style: .default
-            ) { [weak self] _ in
-                self?.selectBrowseCategory(category)
-            })
-        }
+            let key = "explore.filters." + self.sourceRecord.manifest.id
+            UserDefaults.standard.set(exclusions.sorted(), forKey: key)
+            UserDefaults.standard.set(hideUnknown, forKey: key + ".hideUnknown")
+            self.updateBrowseHeader()
 
-        if !browseCategories.contains(where: { $0.kind == "latest" }) {
-            let unsupported = UIAlertAction(
-                title: "Recentes — indisponível nesta fonte",
-                style: .default, handler: nil
-            )
-            unsupported.isEnabled = false
-            menu.addAction(unsupported)
+            if previousID != self.selectedCategory?.id || (wasSearching && selectedID != nil) {
+                self.currentQuery = nil
+                self.sourceSearchController.searchBar.text = nil
+                self.sourceSearchController.searchBar.resignFirstResponder()
+                self.loadFirstPage()
+            } else {
+                self.tableView.reloadData()
+                self.updateEmptyState()
+            }
         }
-        menu.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
-        if let popover = menu.popoverPresentationController {
-            popover.sourceView = browseHeaderButton
-            popover.sourceRect = browseHeaderButton.bounds
-        }
-        present(menu, animated: true)
+        controller.modalPresentationStyle = .overFullScreen
+        controller.modalTransitionStyle = .crossDissolve
+        present(controller, animated: true)
     }
 
-    private func selectBrowseCategory(_ category: SourceBrowseCategory?) {
-        selectedCategory = category
-        currentQuery = nil
-        sourceSearchController.searchBar.text = nil
-        sourceSearchController.searchBar.resignFirstResponder()
-        updateBrowseHeader()
-        loadFirstPage()
+    private func updateEmptyState() {
+        guard !loading, displayedItems.isEmpty else {
+            tableView.backgroundView = nil
+            return
+        }
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.font = UIFont.systemFont(ofSize: 14)
+        label.textColor = ThemeManager.shared.palette.secondaryText
+        label.text = excludedTags.isEmpty
+            ? "Nenhuma obra encontrada nesta seção."
+            : "Nenhuma obra corresponde aos filtros nesta lista.\nSe a fonte não informar tags, experimente permitir obras sem classificação."
+        label.frame = tableView.bounds.insetBy(dx: 28, dy: 20)
+        tableView.backgroundView = label
     }
 
     @objc private func diagnoseCoverTapped() {
@@ -217,12 +240,13 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
 
         // Sample at most three currently visible rows so the user can scroll
         // to a failed cover before explicitly running this bounded test.
+        let shown = displayedItems
         let visible = (tableView.indexPathsForVisibleRows ?? [])
-            .filter { $0.section == 0 && $0.row < items.count }
+            .filter { $0.section == 0 && $0.row < shown.count }
             .sorted { $0.row < $1.row }
             .prefix(3)
-            .map { items[$0.row] }
-        let samples = visible.isEmpty ? Array(items.prefix(3)) : visible
+            .map { shown[$0.row] }
+        let samples = visible.isEmpty ? Array(shown.prefix(3)) : visible
         startCoverDiagnostic(samples: samples, chosenDirectly: false)
     }
 
@@ -326,6 +350,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         items = []
         hasNextPage = false
         tableView.reloadData()
+        updateEmptyState()
         if loading {
             pendingReload = true
         } else {
@@ -379,6 +404,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
                     self.currentPage = page
                     self.hasNextPage = pageResult.hasNextPage
                     self.tableView.reloadData()
+                    self.updateEmptyState()
 
                 case .failure(let error):
                     self.showError(error)
@@ -429,7 +455,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return items.count
+        return displayedItems.count
     }
 
     override func tableView(
@@ -443,7 +469,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             return UITableViewCell()
         }
 
-        let item = items[indexPath.row]
+        let item = displayedItems[indexPath.row]
         cell.configure(
             title: item.title,
             subtitle: item.url ?? item.id,
@@ -459,7 +485,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         willDisplay cell: UITableViewCell,
         forRowAt indexPath: IndexPath
     ) {
-        guard indexPath.row == items.count - 1,
+        guard indexPath.row == displayedItems.count - 1,
               hasNextPage,
               !loading else {
             return
@@ -473,17 +499,17 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         editActionsForRowAt indexPath: IndexPath
     ) -> [UITableViewRowAction]? {
         guard sourceRecord.manifest.id == "kei.webtoons.en",
-              indexPath.section == 0, indexPath.row < items.count else {
+              indexPath.section == 0, indexPath.row < displayedItems.count else {
             return nil
         }
         let action = UITableViewRowAction(style: .normal, title: "Testar capa") {
             [weak self] _, selected in
-            guard let self = self, selected.row < self.items.count else {
+            guard let self = self, selected.row < self.displayedItems.count else {
                 return
             }
             // Explicit swipe action selects the exact requested manga.
             self.startCoverDiagnostic(
-                samples: [self.items[selected.row]],
+                samples: [self.displayedItems[selected.row]],
                 chosenDirectly: true
             )
         }
@@ -502,7 +528,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             MangaDetailsViewController(
                 sourceRecord: sourceRecord,
                 runtime: runtime,
-                summary: items[indexPath.row]
+                summary: displayedItems[indexPath.row]
             ),
             animated: true
         )
@@ -1462,7 +1488,10 @@ extension SourceBrowserViewController: ThemeApplicable {
         ThemeManager.shared.style(tableView: tableView)
         ThemeManager.shared.style(searchBar: sourceSearchController.searchBar)
         refreshControl?.tintColor = ThemeManager.shared.palette.secondaryText
+        browseHeaderHint.textColor = ThemeManager.shared.palette.secondaryText
+        browseHeaderButton.setTitleColor(ThemeManager.shared.palette.accent, for: .normal)
         tableView.reloadData()
+        updateEmptyState()
     }
 }
 
