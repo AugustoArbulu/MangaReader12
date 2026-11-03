@@ -13,7 +13,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.3');
+assert.equal(candidate.version, '0.1.4');
 assert.deepEqual(candidate.domains, ['weebcentral.com', 'temp.compsci88.com', 'hot.planeptune.us']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
@@ -96,6 +96,13 @@ function mock() {
       }
       if (html === 'DETAILS') {
         assert(spec.title && spec.rows && spec.poster && spec.meta);
+        assert.equal(spec.rows.fields.label, 'strong');
+        assert.equal(spec.tagLinks.selector,
+          'section[x-data] > section:first-child ul > li a[href*="included_tag="]');
+        assert.equal(spec.typeLinks.selector,
+          'section[x-data] > section:first-child ul > li a[href*="included_type="]');
+        assert.equal(spec.description.selector,
+          'section[x-data] > section:nth-child(2) li p');
         // iOS12-friendly selectors: no CSS :has / :contains or site JS.
         assert(!JSON.stringify(spec).includes(':has'));
         return {
@@ -148,7 +155,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.3');
+  assert.equal(meta.version, '0.1.4');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -236,6 +243,82 @@ async function main() {
   assert.deepEqual(Array.from(details.genres),['Fantasy','Manhwa']);
   assert.equal(details.cover,BASE+'/covers/a.jpg');
   assert.deepEqual(Array.from(details.altTitles),['Alpha Alt']);
+
+  // Public WeebCentral HTML fixtures use "Author(s):", "Tags(s):",
+  // and <a href="?included_tag=..."> per genre. Verify that genres are
+  // sourced from those individual links rather than inferred from titles.
+  const realisticDetails = runtime({
+    http(url) {
+      assert.equal(url,SERIES);
+      return 'WEEBCENTRAL_SERIES_FIXTURE';
+    },
+    dom(html,spec) {
+      assert.equal(html,'WEEBCENTRAL_SERIES_FIXTURE');
+      assert.equal(spec.tagLinks.selector,
+        'section[x-data] > section:first-child ul > li a[href*="included_tag="]');
+      assert.equal(spec.typeLinks.selector,
+        'section[x-data] > section:first-child ul > li a[href*="included_type="]');
+      return {
+        title:[item('One Piece')],
+        rows:[
+          item('Author(s): ODA Eiichiro',{}, {label:item('Author(s):')}),
+          item('Tags(s): Action,Shounen',{}, {label:item('Tags(s):')}),
+          item('Type: Manga',{}, {label:item('Type:')}),
+          item('Status: Ongoing',{}, {label:item('Status:')}),
+          item('Description As a child, Monkey D. Luffy dreamed of becoming the King of the Pirates.',{},
+            {label:item('Description')}),
+          item('Associated Name(s): One Piece Alt',{}, {label:item('Associated Name(s):')}),
+          item('Related Series: Example',{}, {label:item('Related Series:')})
+        ],
+        tagLinks:[
+          item('Action',{href:'https://weebcentral.com/search?included_tag=Action'}),
+          item('Shounen',{href:'https://weebcentral.com/search?included_tag=Shounen'}),
+          item('Action',{href:'https://weebcentral.com/search?included_tag=Action'})
+        ],
+        typeLinks:[item('Manga',{href:'https://weebcentral.com/search?included_type=Manga'})],
+        description:[item('As a child, Monkey D. Luffy dreamed of becoming the King of the Pirates.')],
+        poster:[item('',{},{
+          image:item('',{src:'https://temp.compsci88.com/cover/fallback/ONEPIECE.jpg'})
+        })],
+        meta:[]
+      };
+    }
+  });
+  const real = await realisticDetails.call('details',SERIES);
+  assert.equal(real.title,'One Piece');
+  assert.equal(real.author,'ODA Eiichiro');
+  assert.equal(real.status,'ongoing');
+  assert.deepEqual(Array.from(real.genres), ['Action','Shounen','Manga']);
+  assert.equal(real.description,
+    'As a child, Monkey D. Luffy dreamed of becoming the King of the Pirates.');
+  assert.deepEqual(Array.from(real.altTitles), ['One Piece Alt']);
+  assert.equal(real.cover,'https://temp.compsci88.com/cover/fallback/ONEPIECE.jpg');
+  assert.equal(realisticDetails.calls.length,1,'series parsing must not issue extra requests');
+
+  // On older templates without linked tags, read the site's explicit
+  // label and comma-separated category names; never invent genre labels.
+  const fallbackDetails = runtime({
+    http() {return 'NO_LINKS';},
+    dom(html,spec) {
+      assert(spec.rows.fields.label==='strong');
+      return {
+        title:[item('Romance Series')],
+        rows:[
+          item('Tags(s): Romance, Fantasy, Romance',{}, {label:item('Tags(s):')}),
+          item('Type: Manhwa',{}, {label:item('Type:')}),
+          item('Author(s): Example Author',{}, {label:item('Author(s):')}),
+          item('Status: Complete',{}, {label:item('Status:')})
+        ],
+        tagLinks:[],typeLinks:[],description:[],
+        poster:[],meta:[]
+      };
+    }
+  });
+  const fallback = await fallbackDetails.call('details',SERIES);
+  assert.deepEqual(Array.from(fallback.genres),['Romance','Fantasy','Manhwa']);
+  assert.equal(fallback.author,'Example Author');
+  assert.equal(fallback.status,'completed');
+  assert.equal(fallbackDetails.calls.length,1);
 
   const chapterList = await r.call('chapters',SERIES);
   assert.equal(chapterList.length,2);
