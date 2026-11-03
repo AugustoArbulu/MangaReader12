@@ -52,6 +52,27 @@ enum ChapterDownloadImageValidator {
             }
         }
 
+        // ImageIO may identify a truncated file from its header alone.
+        // PNG requires its final IEND chunk; JPEG needs its EOI marker
+        // near the end (some valid JPEGs contain a short trailing payload).
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+            let iend: [UInt8] = [
+                0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+                0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+            ]
+            guard data.count >= 20 && data.suffix(12).elementsEqual(iend) else {
+                return false
+            }
+        } else if data.starts(with: [0xFF, 0xD8, 0xFF]) {
+            let tail = Array(data.suffix(64))
+            guard tail.count >= 2,
+                  (1..<tail.count).contains(where: {
+                      tail[$0 - 1] == 0xFF && tail[$0] == 0xD9
+                  }) else {
+                return false
+            }
+        }
+
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(source) > 0 else {
             return false
