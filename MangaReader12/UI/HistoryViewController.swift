@@ -169,6 +169,23 @@ final class HistoryViewController: UITableViewController {
     }
 
     private func open(_ record: HistoryRecord) {
+        if record.sourceID == "local.cbz" {
+            do {
+                guard let comic = try LocalComicStore.shared.find(
+                    id: record.sourceMangaID
+                ) else {
+                    showMessage(
+                        title: "Arquivo não encontrado",
+                        message: "O CBZ foi removido ou não está mais disponível."
+                    )
+                    return
+                }
+                try LocalComicStore.open(comic, from: navigationController)
+            } catch {
+                showError(error)
+            }
+            return
+        }
         do {
             let manager = try SourceLifecycleManager.defaultManager()
             guard let sourceRecord = try manager.installedSources().first(where: {
