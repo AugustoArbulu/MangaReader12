@@ -50,6 +50,23 @@ O adaptador usa `Native.httpRequest` e `Native.htmlSelect`, exatamente como os p
 
 **Depois do relato:** somente incluir um domínio externo de CDN após confirmar sua vinculação à fonte e revisar a política de segurança do cliente HTTP. Permanecem pendentes testes reais de leitura integral, capas, atualização de capítulos e download offline. A Asura permanece fora do escopo deste patch.
 
+## QA físico 0.1.1 e ajuste 0.1.2 — seletor Jsoup/WebKit (2026-11-03)
+
+**Relato novo do usuário, iOS 12.5.8, fonte 0.1.1:** as capas continuam ausentes, e a abertura de um capítulo retornou `Source failed: WeebCentral: no page images matched the chapter HTML selector`. A requisição de capítulo alcançou a fase de parsing, porém a extração de páginas retornou zero elementos.
+
+**Causa encontrada no código da adaptação:** o Keiyoushi usa Jsoup `section[x-data~=scroll] > img`. Em **Jsoup**, `[attr~=regex]` significa expressão regular. Em **CSS/WebKit**, `[attr~=word]` significa uma palavra separada por espaços. Copiar literalmente o seletor alterou sua semântica. Para o parser DOM do iOS, a versão 0.1.2 usa `section[x-data*="scroll"] > img`, que faz a comparação de substring do atributo. A correção é fundamentada nas semânticas documentadas dos dois parsers, mas **ainda precisa de teste físico**; não implica automaticamente que os URLs/imagens funcionarão.
+
+**Diagnóstico sem novos pedidos HTTP:** o mesmo retorno HTML do capítulo agora é avaliado também com seletores estruturais que contam `section[x-data*="scroll"]`, imagens aninhadas nesse container e imagens da página inteira. Se não houver imagem direta, o erro informa somente as três contagens — nunca HTML, caminho, token, cookies ou URLs assinadas. Não usar HTML de outras seções como fallback automático, pois isso poderia misturar imagens que não são páginas do capítulo.
+
+**Capas e CDNs:** exemplos públicos de HTML da WeebCentral, mantidos em outros projetos, identificam `temp.compsci88.com` servindo capas em WebP e fallback JPEG; um fixture de páginas identifica `hot.planeptune.us` servindo PNG. A revisão 0.1.2 **adiciona exclusivamente esses dois hosts** à allowlist do catálogo, sem permissões genéricas para CDNs externos. Prioriza o `<img src="...jpg">` de fallback para capas no iOS 12, porque o decodificador nativo de WebP não é garantido nesse sistema. Evidências:
+- https://github.com/tiagohs/hqr-comics-reader/blob/main/sources/weebcentral/src/commonTest/kotlin/com/tiagohs/hqr/sources/weebcentral/WeebCentralSourceTest.kt
+- https://github.com/serplay/manhwa-downloader/blob/main/server/src/sources/fixtures/weebcentral_search.html
+- https://github.com/readah/lnreader-ios/blob/main/Services/Sources/Native/WeebCentralSource.swift
+
+Os exemplos são **fixtures históricas públicas**, não resposta HTTP recente da WeebCentral. Os domínios poderão mudar; essa atribuição precisa de verificação no iPhone. O parser agora aceita também `section#chapter-images > img`, identificado nos exemplos, além do seletor `x-data` compatível com CSS.
+
+**Teste recomendado:** atualizar manualmente o catálogo piloto e instalar a fonte `WeebCentral EN (experimental)` versão **0.1.2** pelo mesmo endereço HTTPS; a compilação do app/IPA não precisa mudar. Em Populares, verificar as **capas JPEG** e abrir uma obra. Em seguida abrir **um capítulo já visível**: testar se todas as páginas aparecem e se é possível percorrer até o fim, sem download ainda. Se indicar `Blocked image hostnames`, enviar apenas o hostname; se indicar `no direct chapter images`, enviar as contagens. Não insistir se houver HTTP 403/429/aviso de bloqueio. Somente depois de visualização completa testar um download pequeno, atualização na Biblioteca e uso offline. Nenhum funcionamento foi declarado validado por esses testes offline.
+
 ## Testes offline
 
 `node ci/test_weebcentral_offline.cjs` valida: seis funções obrigatórias + descoberta; formato de resultados, URLs, contagem/paginação, ordenação, campos de detalhes, IDs estáveis, ordem/scanlator dos capítulos, imagens, ausência de hosts externos, rejeição de URLs não HTTPS, resposta 403 sem retry, rejeição de redirect externo. Estes testes usam HTML simulado e não constituem prova de funcionamento real.
