@@ -153,6 +153,10 @@ struct SourceMangaSummary: Codable, Equatable {
     let cover: String?
     let url: String?
     let coverDiagnostic: SourceCoverObservation?
+    // Optional public classification text extracted directly from listing
+    // markup. nil means the source did not provide usable tags; it does
+    // NOT mean the work has no excluded content.
+    let tags: [String]?
 
     // Keep existing Library/History/Updates/Downloads call sites source
     // compatible; diagnostic data only exists for newly decoded source rows.
@@ -161,13 +165,15 @@ struct SourceMangaSummary: Codable, Equatable {
         title: String,
         cover: String?,
         url: String?,
-        coverDiagnostic: SourceCoverObservation? = nil
+        coverDiagnostic: SourceCoverObservation? = nil,
+        tags: [String]? = nil
     ) {
         self.id = id
         self.title = title
         self.cover = cover
         self.url = url
         self.coverDiagnostic = coverDiagnostic
+        self.tags = tags
     }
 }
 
