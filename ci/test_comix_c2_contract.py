@@ -64,9 +64,15 @@ class ComixC2Contract(unittest.TestCase):
         workflow = read(".github/workflows/build.yml")
         self.assertIn("ComixBrowserProbeViewController()", main)
         self.assertIn("return 8", main[main.index("final class SettingsViewController"):])
-        self.assertIn("Build 43 • compatível com iOS 12.0", main)
         self.assertIn("ComixBrowserProbeViewController.swift in Sources", project)
-        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 43;"), 2)
+        import re
+        version_values = re.findall(r"CURRENT_PROJECT_VERSION = ([0-9]+);", project)
+        self.assertEqual(len(version_values), 2)
+        self.assertEqual(version_values[0], version_values[1])
+        self.assertGreaterEqual(int(version_values[0]), 43)
+        self.assertIn(
+            f"Build {version_values[0]} • compatível com iOS 12.0", main
+        )
         self.assertIn("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", project)
         self.assertIn("python3 ci/test_comix_c2_contract.py", workflow)
 
