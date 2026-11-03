@@ -4,6 +4,8 @@ final class HistoryViewController: UITableViewController {
     private var records: [HistoryRecord] = []
     private var repository: ReadingProgressRepository?
     private var startupError: Error?
+    private let resumeLatestOnOpen: Bool
+    private var didAttemptResume = false
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -11,7 +13,8 @@ final class HistoryViewController: UITableViewController {
         return formatter
     }()
 
-    init() {
+    init(resumeLatest: Bool = false) {
+        self.resumeLatestOnOpen = resumeLatest
         super.init(style: .plain)
     }
 
@@ -44,6 +47,17 @@ final class HistoryViewController: UITableViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         reloadHistory()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard resumeLatestOnOpen, !didAttemptResume else { return }
+        didAttemptResume = true
+        // A saved chapter ID is needed for a genuine "Continuar lendo".
+        // Without one, retain normal History navigation for the user.
+        if let saved = records.first, saved.sourceChapterID != nil {
+            open(saved)
+        }
     }
 
     private func reloadHistory() {
@@ -196,7 +210,9 @@ final class HistoryViewController: UITableViewController {
                             MangaDetailsViewController(
                                 sourceRecord: sourceRecord,
                                 runtime: runtime,
-                                summary: summary
+                                summary: summary,
+                                resumeChapterID: resumeLatestOnOpen
+                                    ? record.sourceChapterID : nil
                             ),
                             animated: true
                         )
