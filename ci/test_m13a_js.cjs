@@ -468,7 +468,10 @@ function testDiscoveryNativeWiring() {
   assert(section.includes('"browse"'));
   assert(section.includes('"popular"'));
   assert(section.includes('"search"'));
-  assert(section.includes('unsupported.isEnabled = false'));
+  assert(section.includes('let rankings = categories.filter { $0.kind != "genre" }'),
+    'the modern picker may only present advertised source ranking/latest categories');
+  assert(section.includes('if !genres.isEmpty'),
+    'empty source genre list must not show invented filters');
   console.log('PASS native discovery: optional browse, v1 fallback and stale request protection');
 }
 
