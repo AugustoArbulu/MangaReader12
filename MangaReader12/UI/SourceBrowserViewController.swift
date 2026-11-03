@@ -855,7 +855,9 @@ private enum SourceTagMatcher {
 // It is full-screen dimmed even on iPad, and its content is vertically scrollable
 // on older 4-inch devices. Categories come solely from optional source metadata.
 private final class SourceDiscoverySheetViewController: UIViewController {
-    typealias FilterCallback = (String?, Set<String>, Bool, Bool) -> Void
+    typealias FilterCallback = (
+        String?, Set<String>, Bool, Bool, SourceRemoteFilterSelection
+    ) -> Void
     var onApply: FilterCallback?
     var onRestoreHidden: (() -> Void)?
     var onRequestCanvasSample: (() -> Void)?
@@ -865,6 +867,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     private var exclusions: Set<String>
     private var hideUnknown: Bool
     private var didChooseSection = false
+    private let remoteOptions: SourceRemoteFilterOptions?
+    private var remoteSelection: SourceRemoteFilterSelection
     private let hiddenCount: Int
     private let allowsCanvasSample: Bool
 
@@ -877,6 +881,11 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     private let unknownToggle = UISwitch()
     private var categoryChips: [String: UIButton] = [:]
     private var exclusionChips: [String: UIButton] = [:]
+    private var remoteTagChips: [String: UIButton] = [:]
+    private var remoteTypeChips: [String: UIButton] = [:]
+    private var remoteStatusChips: [String: UIButton] = [:]
+    private var remoteSortChips: [String: UIButton] = [:]
+    private var remoteOrderChips: [String: UIButton] = [:]
 
     private let exclusionChoices: [(id: String, label: String)] = [
         ("bl", "BL (Boys' Love)"),
@@ -891,6 +900,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         selectedID: String?,
         exclusions: Set<String>,
         hideUnknown: Bool,
+        remoteOptions: SourceRemoteFilterOptions?,
+        remoteSelection: SourceRemoteFilterSelection,
         hiddenCount: Int,
         allowsCanvasSample: Bool
     ) {
@@ -898,6 +909,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         self.selectedID = selectedID
         self.exclusions = exclusions
         self.hideUnknown = hideUnknown
+        self.remoteOptions = remoteOptions
+        self.remoteSelection = remoteSelection
         self.hiddenCount = hiddenCount
         self.allowsCanvasSample = allowsCanvasSample
         super.init(nibName: nil, bundle: nil)
@@ -1027,12 +1040,52 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             )
         }
 
-        addSection(
-            title: "EXCLUIR TAGS",
-            subtitle: "Oculta obras com tags explícitas correspondentes.",
-            choices: exclusionChoices.map { ($0.id, $0.label) },
-            selection: .exclusion
-        )
+        if let options = remoteOptions {
+            addSection(
+                title: "GÊNEROS E TAGS DA FONTE",
+                subtitle: "1 toque: excluir (vermelho) • 2: incluir (azul) • 3: limpar. " +
+                    "O site aplica as escolhas em todas as páginas da busca.",
+                choices: options.tags.map { ($0, $0) },
+                selection: .remoteTag
+            )
+            addSection(
+                title: "TIPO DE OBRA",
+                subtitle: "Escolha os tipos aceitos. Nenhum marcado = todos.",
+                choices: options.types.map { ($0, $0) },
+                selection: .remoteType
+            )
+            addSection(
+                title: "STATUS",
+                subtitle: "Selecione um ou mais status. Nenhum = todos.",
+                choices: options.statuses.map { ($0, $0) },
+                selection: .remoteStatus
+            )
+            addSection(
+                title: "ORDENAR POR",
+                subtitle: "Sem seleção, use a ordenação da seção atual.",
+                choices: options.sorts.map { ($0, $0) },
+                selection: .remoteSort
+            )
+            addSection(
+                title: "ORDEM",
+                subtitle: "Sem seleção = decrescente.",
+                choices: [
+                    ("Ascending", "Crescente"), ("Descending", "Decrescente")
+                ],
+                selection: .remoteOrder
+            )
+        }
+
+        // Preserve older local exclusions if a source gains remote filters;
+        // otherwise show only the source-backed filter controls.
+        if remoteOptions == nil || !exclusions.isEmpty {
+            addSection(
+                title: remoteOptions == nil ? "EXCLUIR TAGS" : "EXCLUSÕES LOCAIS ANTIGAS",
+                subtitle: "Oculta obras com tags explícitas correspondentes.",
+                choices: exclusionChoices.map { ($0.id, $0.label) },
+                selection: .exclusion
+            )
+        }
 
         let unknownRow = UIStackView()
         unknownRow.axis = .horizontal
@@ -1049,14 +1102,23 @@ private final class SourceDiscoverySheetViewController: UIViewController {
             self, action: #selector(unknownChanged), for: .valueChanged
         )
         unknownRow.addArrangedSubview(unknownToggle)
-        content.addArrangedSubview(unknownRow)
+        if remoteOptions == nil || !exclusions.isEmpty {
+            content.addArrangedSubview(unknownRow)
+        }
 
         infoLabel.numberOfLines = 0
         infoLabel.textColor = ThemeManager.shared.palette.secondaryText
         infoLabel.font = UIFont.systemFont(ofSize: 12)
-        infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
-            "listagem da fonte. A ausência de tags não comprova que a obra " +
-            "não contém o tema excluído. Não analisamos títulos ou imagens."
+        if remoteOptions != nil {
+            infoLabel.text = "Filtros gerais enviados ao mecanismo de busca da fonte. " +
+                "Os resultados dependem das tags cadastradas no site; nenhuma classificação " +
+                "é inferida por título ou imagem. Filtros locais antigos, se presentes, " +
+                "podem continuar ocultando itens."
+        } else {
+            infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
+                "listagem da fonte. A ausência de tags não comprova que a obra " +
+                "não contém o tema excluído. Não analisamos títulos ou imagens."
+        }
         content.addArrangedSubview(infoLabel)
 
         if allowsCanvasSample {
@@ -1124,13 +1186,17 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         let lookup = onRequestCanvasSample
         dismiss(animated: true) {
             applied?(
-                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+                self.selectedID, self.exclusions, self.hideUnknown,
+                self.didChooseSection, self.remoteSelection
             )
             lookup?()
         }
     }
 
-    private enum ChoiceKind { case category, exclusion }
+    private enum ChoiceKind {
+        case category, exclusion, remoteTag, remoteType, remoteStatus,
+             remoteSort, remoteOrder
+    }
 
     private func addSection(
         title: String,
@@ -1170,18 +1236,35 @@ private final class SourceDiscoverySheetViewController: UIViewController {
                     top: 7, left: 7, bottom: 7, right: 7
                 )
                 button.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
-                button.accessibilityIdentifier =
-                    (selection == .category ? "discover.category." : "discover.exclude.") + choice.0
-                if selection == .category {
+                switch selection {
+                case .category:
+                    button.accessibilityIdentifier = "discover.category." + choice.0
                     categoryChips[choice.0] = button
-                    button.addTarget(
-                        self, action: #selector(categoryTapped(_:)), for: .touchUpInside
-                    )
-                } else {
+                    button.addTarget(self, action: #selector(categoryTapped(_:)), for: .touchUpInside)
+                case .exclusion:
+                    button.accessibilityIdentifier = "discover.exclude." + choice.0
                     exclusionChips[choice.0] = button
-                    button.addTarget(
-                        self, action: #selector(exclusionTapped(_:)), for: .touchUpInside
-                    )
+                    button.addTarget(self, action: #selector(exclusionTapped(_:)), for: .touchUpInside)
+                case .remoteTag:
+                    button.accessibilityIdentifier = "discover.remote.tag." + choice.0
+                    remoteTagChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteTagTapped(_:)), for: .touchUpInside)
+                case .remoteType:
+                    button.accessibilityIdentifier = "discover.remote.type." + choice.0
+                    remoteTypeChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteTypeTapped(_:)), for: .touchUpInside)
+                case .remoteStatus:
+                    button.accessibilityIdentifier = "discover.remote.status." + choice.0
+                    remoteStatusChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteStatusTapped(_:)), for: .touchUpInside)
+                case .remoteSort:
+                    button.accessibilityIdentifier = "discover.remote.sort." + choice.0
+                    remoteSortChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteSortTapped(_:)), for: .touchUpInside)
+                case .remoteOrder:
+                    button.accessibilityIdentifier = "discover.remote.order." + choice.0
+                    remoteOrderChips[choice.0] = button
+                    button.addTarget(self, action: #selector(remoteOrderTapped(_:)), for: .touchUpInside)
                 }
                 row.addArrangedSubview(button)
             }
@@ -1248,6 +1331,39 @@ private final class SourceDiscoverySheetViewController: UIViewController {
                 selected ? palette.accent : palette.primaryText, for: .normal
             )
         }
+        for (tag, button) in remoteTagChips {
+            let excluded = remoteSelection.excludedTags.contains(tag)
+            let included = remoteSelection.includedTags.contains(tag)
+            let color = excluded
+                ? UIColor(red: 0.83, green: 0.29, blue: 0.32, alpha: 1)
+                : palette.accent
+            button.setTitle((excluded ? "− " : (included ? "+ " : "")) + tag, for: .normal)
+            button.backgroundColor = (excluded || included)
+                ? color.withAlphaComponent(0.17) : palette.secondaryBackground
+            button.layer.borderColor =
+                ((excluded || included) ? color : palette.separator).cgColor
+            button.setTitleColor(
+                (excluded || included) ? color : palette.primaryText, for: .normal
+            )
+            button.accessibilityValue = excluded ? "Excluir" :
+                (included ? "Incluir" : "Sem filtro")
+        }
+        func styleRemote(_ chips: [String: UIButton], selected: [String]) {
+            for (value, button) in chips {
+                let active = selected.contains(value)
+                button.backgroundColor = active
+                    ? palette.accent.withAlphaComponent(0.17) : palette.secondaryBackground
+                button.layer.borderColor =
+                    (active ? palette.accent : palette.separator).cgColor
+                button.setTitleColor(
+                    active ? palette.accent : palette.primaryText, for: .normal
+                )
+            }
+        }
+        styleRemote(remoteTypeChips, selected: remoteSelection.types)
+        styleRemote(remoteStatusChips, selected: remoteSelection.statuses)
+        styleRemote(remoteSortChips, selected: remoteSelection.sort.map { [$0] } ?? [])
+        styleRemote(remoteOrderChips, selected: remoteSelection.order.map { [$0] } ?? [])
         unknownToggle.isOn = hideUnknown
         unknownToggle.isEnabled = !exclusions.isEmpty
     }
@@ -1271,6 +1387,61 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         refreshSelections()
     }
 
+    @objc private func remoteTagTapped(_ button: UIButton) {
+        guard let tag = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.tag.", with: ""),
+            remoteOptions?.tags.contains(tag) == true else { return }
+        remoteSelection.excludedTags.removeAll { $0 == tag }
+        if remoteSelection.includedTags.contains(tag) {
+            remoteSelection.includedTags.removeAll { $0 == tag }
+        } else if button.accessibilityValue == "Excluir" {
+            remoteSelection.includedTags.append(tag)
+        } else {
+            remoteSelection.excludedTags.append(tag)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteTypeTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.type.", with: ""),
+            remoteOptions?.types.contains(value) == true else { return }
+        if remoteSelection.types.contains(value) {
+            remoteSelection.types.removeAll { $0 == value }
+        } else {
+            remoteSelection.types.append(value)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteStatusTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.status.", with: ""),
+            remoteOptions?.statuses.contains(value) == true else { return }
+        if remoteSelection.statuses.contains(value) {
+            remoteSelection.statuses.removeAll { $0 == value }
+        } else {
+            remoteSelection.statuses.append(value)
+        }
+        refreshSelections()
+    }
+
+    @objc private func remoteSortTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.sort.", with: ""),
+            remoteOptions?.sorts.contains(value) == true else { return }
+        remoteSelection.sort = remoteSelection.sort == value ? nil : value
+        refreshSelections()
+    }
+
+    @objc private func remoteOrderTapped(_ button: UIButton) {
+        guard let value = button.accessibilityIdentifier?
+            .replacingOccurrences(of: "discover.remote.order.", with: ""),
+            ["Ascending", "Descending"].contains(value) else { return }
+        remoteSelection.order = remoteSelection.order == value ? nil : value
+        refreshSelections()
+    }
+
     @objc private func unknownChanged() {
         hideUnknown = unknownToggle.isOn
     }
@@ -1280,6 +1451,7 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         didChooseSection = true
         exclusions.removeAll()
         hideUnknown = false
+        remoteSelection = SourceRemoteFilterSelection()
         refreshSelections()
         scroller.setContentOffset(.zero, animated: true)
     }
@@ -1292,7 +1464,8 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         let callback = onApply
         dismiss(animated: true) {
             callback?(
-                self.selectedID, self.exclusions, self.hideUnknown, self.didChooseSection
+                self.selectedID, self.exclusions, self.hideUnknown,
+                self.didChooseSection, self.remoteSelection
             )
         }
     }
