@@ -9,12 +9,14 @@
   var site = 'https://asurascans.com';
   var api = 'https://api.asurascans.com/api';
   var sourceID = 'kei.asurascans.en';
-  var version = '0.1.0';
+  var version = '0.1.1';
   var PER_PAGE = 20;
   var siteRE = /^https:\/\/(?:www\.)?asurascans\.com(?=\/|[?#]|$)/i;
   var apiRE = /^https:\/\/api\.asurascans\.com(?=\/|[?#]|$)/i;
   var seriesRE = /^https:\/\/(?:www\.)?asurascans\.com\/comics\/([A-Za-z0-9-]{1,180})\/?(?:[?#].*)?$/i;
+  var stableSeriesRE = /^https:\/\/(?:www\.)?asurascans\.com\/series\/([A-Za-z0-9-]{1,180})\/?(?:[?#].*)?$/i;
   var chapterRE = /^https:\/\/(?:www\.)?asurascans\.com\/comics\/([A-Za-z0-9-]{1,180})\/chapter\/([0-9]+(?:\.[0-9]+)?)\/?(?:[?#].*)?$/i;
+  var stableChapterRE = /^https:\/\/(?:www\.)?asurascans\.com\/series\/([A-Za-z0-9-]{1,180})\/chapter\/([0-9]+(?:\.[0-9]+)?)\/?(?:[?#].*)?$/i;
   var cache = {};
   var cachedAt = {};
   var pending = {};
@@ -32,15 +34,53 @@
     var url = Native.resolveUrl(origin, value);
     return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
   }
-  function seriesURL(value) {
+  function validSlug(value) {
+    return typeof value === 'string' && /^[A-Za-z0-9-]{1,180}$/.test(value);
+  }
+  function stableSeriesURL(slug) {
+    return validSlug(slug) ? site + '/series/' + slug : null;
+  }
+  function publicSeriesURL(value) {
     var url = resolve(site + '/', value);
     var match = url && seriesRE.exec(url);
     return match ? site + '/comics/' + match[1] : null;
   }
+  function seriesURL(value) {
+    var url = resolve(site + '/', value);
+    var stable = url && stableSeriesRE.exec(url);
+    return stable ? stableSeriesURL(stable[1]) : publicSeriesURL(value);
+  }
   function chapterURL(value) {
     var url = resolve(site + '/', value);
+    var stable = url && stableChapterRE.exec(url);
+    if (stable) return stableSeriesURL(stable[1]) + '/chapter/' + stable[2];
     var match = url && chapterRE.exec(url);
     return match ? site + '/comics/' + match[1] + '/chapter/' + match[2] : null;
+  }
+  function savePublicAlias(stableURL, publicURL) {
+    var stable = stableSeriesRE.exec(stableURL || '');
+    var actual = publicSeriesURL(publicURL);
+    if (stable && actual) {
+      // Store only ordinary public series URL aliases (no auth, tokens,
+      // signed page paths or cookies) in the source's own namespace.
+      Native.storageSet('asura-public-v1:' + stable[1], actual);
+    }
+  }
+  function publicAlias(stableURL) {
+    var stable = stableSeriesRE.exec(stableURL || '');
+    if (!stable) return publicSeriesURL(stableURL);
+    var saved = Native.storageGet('asura-public-v1:' + stable[1]);
+    // If the device has no saved alias, use the site's public comics path
+    // without a random suffix. The server may redirect to the current one.
+    return publicSeriesURL(saved) || site + '/comics/' + stable[1];
+  }
+  function publicChapterURL(id) {
+    var canonical = chapterURL(id);
+    var stable = canonical && stableChapterRE.exec(canonical);
+    if (stable) {
+      return publicAlias(stableSeriesURL(stable[1])) + '/chapter/' + stable[2];
+    }
+    return canonical;
   }
   function safeImage(value) {
     var url = resolve(site + '/', value);
@@ -213,7 +253,7 @@
       }
       output.push({id: url, name: name, number: Number(num), volume: null,
         date: isoDate(chapter.created_at), scanlator: null,
-        language: 'en', url: url});
+        language: 'en', url: publicChapterURL(url) || url});
     }
     // Existing reader/Library support this order; avoid inventing omitted
     // premium chapters or re-numbering public IDs.
@@ -228,11 +268,20 @@
     }
     if (pending[canonical]) { pending[canonical].push(done); return; }
     pending[canonical] = [done];
-    request(canonical,'text/html', function (resp) {
+    var target = publicAlias(canonical);
+    if (!target) {
+      var invalid = pending[canonical]; delete pending[canonical];
+      invalid.forEach(function (callback) {
+        fail(callback, 'Asura public series alias unavailable');
+      });
+      return;
+    }
+    request(target,'text/html', function (resp) {
       if (resp.__sourceError) {
         var callbacks=pending[canonical];delete pending[canonical];
         callbacks.forEach(function (callback) {callback(resp);});return;
       }
+      savePublicAlias(canonical, resp.finalURL);
       select(resp.body, {
         details: {selector: '*[props*="title"][props*="description"]'},
         chapters: {selector: '*[props*="chapters"]'}
@@ -252,7 +301,9 @@
       if (result.__sourceError) {done(result);return;}
       try {
         if (method === 'details') {
-          done(detailsInfo(findAstro(result,'details'),url));
+          var details = detailsInfo(findAstro(result,'details'),url);
+          details.url = publicAlias(url) || url;
+          done(details);
         } else {
           var chapterProp = findAstro(result,'chapters');
           var output = chapterList(chapterProp,url);
@@ -292,13 +343,15 @@
       for(var i=0;i<json.data.length;i++) {
         var m=json.data[i];
         if (!m || typeof m.title!=='string' || !m.title.trim()) continue;
-        var canonical=seriesURL(m.public_url);
-        if(!canonical || seen[canonical])continue;
-        seen[canonical]=true;
+        var publicURL = publicSeriesURL(m.public_url);
+        var canonical = stableSeriesURL(m.slug);
+        if (!publicURL || !canonical || seen[canonical]) continue;
+        savePublicAlias(canonical, publicURL);
+        seen[canonical] = true;
         var cover=safeImage(m.cover || m.coverUrl);
         if(cover.host && !cover.url && missingMediaHosts.indexOf(cover.host)<0 &&
             missingMediaHosts.length < 3) missingMediaHosts.push(cover.host);
-        items.push({id: canonical,title:m.title.trim(),cover:cover.url,url:canonical});
+        items.push({id: canonical,title:m.title.trim(),cover:cover.url,url:publicURL});
       }
       if (json.data.length && !items.length) {
         fail(done,'Asura API did not contain compatible series URLs');return;
@@ -307,7 +360,7 @@
     });
   }
   function pages(chapterId,done) {
-    var url=chapterURL(chapterId);
+    var url=publicChapterURL(chapterId);
     if(!url){fail(done,'Invalid Asura chapter URL');return;}
     request(url,'text/html',function(resp) {
       if(resp.__sourceError){done(resp);return;}
