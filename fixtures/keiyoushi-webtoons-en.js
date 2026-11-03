@@ -47,7 +47,7 @@ var H = (function () {
 // Unofficial Webtoons.com English adapter — source attribution: Keiyoushi Apache-2.0.
 (function(){
   'use strict';
-  var base=H.roots.web,id='kei.webtoons.en',version='0.1.9';
+  var base=H.roots.web,id='kei.webtoons.en',version='0.1.10';
   // Capture only sanitized attributes of the listing response already parsed.
   // This contains neither full URLs nor titles and performs zero extra GETs.
   var coverTrace = {};
@@ -202,11 +202,20 @@ var H = (function () {
     }
     return listCover(card);
   }
+  function listingTags(card) {
+    // Do not infer content labels from title, artwork or the current genre
+    // route. Only use explicit classification shown on this listing card.
+    var raw=H.text(H.field(card,'genre'));
+    if(!raw)return null;
+    var tags=raw.split(/[,|/•]+/).map(function(t){return t.trim();})
+      .filter(function(t){return t.length>0&&t.length<=48;}).slice(0,12);
+    return tags.length?tags:null;
+  }
   function listing(path,hasNext,done){
     H.get(base+path,function(resp){
       if(resp.__sourceError){done(resp);return;}
       H.select(resp.body,{items:{selector:'.webtoon_list li a, .card_list li a, .genre_list li a',
-        fields:{title:'.title, .subj',cover:'img',
+        fields:{title:'.title, .subj',genre:'.genre, .tag, [data-genre]',cover:'img',
           coverLazy:'img[data-src],img[data-original],img[data-lazy-src],img[data-url]',
           coverSrcset:'img[srcset],img[data-srcset]',
           coverHost:'img[src*="pstatic.net"],img[src*="webtoons.com"]',
@@ -220,7 +229,8 @@ var H = (function () {
           var img=listCardCover(x);
           if(!u||!title||seen[u])return null; seen[u]=true;
           var diagnostic=rememberTrace(u,x,img);
-          return {id:u,title:title,cover:img,url:u,coverDiagnostic:diagnostic};
+          return {id:u,title:title,cover:img,url:u,
+            coverDiagnostic:diagnostic,tags:listingTags(x)};
         }).filter(Boolean);
         done({items:entries,hasNextPage:hasNext===null?H.items(res,'next').length>0:hasNext});
       });
