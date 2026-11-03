@@ -10,7 +10,7 @@ Isto é um risco genérico de integridade, **não evidência de que ocorreu na W
 ## Mudança Build 46
 - Adicionado `ChapterDownloadImageValidator.canStore(data:headers:)` dentro do mesmo arquivo nativo e sem alterações de API pública.
 - Rejeita corpo vazio, `Content-Type` textual/JSON/XML (comparação sem diferenciar maiúsculas e minúsculas) e arquivos que `ImageIO` não reconhece como imagem **completa**.
-- Usa `CGImageSourceCreateWithData` e `CGImageSourceGetStatusAtIndex`, sem renderizar bitmaps inteiros no download, reduzindo carga de memória no iOS 12.
+- Usa `CGImageSourceCreateWithData` e `CGImageSourceGetStatusAtIndex`, sem renderizar bitmaps inteiros no download, reduzindo carga de memória no iOS 12. Como o ImageIO pode reconhecer PNGs incompletos pelo cabeçalho, exige também o chunk final `IEND` do PNG e o marcador `EOI` perto do fim do JPEG.
 - O download rejeitado recebe o erro claro `ChapterDownloadError.invalidImagePayload`, muda para estado `failed` pela rotina existente e **não incrementa o número de páginas gravadas**.
 - A fila e retomada persistente existentes continuam inalteradas. Não mexe em arquivos de capítulos já finalizados.
 - A etapa de leitura online permanece com a validação existente do próprio leitor (`UIImage(data:)`).
