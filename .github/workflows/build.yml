@@ -39,6 +39,9 @@ jobs:
       - name: Verify Build44 complete chapter list parser (offline)
         run: node ci/test_build44_chapter_selector.cjs
 
+      - name: Verify Build45 general remote filters (offline)
+        run: python3 ci/test_build45_filters.py
+
       - name: Validate read-only upstream monitor (offline)
         run: python3 ci/test_monitor_keiyoushi_upstream.py
 
