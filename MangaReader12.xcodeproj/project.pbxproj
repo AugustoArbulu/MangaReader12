@@ -386,8 +386,21 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/libwebp-1.6.0/src",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/lib",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lwebp",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "MangaReader12/Networking/MR12WebPBridge.h";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
@@ -408,8 +421,21 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/libwebp-1.6.0/src",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/lib",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lwebp",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "MangaReader12/Networking/MR12WebPBridge.h";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
