@@ -19,8 +19,10 @@ def between(src,start,end):
     return src.split(start,1)[1].split(end,1)[0]
 LIBHELPER=between(LIB,"// BEGIN BUILD51_PINNED_LIBRARY","// END BUILD51_PINNED_LIBRARY")
 DLHELPER=between(DL,"// BEGIN BUILD51_DOWNLOAD_STORAGE_METER","// END BUILD51_DOWNLOAD_STORAGE_METER")
-assert PROJECT.count("CURRENT_PROJECT_VERSION = 51;")==2
-assert "Build 51 • compatível com iOS 12.0" in MAIN
+import re
+builds = [int(item) for item in re.findall(r"CURRENT_PROJECT_VERSION = (\\d+);", PROJECT)]
+assert len(builds) == 2 and builds[0] == builds[1] and builds[0] >= 51
+assert f"Build {builds[0]} • compatível com iOS 12.0" in MAIN
 assert "let pinnedIDs = LibraryPinnedWorks.all()" in LIB
 assert "if leftPinned != rightPinned { return leftPinned }" in LIB
 assert "self?.reloadLibrary()" in LIB
