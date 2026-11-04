@@ -149,7 +149,7 @@ final class ReaderImageLoader {
         if isLocalFile, let url = fileURL {
             do {
                 let data = try Data(contentsOf: url)
-                guard let image = UIImage(data: data) else {
+                guard let image = WebPImageDecoder.image(from: data) else {
                     deliver(.failure(ReaderError.invalidImage), to: [completion])
                     return
                 }
@@ -163,7 +163,7 @@ final class ReaderImageLoader {
 
         if let diskURL = cacheFileURL(for: key),
            let data = try? Data(contentsOf: diskURL) {
-            if let image = UIImage(data: data) {
+            if let image = WebPImageDecoder.image(from: data) {
                 remember(image, for: key)
                 deliver(.success(image), to: [completion])
                 return
@@ -206,7 +206,7 @@ final class ReaderImageLoader {
         case .success(let response):
             if !(200..<300).contains(response.statusCode) {
                 output = .failure(ReaderError.httpStatus(response.statusCode))
-            } else if let image = UIImage(data: response.data) {
+            } else if let image = WebPImageDecoder.image(from: response.data) {
                 remember(image, for: request.key)
                 if let diskURL = cacheFileURL(for: request.key) {
                     do {
