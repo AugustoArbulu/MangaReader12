@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Build 56 (2026-11-04, implementação em PR):** cada obra agora exibe sua fonte por ID real em Biblioteca lista/grade, detalhes e Atualizações; ícones oficiais Keiyoushi são reutilizados quando há asset. A aba Atualizações inclui `Novas/Todas` e reconhecimento não destrutivo de eventos, distinto de marcar capítulo como lido. Testes Swift offline, iOS 12 Debug/Release e QA física ainda precisam de confirmação antes de promover a versão. Detalhes em [Build 56](docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md).
+
+
 > **CHECKPOINT FÍSICO ATUAL — Build 55 (2026-11-04):** usuário confirmou “está funcionando” no iOS 12.5.8. PR [#86](https://github.com/AugustoArbulu/MangaReader12/pull/86) integrado à `main` no commit `9657d235b959e5647893889d863be7a82365f355`, após CI verde. Próximo plano [WebReader — Build 56 e roadmap](docs/HANDOFF_WEBREADER_BUILD55_ROADMAP_2026-11-04.md). **Requisito novo da Build 56:** mostrar a fonte real associada a **cada obra** da Biblioteca (nome e ícone disponível, lista e grade), inclusive várias obras com o mesmo título vindas de fontes distintas. Não confundir IDs nem perder dados.
 
 
