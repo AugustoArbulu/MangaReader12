@@ -49,7 +49,7 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
         if indexPath.section == 0 {
             if indexPath.row == 0 {
                 cell.textLabel?.text = "Criar backup"
-                cell.detailTextLabel?.text = "Biblioteca, capítulos, histórico, categorias, repositórios e ajustes."
+                cell.detailTextLabel?.text = "Biblioteca, capítulos, histórico, obras fixadas, categorias e ajustes."
             } else {
                 cell.textLabel?.text = "Restaurar backup"
                 cell.detailTextLabel?.text = "Importar um arquivo .mr12backup."
@@ -57,7 +57,7 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
         } else {
-            cell.textLabel?.text = "Downloads e scripts de extensões não entram no backup."
+            cell.textLabel?.text = "Arquivos de capítulos e scripts de extensões não entram no backup."
             cell.detailTextLabel?.text = "Após restaurar em outro aparelho, reinstale as sources necessárias. O progresso e a Biblioteca permanecem no banco."
             cell.textLabel?.numberOfLines = 0
             cell.detailTextLabel?.numberOfLines = 0
