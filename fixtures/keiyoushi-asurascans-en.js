@@ -391,7 +391,8 @@
     if (rawFilters == null) rawFilters = [];
     if (Object.prototype.toString.call(rawFilters) === '[object Array]') {
       if (rawFilters.length) throw new Error('Legacy filter list unsupported');
-      return {sort:fallbackSort,order:'desc',status:null,type:null,genres:[]};
+      return {sort:fallbackSort==='Latest Updates'?'latest':'popular',
+        order:'desc',status:null,type:null,genres:[]};
     }
     if (!rawFilters || typeof rawFilters !== 'object') {
       throw new Error('Invalid Asura filter selection');
