@@ -90,6 +90,9 @@ jobs:
       - name: Test Build53 pinned favorites in portable backup (Swift offline)
         run: python3 ci/test_build53_backup_pins.py
 
+      - name: Test Build54 WebReader branding and upgrade-safe identity
+        run: python3 ci/test_build54_branding.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
@@ -125,14 +128,14 @@ jobs:
         run: |
           ./ci/package_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
-            MangaReader12-iOS12-unsigned.ipa
+            WebReader-iOS12-unsigned.ipa
 
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MangaReader12-iOS12-M0
+          name: WebReader-iOS12-Build54
           if-no-files-found: error
           path: |
-            MangaReader12-iOS12-unsigned.ipa
-            MangaReader12-iOS12-unsigned.ipa.sha256
+            WebReader-iOS12-unsigned.ipa
+            WebReader-iOS12-unsigned.ipa.sha256
             ${{ runner.temp }}/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app
