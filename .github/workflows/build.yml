@@ -99,6 +99,9 @@ jobs:
       - name: Test Build54 WebReader branding and upgrade-safe identity
         run: python3 ci/test_build54_branding.py
 
+      - name: Test Build55 official Keiyoushi source icons
+        run: python3 ci/test_build55_source_icons.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

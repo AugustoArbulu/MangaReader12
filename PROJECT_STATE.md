@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Build 55 (2026-11-04):** assets originais Keiyoushi para Asura, WeebCentral, Webtoons e outras fontes mapeadas por ID; `SourceIconCell` prioriza ícones locais sem rede em Fontes instaladas e no catálogo. A fonte `kei.manhwa18net` **não** usa o ícone da extensão upstream `manhwa18.com`, que é um site diferente. [Handoff Build 55](docs/BUILD55_KEIYOUSHI_OFFICIAL_SOURCE_ICONS_2026-11-04.md). A Build 54 foi relatada como funcional no iOS 12.5.8. Build 55 requer CI e QA física.
+
+
 > **Atualização 2026-11-04 — Build 54:** nome público do aplicativo e ícone alterados para **WebReader** (kanji vermelho 画 sobre preto) (`CFBundleDisplayName`, `CFBundleName` e Ajustes). Identificador `com.example.MangaReader12`, executável, target, diretórios, banco SQLite, backups e extensões permanecem inalterados para preservar dados. Veja [Build 54](docs/BUILD54_WEBREADER_BRANDING_2026-11-04.md). A validação física da Build 54 ainda depende de teste no iOS 12.5.8.
 
 
