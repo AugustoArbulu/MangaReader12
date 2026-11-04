@@ -759,6 +759,13 @@ private struct SourceRemoteFilterOptions: Decodable {
     let types: [String]
     let statuses: [String]
     let sorts: [String]
+    // Absent for older adapters (e.g. WeebCentral); defaults preserve
+    // their existing multi-select and include/exclude behavior.
+    let supportsTagExclusions: Bool?
+    let singleTypeStatus: Bool?
+
+    var allowsTagExclusions: Bool { return supportsTagExclusions != false }
+    var requiresSingleTypeStatus: Bool { return singleTypeStatus == true }
 
     var isValid: Bool {
         func clean(_ items: [String], maxCount: Int) -> Bool {
@@ -771,7 +778,7 @@ private struct SourceRemoteFilterOptions: Decodable {
                 ) != nil
             }
         }
-        return clean(tags, maxCount: 60) &&
+        return (tags.isEmpty || clean(tags, maxCount: 60)) &&
             clean(types, maxCount: 16) &&
             clean(statuses, maxCount: 16) &&
             clean(sorts, maxCount: 16)
@@ -796,12 +803,17 @@ private struct SourceRemoteFilterSelection: Codable, Equatable {
 
     func sanitized(for options: SourceRemoteFilterOptions) -> SourceRemoteFilterSelection {
         var cleaned = SourceRemoteFilterSelection()
-        cleaned.excludedTags = options.tags.filter { excludedTags.contains($0) }
+        cleaned.excludedTags = options.allowsTagExclusions
+            ? options.tags.filter { excludedTags.contains($0) } : []
         cleaned.includedTags = options.tags.filter {
             includedTags.contains($0) && !cleaned.excludedTags.contains($0)
         }
         cleaned.types = options.types.filter { types.contains($0) }
         cleaned.statuses = options.statuses.filter { statuses.contains($0) }
+        if options.requiresSingleTypeStatus {
+            cleaned.types = Array(cleaned.types.prefix(1))
+            cleaned.statuses = Array(cleaned.statuses.prefix(1))
+        }
         cleaned.sort = options.sorts.contains(sort ?? "") ? sort : nil
         cleaned.order = ["Ascending", "Descending"].contains(order ?? "") ? order : nil
         return cleaned
@@ -1049,22 +1061,32 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         }
 
         if let options = remoteOptions {
-            addSection(
-                title: "GÊNEROS E TAGS DA FONTE",
-                subtitle: "1 toque: excluir (vermelho) • 2: incluir (azul) • 3: limpar. " +
-                    "O site aplica as escolhas em todas as páginas da busca.",
-                choices: options.tags.map { ($0, $0) },
-                selection: .remoteTag
-            )
+            if !options.tags.isEmpty {
+                addSection(
+                    title: "GÊNEROS E TAGS DA FONTE",
+                    subtitle: options.allowsTagExclusions
+                        ? "1 toque: excluir (vermelho) • 2: incluir (azul) • 3: limpar. " +
+                            "O site aplica os filtros antes da paginação."
+                        : "Toque para incluir ou remover. A Asura não permite excluir " +
+                            "gêneros pela API pública; resultados sem classificação " +
+                            "não são garantidos.",
+                    choices: options.tags.map { ($0, $0) },
+                    selection: .remoteTag
+                )
+            }
             addSection(
                 title: "TIPO DE OBRA",
-                subtitle: "Escolha os tipos aceitos. Nenhum marcado = todos.",
+                subtitle: options.requiresSingleTypeStatus
+                    ? "Um tipo por vez. Nenhum marcado = todos."
+                    : "Escolha os tipos aceitos. Nenhum marcado = todos.",
                 choices: options.types.map { ($0, $0) },
                 selection: .remoteType
             )
             addSection(
                 title: "STATUS",
-                subtitle: "Selecione um ou mais status. Nenhum = todos.",
+                subtitle: options.requiresSingleTypeStatus
+                    ? "Um status por vez. Nenhum marcado = todos."
+                    : "Selecione um ou mais status. Nenhum = todos.",
                 choices: options.statuses.map { ($0, $0) },
                 selection: .remoteStatus
             )
@@ -1117,11 +1139,14 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         infoLabel.numberOfLines = 0
         infoLabel.textColor = ThemeManager.shared.palette.secondaryText
         infoLabel.font = UIFont.systemFont(ofSize: 12)
-        if remoteOptions != nil {
-            infoLabel.text = "Filtros gerais enviados ao mecanismo de busca da fonte. " +
-                "Os resultados dependem das tags cadastradas no site; nenhuma classificação " +
-                "é inferida por título ou imagem. Filtros locais antigos, se presentes, " +
-                "podem continuar ocultando itens."
+        if let options = remoteOptions {
+            infoLabel.text = options.allowsTagExclusions
+                ? "Filtros enviados ao mecanismo da fonte antes da paginação. " +
+                    "Os resultados dependem das tags cadastradas no site. " +
+                    "Filtros locais antigos podem continuar ocultando itens."
+                : "A Asura permite apenas inclusão de gêneros via busca pública. " +
+                    "Não há exclusão remota de BL/GL e nem classificação garantida. " +
+                    "Status, tipo e ordem são enviados antes da paginação."
         } else {
             infoLabel.text = "Os filtros de exclusão usam apenas tags informadas na " +
                 "listagem da fonte. A ausência de tags não comprova que a obra " +
@@ -1398,11 +1423,12 @@ private final class SourceDiscoverySheetViewController: UIViewController {
     @objc private func remoteTagTapped(_ button: UIButton) {
         guard let tag = button.accessibilityIdentifier?
             .replacingOccurrences(of: "discover.remote.tag.", with: ""),
-            remoteOptions?.tags.contains(tag) == true else { return }
+            let options = remoteOptions, options.tags.contains(tag) else { return }
         remoteSelection.excludedTags.removeAll { $0 == tag }
         if remoteSelection.includedTags.contains(tag) {
             remoteSelection.includedTags.removeAll { $0 == tag }
-        } else if button.accessibilityValue == "Excluir" {
+        } else if !options.allowsTagExclusions ||
+                    button.accessibilityValue == "Excluir" {
             remoteSelection.includedTags.append(tag)
         } else {
             remoteSelection.excludedTags.append(tag)
@@ -1417,6 +1443,9 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         if remoteSelection.types.contains(value) {
             remoteSelection.types.removeAll { $0 == value }
         } else {
+            if remoteOptions?.requiresSingleTypeStatus == true {
+                remoteSelection.types.removeAll()
+            }
             remoteSelection.types.append(value)
         }
         refreshSelections()
@@ -1429,6 +1458,9 @@ private final class SourceDiscoverySheetViewController: UIViewController {
         if remoteSelection.statuses.contains(value) {
             remoteSelection.statuses.removeAll { $0 == value }
         } else {
+            if remoteOptions?.requiresSingleTypeStatus == true {
+                remoteSelection.statuses.removeAll()
+            }
             remoteSelection.statuses.append(value)
         }
         refreshSelections()

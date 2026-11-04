@@ -9,7 +9,7 @@
   var site = 'https://asurascans.com';
   var api = 'https://api.asurascans.com/api';
   var sourceID = 'kei.asurascans.en';
-  var version = '0.1.2';
+  var version = '0.1.3';
   var PER_PAGE = 20;
   var siteRE = /^https:\/\/(?:www\.)?asurascans\.com(?=\/|[?#]|$)/i;
   var apiRE = /^https:\/\/api\.asurascans\.com(?=\/|[?#]|$)/i;
@@ -23,6 +23,17 @@
   var cache = {};
   var cachedAt = {};
   var pending = {};
+  // Discover the official /browse genres once per runtime session; no
+  // guessed genre slugs or locally filtered/partially paginated results.
+  var genreSlugByName = {};
+  var cachedFilterOptions = null;
+  var filterWaiters = null;
+  var defaultFilterOptions = {
+    tags: [], types: ['Manhwa', 'Manhua', 'Manga'],
+    statuses: ['Ongoing', 'Completed', 'Hiatus', 'Dropped', 'Axed'],
+    sorts: ['Latest Updates', 'Popularity', 'Rating', 'A-Z', 'Recently Added'],
+    supportsTagExclusions: false, singleTypeStatus: true
+  };
 
   function fail(done, reason) {
     done({__sourceError: String(reason && reason.message || reason || 'Asura source error')});
@@ -330,6 +341,113 @@
       } catch (e) {fail(done,e);}
     });
   }
+  function genreFilterOptions(done) {
+    if (cachedFilterOptions) {done(cachedFilterOptions);return;}
+    if (filterWaiters) {filterWaiters.push(done);return;}
+    filterWaiters = [done];
+    function complete(tags, mapping) {
+      genreSlugByName = mapping || {};
+      cachedFilterOptions = {
+        tags:tags,
+        types:defaultFilterOptions.types.slice(),
+        statuses:defaultFilterOptions.statuses.slice(),
+        sorts:defaultFilterOptions.sorts.slice(),
+        supportsTagExclusions:false,
+        singleTypeStatus:true
+      };
+      var callbacks = filterWaiters;filterWaiters = null;
+      callbacks.forEach(function (callback) {callback(cachedFilterOptions);});
+    }
+    request(site+'/browse', 'text/html', function (response) {
+      if (response.__sourceError) {complete([],{});return;}
+      select(response.body, {
+        genres: {selector:'*[props*="availableGenres"]'}
+      }, function (dom) {
+        if (dom.__sourceError) {complete([],{});return;}
+        try {
+          var astro = findAstro(dom, 'genres');
+          var available = astro && astro.availableGenres;
+          if (Object.prototype.toString.call(available) !== '[object Array]') {
+            complete([],{});return;
+          }
+          var tags=[],mapping={};
+          for (var i=0;i<available.length&&tags.length<60;i++) {
+            var value=available[i];
+            if (!value || typeof value.name!=='string' ||
+                typeof value.slug!=='string') continue;
+            var name=value.name.trim(),slug=value.slug.trim();
+            if (!/^[A-Za-z][A-Za-z0-9 .'-]{0,49}$/.test(name) ||
+                !/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug) ||
+                Object.prototype.hasOwnProperty.call(mapping,name)) continue;
+            tags.push(name);mapping[name]=slug;
+          }
+          complete(tags,mapping);
+        } catch (e) {complete([],{});}
+      });
+    });
+  }
+
+  function validateSearchFilters(rawFilters, fallbackSort) {
+    if (rawFilters == null) rawFilters = [];
+    if (Object.prototype.toString.call(rawFilters) === '[object Array]') {
+      if (rawFilters.length) throw new Error('Legacy filter list unsupported');
+      return {sort:fallbackSort==='Latest Updates'?'latest':'popular',
+        order:'desc',status:null,type:null,genres:[]};
+    }
+    if (!rawFilters || typeof rawFilters !== 'object') {
+      throw new Error('Invalid Asura filter selection');
+    }
+    var keys=Object.keys(rawFilters),allowed=[
+      'includedTags','excludedTags','types','statuses','sort','order'
+    ];
+    for (var k=0;k<keys.length;k++) {
+      if (allowed.indexOf(keys[k])===-1) throw new Error('Unknown Asura filter key');
+    }
+    function list(name,max) {
+      var values=rawFilters[name]||[];
+      if (Object.prototype.toString.call(values)!=='[object Array]' ||
+          values.length>max) throw new Error('Invalid Asura '+name);
+      for(var i=0;i<values.length;i++) {
+        if(typeof values[i]!=='string'||values.indexOf(values[i])!==i) {
+          throw new Error('Invalid Asura '+name);
+        }
+      }
+      return values;
+    }
+    var included=list('includedTags',12),excluded=list('excludedTags',0),
+      statuses=list('statuses',1),types=list('types',1);
+    if (excluded.length) throw new Error('Asura API does not support remote genre exclusion');
+    var mapStatus = {'Ongoing':'ongoing','Completed':'completed',
+      'Hiatus':'hiatus','Dropped':'dropped','Axed':'axed'};
+    var mapType = {'Manhwa':'manhwa','Manhua':'manhua','Manga':'manga'};
+    var mapSort = {'Latest Updates':'latest','Popularity':'popular',
+      'Rating':'rating','A-Z':'title','Recently Added':'update',
+      'Best Match':'latest'};
+    var sort=rawFilters.sort==null ? fallbackSort : rawFilters.sort;
+    var order=rawFilters.order==null ? 'Descending' : rawFilters.order;
+    if (typeof sort!=='string' ||
+        !Object.prototype.hasOwnProperty.call(mapSort,sort) ||
+        (order!=='Ascending'&&order!=='Descending')) {
+      throw new Error('Invalid Asura sort/order');
+    }
+    if ((statuses.length&& !Object.prototype.hasOwnProperty.call(mapStatus,statuses[0])) ||
+        (types.length&&!Object.prototype.hasOwnProperty.call(mapType,types[0]))) {
+      throw new Error('Invalid Asura type/status');
+    }
+    var slugs=[];
+    for (var g=0;g<included.length;g++) {
+      if(!Object.prototype.hasOwnProperty.call(genreSlugByName,included[g])) {
+        throw new Error('Asura genre filter unavailable; reload public genres');
+      }
+      slugs.push(genreSlugByName[included[g]]);
+    }
+    return {
+      sort:mapSort[sort],order:order==='Ascending'?'asc':'desc',
+      status:statuses.length?mapStatus[statuses[0]]:null,
+      type:types.length?mapType[types[0]]:null,genres:slugs
+    };
+  }
+
   function searchList(page, text, sort, done, rawFilters) {
     if (typeof text !== 'string' || text.length > 200) {
       fail(done,'Invalid search query');return;
@@ -342,13 +460,22 @@
     if (allowedSort.indexOf(sort) < 0) {
       fail(done,'Invalid Asura sort');return;
     }
+    var normalized;
+    try {
+      // Existing popular/latest callers provide the canonical API sort;
+      // generic UIKit choices use a separate descriptive label.
+      var fallback = sort==='latest' ? 'Latest Updates' : 'Popularity';
+      normalized=validateSearchFilters(rawFilters,fallback);
+    } catch (e) {fail(done,e);return;}
     var query = api + '/series?offset=' + ((p-1)*PER_PAGE) +
-      '&limit=' + PER_PAGE + '&sort=' + encodeURIComponent(sort) + '&order=desc';
+      '&limit=' + PER_PAGE + '&sort=' + encodeURIComponent(normalized.sort) +
+      '&order=' + encodeURIComponent(normalized.order);
     if (text.trim()) query += '&search=' + encodeURIComponent(text.trim());
-    // The pilot initially accepts only the existing empty filter list.
-    // Advanced genres need live metadata from /browse before publication.
-    if (rawFilters && (Object.prototype.toString.call(rawFilters) !== '[object Array]' ||
-        rawFilters.length)) {fail(done,'Asura advanced filters not available in pilot');return;}
+    if (normalized.status) query += '&status='+encodeURIComponent(normalized.status);
+    if (normalized.type) query += '&type='+encodeURIComponent(normalized.type);
+    if (normalized.genres.length) {
+      query += '&genres='+encodeURIComponent(normalized.genres.join(','));
+    }
     request(query, 'application/json', function (resp) {
       if (resp.__sourceError) {done(resp);return;}
       var json=parseJSON(resp.body,done);
@@ -439,6 +566,7 @@
       id:sourceID,name:'Asura Scans EN (experimental)',lang:'en',version:version
     };},
     popular:function(page,done){searchList(page,'','popular',done,[]);},
+    filterOptions:genreFilterOptions,
     search:function(query,page,filters,done){
       searchList(page,query || '',query ? 'latest':'popular',done,filters);
     },

@@ -1,5 +1,51 @@
 import UIKit
 
+// BEGIN BUILD51_DOWNLOAD_STORAGE_METER
+// Read-only app-owned download inspection, bounded for older iOS devices.
+enum DownloadStorageMeter {
+    struct Snapshot {
+        let bytes: Int64
+        let files: Int
+        let truncated: Bool
+
+        var label: String {
+            return "Armazenamento: " + (truncated ? "≥ " : "") +
+                ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) +
+                " (" + String(files) + " arquivos" +
+                (truncated ? "+)" : ")")
+        }
+    }
+
+    static func inspect(root: URL, fileManager: FileManager = .default,
+                        maximumFiles: Int = 10_000) -> Snapshot {
+        guard maximumFiles > 0 else {
+            return Snapshot(bytes: 0, files: 0, truncated: true)
+        }
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey
+            ],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return Snapshot(bytes: 0, files: 0, truncated: false) }
+        var bytes: Int64 = 0
+        var files = 0
+        var truncated = false
+        for case let item as URL in enumerator {
+            if files >= maximumFiles { truncated = true; break }
+            guard let values = try? item.resourceValues(forKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey
+            ]), values.isSymbolicLink != true,
+                values.isRegularFile == true else { continue }
+            files += 1
+            let size = Int64(max(0, values.fileSize ?? 0))
+            bytes = size > Int64.max - bytes ? Int64.max : bytes + size
+        }
+        return Snapshot(bytes: bytes, files: files, truncated: truncated)
+    }
+}
+// END BUILD51_DOWNLOAD_STORAGE_METER
+
 final class DownloadsViewController: UITableViewController {
     private var records: [DownloadListRecord] = []
     private var repository: DownloadRepository?
@@ -8,6 +54,9 @@ final class DownloadsViewController: UITableViewController {
     private var refreshTimer: Timer?
     private var retryInFlight = Set<String>()
     private let queueSummaryLabel = UILabel()
+    private var storageInfo = "Armazenamento: calcular…"
+    private var lastStorageRefresh: TimeInterval = 0
+    private var storageEpoch = 0
 
     init() {
         super.init(style: .plain)
@@ -47,6 +96,7 @@ final class DownloadsViewController: UITableViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         reloadDownloads()
+        refreshStorageIfNeeded(force: true)
         startRefreshTimer()
     }
 
@@ -80,7 +130,7 @@ final class DownloadsViewController: UITableViewController {
 
     private func configureQueueSummary() {
         let header = UIView(frame: CGRect(
-            x: 0, y: 0, width: max(1, tableView.bounds.width), height: 56
+            x: 0, y: 0, width: max(1, tableView.bounds.width), height: 82
         ))
         header.autoresizingMask = [.flexibleWidth]
         header.backgroundColor = ThemeManager.shared.palette.secondaryBackground
@@ -88,7 +138,7 @@ final class DownloadsViewController: UITableViewController {
         queueSummaryLabel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         queueSummaryLabel.font = UIFont.systemFont(ofSize: 12, weight: .medium)
         queueSummaryLabel.textColor = ThemeManager.shared.palette.secondaryText
-        queueSummaryLabel.numberOfLines = 2
+        queueSummaryLabel.numberOfLines = 3
         queueSummaryLabel.text = "Fila de downloads"
         header.addSubview(queueSummaryLabel)
         tableView.tableHeaderView = header
@@ -101,7 +151,34 @@ final class DownloadsViewController: UITableViewController {
         let failed = records.filter { $0.state == "failed" }.count
         let complete = records.filter { $0.state == "completed" }.count
         queueSummaryLabel.text = "Baixando: \(downloading)  •  Na fila: \(queued)  •  Pausados: \(paused)\n" +
-            "Concluídos: \(complete)  •  Com falha: \(failed)"
+            "Concluídos: \(complete)  •  Com falha: \(failed)\n" + storageInfo
+    }
+
+    private func refreshStorageIfNeeded(force: Bool) {
+        let now = Date().timeIntervalSince1970
+        guard force || now - lastStorageRefresh >= 30 else { return }
+        lastStorageRefresh = now
+        storageEpoch += 1
+        let request = storageEpoch
+        let root = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first?
+            .appendingPathComponent("MangaReader12", isDirectory: true)
+            .appendingPathComponent("Downloads", isDirectory: true)
+
+        guard let folder = root else {
+            storageInfo = "Armazenamento: indisponível"
+            updateQueueSummary()
+            return
+        }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let snapshot = DownloadStorageMeter.inspect(root: folder)
+            DispatchQueue.main.async {
+                guard let self = self, request == self.storageEpoch else { return }
+                self.storageInfo = snapshot.label
+                self.updateQueueSummary()
+            }
+        }
     }
 
     @objc private func queueTapped() {
@@ -188,6 +265,7 @@ final class DownloadsViewController: UITableViewController {
 
     @objc private func refreshPulled() {
         reloadDownloads()
+        refreshStorageIfNeeded(force: true)
     }
 
     private func startRefreshTimer() {
@@ -239,6 +317,9 @@ final class DownloadsViewController: UITableViewController {
 
         refreshControl?.endRefreshing()
         updateQueueSummary()
+        if records != previousRecords {
+            refreshStorageIfNeeded(force: false)
+        }
         // Do not close swipe-action menus every 1.5 seconds when the list did
         // not actually change (needed for Pause/Resume/Prioritize to be usable).
         if records != previousRecords ||

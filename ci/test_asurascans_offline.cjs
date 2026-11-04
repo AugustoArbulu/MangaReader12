@@ -12,7 +12,7 @@ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,
 const manifest=catalog.sources[0];
 assert.equal(catalog.sources.length,1);
 assert.equal(manifest.id,'kei.asurascans.en');
-assert.equal(manifest.version,'0.1.2');
+assert.equal(manifest.version,'0.1.3');
 assert.deepEqual(manifest.domains,['asurascans.com','api.asurascans.com','cdn.asurascans.com']);
 assert.equal(crypto.createHash('sha256').update(script).digest('hex'),manifest.sha256);
 assert(!/access_token|X-Page-Token|Authorization:|cloudflare|bypass|webdriver/i.test(script));
@@ -73,6 +73,7 @@ function createRuntime(config={}) {
     ],meta:{has_more:true}})
    };
    else if(req.url===A) data={body:'SERIES'};
+   else if(req.url===BASE+'/browse') data={body:'BROWSE'};
    else if(req.url===CH1) data={body:'PAGES'};
    else throw Error('Unexpected HTTP: '+req.url);
    if(typeof data==='string')data={body:data};
@@ -87,6 +88,15 @@ function createRuntime(config={}) {
     assert(spec.details&&spec.chapters);
     results={details:[item({props:PROPS.details})],
       chapters:[item({props:PROPS.chapters})]};
+   } else if(html==='BROWSE') {
+    assert(spec.genres);
+    results={genres:[item({props:JSON.stringify([0,{
+      availableGenres:[
+        {name:'Romance',slug:'romance'}, {name:'Action',slug:'action'},
+        {name:'Boys Love',slug:'boys-love'}, {name:'Girls Love',slug:'girls-love'},
+        {name:'Invalid_Genre',slug:'bad'}, {name:'X',slug:'../private'}
+      ]
+    }])})]};
    } else if(html==='PAGES') {
     assert(spec.pages);
     results={pages:[item({props:JSON.stringify([0,pageInfo])})]};
@@ -98,7 +108,7 @@ function createRuntime(config={}) {
  new vm.Script(script,{filename:'keiyoushi-asurascans-en.js'}).runInContext(context);
  const source=context.source;
  for(const name of ['metadata','popular','search','details','chapters','pages',
-    'browseCategories','browse']) assert.equal(typeof source[name],'function');
+    'filterOptions','browseCategories','browse']) assert.equal(typeof source[name],'function');
  function call(name,...params) {
   return new Promise((resolve,reject)=>{
    try {
@@ -136,6 +146,72 @@ async function main(){
  assert.match(r.calls[2].url,/offset=40/);
  const cats=await r.call('browseCategories');
  assert.deepEqual(Array.from(cats).map(c=>c.id),['popular','latest']);
+ // Genres are fetched from public /browse Astro props, not guessed from
+ // the titles or silently filtered after the API's 20-item pagination.
+ const options=await r.call('filterOptions');
+ assert.deepEqual(Array.from(options.tags),
+   ['Romance','Action','Boys Love','Girls Love']);
+ assert.deepEqual(Array.from(options.types),['Manhwa','Manhua','Manga']);
+ assert.deepEqual(Array.from(options.statuses),
+   ['Ongoing','Completed','Hiatus','Dropped','Axed']);
+ assert.equal(options.supportsTagExclusions,false);
+ assert.equal(options.singleTypeStatus,true);
+ assert.equal(r.calls[3].url,BASE+'/browse');
+ const optionsAgain=await r.call('filterOptions');
+ assert.equal(optionsAgain.tags.length,4);
+ assert.equal(r.calls.length,4,'public genre options are cached per runtime');
+
+ const filtered=await r.call('search','Sample',2,{
+   includedTags:['Romance','Action'],excludedTags:[],
+   types:['Manhwa'],statuses:['Completed'],
+   sort:'Rating',order:'Ascending'
+ });
+ assert.equal(filtered.items.length,1);
+ const filteredURL=new URL(r.calls[r.calls.length-1].url);
+ assert.equal(filteredURL.searchParams.get('search'),'Sample');
+ assert.equal(filteredURL.searchParams.get('offset'),'20');
+ assert.equal(filteredURL.searchParams.get('genres'),'romance,action');
+ assert.equal(filteredURL.searchParams.get('type'),'manhwa');
+ assert.equal(filteredURL.searchParams.get('status'),'completed');
+ assert.equal(filteredURL.searchParams.get('sort'),'rating');
+ assert.equal(filteredURL.searchParams.get('order'),'asc');
+ const orderOnly=await r.call('search','',1,{
+   includedTags:[],excludedTags:[],types:[],statuses:[],
+   sort:'A-Z',order:'Descending'
+ });
+ assert.equal(orderOnly.items.length,1);
+ assert.match(r.calls[r.calls.length-1].url,/sort=title/);
+ const afterAllowed=r.calls.length;
+ for(const selections of [
+   {includedTags:[],excludedTags:['Boys Love'],types:[],statuses:[]},
+   {includedTags:[],excludedTags:[],types:['Manhwa','Manhua'],statuses:[]},
+   {includedTags:[],excludedTags:[],types:[],statuses:['Ongoing','Hiatus']},
+   {includedTags:['Made Up'],excludedTags:[],types:[],statuses:[]},
+   {includedTags:[],excludedTags:[],types:[],statuses:[],foo:'bar'}
+ ]) {
+   const rejected=await r.call('search','',1,selections);
+   assert(rejected.__sourceError);
+ }
+ assert.equal(r.calls.length,afterAllowed,'invalid filters never issue requests');
+ const noGenres=createRuntime({request(req){
+   if(req.url===BASE+'/browse') return {status:403,ok:false,body:'Denied'};
+   if(req.url.startsWith(API+'/series?')) return {
+     body:JSON.stringify({data:[],meta:{has_more:false}})
+   };
+   throw Error('Unexpected request');
+ }});
+ const fallback=await noGenres.call('filterOptions');
+ assert.equal(fallback.tags.length,0,'no genres when public browse unavailable');
+ assert.equal(fallback.types.length,3,'status/type/sort still usable');
+ assert.equal(noGenres.calls.length,1);
+ const onlyStatus=await noGenres.call('search','',1,{
+   includedTags:[],excludedTags:[],types:['Manga'],statuses:['Ongoing'],
+   sort:'Popularity',order:'Descending'
+ });
+ assert.equal(onlyStatus.items.length,0);
+ assert.match(noGenres.calls[1].url,/type=manga/);
+ assert.match(noGenres.calls[1].url,/status=ongoing/);
+
  const before=r.calls.length;
  const pair=await Promise.all([r.call('details',STABLE),r.call('chapters',STABLE)]);
  const details=pair[0],chapters=pair[1];

@@ -81,6 +81,9 @@ jobs:
       - name: Test native libwebp decoding with valid/truncated WebP (offline)
         run: python3 ci/test_build49_webp.py
 
+      - name: Test Build51 pinned library and bounded download storage (Swift offline)
+        run: python3 ci/test_build51_general.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

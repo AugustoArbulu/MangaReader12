@@ -1,5 +1,46 @@
 import UIKit
 
+// BEGIN BUILD51_PINNED_LIBRARY
+// Preference-only favorites: original Library source IDs, chapter IDs and
+// persisted records are never modified. Key uses length-prefixed identity.
+enum LibraryPinnedWorks {
+    static let defaultsKey = "library.pinned.sources.v1"
+
+    static func identity(sourceID: String, mangaID: String) -> String {
+        return String(sourceID.utf8.count) + ":" + sourceID + mangaID
+    }
+
+    static func all(defaults: UserDefaults = .standard) -> Set<String> {
+        return Set(defaults.stringArray(forKey: defaultsKey) ?? [])
+    }
+
+    static func contains(sourceID: String, mangaID: String,
+                         defaults: UserDefaults = .standard) -> Bool {
+        return all(defaults: defaults).contains(
+            identity(sourceID: sourceID, mangaID: mangaID)
+        )
+    }
+
+    @discardableResult static func toggle(
+        sourceID: String, mangaID: String,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        var items = all(defaults: defaults)
+        let key = identity(sourceID: sourceID, mangaID: mangaID)
+        let nowPinned: Bool
+        if items.contains(key) {
+            items.remove(key)
+            nowPinned = false
+        } else {
+            items.insert(key)
+            nowPinned = true
+        }
+        defaults.set(items.sorted(), forKey: defaultsKey)
+        return nowPinned
+    }
+}
+// END BUILD51_PINNED_LIBRARY
+
 final class LibraryViewController: UITableViewController, UISearchResultsUpdating {
     private var records: [LibraryMangaRecord] = []
     private var allRecords: [LibraryMangaRecord] = []
@@ -183,6 +224,12 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             },
             open: { [weak self] record in
                 self?.open(record: record)
+            },
+            togglePin: { [weak self] record in
+                LibraryPinnedWorks.toggle(
+                    sourceID: record.sourceID, mangaID: record.sourceMangaID
+                )
+                self?.reloadLibrary()
             }
         )
         navigationController?.pushViewController(grid, animated: true)
@@ -208,7 +255,13 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             }
             return true
         }
+        let pinnedIDs = LibraryPinnedWorks.all()
         records.sort { left, right in
+            let leftPinned = pinnedIDs.contains(LibraryPinnedWorks.identity(
+                sourceID: left.sourceID, mangaID: left.sourceMangaID))
+            let rightPinned = pinnedIDs.contains(LibraryPinnedWorks.identity(
+                sourceID: right.sourceID, mangaID: right.sourceMangaID))
+            if leftPinned != rightPinned { return leftPinned }
             let first = metrics[left.internalID]
             let second = metrics[right.internalID]
             switch sortKey {
@@ -298,6 +351,9 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
 
         let record = records[indexPath.row]
         var details = [record.status.rawValue]
+        if LibraryPinnedWorks.contains(
+            sourceID: record.sourceID, mangaID: record.sourceMangaID
+        ) { details.insert("★ Fixada", at: 0) }
         if let count = metrics[record.internalID]?.unreadChapters, count > 0 {
             details.append(String(count) + " não lidos")
         }
@@ -369,8 +425,18 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
                 animated: true
             )
         }
-
-        return [remove, categories]
+        let pinned = LibraryPinnedWorks.contains(
+            sourceID: record.sourceID, mangaID: record.sourceMangaID
+        )
+        let favorite = UITableViewRowAction(
+            style: .normal, title: pinned ? "Desfixar" : "Fixar"
+        ) { [weak self] _, _ in
+            LibraryPinnedWorks.toggle(
+                sourceID: record.sourceID, mangaID: record.sourceMangaID
+            )
+            self?.reloadLibrary()
+        }
+        return [remove, categories, favorite]
     }
 
     @objc private func localComicsTapped() {
@@ -921,6 +987,9 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
             parts.append("Offline")
         }
         if parts.isEmpty { parts.append(record.status.rawValue) }
+        if LibraryPinnedWorks.contains(
+            sourceID: record.sourceID, mangaID: record.sourceMangaID
+        ) { parts.insert("★ Fixada", at: 0) }
         detail.text = parts.joined(separator: " • ")
         accessibilityLabel = record.title + ". " + (detail.text ?? "")
         representedURL = record.cover
@@ -940,15 +1009,18 @@ final class LibraryGridViewController:
     typealias Snapshot = ([LibraryMangaRecord], [Int64: LibraryMangaMetrics])
     private let snapshot: () -> Snapshot
     private let openRecord: (LibraryMangaRecord) -> Void
+    private let togglePin: (LibraryMangaRecord) -> Void
     private var entries: [LibraryMangaRecord] = []
     private var metrics: [Int64: LibraryMangaMetrics] = [:]
 
     init(
         snapshot: @escaping () -> Snapshot,
-        open: @escaping (LibraryMangaRecord) -> Void
+        open: @escaping (LibraryMangaRecord) -> Void,
+        togglePin: @escaping (LibraryMangaRecord) -> Void
     ) {
         self.snapshot = snapshot
         self.openRecord = open
+        self.togglePin = togglePin
         let layout = UICollectionViewFlowLayout()
         layout.minimumInteritemSpacing = 10
         layout.minimumLineSpacing = 14
@@ -969,6 +1041,10 @@ final class LibraryGridViewController:
             LibraryGridCoverCell.self,
             forCellWithReuseIdentifier: LibraryGridCoverCell.reuseID
         )
+        let hold = UILongPressGestureRecognizer(
+            target: self, action: #selector(holdGridWork(_:))
+        )
+        collectionView.addGestureRecognizer(hold)
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "Lista", style: .plain,
             target: self, action: #selector(listTapped)
@@ -1047,6 +1123,31 @@ final class LibraryGridViewController:
         collectionView.deselectItem(at: indexPath, animated: true)
         guard entries.indices.contains(indexPath.item) else { return }
         openRecord(entries[indexPath.item])
+    }
+
+    @objc private func holdGridWork(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began,
+              let indexPath = collectionView.indexPathForItem(
+                at: gesture.location(in: collectionView)
+              ), entries.indices.contains(indexPath.item) else { return }
+        let record = entries[indexPath.item]
+        let pinned = LibraryPinnedWorks.contains(
+            sourceID: record.sourceID, mangaID: record.sourceMangaID
+        )
+        let alert = UIAlertController(
+            title: record.title,
+            message: "Favoritos fixados aparecem antes das demais obras.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(
+            title: pinned ? "Desfixar obra" : "★ Fixar obra",
+            style: .default
+        ) { [weak self] _ in
+            self?.togglePin(record)
+            self?.refreshSnapshot()
+        })
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        present(alert, animated: true)
     }
 
     func collectionView(
