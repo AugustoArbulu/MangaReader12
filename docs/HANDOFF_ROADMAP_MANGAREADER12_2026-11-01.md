@@ -1,5 +1,7 @@
 # HANDOFF COMPLETO — ROADMAP MangaReader12 (iOS 12)
 
+> **NOVO CHECKPOINT (2026-11-04):** o produto se chama WebReader (bundle ID legado), Build 55 aprovada preliminarmente no aparelho e PR #86 na main. O plano atual começa pela Build 56, incluindo **origem por obra da Biblioteca** com nome/ícone da fonte associado por ID exato, mais melhorias dos indicadores de novidades. Consulte [handoff atual Build 55 / Build 56+](HANDOFF_WEBREADER_BUILD55_ROADMAP_2026-11-04.md). Os marcos Build36–53 descritos abaixo são históricos.
+
 > **STATUS NOVO, 2026-11-04:** Este roadmap contém fases históricas. Para o estado de fato após Build 53, veja [HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md](HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md). **Não** recriar seleção de capítulos (até 5 por lote), feed de Updates, ou indicadores de não lidos: já estão no código. A Build 51 foi relatada como funcional; Builds 52/53 aguardam QA física. O foco de compatibilidade é WebP/ImageIO limitado, e AVIF segue apenas detectado.
 
 

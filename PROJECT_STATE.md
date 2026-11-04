@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **CHECKPOINT FÍSICO ATUAL — Build 55 (2026-11-04):** usuário confirmou “está funcionando” no iOS 12.5.8. PR [#86](https://github.com/AugustoArbulu/MangaReader12/pull/86) integrado à `main` no commit `9657d235b959e5647893889d863be7a82365f355`, após CI verde. Próximo plano [WebReader — Build 56 e roadmap](docs/HANDOFF_WEBREADER_BUILD55_ROADMAP_2026-11-04.md). **Requisito novo da Build 56:** mostrar a fonte real associada a **cada obra** da Biblioteca (nome e ícone disponível, lista e grade), inclusive várias obras com o mesmo título vindas de fontes distintas. Não confundir IDs nem perder dados.
+
+
 > **Build 55 (2026-11-04):** assets originais Keiyoushi para Asura, WeebCentral, Webtoons e outras fontes mapeadas por ID; `SourceIconCell` prioriza ícones locais sem rede em Fontes instaladas e no catálogo. A fonte `kei.manhwa18net` **não** usa o ícone da extensão upstream `manhwa18.com`, que é um site diferente. [Handoff Build 55](docs/BUILD55_KEIYOUSHI_OFFICIAL_SOURCE_ICONS_2026-11-04.md). A Build 54 foi relatada como funcional no iOS 12.5.8. Build 55 requer CI e QA física.
 
 
