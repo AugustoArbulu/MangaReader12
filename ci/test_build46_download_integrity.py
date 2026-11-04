@@ -58,6 +58,18 @@ tests = """
 import Foundation
 import ImageIO
 
+// The Build46 ImageIO regression test runs independently from the iOS UIKit
+// target; Build49 WebP validity is tested by the native libwebp C tests.
+enum WebPImageDecoder {
+    static func isWebP(_ data: Data) -> Bool {
+        let bytes = [UInt8](data.prefix(12))
+        return bytes.count >= 12 &&
+            Array(bytes[0..<4]) == [82,73,70,70] &&
+            Array(bytes[8..<12]) == [87,69,66,80]
+    }
+    static func image(from data: Data) -> Data? { return nil }
+}
+
 """ + validator + """
 func check(_ value: Bool, _ label: String) {
     if !value { fatalError("Image validator failed: " + label) }

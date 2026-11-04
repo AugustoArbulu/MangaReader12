@@ -45,6 +45,7 @@
 		A10000000000000000000024 /* SafeCBZArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* SafeCBZArchive.swift */; };
 		A10000000000000000000025 /* LocalComicsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* LocalComicsViewController.swift */; };
 		A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ComixBrowserProbeViewController.swift */; };
+		A10000000000000000000028 /* libwebp-COPYING.txt in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* libwebp-COPYING.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +89,7 @@
 		A20000000000000000000025 /* SafeCBZArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeCBZArchive.swift; sourceTree = "<group>"; };
 		A20000000000000000000026 /* LocalComicsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalComicsViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000027 /* ComixBrowserProbeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComixBrowserProbeViewController.swift; sourceTree = "<group>"; };
+		A20000000000000000000028 /* libwebp-COPYING.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "libwebp-COPYING.txt"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +165,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000008 /* HTTPClient.swift */,
+				A20000000000000000000028 /* libwebp-COPYING.txt */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -296,6 +299,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000003 /* LaunchScreen.storyboard in Resources */,
+				A10000000000000000000028 /* libwebp-COPYING.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -386,8 +390,21 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/libwebp-1.6.0/src",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/lib",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lwebp",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "MangaReader12/Networking/MR12WebPBridge.h";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
@@ -408,8 +425,21 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/libwebp-1.6.0/src",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/.ci-webp/lib",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lwebp",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "MangaReader12/Networking/MR12WebPBridge.h";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MangaReader12/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
