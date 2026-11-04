@@ -5,6 +5,9 @@ final class UpdatesViewController: UITableViewController {
     private var events: [LibraryUpdateEvent] = []
     private var updateManager: LibraryUpdateManager?
     private var checking = false
+    private var showAll = UserDefaults.standard.bool(forKey: "updates.showAll.v1")
+    private var refreshItem: UIBarButtonItem?
+    private var markAllItem: UIBarButtonItem?
 
     init() {
         super.init(style: .plain)
@@ -27,11 +30,23 @@ final class UpdatesViewController: UITableViewController {
         )
         applyTheme()
 
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let scope = UISegmentedControl(items: ["Novas", "Todas"])
+        scope.selectedSegmentIndex = showAll ? 1 : 0
+        scope.addTarget(self, action: #selector(scopeChanged(_:)), for: .valueChanged)
+        navigationItem.titleView = scope
+
+        refreshItem = UIBarButtonItem(
             barButtonSystemItem: .refresh,
             target: self,
             action: #selector(refreshTapped)
         )
+        markAllItem = UIBarButtonItem(
+            title: "Marcar vistas", style: .plain,
+            target: self, action: #selector(markAllTapped)
+        )
+        if let refreshItem = refreshItem, let markAllItem = markAllItem {
+            navigationItem.rightBarButtonItems = [refreshItem, markAllItem]
+        }
 
         do {
             updateManager = try LibraryUpdateManager.defaultManager()
@@ -47,6 +62,29 @@ final class UpdatesViewController: UITableViewController {
         reloadFeed()
     }
 
+    @objc private func scopeChanged(_ control: UISegmentedControl) {
+        showAll = control.selectedSegmentIndex == 1
+        UserDefaults.standard.set(showAll, forKey: "updates.showAll.v1")
+        reloadFeed()
+    }
+
+    @objc private func markAllTapped() {
+        guard !feedStore.pendingEvents().isEmpty else { return }
+        let alert = UIAlertController(
+            title: "Marcar novidades como vistas?",
+            message: "As atualizações continuarão disponíveis em Todas. " +
+                "Isso não marca os capítulos como lidos.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Marcar vistas", style: .default) {
+            [weak self] _ in
+            self?.feedStore.acknowledgeAll()
+            self?.reloadFeed()
+        })
+        present(alert, animated: true)
+    }
+
     @objc private func refreshTapped() {
         guard !checking,
               let updateManager = updateManager else {
@@ -54,7 +92,8 @@ final class UpdatesViewController: UITableViewController {
         }
 
         checking = true
-        navigationItem.rightBarButtonItem?.isEnabled = false
+        refreshItem?.isEnabled = false
+        markAllItem?.isEnabled = false
         navigationItem.prompt = "Verificando Biblioteca…"
 
         updateManager.checkAll(
@@ -65,7 +104,7 @@ final class UpdatesViewController: UITableViewController {
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.checking = false
-                    self.navigationItem.rightBarButtonItem?.isEnabled = true
+                    self.refreshItem?.isEnabled = true
                     self.navigationItem.prompt = nil
 
                     switch result {
@@ -97,11 +136,13 @@ final class UpdatesViewController: UITableViewController {
     }
 
     private func reloadFeed() {
-        events = feedStore.events()
-
+        events = showAll ? feedStore.events() : feedStore.pendingEvents()
+        markAllItem?.isEnabled = !checking && !feedStore.pendingEvents().isEmpty
         if events.isEmpty {
             let label = UILabel()
-            label.text = "Nenhum capítulo novo registrado.\nUse Atualizar para verificar sua Biblioteca."
+            label.text = showAll
+                ? "Nenhum capítulo novo registrado.\nUse Atualizar para verificar sua Biblioteca."
+                : "Nenhuma novidade pendente.\nToque em Todas para ver o histórico."
             label.numberOfLines = 0
             label.textAlignment = .center
             label.textColor = ThemeManager.shared.palette.secondaryText
@@ -137,7 +178,8 @@ final class UpdatesViewController: UITableViewController {
             subtitle: event.chapterName,
             coverURL: event.mangaCover,
             allowedDomains: [],
-            badge: "Novo"
+            badge: feedStore.isAcknowledged(event) ? "Vista" : "Novo",
+            sourceID: event.sourceID
         )
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -148,7 +190,27 @@ final class UpdatesViewController: UITableViewController {
         didSelectRowAt indexPath: IndexPath
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
-        open(events[indexPath.row])
+        let event = events[indexPath.row]
+        // Opening a newly discovered event never changes chapter read state.
+        feedStore.acknowledge(event)
+        reloadFeed()
+        open(event)
+    }
+
+    override func tableView(
+        _ tableView: UITableView,
+        editActionsForRowAt indexPath: IndexPath
+    ) -> [UITableViewRowAction]? {
+        let event = events[indexPath.row]
+        guard !feedStore.isAcknowledged(event) else { return nil }
+        let mark = UITableViewRowAction(
+            style: .normal, title: "Vista"
+        ) { [weak self] _, _ in
+            self?.feedStore.acknowledge(event)
+            self?.reloadFeed()
+        }
+        mark.backgroundColor = ThemeManager.shared.palette.accent
+        return [mark]
     }
 
     private func open(_ event: LibraryUpdateEvent) {
