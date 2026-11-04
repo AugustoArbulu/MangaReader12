@@ -7,13 +7,13 @@
 
   var base = 'https://weebcentral.com';
   var sourceId = 'kei.weebcentral.en';
-  var version = '0.1.5';
+  var version = '0.1.6';
   var FETCH_LIMIT = 32;
   var hostRE = /^https:\/\/(?:www\.)?weebcentral\.com(?=\/|[?#]|$)/i;
-  // Exact media CDN hosts are grounded in public offline WeebCentral HTML
-  // fixtures (covers: temp.compsci88.com; chapter PNGs: hot.planeptune.us).
-  // This is not a wildcard permission for arbitrary third-party CDNs.
-  var imageHostRE = /^https:\/\/(?:(?:[a-z0-9-]+\.)*weebcentral\.com|temp\.compsci88\.com|hot\.planeptune\.us)(?=\/|[?#]|$)/i;
+  // Exact media CDN hosts: covers from documented fixtures, and
+  // official.lowee.us observed in the iOS 12.5.8 chapter HTML diagnostic
+  // (62 parsed / 0 permitted, 2026-11-04). No arbitrary CDN wildcard.
+  var imageHostRE = /^https:\/\/(?:(?:[a-z0-9-]+\.)*weebcentral\.com|temp\.compsci88\.com|hot\.planeptune\.us|official\.lowee\.us)(?=\/|[?#]|$)/i;
   var seriesRE = /^https:\/\/(?:www\.)?weebcentral\.com\/series\/([^\/?#]+)(?:\/[^\/?#]+)?\/?(?:[?#].*)?$/i;
   var chapterRE = /^https:\/\/(?:www\.)?weebcentral\.com\/(?:chapters?\/[^?#]+|series\/[^?#]+\/chapter\/[^?#]+)(?:[?#].*)?$/i;
 
