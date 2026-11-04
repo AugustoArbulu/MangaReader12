@@ -45,6 +45,9 @@ jobs:
       - name: Test Asura public source contract (offline)
         run: node ci/test_asurascans_offline.cjs
 
+      - name: Test Build47 inert Astro props bridge (offline)
+        run: node ci/test_build47_astro_props.cjs
+
       - name: Test Build46 ImageIO offline image integrity (Swift)
         run: python3 ci/test_build46_download_integrity.py
 

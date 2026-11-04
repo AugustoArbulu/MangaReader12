@@ -323,8 +323,18 @@ private final class HTMLSelectorService: NSObject, WKNavigationDelegate {
             var attrs = {};
             for (var k = 0; k < node.attributes.length; k++) {
               var a = node.attributes[k];
-              var maxValue = a.name === "data-page" ? (2 * 1024 * 1024) : 4096;
-              if (a.name.length < 100 && a.value.length <= maxValue) attrs[a.name] = a.value;
+              // Build47: Astro serializes public series/chapter metadata
+              // in its props attribute. Build46 silently omitted >4096
+              // characters, breaking details with missing/invalid JSON.
+              // Trust only the inert DOM representation of an astro-island;
+              // keep all unrelated attributes capped at 4096 characters.
+              var astroProps = a.name === "props" &&
+                               node.localName === "astro-island";
+              var maxValue = a.name === "data-page" || astroProps
+                  ? (2 * 1024 * 1024) : 4096;
+              if (a.name.length < 100 && a.value.length <= maxValue) {
+                attrs[a.name] = a.value;
+              }
             }
             return {text: (node.textContent || "").trim().slice(0, 8192),
                     attrs: attrs};
