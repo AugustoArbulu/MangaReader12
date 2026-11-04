@@ -2146,7 +2146,9 @@ final class MangaDetailsViewController: UITableViewController {
             cell.configure(
                 manga: manga,
                 fallback: summary,
-                allowedDomains: sourceRecord.manifest.domains
+                allowedDomains: sourceRecord.manifest.domains,
+                sourceID: sourceRecord.manifest.id,
+                sourceName: sourceRecord.manifest.name
             )
             return cell
         }
