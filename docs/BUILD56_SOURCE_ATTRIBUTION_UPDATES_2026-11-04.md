@@ -1,5 +1,7 @@
 # Build 56 — fontes por obra e novidades da Biblioteca
 
+> **CI e merge confirmados (2026-11-04):** PR #88 aprovado em push/PR CI com iOS12 Debug/Release e IPA; merge `6c3bef88c025205779354b8c53469cd837eb8483`. Arquivo IPA verificado (WebReader, versão 56, mínimo iOS12.0, mesmo identificador). **QA física pendente**, não confundir com aprovação no aparelho.
+
 **Data:** 2026-11-04. **Base física:** Build 55 aprovada preliminarmente pelo usuário no iOS 12.5.8. **Branch:** `feat/build56-source-attribution-updates`. Produto chama-se **WebReader**, identificador legado `com.example.MangaReader12`. iOS mínimo **12.0**. Não editar a main diretamente.
 
 ## A. Fonte de cada obra (solicitação explícita do usuário)

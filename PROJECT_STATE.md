@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Build 56 integrada — 2026-11-04:** PR [#88](https://github.com/AugustoArbulu/MangaReader12/pull/88) integrado à `main` no commit `6c3bef88c025205779354b8c53469cd837eb8483`. CI de push e PR no HEAD exato: **sucesso** (inclui iOS12 Debug/Release, teste Swift real de novidades vistas e PNGs Keiyoushi). IPA WebReader Build 56 não assinada gerada e conferida (`CFBundleVersion=56`, mínimo 12.0, mesmo bundle ID). **Falta teste físico do usuário**: Build 55 segue referência fisicamente aprovada. Detalhes: [handoff Build 56](docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md).
+
+
 > **Build 56 (2026-11-04, implementação em PR):** cada obra agora exibe sua fonte por ID real em Biblioteca lista/grade, detalhes e Atualizações; ícones oficiais Keiyoushi são reutilizados quando há asset. A aba Atualizações inclui `Novas/Todas` e reconhecimento não destrutivo de eventos, distinto de marcar capítulo como lido. Testes Swift offline, iOS 12 Debug/Release e QA física ainda precisam de confirmação antes de promover a versão. Detalhes em [Build 56](docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md).
 
 
