@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import io
 import json
+import lzma
 import posixpath
 from pathlib import Path
 import re
@@ -158,6 +159,23 @@ def control_fields(raw: bytes) -> dict:
     return fields
 
 
+def _legacy_lzma_member(name: str, raw: bytes) -> bytes:
+    """Decode old Theos/Debian .tar.lzma members within a strict memory bound."""
+    if not name.endswith(".tar.lzma"):
+        return raw
+    try:
+        decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE)
+        decoded = decoder.decompress(raw, max_length=MAX_TAR_LOGICAL_SIZE + 2097152)
+        if (not decoder.eof or decoder.unused_data or
+            len(decoded) > MAX_TAR_LOGICAL_SIZE + 2097152):
+            raise PackageRejected("truncated, trailing or oversized LZMA tar")
+        return decoded
+    except (lzma.LZMAError, EOFError, ValueError, OverflowError) as error:
+        if isinstance(error, PackageRejected):
+            raise
+        raise PackageRejected("malformed legacy LZMA tar") from error
+
+
 def audit_bytes(data: bytes) -> dict:
     if not isinstance(data, bytes) or not 0 < len(data) <= MAX_DEB_BYTES:
         raise PackageRejected("package too large or empty")
@@ -165,8 +183,12 @@ def audit_bytes(data: bytes) -> dict:
     parts = parse_ar(data)
     control_member = next(k for k in parts if k.startswith("control.tar"))
     payload_member = next(k for k in parts if k.startswith("data.tar"))
-    control_entries, controls, scripts = inspect_tar(parts[control_member], True)
-    data_entries, _, _ = inspect_tar(parts[payload_member], False)
+    control_entries, controls, scripts = inspect_tar(
+        _legacy_lzma_member(control_member, parts[control_member]), True
+    )
+    data_entries, _, _ = inspect_tar(
+        _legacy_lzma_member(payload_member, parts[payload_member]), False
+    )
     if "control" not in controls:
         raise PackageRejected("no Debian control file")
     fields = control_fields(controls["control"])
