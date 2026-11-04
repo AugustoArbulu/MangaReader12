@@ -559,6 +559,7 @@ final class MangaCoverCell: UITableViewCell {
     static let reuseIdentifier = "MangaCoverCell"
 
     private let coverView = UIImageView()
+    private let sourceIconView = UIImageView()
     private let titleView = UILabel()
     private let subtitleView = UILabel()
     private let badgeView = UILabel()
@@ -572,6 +573,12 @@ final class MangaCoverCell: UITableViewCell {
         coverView.clipsToBounds = true
         coverView.layer.cornerRadius = 5
         coverView.backgroundColor = UIColor(white: 0.25, alpha: 1)
+
+        sourceIconView.translatesAutoresizingMaskIntoConstraints = false
+        sourceIconView.contentMode = .scaleAspectFit
+        sourceIconView.clipsToBounds = true
+        sourceIconView.layer.cornerRadius = 4
+        sourceIconView.isHidden = true
 
         titleView.translatesAutoresizingMaskIntoConstraints = false
         titleView.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
@@ -589,6 +596,7 @@ final class MangaCoverCell: UITableViewCell {
         badgeView.isHidden = true
 
         contentView.addSubview(coverView)
+        contentView.addSubview(sourceIconView)
         contentView.addSubview(titleView)
         contentView.addSubview(subtitleView)
         contentView.addSubview(badgeView)
@@ -599,6 +607,10 @@ final class MangaCoverCell: UITableViewCell {
             coverView.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -8),
             coverView.widthAnchor.constraint(equalToConstant: 58),
             coverView.heightAnchor.constraint(equalToConstant: 84),
+            sourceIconView.widthAnchor.constraint(equalToConstant: 22),
+            sourceIconView.heightAnchor.constraint(equalToConstant: 22),
+            sourceIconView.trailingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: 2),
+            sourceIconView.bottomAnchor.constraint(equalTo: coverView.bottomAnchor, constant: 2),
 
             titleView.leadingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: 12),
             titleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -34),
@@ -624,6 +636,8 @@ final class MangaCoverCell: UITableViewCell {
         super.prepareForReuse()
         representedURL = nil
         coverView.image = nil
+        sourceIconView.image = nil
+        sourceIconView.isHidden = true
         badgeView.isHidden = true
         badgeView.text = nil
     }
@@ -633,12 +647,17 @@ final class MangaCoverCell: UITableViewCell {
         subtitle: String?,
         coverURL: String?,
         allowedDomains: [String],
-        badge: String? = nil
+        badge: String? = nil,
+        sourceID: String? = nil
     ) {
         titleView.text = title
         subtitleView.text = subtitle
         representedURL = coverURL
         coverView.image = nil
+        sourceIconView.image = sourceID.flatMap {
+            KeiyoushiSourceIconAssets.image(for: $0)
+        }
+        sourceIconView.isHidden = sourceIconView.image == nil
 
         if let badge = badge, !badge.isEmpty {
             badgeView.text = "  \(badge)  "
@@ -688,6 +707,7 @@ final class MangaDetailsHeaderCell: UITableViewCell {
     static let reuseIdentifier = "MangaDetailsHeaderCell"
 
     private let coverView = UIImageView()
+    private let sourceIconView = UIImageView()
     private let titleView = UILabel()
     private let metaView = UILabel()
     private let genresView = UILabel()
@@ -703,6 +723,12 @@ final class MangaDetailsHeaderCell: UITableViewCell {
         coverView.contentMode = .scaleAspectFill
         coverView.clipsToBounds = true
         coverView.layer.cornerRadius = 7
+
+        sourceIconView.translatesAutoresizingMaskIntoConstraints = false
+        sourceIconView.contentMode = .scaleAspectFit
+        sourceIconView.clipsToBounds = true
+        sourceIconView.layer.cornerRadius = 5
+        sourceIconView.isHidden = true
         coverView.backgroundColor = UIColor(white: 0.25, alpha: 1)
 
         titleView.translatesAutoresizingMaskIntoConstraints = false
@@ -722,6 +748,7 @@ final class MangaDetailsHeaderCell: UITableViewCell {
         descriptionView.numberOfLines = 0
 
         contentView.addSubview(coverView)
+        contentView.addSubview(sourceIconView)
         contentView.addSubview(titleView)
         contentView.addSubview(metaView)
         contentView.addSubview(genresView)
@@ -732,6 +759,10 @@ final class MangaDetailsHeaderCell: UITableViewCell {
             coverView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
             coverView.widthAnchor.constraint(equalToConstant: 108),
             coverView.heightAnchor.constraint(equalToConstant: 158),
+            sourceIconView.widthAnchor.constraint(equalToConstant: 28),
+            sourceIconView.heightAnchor.constraint(equalToConstant: 28),
+            sourceIconView.trailingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: 3),
+            sourceIconView.bottomAnchor.constraint(equalTo: coverView.bottomAnchor, constant: 3),
 
             titleView.leadingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: 14),
             titleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
@@ -760,7 +791,9 @@ final class MangaDetailsHeaderCell: UITableViewCell {
     func configure(
         manga: Manga?,
         fallback: SourceMangaSummary,
-        allowedDomains: [String]
+        allowedDomains: [String],
+        sourceID: String? = nil,
+        sourceName: String? = nil
     ) {
         let valueTitle = manga?.title ?? fallback.title
         let coverURL = manga?.cover ?? fallback.cover
@@ -768,9 +801,15 @@ final class MangaDetailsHeaderCell: UITableViewCell {
         titleView.text = valueTitle
         representedURL = coverURL
         coverView.image = nil
+        sourceIconView.image = sourceID.flatMap {
+            KeiyoushiSourceIconAssets.image(for: $0)
+        }
+        sourceIconView.isHidden = sourceIconView.image == nil
+        let sourceLine = sourceName.map { "Fonte: " + $0 }
 
         if let manga = manga {
             var meta: [String] = []
+            if let sourceLine = sourceLine { meta.append(sourceLine) }
             if let author = manga.author, !author.isEmpty {
                 meta.append("Autor: \(author)")
             }
@@ -784,7 +823,8 @@ final class MangaDetailsHeaderCell: UITableViewCell {
                 : manga.genres.joined(separator: " • ")
             descriptionView.text = manga.description
         } else {
-            metaView.text = "Carregando detalhes…"
+            metaView.text = [sourceLine, "Carregando detalhes…"]
+                .compactMap { $0 }.joined(separator: "\n")
             genresView.text = nil
             descriptionView.text = nil
         }
@@ -817,7 +857,7 @@ final class MangaDetailsHeaderCell: UITableViewCell {
 
 // Keiyoushi icons are bundled as original PNGs in Assets.xcassets.
 // Match the adapter identity, never guess from the source display name.
-private enum KeiyoushiSourceIconAssets {
+enum KeiyoushiSourceIconAssets {
     private static let assetBySourceID: [String: String] = [
         "kei.asurascans.en": "KeiAsuraScans",
         "kei.weebcentral.en": "KeiWeebCentral",
