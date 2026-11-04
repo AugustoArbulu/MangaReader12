@@ -3,6 +3,7 @@ import UIKit
 final class UpdatesViewController: UITableViewController {
     private let feedStore = UpdateFeedStore()
     private var events: [LibraryUpdateEvent] = []
+    private var sourceNames: [String: String] = [:]
     private var updateManager: LibraryUpdateManager?
     private var checking = false
     private var showAll = UserDefaults.standard.bool(forKey: "updates.showAll.v1")
@@ -136,6 +137,15 @@ final class UpdatesViewController: UITableViewController {
     }
 
     private func reloadFeed() {
+        // One local installed-source snapshot for the whole feed, not per cell.
+        if let lifecycle = try? SourceLifecycleManager.defaultManager(),
+           let sources = try? lifecycle.installedSources() {
+            sourceNames = Dictionary(uniqueKeysWithValues: sources.map {
+                ($0.manifest.id, $0.manifest.name)
+            })
+        } else {
+            sourceNames = [:]
+        }
         events = showAll ? feedStore.events() : feedStore.pendingEvents()
         markAllItem?.isEnabled = !checking && !feedStore.pendingEvents().isEmpty
         if events.isEmpty {
@@ -175,7 +185,10 @@ final class UpdatesViewController: UITableViewController {
         let event = events[indexPath.row]
         cell.configure(
             title: event.mangaTitle,
-            subtitle: event.chapterName,
+            subtitle: event.chapterName + " • Fonte: " +
+                LibrarySourceLabels.displayName(
+                    sourceID: event.sourceID, knownNames: sourceNames
+                ),
             coverURL: event.mangaCover,
             allowedDomains: [],
             badge: feedStore.isAcknowledged(event) ? "Vista" : "Novo",
