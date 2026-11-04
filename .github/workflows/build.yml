@@ -84,6 +84,9 @@ jobs:
       - name: Test Build51 pinned library and bounded download storage (Swift offline)
         run: python3 ci/test_build51_general.py
 
+      - name: Test Build52 bounded image compatibility geometry (Swift offline)
+        run: python3 ci/test_build52_image_engine.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \

@@ -41,9 +41,11 @@ assert "min(420" in ART
 assert "CGDataProvider(data: pixels as CFData)" in ART
 assert "maximumReaderPixels = 24_000_000" in ART
 assert "maximumCoverPixels = 4_000_000" in ART
-assert "WebPImageDecoder.image(from: response.data)" in READER
-assert READER.count("WebPImageDecoder.image(from: data)") == 2
+assert "ImageCompatibilityDecoder.page(response.data)" in READER
+assert READER.count("ImageCompatibilityDecoder.page(data)") == 2
 assert "WebPImageDecoder.image(from: data) != nil" in DOWNLOAD
+assert "MR12WebPDecodePageScaledBGRA" in BRIDGE
+assert "MR12WebPDecodePageScaledBGRA(" in ART
 assert "CGImageSourceGetStatusAtIndex" in DOWNLOAD
 assert "PNG requires its final IEND chunk" in DOWNLOAD
 
@@ -110,7 +112,28 @@ int main(void) {
                               small,small_size,small_w,small_h,
                               small_w*4)) return 16;
   free(small);
-  puts("PASS: libwebp real WebP, rejected bad bytes, scaled 5 MP cover to 420x336 safely");
+  // Build52: the chapter-scale codec must also decode the entire WebP
+  // into a caller-owned buffer and reject truncated/spoofed streams.
+  const int page_w = 2000, page_h = 1600;
+  const size_t page_bytes = (size_t)page_w * page_h * 4;
+  uint8_t *page = calloc(1, page_bytes);
+  if (!page) return 17;
+  if (!MR12WebPDecodePageScaledBGRA(large, sizeof(large),
+                                   page, page_bytes,
+                                   page_w, page_h, page_w * 4)) return 18;
+  if (page[0] != 48 || page[1] != 112 ||
+      page[2] != 224 || page[3] != 255) return 19;
+  if (MR12WebPDecodePageScaledBGRA(large, sizeof(large)/2,
+                                  page, page_bytes,
+                                  page_w, page_h, page_w * 4)) return 20;
+  if (MR12WebPDecodePageScaledBGRA((const uint8_t*)"<html>", 6,
+                                  page, page_bytes,
+                                  page_w, page_h, page_w * 4)) return 21;
+  if (MR12WebPDecodePageScaledBGRA(large, sizeof(large),
+                                  page, page_bytes,
+                                  32769, 1, 32769 * 4)) return 22;
+  free(page);
+  puts("PASS: libwebp real WebP, reject bad bytes, cover and page scaling bounded");
   return 0;
 }
 '''.replace("__DATA__", ", ".join(str(b) for b in webp)).replace(

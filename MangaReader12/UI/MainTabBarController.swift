@@ -1767,7 +1767,7 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Build 51 • compatível com iOS 12.0"
+            cell.detailTextLabel?.text = "Build 52 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
