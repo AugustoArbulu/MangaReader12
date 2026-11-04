@@ -1,6 +1,75 @@
 import UIKit
 import ImageIO
 
+// BEGIN IMAGE_RESPONSE_DIAGNOSTICS
+// Safe, content-based diagnosis. Never include URL paths/queries, headers
+// other than sanitized MIME, body content, credentials, cookies or tokens.
+enum ImageResponseDiagnostics {
+    static func format(_ data: Data) -> String {
+        if data.count >= 12 {
+            let b = [UInt8](data.prefix(12))
+            if b[0...3].elementsEqual([82, 73, 70, 70]) &&
+                b[8...11].elementsEqual([87, 69, 66, 80]) { return "WebP" }
+            if b[4...7].elementsEqual([102, 116, 121, 112]) {
+                if b[8...11].elementsEqual([97, 118, 105, 102]) ||
+                    b[8...11].elementsEqual([97, 118, 105, 115]) { return "AVIF" }
+                if b[8...11].elementsEqual([104, 101, 105, 99]) ||
+                    b[8...11].elementsEqual([104, 101, 105, 120]) { return "HEIC" }
+            }
+        }
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+            return "PNG"
+        }
+        if data.starts(with: [0xFF, 0xD8, 0xFF]) { return "JPEG" }
+        if data.starts(with: [71, 73, 70, 56]) { return "GIF" }
+        if data.starts(with: [37, 80, 68, 70]) { return "PDF" }
+        if data.isEmpty { return "empty" }
+        // Examine only the first 64 bytes; never include the content.
+        let prefix = String(data: data.prefix(64), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        if prefix.hasPrefix("<!doctype html") || prefix.hasPrefix("<html") ||
+            prefix.hasPrefix("<head") || prefix.hasPrefix("<body") { return "HTML" }
+        if prefix.hasPrefix("<?xml") { return "XML" }
+        if prefix.hasPrefix("{") || prefix.hasPrefix("[") { return "JSON-like" }
+        return "unrecognized"
+    }
+
+    static func mime(_ headers: [String: String]) -> String {
+        guard let raw = headers.first(where: {
+            $0.key.caseInsensitiveCompare("content-type") == .orderedSame
+        })?.value else { return "(missing)" }
+        let value = raw.components(separatedBy: ";").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        // Permit only innocuous MIME syntax. Never reflect arbitrary header text.
+        guard value.count > 0, value.count <= 64,
+              value.range(of: "^[a-z0-9.+_-]+/[a-z0-9.+_-]+$",
+                          options: .regularExpression) != nil else {
+            return "(invalid)"
+        }
+        return value
+    }
+
+    static func host(_ url: String) -> String {
+        guard let parsed = URLComponents(string: url),
+              parsed.scheme?.lowercased() == "https",
+              let host = parsed.host?.lowercased(),
+              host.range(of: "^[a-z0-9.-]{1,253}$",
+                         options: .regularExpression) != nil else {
+            return "(invalid)"
+        }
+        return host
+    }
+
+    static func summary(data: Data, headers: [String: String], status: Int,
+                        url: String) -> String {
+        return "HTTP " + String(status) + ", formato=" + format(data) +
+            ", MIME=" + mime(headers) + ", bytes=" + String(data.count) +
+            ", host=" + host(url)
+    }
+}
+// END IMAGE_RESPONSE_DIAGNOSTICS
+
 // A bounded thumbnail pipeline for older iOS devices. One HTTP client per
 // active transfer is retained until completion; at most three are active.
 // Identical URLs under identical host policies share a single fetch.

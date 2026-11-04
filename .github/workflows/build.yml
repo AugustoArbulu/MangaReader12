@@ -48,6 +48,9 @@ jobs:
       - name: Test Build47 inert Astro props bridge (offline)
         run: node ci/test_build47_astro_props.cjs
 
+      - name: Test Build48 safe image-response diagnostics (Swift offline)
+        run: python3 ci/test_build48_image_diagnostics.py
+
       - name: Test Build46 ImageIO offline image integrity (Swift)
         run: python3 ci/test_build46_download_integrity.py
 
