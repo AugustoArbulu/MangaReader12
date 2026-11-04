@@ -38,8 +38,8 @@ REQUIRED_CONTROL = {
 }
 ALLOWED_AR_NAMES = {
     "debian-binary", "control.tar.gz", "control.tar.xz",
-    "control.tar.bz2", "control.tar", "data.tar.gz",
-    "data.tar.xz", "data.tar.bz2", "data.tar", "data.tar.zst"
+    "control.tar.bz2", "control.tar.lzma", "control.tar", "data.tar.gz",
+    "data.tar.xz", "data.tar.bz2", "data.tar.lzma", "data.tar", "data.tar.zst"
 }
 SCRIPT_NAMES = {"preinst", "postinst", "prerm", "postrm", "config", "templates"}
 
