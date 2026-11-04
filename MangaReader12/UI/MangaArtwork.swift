@@ -83,6 +83,82 @@ enum WebPImageDecoder {
         return ImageResponseDiagnostics.format(data) == "WebP"
     }
 
+    // The cover loader never needs the original full-resolution pixels.
+    // WebPGetInfo inspects only the header; no remote request or large buffer.
+    static func dimensions(of data: Data) -> (Int, Int)? {
+        guard isWebP(data), data.count >= 20, data.count <= maxInputBytes else {
+            return nil
+        }
+        var width: Int32 = 0
+        var height: Int32 = 0
+        let ok = data.withUnsafeBytes { bytes -> Bool in
+            guard let input = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self)
+                else { return false }
+            return WebPGetInfo(input, data.count, &width, &height) == 1
+        }
+        guard ok, width > 0, height > 0 else { return nil }
+        return (Int(width), Int(height))
+    }
+
+    // A large source image (>4 MP) must not be expanded into RAM merely to
+    // draw a 420-pixel cover. libwebp scales while decoding into a fixed,
+    // caller-owned BGRA buffer; the full source dimensions remain bounded.
+    static func thumbnail(from data: Data) -> UIImage? {
+        guard let size = dimensions(of: data) else { return nil }
+        let (w, h) = size
+        guard w <= 64_000_000 / h, w <= 16_384, h <= 16_384 else {
+            return nil
+        }
+        let factor = max(1.0, max(Double(w) / 420.0, Double(h) / 420.0))
+        let scaledWidth = max(1, min(420, Int((Double(w) / factor).rounded())))
+        let scaledHeight = max(1, min(420, Int((Double(h) / factor).rounded())))
+        let bytesPerRow = scaledWidth * 4
+        let byteCount = bytesPerRow * scaledHeight
+        var pixels = Data(count: byteCount)
+
+        let decoded = pixels.withUnsafeMutableBytes { destination -> Bool in
+            guard let output = destination.baseAddress?
+                .assumingMemoryBound(to: UInt8.self) else { return false }
+            return data.withUnsafeBytes { source -> Bool in
+                guard let input = source.baseAddress?
+                    .assumingMemoryBound(to: UInt8.self) else { return false }
+                return MR12WebPDecodeScaledBGRA(
+                    input, data.count, output, byteCount,
+                    Int32(scaledWidth), Int32(scaledHeight),
+                    Int32(bytesPerRow)
+                ) == 1
+            }
+        }
+        guard decoded else { return nil }
+
+        // MODE_BGRA has straight alpha; CoreGraphics requires premultiplied.
+        pixels.withUnsafeMutableBytes { buffer in
+            guard let bytes = buffer.baseAddress?
+                .assumingMemoryBound(to: UInt8.self) else { return }
+            for i in Swift.stride(from: 0, to: byteCount, by: 4) {
+                let alpha = Int(bytes[i + 3])
+                if alpha < 255 {
+                    bytes[i] = UInt8((Int(bytes[i]) * alpha + 127) / 255)
+                    bytes[i + 1] = UInt8((Int(bytes[i + 1]) * alpha + 127) / 255)
+                    bytes[i + 2] = UInt8((Int(bytes[i + 2]) * alpha + 127) / 255)
+                }
+            }
+        }
+        guard let provider = CGDataProvider(data: pixels as CFData),
+              let cgImage = CGImage(
+                width: scaledWidth, height: scaledHeight,
+                bitsPerComponent: 8, bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.union(
+                    CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+                ),
+                provider: provider, decode: nil, shouldInterpolate: true,
+                intent: .defaultIntent
+              ) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+
     static func image(from data: Data, maxPixels: Int = maximumReaderPixels) -> UIImage? {
         guard isWebP(data) else { return UIImage(data: data) }
         guard data.count >= 20, data.count <= maxInputBytes,
@@ -305,22 +381,10 @@ final class CoverImageLoader {
     // Draw only a thumbnail. A single full-size cover image can otherwise
     // consume substantial RAM after decompression on older devices.
     private func decodeCover(_ data: Data) -> UIImage? {
-        // Bounded WebP decode; do not force iOS 12 ImageIO to parse WebP.
+        // Decode WebP directly to a bounded thumbnail, including covers
+        // larger than the former 4 MP full-resolution allocation ceiling.
         if WebPImageDecoder.isWebP(data) {
-            guard let image = WebPImageDecoder.image(
-                from: data, maxPixels: WebPImageDecoder.maximumCoverPixels
-            ) else { return nil }
-            let fullPixels = image.size.width * image.size.height
-            if fullPixels <= 420 * 420 { return image }
-            // Downscale the already bounded image for the list's memory cache.
-            let ratio = min(420 / image.size.width, 420 / image.size.height)
-            let target = CGSize(width: max(1, image.size.width * ratio),
-                                height: max(1, image.size.height * ratio))
-            UIGraphicsBeginImageContextWithOptions(target, false, 1)
-            image.draw(in: CGRect(origin: .zero, size: target))
-            let thumbnail = UIGraphicsGetImageFromCurrentImageContext()
-            UIGraphicsEndImageContext()
-            return thumbnail ?? image
+            return WebPImageDecoder.thumbnail(from: data)
         }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return UIImage(data: data)
