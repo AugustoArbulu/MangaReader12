@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-> **Atualização 2026-11-04 — Build 54:** nome público do aplicativo alterado para **WebReader** (`CFBundleDisplayName`, `CFBundleName` e Ajustes). Identificador `com.example.MangaReader12`, executável, target, diretórios, banco SQLite, backups e extensões permanecem inalterados para preservar dados. Veja [Build 54](docs/BUILD54_WEBREADER_BRANDING_2026-11-04.md). A validação física da Build 54 ainda depende de teste no iOS 12.5.8.
+> **Atualização 2026-11-04 — Build 54:** nome público do aplicativo e ícone alterados para **WebReader** (kanji vermelho 画 sobre preto) (`CFBundleDisplayName`, `CFBundleName` e Ajustes). Identificador `com.example.MangaReader12`, executável, target, diretórios, banco SQLite, backups e extensões permanecem inalterados para preservar dados. Veja [Build 54](docs/BUILD54_WEBREADER_BRANDING_2026-11-04.md). A validação física da Build 54 ainda depende de teste no iOS 12.5.8.
 
 
 > **CHECKPOINT ATUAL — 2026-11-04 (Build 53):** a parte histórica abaixo começou no Build 16. O estado mais recente está no handoff [docs/HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md](docs/HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md). Build 51 teve feedback físico preliminar positivo; Builds 52/53 foram aprovadas em CI iOS12, mas aguardam validação no dispositivo. Fonte Asura EN 0.1.3 e libwebp 1.6.0. Não alegar AVIF decodificado. A main mais recente após PR #83 é `4923420f918c57772037112c50f93995549b09f3`.

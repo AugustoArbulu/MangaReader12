@@ -59,3 +59,16 @@ if [[ "$IDENTIFIER" != "com.example.MangaReader12" || "$EXECUTABLE" != "MangaRea
 fi
 echo "PASS: WebReader branding and existing app identity are intact."
 
+# Asset catalog is compiled in both iPhone/iPad variants; no empty default
+# icon is allowed to pass artifact verification.
+if [[ ! -f "$APP_PATH/Assets.car" ]]; then
+  echo "ERROR: no compiled WebReader icon catalog" >&2
+  exit 7
+fi
+ICON_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist" 2>/dev/null || true)
+if [[ "$ICON_NAME" != "AppIcon" ]]; then
+  echo "ERROR: CFBundleIcons does not point to AppIcon: $ICON_NAME" >&2
+  exit 7
+fi
+echo "PASS: AppIcon compiled into WebReader iOS12 app."
+
