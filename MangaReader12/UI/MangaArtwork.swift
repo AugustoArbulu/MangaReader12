@@ -70,6 +70,85 @@ enum ImageResponseDiagnostics {
 }
 // END IMAGE_RESPONSE_DIAGNOSTICS
 
+// BEGIN WEBP_IMAGE_DECODER
+// WebP is not decoded by iOS 12 UIImage/ImageIO. Use libwebp's C decoder,
+// statically linked for iOS 12.0, with hard limits on compressed bytes and
+// decoded pixels. No remote fetches, WAF/session state or URL manipulation.
+enum WebPImageDecoder {
+    private static let maxInputBytes = 20 * 1024 * 1024
+    static let maximumReaderPixels = 24_000_000
+    static let maximumCoverPixels = 4_000_000
+
+    static func isWebP(_ data: Data) -> Bool {
+        return ImageResponseDiagnostics.format(data) == "WebP"
+    }
+
+    static func image(from data: Data, maxPixels: Int = maximumReaderPixels) -> UIImage? {
+        guard isWebP(data) else { return UIImage(data: data) }
+        guard data.count >= 20, data.count <= maxInputBytes,
+              maxPixels >= 1 else { return nil }
+        var width: Int32 = 0
+        var height: Int32 = 0
+        let recognized: Bool = data.withUnsafeBytes { raw in
+            guard let input = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return false
+            }
+            return WebPGetInfo(input, data.count, &width, &height) == 1
+        }
+        guard recognized, width > 0, height > 0,
+              width <= 100_000, height <= 100_000 else { return nil }
+
+        // Avoid integer overflow and unbounded allocations on older iPads.
+        let w = Int(width), h = Int(height)
+        guard w <= maxPixels / h, w <= Int32.max / 4 else { return nil }
+        let stride = w * 4
+        let totalBytes = stride * h
+        guard totalBytes <= maxPixels * 4 else { return nil }
+
+        // Explicit BGRA output avoids libwebp's implicit large allocations.
+        // The decoder writes into this Swift-owned bounded buffer.
+        var pixels = Data(count: totalBytes)
+        let decoded: Bool = pixels.withUnsafeMutableBytes { destination in
+            guard let output = destination.baseAddress?
+                .assumingMemoryBound(to: UInt8.self) else { return false }
+            return data.withUnsafeBytes { source in
+                guard let input = source.baseAddress?
+                    .assumingMemoryBound(to: UInt8.self) else { return false }
+                return WebPDecodeBGRAInto(input, data.count, output,
+                                         totalBytes, Int32(stride)) != nil
+            }
+        }
+        guard decoded else { return nil }
+
+        // CGImage/Quartz expects premultiplied BGRA on iOS 12. WebP's
+        // BGRAInto writes straight-alpha samples; premultiply explicitly.
+        pixels.withUnsafeMutableBytes { buffer in
+            guard let bytes = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+                else { return }
+            for i in stride(from: 0, to: totalBytes, by: 4) {
+                let alpha = Int(bytes[i + 3])
+                if alpha < 255 {
+                    bytes[i] = UInt8((Int(bytes[i]) * alpha + 127) / 255)
+                    bytes[i + 1] = UInt8((Int(bytes[i + 1]) * alpha + 127) / 255)
+                    bytes[i + 2] = UInt8((Int(bytes[i + 2]) * alpha + 127) / 255)
+                }
+            }
+        }
+        guard let provider = CGDataProvider(data: pixels as CFData),
+              let cgImage = CGImage(
+                width: w, height: h,
+                bitsPerComponent: 8, bitsPerPixel: 32,
+                bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.union(
+                    CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+                ), provider: provider, decode: nil,
+                shouldInterpolate: true, intent: .defaultIntent
+              ) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+}
+// END WEBP_IMAGE_DECODER
+
 // A bounded thumbnail pipeline for older iOS devices. One HTTP client per
 // active transfer is retained until completion; at most three are active.
 // Identical URLs under identical host policies share a single fetch.
@@ -226,6 +305,23 @@ final class CoverImageLoader {
     // Draw only a thumbnail. A single full-size cover image can otherwise
     // consume substantial RAM after decompression on older devices.
     private func decodeCover(_ data: Data) -> UIImage? {
+        // Bounded WebP decode; do not force iOS 12 ImageIO to parse WebP.
+        if WebPImageDecoder.isWebP(data) {
+            guard let image = WebPImageDecoder.image(
+                from: data, maxPixels: WebPImageDecoder.maximumCoverPixels
+            ) else { return nil }
+            let fullPixels = image.size.width * image.size.height
+            if fullPixels <= 420 * 420 { return image }
+            // Downscale the already bounded image for the list's memory cache.
+            let ratio = min(420 / image.size.width, 420 / image.size.height)
+            let target = CGSize(width: max(1, image.size.width * ratio),
+                                height: max(1, image.size.height * ratio))
+            UIGraphicsBeginImageContextWithOptions(target, false, 1)
+            image.draw(in: CGRect(origin: .zero, size: target))
+            let thumbnail = UIGraphicsGetImageFromCurrentImageContext()
+            UIGraphicsEndImageContext()
+            return thumbnail ?? image
+        }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return UIImage(data: data)
         }
