@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Checkpoint físico 2026-11-04 — Build 56 aprovada pelo usuário no iOS 12.5.8.** A interface da Biblioteca/Updates da Build 56 foi testada e aprovada. Sistema de atualização in-app via **Chimera + AppSync + appinst** incorporado ao roadmap como trilha paralela, **ainda não funcional no app**. Início da Fase 1 (auditoria e teste offline de manifesto assinado) em branch isolada: [Handoff do Updater Chimera](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md). Nunca usar appinst de espelho não verificado para instalar builds nem modificar a main sem revisão.
+
+
 > **Build 56 integrada — 2026-11-04:** PR [#88](https://github.com/AugustoArbulu/MangaReader12/pull/88) integrado à `main` no commit `6c3bef88c025205779354b8c53469cd837eb8483`. CI de push e PR no HEAD exato: **sucesso** (inclui iOS12 Debug/Release, teste Swift real de novidades vistas e PNGs Keiyoushi). IPA WebReader Build 56 não assinada gerada e conferida (`CFBundleVersion=56`, mínimo 12.0, mesmo bundle ID). **Falta teste físico do usuário**: Build 55 segue referência fisicamente aprovada. Detalhes: [handoff Build 56](docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md).
 
 

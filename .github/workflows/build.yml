@@ -105,6 +105,9 @@ jobs:
       - name: Test Build56 source attribution and persistent update feed (Swift offline)
         run: python3 ci/test_build56_library_updates.py
 
+      - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
+        run: python3 ci/test_webreader_update_manifest.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
