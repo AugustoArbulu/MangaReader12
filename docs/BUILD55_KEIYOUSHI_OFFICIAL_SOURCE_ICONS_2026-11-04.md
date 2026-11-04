@@ -37,4 +37,4 @@ O repositório Keiyoushi publica código sob Apache-2.0; logotipos/ícones podem
 4. Em fontes não mapeadas, validar `manifest.icon` ou fallback, sem exibir ícone de fonte diferente.
 5. Conferir Biblioteca, leitura WebP online/offline, filtros Asura e downloads.
 
-**Estado:** Não tratar a Build55 como aprovada fisicamente antes do retorno do usuário. Após aprovação, continuar o roadmap de Biblioteca e Downloads. AVIF continua não decodificado.
+**Estado atualizado (2026-11-04):** usuário confirmou **“está funcionando”** no iOS 12.5.8 (aceite preliminar, não validação exaustiva de cada ícone). PR #86 aprovado em CI e integrado à `main`, commit `9657d235b959e5647893889d863be7a82365f355`. **Build 56 prevista:** mostrar junto a cada obra a fonte a que pertence, incluindo nome, ícone oficial quando mapeado e identidade correta em lista e grade. Consulte [HANDOFF_WEBREADER_BUILD55_ROADMAP_2026-11-04.md](HANDOFF_WEBREADER_BUILD55_ROADMAP_2026-11-04.md). AVIF continua não decodificado.
