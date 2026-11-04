@@ -100,7 +100,7 @@ enum WebPImageDecoder {
 
         // Avoid integer overflow and unbounded allocations on older iPads.
         let w = Int(width), h = Int(height)
-        guard w <= maxPixels / h, w <= Int32.max / 4 else { return nil }
+        guard w <= maxPixels / h, w <= Int(Int32.max) / 4 else { return nil }
         let stride = w * 4
         let totalBytes = stride * h
         guard totalBytes <= maxPixels * 4 else { return nil }
@@ -125,7 +125,7 @@ enum WebPImageDecoder {
         pixels.withUnsafeMutableBytes { buffer in
             guard let bytes = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self)
                 else { return }
-            for i in stride(from: 0, to: totalBytes, by: 4) {
+            for i in Swift.stride(from: 0, to: totalBytes, by: 4) {
                 let alpha = Int(bytes[i + 3])
                 if alpha < 255 {
                     bytes[i] = UInt8((Int(bytes[i]) * alpha + 127) / 255)
