@@ -189,7 +189,7 @@ final class ExploreViewController: UITableViewController {
         )
 
         sheet.addAction(UIAlertAction(
-            title: "Repositório demo do MangaReader12",
+            title: "Repositório demo do WebReader",
             style: .default
         ) { [weak self] _ in
             self?.addRepository(url: SourceLifecycleManager.demoRepositoryURL)
@@ -1766,8 +1766,8 @@ final class SettingsViewController: UITableViewController {
             cell.selectionStyle = .default
 
         default:
-            cell.textLabel?.text = "MangaReader12"
-            cell.detailTextLabel?.text = "Build 53 • compatível com iOS 12.0"
+            cell.textLabel?.text = "WebReader"
+            cell.detailTextLabel?.text = "Build 54 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none

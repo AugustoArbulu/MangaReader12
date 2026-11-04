@@ -1,5 +1,7 @@
 # HANDOFF ATUAL — MangaReader12 Builds 51–53 / Compatibilidade e Roadmap
 
+> **Build 54 — nova marca WebReader:** a partir do Build 54, o nome visível do app no iOS é **WebReader**. O repositório, executável, Bundle ID `com.example.MangaReader12`, dados e arquivos internos continuam com o identificador anterior para preservar atualizações. Ver [docs/BUILD54_WEBREADER_BRANDING_2026-11-04.md](BUILD54_WEBREADER_BRANDING_2026-11-04.md). Esta página continua cobrindo as Builds 51–53; aguardar QA física antes de aprovar a 54.
+
 **Data:** 2026-11-04 (America/Sao_Paulo). **Repositório:** `AugustoArbulu/MangaReader12`; branch estável: `main`. **HEAD após PR #83:** `4923420f918c57772037112c50f93995549b09f3`. **Dispositivo-alvo:** iOS 12.5.8; deployment target 12.0; macOS 14 / Xcode 15.4 para CI. **Nunca modificar main diretamente**: branch, testes, PR, CI verde, squash merge.
 
 ## 1. Ordem dos fatos: o que NÃO deve ser confundido

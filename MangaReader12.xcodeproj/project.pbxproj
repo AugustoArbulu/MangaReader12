@@ -46,6 +46,7 @@
 		A10000000000000000000025 /* LocalComicsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* LocalComicsViewController.swift */; };
 		A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ComixBrowserProbeViewController.swift */; };
 		A10000000000000000000028 /* libwebp-COPYING.txt in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* libwebp-COPYING.txt */; };
+		A10000000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +91,7 @@
 		A20000000000000000000026 /* LocalComicsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalComicsViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000027 /* ComixBrowserProbeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComixBrowserProbeViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* libwebp-COPYING.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "libwebp-COPYING.txt"; sourceTree = "<group>"; };
+		A20000000000000000000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +131,7 @@
 				A4000000000000000000000B /* Library */,
 				A20000000000000000000003 /* Info.plist */,
 				A20000000000000000000004 /* LaunchScreen.storyboard */,
+				A20000000000000000000029 /* Assets.xcassets */,
 			);
 			path = MangaReader12;
 			sourceTree = "<group>";
@@ -300,6 +303,7 @@
 			files = (
 				A10000000000000000000003 /* LaunchScreen.storyboard in Resources */,
 				A10000000000000000000028 /* libwebp-COPYING.txt in Resources */,
+				A10000000000000000000029 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -390,7 +394,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 53;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 54;
 				DEVELOPMENT_TEAM = "";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -425,7 +430,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 53;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 54;
 				DEVELOPMENT_TEAM = "";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
