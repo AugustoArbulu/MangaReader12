@@ -68,7 +68,7 @@ def parse_ar(data: bytes) -> dict:
         if size < 0 or size > MAX_DEB_BYTES or pos + size > len(data):
             raise PackageRejected("ar member outside archive")
         if filename in parts or filename not in ALLOWED_AR_NAMES:
-            raise PackageRejected("unexpected or duplicate ar member")
+            raise PackageRejected("unexpected or duplicate ar member: " + repr(filename[:32]))
         parts[filename] = data[pos:pos + size]
         pos += size + (size % 2)
     if pos != len(data):
