@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_PATH="${1:?usage: package_ipa.sh /path/to/App.app [output.ipa]}"
-OUTPUT="${2:-MangaReader12-unsigned.ipa}"
+OUTPUT="${2:-WebReader-unsigned.ipa}"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "ERROR: app bundle not found: $APP_PATH" >&2
