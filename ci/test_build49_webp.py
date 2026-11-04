@@ -53,15 +53,20 @@ webp = base64.b64decode(
     "UklGRh4AAABXRUJQVlA4TBEAAAAvAUAAEAdQj8IXpYCBiOh/AAA="
 )
 assert len(webp) == 38
+# Fixed offline 2500x2000 lossless WebP fixture (RGBA 224,112,48,255).
+# The bytes were generated once with Pillow outside CI. libwebp decodes
+# these bytes; it need not link its unrelated encoder/sharpyuv libraries.
+large_webp = base64.b64decode("UklGRvQAAABXRUJQVlA4TOgAAAAvw8nzAQdQuIIXpv8BAEX6/58i+p/63//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9//5sH")
+assert len(large_webp) == 252
 TEST_C = r'''
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <webp/decode.h>
-#include <webp/encode.h>
 #include "MR12WebPBridge.h"
 static const uint8_t valid[] = { __DATA__ };
+static const uint8_t large[] = { __LARGE_DATA__ };
 int main(void) {
   int width = 0, height = 0;
   uint8_t output[16] = {0};
@@ -80,46 +85,37 @@ int main(void) {
   if (WebPDecodeBGRAInto((const uint8_t*)"<html>", 6,
                          output, sizeof(output), 8) != NULL) return 8;
   if (WebPGetInfo((const uint8_t*)"<html>", 6, &width, &height) != 0) return 9;
-  // A 2500x2000 WebP is larger than the old 4 million-pixel cover limit.
-  // Decode it directly to 420x336 pixels without a full-size RGBA buffer.
-  const int large_w = 2500, large_h = 2000, small_w = 420, small_h = 336;
-  uint8_t* rgba = malloc((size_t)large_w * large_h * 4);
-  if (!rgba) return 10;
-  for (size_t i = 0; i < (size_t)large_w * large_h; ++i) {
-    rgba[i*4+0] = 224;
-    rgba[i*4+1] = 112;
-    rgba[i*4+2] = 48;
-    rgba[i*4+3] = 255;
-  }
-  uint8_t* compressed = NULL;
-  const size_t compressed_size = WebPEncodeLosslessRGBA(
-    rgba, large_w, large_h, large_w*4, &compressed);
-  free(rgba);
-  if (!compressed || compressed_size == 0) return 11;
+  // A 2500x2000 WebP exceeds the old 4 MP cover limit.
+  // Decode directly to 420x336 without a full-size RGBA allocation.
+  int source_w = 0, source_h = 0;
+  if (WebPGetInfo(large, sizeof(large), &source_w, &source_h) != 1 ||
+      source_w != 2500 || source_h != 2000) return 10;
+  const int small_w = 420, small_h = 336;
   const size_t small_size = (size_t)small_w*small_h*4;
-  uint8_t* small = calloc(1,small_size);
-  if (!small) { WebPFree(compressed); return 12; }
-  if (!MR12WebPDecodeScaledBGRA(compressed, compressed_size,
+  uint8_t* small = calloc(1, small_size);
+  if (!small) return 11;
+  if (!MR12WebPDecodeScaledBGRA(large, sizeof(large),
                                small, small_size, small_w, small_h,
-                               small_w*4)) return 13;
-  // BGRA expected for the input RGBA (224,112,48,255).
+                               small_w*4)) return 12;
+  // BGRA for input RGBA (224,112,48,255).
   if (small[0] != 48 || small[1] != 112 ||
-      small[2] != 224 || small[3] != 255) return 14;
-  if (MR12WebPDecodeScaledBGRA(compressed, compressed_size/2,
+      small[2] != 224 || small[3] != 255) return 13;
+  if (MR12WebPDecodeScaledBGRA(large, sizeof(large)/2,
                               small,small_size,small_w,small_h,
-                              small_w*4)) return 15;
-  if (MR12WebPDecodeScaledBGRA(compressed,compressed_size,
+                              small_w*4)) return 14;
+  if (MR12WebPDecodeScaledBGRA(large,sizeof(large),
                               small,small_size-1,small_w,small_h,
-                              small_w*4)) return 16;
+                              small_w*4)) return 15;
   if (MR12WebPDecodeScaledBGRA((const uint8_t*)"<html>",6,
                               small,small_size,small_w,small_h,
-                              small_w*4)) return 17;
+                              small_w*4)) return 16;
   free(small);
-  WebPFree(compressed);
   puts("PASS: libwebp real WebP, rejected bad bytes, scaled 5 MP cover to 420x336 safely");
   return 0;
 }
-'''.replace("__DATA__", ", ".join(str(b) for b in webp))
+'''.replace("__DATA__", ", ".join(str(b) for b in webp)).replace(
+    "__LARGE_DATA__", ", ".join(str(b) for b in large_webp)
+)
 
 with tempfile.TemporaryDirectory(prefix="mr12-host-webp-") as root:
     work = Path(root)
