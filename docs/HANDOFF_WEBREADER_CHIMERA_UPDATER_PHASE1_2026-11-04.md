@@ -44,6 +44,22 @@ Para adiantar a análise sem riscos, acrescentei:
 
 **Uso futuro, sem instalar nada:** `python3 ci/audit_appinst_deb.py "/caminho/para/appinst-2.1.1-iphoneos-arm.deb"`. A saída deve ser interpretada como *relatório estrutural*, **não** como certificado de procedência. Se houver uma cópia do `.deb` realmente instalado no iPhone, seu hash também deve ser confrontado separadamente com o arquivo do espelho e com um identificador confiável da distribuição oficial, caso seja localizado.
 
+### Resultado da auditoria do `.deb` real do espelho (04/11/2026)
+
+O GitHub Actions analisou **os bytes reais** do pacote rootful disponibilizado pelo espelho, sem instalação, no run de push [41937123759](https://github.com/AugustoArbulu/MangaReader12/actions/runs/41937123759), concluído com sucesso. Verificações:
+
+- `59716` bytes, SHA-256 **igual ao digest do próprio índice do espelho**: `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`.
+- Metadados internos: `Package=ai.akemi.appinst`, `Version=2.1.1`, `Architecture=iphoneos-arm`.
+- Arquivo `ar` efetivo: `debian-binary`, `control.tar.gz` e **`data.tar.lzma`**. O auditor foi ampliado com descompressão LZMA-alone limitada em tamanho, incluindo teste de truncamento.
+- O payload contém `usr/bin/appinst`. **Nenhum script Debian de manutenção** foi encontrado. Nenhuma execução ou instalação ocorreu.
+- A referência `235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a` do nome do pacote corresponde a um commit existente do repositório oficial `akemin-dayo/AppSync`, com autoria `Karen/あけみ`. **O nome do arquivo não demonstra que seu binário deriva fielmente desse commit.**
+- A consulta ao índice HTTPS original `cydia.akemi.ai/Packages.bz2`, `Packages.gz` e `Packages` **não obteve resposta**: três timeouts de leitura. Portanto a comparação entre hash do espelho e um hash publicado pelo próprio autor **continua inconclusiva**.
+- O `.deb` que está **instalado no dispositivo** também não foi extraído ou comparado. **`official_origin_verified=false`** e `permission_to_install_granted=false` no relatório.
+
+Código de CI: `ci/audit_pinned_appinst_mirror.py`, `ci/test_audit_pinned_appinst_mirror.py`, `ci/audit_appinst_deb.py` e `ci/test_audit_appinst_deb.py`. Auditoria estrutural bem-sucedida **não equivale** a autenticação do fornecedor ou a permissão para executar o appinst em modo privilegiado.
+
+**Próximo gate físico:** recuperar o `.deb` efetivamente instalado ou um hash confiável do pacote, verificar procedência com a distribuição oficial por um canal autenticado e só então testar instalações de um app descartável, sem tocar na Biblioteca do WebReader.
+
 ## 2. Integração verificada no repositório
 
 - **Nome público:** WebReader. **Bundle ID real:** `com.example.MangaReader12`, **executable:** `MangaReader12`, **deployment target** 12.0. **Nunca mudar ID/contêiner** durante atualização. Bundle ID igual é necessário, mas não garante preservação em todo modelo de assinatura/entitlement.

@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Atualizador Chimera — auditoria estendida (04/11/2026):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) em draft. CI fez leitura dos bytes reais do `appinst 2.1.1 iphoneos-arm` do espelho: metadados/estrutura válidos, SHA-256 igual ao índice do espelho, payload `usr/bin/appinst` com `data.tar.lzma`, sem scripts de manutenção. **Origem oficial não verificada** porque `cydia.akemi.ai` não respondeu e o arquivo instalado no iPhone não foi comparado. Nenhuma instalação executada. [Relatório técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Checkpoint físico 2026-11-04 — Build 56 aprovada pelo usuário no iOS 12.5.8.** A interface da Biblioteca/Updates da Build 56 foi testada e aprovada. Sistema de atualização in-app via **Chimera + AppSync + appinst** incorporado ao roadmap como trilha paralela, **ainda não funcional no app**. Início da Fase 1 (auditoria e teste offline de manifesto assinado) em branch isolada: [Handoff do Updater Chimera](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md). Nunca usar appinst de espelho não verificado para instalar builds nem modificar a main sem revisão.
 
 
