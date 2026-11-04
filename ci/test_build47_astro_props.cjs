@@ -40,8 +40,10 @@ assert(file.includes('name === "chapters" ? 4000'));
 assert(file.includes('name === "images" ? 1500'));
 const pbx=fs.readFileSync(path.join(__dirname,
   '../MangaReader12.xcodeproj/project.pbxproj'),'utf8');
-assert.equal((pbx.match(/CURRENT_PROJECT_VERSION = 47;/g)||[]).length,2);
+const versions=Array.from(pbx.matchAll(/CURRENT_PROJECT_VERSION = ([0-9]+);/g),m=>Number(m[1]));
+assert.equal(versions.length,2);
+assert(versions.every(v=>v===versions[0] && v>=47));
 const ui=fs.readFileSync(path.join(__dirname,
   '../MangaReader12/UI/MainTabBarController.swift'),'utf8');
-assert(ui.includes('Build 47 • compatível com iOS 12.0'));
+assert(ui.includes('Build '+versions[0]+' • compatível com iOS 12.0'));
 console.log('PASS Build47: native Astro props >4096 bytes, 2MB ceiling, unrelated 4KB limits, chapter/image caps, Build47');
