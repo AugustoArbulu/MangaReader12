@@ -2,6 +2,7 @@
 """Offline test fixtures for read-only appinst .deb audit. No jailbreak needed."""
 import gzip
 import io
+import lzma
 import tarfile
 import unittest
 
@@ -68,6 +69,30 @@ class DebianAuditTests(unittest.TestCase):
             "./postinst", b"#!/bin/sh\nexit 0\n", "file"
         )]))
         self.assertEqual(result["maintainer_scripts"], ["postinst"])
+
+    def test_legacy_lzma_payload_is_inspected_without_execution(self):
+        def legacy_payload(members):
+            compressed_gzip_tar = members[2][1]
+            raw_tar = gzip.decompress(compressed_gzip_tar)
+            members[2] = (
+                "data.tar.lzma",
+                lzma.compress(raw_tar, format=lzma.FORMAT_ALONE),
+            )
+            return members
+
+        result = audit_bytes(package(changes=legacy_payload))
+        self.assertEqual(result["architecture"], "iphoneos-arm")
+        self.assertFalse(result["eligible_for_privileged_installation"])
+
+    def test_truncated_legacy_lzma_is_rejected(self):
+        def truncated(members):
+            raw_tar = gzip.decompress(members[2][1])
+            payload = lzma.compress(raw_tar, format=lzma.FORMAT_ALONE)
+            members[2] = ("data.tar.lzma", payload[:-9])
+            return members
+
+        with self.assertRaises(PackageRejected):
+            audit_bytes(package(changes=truncated))
 
     def test_wrong_architecture_rejected(self):
         def wrong(members):
