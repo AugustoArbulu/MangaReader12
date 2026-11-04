@@ -111,6 +111,9 @@ jobs:
       - name: Audit appinst .deb format with malicious offline fixtures (no installation)
         run: python3 ci/test_audit_appinst_deb.py
 
+      - name: Test WebReader IPA integrity structure with offline malicious fixtures
+        run: python3 ci/test_validate_webreader_ipa.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
@@ -147,6 +150,14 @@ jobs:
           ./ci/package_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
             WebReader-iOS12-unsigned.ipa
+
+      - name: Independently verify packaged IPA structure, version and checksum (host only)
+        run: |
+          python3 ci/validate_webreader_ipa.py \
+            WebReader-iOS12-unsigned.ipa \
+            --sha256-file WebReader-iOS12-unsigned.ipa.sha256 \
+            --installed-build 55 \
+            --installed-ios 12.5.8
 
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
