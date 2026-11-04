@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import bz2
 import gzip
 import hashlib
+import zlib
 import json
 from pathlib import Path
 import sys
@@ -56,7 +57,6 @@ def unpack_index(raw: bytes, name: str) -> str:
                 raise VerificationError("incomplete or oversized BZ2 index")
         elif name.endswith(".gz"):
             # gzip.decompress has no length guard; use streaming inflate.
-            import zlib
             dc = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
             data = dc.decompress(raw, MAX_DECOMPRESSED_INDEX + 1)
             if not dc.eof:
@@ -66,7 +66,7 @@ def unpack_index(raw: bytes, name: str) -> str:
         if len(data) > MAX_DECOMPRESSED_INDEX:
             raise VerificationError("APT index oversized")
         return data.decode("utf-8")
-    except (OSError, ValueError, EOFError, UnicodeError) as e:
+    except (OSError, ValueError, EOFError, UnicodeError, zlib.error) as e:
         if isinstance(e, VerificationError):
             raise
         raise VerificationError("invalid APT index") from e
