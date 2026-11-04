@@ -17,6 +17,14 @@ O handoff do usuário descreve um objetivo separado do leitor: `WebReader → ve
 
 Não pedir ao usuário para reinstalar o Chimera, AppSync, Sileo, Filza ou appinst; as instalações já foram reportadas. Mas **não usar o appinst desse espelho até sua proveniência ser verificada** frente à distribuição original de Karen/あけみ. Documentação oficial: `https://github.com/akemin-dayo/AppSync/tree/master/appinst`; o arquivo `appinst/control` identifica pacote, arquitetura e versão. O README oficial recomenda releases sem modificação de `https://cydia.akemi.ai/`. Nenhum hash oficial do `.deb` 2.1.1 foi confirmado nesta auditoria; não alegar equivalência binária.
 
+### Auditoria adicional do código original do appinst
+
+O código-fonte oficial em `akemin-dayo/AppSync/appinst/appinst.m` usa **`LSApplicationWorkspace installApplication:withOptions:error:` no iOS 8+**, a partir de um caminho temporário da própria ferramenta. O pacote define `appinst_INSTALL_PATH = /usr/bin` e aplica um arquivo específico de **entitlements** (`com.apple.private.mobileinstall.allowedSPI` e acesso ao serviço `com.apple.mobile.installd`). Isso reforça que executar instalação a partir de um app UIKit normal **não é equivalente** a rodar a ferramenta instalada no sistema. A integração privilegiada exige teste de permissões, helper restrito e autorização de solicitações.
+
+O código também realiza cópia temporária e tratamento de instalações concorrentes. Não expor ao helper um caminho arbitrário ou confiar apenas no hash conferido pelo processo normal do WebReader; revalidar o artefato no auxiliar imediatamente antes de chamar o instalador.
+
+**Fontes de código:** `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst.m`, `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst_entitlements.plist` e `https://github.com/akemin-dayo/AppSync/blob/master/appinst/Makefile`. Inspeção estática não comprova que a instalação funciona com a variante específica do pacote presente no aparelho.
+
 ## 2. Integração verificada no repositório
 
 - **Nome público:** WebReader. **Bundle ID real:** `com.example.MangaReader12`, **executable:** `MangaReader12`, **deployment target** 12.0. **Nunca mudar ID/contêiner** durante atualização. Bundle ID igual é necessário, mas não garante preservação em todo modelo de assinatura/entitlement.
