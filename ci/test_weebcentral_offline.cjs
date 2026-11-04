@@ -13,8 +13,8 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
 assert.equal(catalog.sources.length, 1, 'isolated pilot must contain one source');
 const candidate = catalog.sources[0];
 assert.equal(candidate.id, 'kei.weebcentral.en');
-assert.equal(candidate.version, '0.1.5');
-assert.deepEqual(candidate.domains, ['weebcentral.com', 'temp.compsci88.com', 'hot.planeptune.us']);
+assert.equal(candidate.version, '0.1.6');
+assert.deepEqual(candidate.domains, ['weebcentral.com', 'temp.compsci88.com', 'hot.planeptune.us', 'official.lowee.us']);
 assert.equal(candidate.script,
   'https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/fixtures/keiyoushi-weebcentral-en.js');
 assert.equal(crypto.createHash('sha256').update(script, 'utf8').digest('hex'),
@@ -157,7 +157,7 @@ async function main() {
   const r = mock();
   const meta = await r.call('metadata');
   assert.equal(meta.id, 'kei.weebcentral.en');
-  assert.equal(meta.version, '0.1.5');
+  assert.equal(meta.version, '0.1.6');
 
   const popular = await r.call('popular', 1);
   assert.equal(popular.items.length, 2);
@@ -360,6 +360,57 @@ async function main() {
   assert.equal(coverResult.items[0].coverDiagnostic.coverFound,true);
   assert.equal(coverResult.items[0].coverDiagnostic.outputClass,'permitted-https');
   assert.equal(popular.items[0].coverDiagnostic.outputClass, 'permitted-https');
+  // Real iOS 12.5.8 diagnostic (2026-11-04): all 62 public chapter
+  // images point to official.lowee.us. This is the same source.pages
+  // contract used by online reading and offline download preparation.
+  // No image bytes are requested by these fixture-based tests.
+  const observedCDN = runtime({
+    http(url) {
+      assert.equal(url,CH1+'/images?is_prev=False&reading_style=long_strip');
+      return 'LOWEE_HTML';
+    },
+    dom(html,spec) {
+      assert.equal(html,'LOWEE_HTML');
+      assert.equal(spec.images.selector,
+        'section#chapter-images > img, section[x-data*="scroll"] > img');
+      return {images:Array.from({length:62},(_,i)=>item('',{
+        src:'https://official.lowee.us/manga/chapter/'+String(i+1).padStart(3,'0')+'.jpg'
+      }))};
+    }
+  });
+  const observedPages = await observedCDN.call('pages',CH1);
+  assert.equal(observedPages.length,62);
+  assert.equal(observedPages[0].index,0);
+  assert.equal(observedPages[61].index,61);
+  assert.equal(observedPages[0].imageUrl,
+    'https://official.lowee.us/manga/chapter/001.jpg');
+  assert.equal(observedPages[61].imageUrl,
+    'https://official.lowee.us/manga/chapter/062.jpg');
+  assert.equal(observedPages[0].headers.Referer,BASE+'/');
+  assert.equal(observedCDN.calls.length,1,'only the chapter HTML GET is permitted in the parser');
+
+  // Exact-host policy: do not allow subdomains, lookalikes or HTTP URLs.
+  const impostor = runtime({
+    http() {return 'SPOOFED_CDN';},
+    dom(html,spec) {
+      assert(spec.images);
+      return {images:[
+        item('',{src:'https://official.lowee.us/legit.jpg'}),
+        item('',{src:'https://official.lowee.us.malicious.invalid/unsafe.jpg?token=SECRET'}),
+        item('',{src:'https://cdn.official.lowee.us/unsafe.jpg'}),
+        item('',{src:'http://official.lowee.us/unsafe.jpg'})
+      ]};
+    }
+  });
+  const impostorResult = await impostor.call('pages',CH1);
+  assert(impostorResult.__sourceError);
+  assert(impostorResult.__sourceError.includes('Images parsed: 4'));
+  assert(impostorResult.__sourceError.includes('official.lowee.us.malicious.invalid'));
+  assert(impostorResult.__sourceError.includes('cdn.official.lowee.us'));
+  assert(!impostorResult.__sourceError.includes('SECRET'));
+  assert(!impostorResult.__sourceError.includes('/unsafe.jpg'));
+  assert.equal(impostor.calls.length,1);
+
   // Foreign CDN is recorded as HOSTNAME ONLY and never fetched; if any
   // image is blocked, do not return a partial chapter (offline integrity).
   const external = runtime({
