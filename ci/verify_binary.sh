@@ -42,3 +42,20 @@ if [[ "$VERSION" != "$EXPECTED_VERSION" ]]; then
   exit 4
 fi
 echo "PASS: embedded CFBundleVersion is $EXPECTED_VERSION."
+
+# Public branding changes must not change the iOS application identity.
+# The legacy app target is intentional to preserve on-device sandbox data.
+DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")
+BUNDLE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP_PATH/Info.plist")
+IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
+EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
+if [[ "$DISPLAY_NAME" != "WebReader" || "$BUNDLE_NAME" != "WebReader" ]]; then
+  echo "ERROR: expected WebReader display name in compiled bundle" >&2
+  exit 5
+fi
+if [[ "$IDENTIFIER" != "com.example.MangaReader12" || "$EXECUTABLE" != "MangaReader12" ]]; then
+  echo "ERROR: legacy bundle ID or executable changed unexpectedly" >&2
+  exit 6
+fi
+echo "PASS: WebReader branding and existing app identity are intact."
+
