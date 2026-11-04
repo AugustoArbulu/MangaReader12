@@ -104,11 +104,12 @@ enum WebPImageDecoder {
     // draw a 420-pixel cover. libwebp scales while decoding into a fixed,
     // caller-owned BGRA buffer; the full source dimensions remain bounded.
     static func thumbnail(from data: Data) -> UIImage? {
-        guard let (w, h) = dimensions(of: data),
-              w <= 64_000_000 / h, w <= 16_384, h <= 16_384 else {
+        guard let size = dimensions(of: data) else { return nil }
+        let (w, h) = size
+        guard w <= 64_000_000 / h, w <= 16_384, h <= 16_384 else {
             return nil
         }
-        let factor = max(1.0, Double(w) / 420.0, Double(h) / 420.0)
+        let factor = max(1.0, max(Double(w) / 420.0, Double(h) / 420.0))
         let scaledWidth = max(1, min(420, Int((Double(w) / factor).rounded())))
         let scaledHeight = max(1, min(420, Int((Double(h) / factor).rounded())))
         let bytesPerRow = scaledWidth * 4
