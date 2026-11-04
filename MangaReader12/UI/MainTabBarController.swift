@@ -331,7 +331,8 @@ final class ExploreViewController: UITableViewController {
         cell.configure(
             title: source.manifest.name,
             subtitle: "v\(source.manifest.version) • \(source.manifest.lang) • \(source.enabled ? "ativada" : "desativada")",
-            iconURL: source.manifest.icon
+            iconURL: source.manifest.icon,
+            sourceID: source.manifest.id
         )
         cell.accessoryType = source.enabled ? .disclosureIndicator : .none
         return cell
@@ -1565,7 +1566,8 @@ final class RepositoryCatalogViewController: UITableViewController {
         cell.configure(
             title: manifest.name,
             subtitle: "v\(manifest.version) • \(manifest.lang) • \(actionText(plan?.action))",
-            iconURL: manifest.icon
+            iconURL: manifest.icon,
+            sourceID: manifest.id
         )
 
         if let action = plan?.action, action == .install || action == .update {
@@ -1767,7 +1769,7 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "WebReader"
-            cell.detailTextLabel?.text = "Build 54 • compatível com iOS 12.0"
+            cell.detailTextLabel?.text = "Build 55 • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
