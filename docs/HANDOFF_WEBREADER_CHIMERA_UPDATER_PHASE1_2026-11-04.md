@@ -65,6 +65,21 @@ Campos do payload assinado: `schemaVersion`, `application`, `bundleId`, `channel
 
 **Implementação futura no iOS 12:** usar Security.framework `SecKeyVerifySignature` e `URLSession` com verificação TLS padrão e política explícita de redirects; esta camada host Python/openssl **não** roda dentro do iPhone. Antes de confiar no fluxo, verificar em hardware a cadeia TLS de manifesto, `github.com` e asset host final (por exemplo `release-assets.githubusercontent.com`), sem desativar validação de certificado.
 
+### Validação estrutural offline da IPA — etapa preparatória adicional
+
+Para não deixar a validação de arquivo como um plano abstrato, adicionei `ci/validate_webreader_ipa.py` e `ci/test_validate_webreader_ipa.py`. O auditor:
+
+- calcula SHA-256 do arquivo e exige igualdade com o hash esperado;
+- lê `Payload/MangaReader12.app/Info.plist` e exige `CFBundleIdentifier=com.example.MangaReader12`, nome público `WebReader`, executável esperado `MangaReader12`, build **mais nova** e `MinimumOSVersion` compatível;
+- rejeita duplicatas de entradas ZIP, caminhos `../`, entrada fora do `Payload`, outro bundle de app, links simbólicos, arquivos ZIP criptografados e tamanhos/expansão excessivos;
+- **não extrai**, não carrega dylibs, não executa arquivos de instalação e não muda o sandbox do WebReader.
+
+O CI testa casos maliciosos **offline** e executa este auditor sobre a **IPA real** produzida no mesmo job, usando o `.sha256` que o empacotador gerou localmente. Isso oferece proteção contra erros de geração da IPA; **não comprova a autenticidade da publicação**. Na implementação futura, o hash de referência deve vir do **payload autenticado do manifesto**, não ser gerado a partir do próprio download.
+
+Usar no host: `python3 ci/validate_webreader_ipa.py WebReader-iOS12-unsigned.ipa --sha256-file WebReader-iOS12-unsigned.ipa.sha256 --installed-build 55 --installed-ios 12.5.8`.
+
+**Limitação:** a validação host Python não substitui o analisador Swift/iOS12 futuro nem a auditoria de `appinst`, assinatura da publicação ou preservação dos dados durante a instalação.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado
@@ -100,7 +115,7 @@ Campos do payload assinado: `schemaVersion`, `application`, `bundleId`, `channel
 
 ## 6. Estado deste PR e próxima tarefa
 
-- **Concluído nesta etapa:** auditoria de projeto e distribuição, integração documental, proposta de assinatura, simulador offline de manifestos host, auditoria estrutural de `.deb` em Python e testes adversariais CI. Nenhum comando privilegiado executado; nenhuma IPA nova publicada; `main` preservada até aprovação do PR.
+- **Concluído nesta etapa:** auditoria de projeto/distribuição, integração documental, proposta de assinatura, simulador offline de manifestos host, auditoria estática `.deb`, validação offline da IPA real gerada pelo CI e testes adversariais. Nenhum comando privilegiado executado; nenhuma IPA nova publicada; `main` preservada até aprovação do PR.
 - **Pendente:** validação independente do `.deb` 2.1.1 vindo do espelho; experimento isolado com appinst no dispositivo; pinagem de chave pública real; publicação autorizada de Release, HTTPS real no iOS12; downloader; helper/IPC; instalação; QA de preservação de dados.
 - **Regra de segurança:** não baixar IPAs de manifestos não autenticados e não iniciar instalação a partir do WebReader antes de confirmação expressa do usuário e testes do auxiliar.
 
