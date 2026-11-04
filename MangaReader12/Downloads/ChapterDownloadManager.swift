@@ -52,6 +52,13 @@ enum ChapterDownloadImageValidator {
             }
         }
 
+        // WebP is not supported by ImageIO on iOS 12. A successful, bounded
+        // libwebp decode verifies the complete payload, not merely its header,
+        // before the bytes are atomically stored for offline reading.
+        if WebPImageDecoder.isWebP(data) {
+            return WebPImageDecoder.image(from: data) != nil
+        }
+
         // ImageIO may identify a truncated file from its header alone.
         // PNG requires its final IEND chunk; JPEG needs its EOI marker
         // near the end (some valid JPEGs contain a short trailing payload).
