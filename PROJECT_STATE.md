@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **CHECKPOINT ATUAL — 2026-11-04 (Build 53):** a parte histórica abaixo começou no Build 16. O estado mais recente está no handoff [docs/HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md](docs/HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md). Build 51 teve feedback físico preliminar positivo; Builds 52/53 foram aprovadas em CI iOS12, mas aguardam validação no dispositivo. Fonte Asura EN 0.1.3 e libwebp 1.6.0. Não alegar AVIF decodificado. A main mais recente após PR #83 é `4923420f918c57772037112c50f93995549b09f3`.
+
+
 ## Checkpoint
 
 - Project: MangaReader12
