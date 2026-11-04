@@ -41,10 +41,22 @@ enum LibraryPinnedWorks {
 }
 // END BUILD51_PINNED_LIBRARY
 
+// BEGIN BUILD56_SOURCE_ATTRIBUTION
+// Identity comes from LibraryMangaRecord.sourceID, never inferred from title.
+// This pure helper can be exercised by host Swift regression tests.
+enum LibrarySourceLabels {
+    static func displayName(sourceID: String, knownNames: [String: String]) -> String {
+        if let found = knownNames[sourceID], !found.isEmpty { return found }
+        return "Fonte indisponível (" + sourceID + ")"
+    }
+}
+// END BUILD56_SOURCE_ATTRIBUTION
+
 final class LibraryViewController: UITableViewController, UISearchResultsUpdating {
     private var records: [LibraryMangaRecord] = []
     private var allRecords: [LibraryMangaRecord] = []
     private var metrics: [Int64: LibraryMangaMetrics] = [:]
+    private var sourceNames: [String: String] = [:]
     private var searchText = ""
     private var sortKey = UserDefaults.standard.string(forKey: "library.sort") ?? "added"
     private var statusKey = UserDefaults.standard.string(forKey: "library.status") ?? "all"
@@ -155,6 +167,15 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
                 allRecords = try repository.list()
             }
             metrics = try repository.readingMetrics()
+            // Resolve source names once per refresh; never query the network per row.
+            if let lifecycle = try? SourceLifecycleManager.defaultManager(),
+               let sources = try? lifecycle.installedSources() {
+                sourceNames = Dictionary(uniqueKeysWithValues: sources.map {
+                    ($0.manifest.id, $0.manifest.name)
+                })
+            } else {
+                sourceNames = [:]
+            }
             if let progress = try? ReadingProgressRepository.defaultRepository(),
                let history = try? progress.history() {
                 latestReading = history.first(where: { $0.sourceChapterID != nil })
@@ -218,9 +239,9 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         UserDefaults.standard.set("grid", forKey: "library.layout")
         let grid = LibraryGridViewController(
             snapshot: { [weak self] in
-                guard let self = self else { return ([], [:]) }
+                guard let self = self else { return ([], [:], [:]) }
                 self.reloadLibrary()
-                return (self.records, self.metrics)
+                return (self.records, self.metrics, self.sourceNames)
             },
             open: { [weak self] record in
                 self?.open(record: record)
@@ -350,7 +371,10 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         }
 
         let record = records[indexPath.row]
-        var details = [record.status.rawValue]
+        let sourceName = LibrarySourceLabels.displayName(
+            sourceID: record.sourceID, knownNames: sourceNames
+        )
+        var details = ["Fonte: " + sourceName, record.status.rawValue]
         if LibraryPinnedWorks.contains(
             sourceID: record.sourceID, mangaID: record.sourceMangaID
         ) { details.insert("★ Fixada", at: 0) }
@@ -370,7 +394,8 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             title: record.title,
             subtitle: details.joined(separator: " • "),
             coverURL: record.cover,
-            allowedDomains: []
+            allowedDomains: [],
+            sourceID: record.sourceID
         )
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -928,6 +953,8 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
     private let cover = UIImageView()
     private let name = UILabel()
     private let detail = UILabel()
+    private let sourceIcon = UIImageView()
+    private let sourceLabel = UILabel()
     private var representedURL: String?
 
     override init(frame: CGRect) {
@@ -940,9 +967,17 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
         name.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         detail.numberOfLines = 1
         detail.font = UIFont.systemFont(ofSize: 11, weight: .medium)
+        sourceIcon.contentMode = .scaleAspectFit
+        sourceIcon.layer.cornerRadius = 3
+        sourceIcon.clipsToBounds = true
+        sourceLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .medium)
+        sourceLabel.numberOfLines = 1
+        sourceLabel.lineBreakMode = .byTruncatingTail
         contentView.addSubview(cover)
         contentView.addSubview(name)
         contentView.addSubview(detail)
+        contentView.addSubview(sourceIcon)
+        contentView.addSubview(sourceLabel)
         isAccessibilityElement = true
         accessibilityTraits = .button
     }
@@ -957,6 +992,8 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
         cover.image = nil
         name.text = nil
         detail.text = nil
+        sourceIcon.image = nil
+        sourceLabel.text = nil
     }
 
     override func layoutSubviews() {
@@ -970,15 +1007,27 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
         detail.frame = CGRect(
             x: 7, y: coverHeight + 44, width: max(1, width - 14), height: 18
         )
+        sourceIcon.frame = CGRect(x: 7, y: coverHeight + 65, width: 17, height: 17)
+        let hasIcon = sourceIcon.image != nil
+        sourceIcon.isHidden = !hasIcon
+        sourceLabel.frame = CGRect(
+            x: hasIcon ? 28 : 7, y: coverHeight + 64,
+            width: max(1, width - (hasIcon ? 35 : 14)), height: 19
+        )
     }
 
-    func configure(record: LibraryMangaRecord, metrics: LibraryMangaMetrics?) {
+    func configure(
+        record: LibraryMangaRecord, metrics: LibraryMangaMetrics?, sourceName: String
+    ) {
         let palette = ThemeManager.shared.palette
         contentView.backgroundColor = palette.secondaryBackground
         cover.backgroundColor = palette.separator
         name.textColor = palette.primaryText
         detail.textColor = palette.secondaryText
+        sourceLabel.textColor = palette.secondaryText
         name.text = record.title
+        sourceLabel.text = sourceName
+        sourceIcon.image = KeiyoushiSourceIconAssets.image(for: record.sourceID)
         var parts: [String] = []
         if let unread = metrics?.unreadChapters, unread > 0 {
             parts.append(String(unread) + " não lidos")
@@ -991,7 +1040,9 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
             sourceID: record.sourceID, mangaID: record.sourceMangaID
         ) { parts.insert("★ Fixada", at: 0) }
         detail.text = parts.joined(separator: " • ")
-        accessibilityLabel = record.title + ". " + (detail.text ?? "")
+        accessibilityLabel = record.title + ". Fonte: " + sourceName +
+            ". " + (detail.text ?? "")
+        setNeedsLayout()
         representedURL = record.cover
         cover.image = nil
         guard let url = record.cover else { return }
@@ -1006,12 +1057,15 @@ private final class LibraryGridCoverCell: UICollectionViewCell {
 final class LibraryGridViewController:
     UICollectionViewController, UICollectionViewDelegateFlowLayout {
 
-    typealias Snapshot = ([LibraryMangaRecord], [Int64: LibraryMangaMetrics])
+    typealias Snapshot = (
+        [LibraryMangaRecord], [Int64: LibraryMangaMetrics], [String: String]
+    )
     private let snapshot: () -> Snapshot
     private let openRecord: (LibraryMangaRecord) -> Void
     private let togglePin: (LibraryMangaRecord) -> Void
     private var entries: [LibraryMangaRecord] = []
     private var metrics: [Int64: LibraryMangaMetrics] = [:]
+    private var sourceNames: [String: String] = [:]
 
     init(
         snapshot: @escaping () -> Snapshot,
@@ -1072,6 +1126,7 @@ final class LibraryGridViewController:
         let current = snapshot()
         entries = current.0
         metrics = current.1
+        sourceNames = current.2
         collectionView?.reloadData()
         if entries.isEmpty {
             let label = UILabel(frame: CGRect(
@@ -1112,7 +1167,13 @@ final class LibraryGridViewController:
             return UICollectionViewCell()
         }
         let record = entries[indexPath.item]
-        cell.configure(record: record, metrics: metrics[record.internalID])
+        let sourceName = LibrarySourceLabels.displayName(
+            sourceID: record.sourceID, knownNames: sourceNames
+        )
+        cell.configure(
+            record: record, metrics: metrics[record.internalID],
+            sourceName: sourceName
+        )
         return cell
     }
 
@@ -1160,6 +1221,6 @@ final class LibraryGridViewController:
         let cardWidth = max(1, floor(
             (width - 24 - CGFloat(columns - 1) * 10) / CGFloat(columns)
         ))
-        return CGSize(width: cardWidth, height: cardWidth * 1.4 + 68)
+        return CGSize(width: cardWidth, height: cardWidth * 1.4 + 91)
     }
 }

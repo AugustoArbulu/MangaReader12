@@ -17,6 +17,8 @@ O usuário reportou **“está funcionando”** na Build 55 instalada em iOS 12.
 - Backup `.mr12backup` inclui Biblioteca e obras fixadas, não arquivos de capítulos baixados nem scripts de extensões.
 - AVIF é identificado, **não decodificado**. Comix permanece investigação separada; não contornar Cloudflare/TLS/403.
 
+> **ESTADO DE IMPLEMENTAÇÃO (2026-11-04):** a Build 56 já tem os recursos A/B no código da branch `feat/build56-source-attribution-updates`. Aguardando CI/PR, artefato IPA e QA física. Handoff específico: [BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md](BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md). Não considerar fisicamente aprovado.
+
 ## Build 56 — duas entregas combinadas (NOVO REQUISITO DO USUÁRIO)
 
 ### A. Identificação da fonte de **cada obra**

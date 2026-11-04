@@ -102,6 +102,9 @@ jobs:
       - name: Test Build55 official Keiyoushi source icons
         run: python3 ci/test_build55_source_icons.py
 
+      - name: Test Build56 source attribution and persistent update feed (Swift offline)
+        run: python3 ci/test_build56_library_updates.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
@@ -142,7 +145,7 @@ jobs:
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-iOS12-Build54
+          name: WebReader-iOS12-Build56
           if-no-files-found: error
           path: |
             WebReader-iOS12-unsigned.ipa

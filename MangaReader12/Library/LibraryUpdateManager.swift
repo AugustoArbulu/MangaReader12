@@ -20,6 +20,8 @@ struct LibraryUpdateResult {
 final class UpdateFeedStore {
     private let defaults: UserDefaults
     private let key = "updates.feed.v1"
+    // Acknowledgements are kept separately: old feed v1 backups still decode.
+    private let acknowledgedKey = "updates.feed.acknowledged.v1"
     private let maxEvents = 200
 
     init(defaults: UserDefaults = .standard) {
@@ -38,18 +40,53 @@ final class UpdateFeedStore {
         return decoded.sorted { $0.discoveredAt > $1.discoveredAt }
     }
 
+    // Stable, length-delimited IDs avoid collisions when a source ID
+    // contains the old pipe separator. Never key updates on manga title.
+    static func identity(_ event: LibraryUpdateEvent) -> String {
+        return [
+            event.sourceID, event.sourceMangaID, event.sourceChapterID
+        ].map { String($0.utf8.count) + ":" + $0 }.joined(separator: "|")
+    }
+
+    private func acknowledgedKeys() -> Set<String> {
+        return Set(defaults.stringArray(forKey: acknowledgedKey) ?? [])
+    }
+
+    func isAcknowledged(_ event: LibraryUpdateEvent) -> Bool {
+        return acknowledgedKeys().contains(Self.identity(event))
+    }
+
+    func pendingEvents() -> [LibraryUpdateEvent] {
+        let acknowledged = acknowledgedKeys()
+        return events().filter { !acknowledged.contains(Self.identity($0)) }
+    }
+
+    func acknowledge(_ event: LibraryUpdateEvent) {
+        let available = Set(events().map { Self.identity($0) })
+        let identity = Self.identity(event)
+        guard available.contains(identity) else { return }
+        var marked = acknowledgedKeys().intersection(available)
+        marked.insert(identity)
+        defaults.set(marked.sorted(), forKey: acknowledgedKey)
+    }
+
+    func acknowledgeAll() {
+        defaults.set(
+            events().map { Self.identity($0) }.sorted(),
+            forKey: acknowledgedKey
+        )
+    }
+
     func append(_ events: [LibraryUpdateEvent]) {
         guard !events.isEmpty else { return }
 
         var combined = self.events()
-        let existingKeys = Set(combined.map {
-            "\($0.sourceID)|\($0.sourceMangaID)|\($0.sourceChapterID)"
-        })
+        let existingKeys = Set(combined.map { Self.identity($0) })
 
         var mutableKeys = existingKeys
 
         for event in events {
-            let key = "\(event.sourceID)|\(event.sourceMangaID)|\(event.sourceChapterID)"
+            let key = Self.identity(event)
             guard !mutableKeys.contains(key) else { continue }
             mutableKeys.insert(key)
             combined.append(event)
@@ -63,11 +100,16 @@ final class UpdateFeedStore {
 
         if let data = try? JSONEncoder().encode(combined) {
             defaults.set(data, forKey: key)
+            // Avoid unbounded remembered IDs after 200-event feed rotation.
+            let inFeed = Set(combined.map { Self.identity($0) })
+            let remaining = acknowledgedKeys().intersection(inFeed)
+            defaults.set(remaining.sorted(), forKey: acknowledgedKey)
         }
     }
 
     func clear() {
         defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: acknowledgedKey)
     }
 }
 
