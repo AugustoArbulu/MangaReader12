@@ -12,8 +12,8 @@ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,
 const manifest=catalog.sources[0];
 assert.equal(catalog.sources.length,1);
 assert.equal(manifest.id,'kei.asurascans.en');
-assert.equal(manifest.version,'0.1.1');
-assert.deepEqual(manifest.domains,['asurascans.com','api.asurascans.com']);
+assert.equal(manifest.version,'0.1.2');
+assert.deepEqual(manifest.domains,['asurascans.com','api.asurascans.com','cdn.asurascans.com']);
 assert.equal(crypto.createHash('sha256').update(script).digest('hex'),manifest.sha256);
 assert(!/access_token|X-Page-Token|Authorization:|cloudflare|bypass|webdriver/i.test(script));
 const BASE='https://asurascans.com';
@@ -67,7 +67,7 @@ function createRuntime(config={}) {
     body:JSON.stringify({data:[
       {title:'Sample Comic',slug:'sample-comic',
         public_url:'/comics/sample-comic-zx91a2b3',
-        cover:'https://asurascans.com/covers/100.jpg'},
+        cover:'https://cdn.asurascans.com/covers/100.jpg'},
       {title:'Ignored',slug:'evil-series',public_url:'https://evil.invalid/comics/abc',
         cover:'https://evil.invalid/cover.jpg'}
     ],meta:{has_more:true}})
@@ -118,7 +118,10 @@ async function main(){
  assert.equal(popular.items[0].id,STABLE);
  assert.equal(popular.items[0].url,A);
  assert.equal(r.state['asura-public-v1:sample-comic'],A);
- assert.equal(popular.items[0].cover,BASE+'/covers/100.jpg');
+ assert.equal(popular.items[0].cover,'https://cdn.asurascans.com/covers/100.jpg');
+ assert.equal(popular.items[0].coverDiagnostic.outputClass,'permitted-https');
+ assert.deepEqual(Array.from(popular.items[0].coverDiagnostic.kinds),
+    ['image-hostname=cdn.asurascans.com']);
  assert.equal(popular.hasNextPage,true);
  assert.match(r.calls[0].url,/sort=popular/);
  assert.equal(r.calls[0].headers.Accept,'application/json');
@@ -197,6 +200,66 @@ async function main(){
  assert.equal(rotated.items[0].id,STABLE);
  assert.equal(rotated.items[0].url,newPublic);
  assert.equal(r.state['asura-public-v1:sample-comic'],newPublic);
+ // Oversized Astro metadata (e.g. hundreds of public chapters) must
+ // survive the decoded props field, and malformed JSON fails explicitly.
+ const giantChapters={chapters:Array.from({length:350},(_,i)=>({
+   number:i+1,title:'Chapter '+(i+1)+' '+('x'.repeat(20)),
+   created_at:'2026-10-01T12:00:00Z'
+ }))};
+ const longProps=JSON.stringify([0,giantChapters]);
+ assert(longProps.length>4096);
+ const large=createRuntime({select(html,spec){
+   assert(spec.chapters);
+   return {details:[item({props:PROPS.details})],
+     chapters:[item({props:longProps})]};
+ }});
+ const longList=await large.call('chapters',A);
+ assert.equal(longList.length,350);
+ assert.equal(longList[0].number,350);
+ assert.equal(longList[349].number,1);
+ assert.equal(large.calls.length,1);
+ const malformed=createRuntime({select(html,spec){
+   return {details:[item({props:'[0,{"title":"Truncated'}],
+     chapters:[item({props:PROPS.chapters})]};
+ }});
+ const malformedDetails=await malformed.call('details',A);
+ assert(malformedDetails.__sourceError.includes('incomplete/invalid JSON'));
+ assert(!malformedDetails.__sourceError.includes('Truncated'));
+ assert.equal(malformed.calls.length,1);
+ const missingProps=createRuntime({select(html,spec){
+   return {details:[item({})],chapters:[item({props:PROPS.chapters})]};
+ }});
+ const missingResult=await missingProps.call('details',A);
+ assert(missingResult.__sourceError.includes('Build 47 required'));
+ assert.equal(missingProps.calls.length,1);
+ const hosted=createRuntime({request(req){
+   assert(req.url.startsWith(API+'/series?'));
+   return {body:JSON.stringify({data:[
+    {title:'CDN Cover',slug:'cdn-cover',public_url:'/comics/cdn-cover-abc12345',
+     cover:'https://cdn.asurascans.com/covers/0123.webp'},
+    {title:'Unreviewed Cover',slug:'other-cover',public_url:'/comics/other-cover-abc12345',
+     cover:'https://images.unknown.invalid/cover.jpg?token=PRIVATE'}
+   ],meta:{has_more:false}})};
+ }});
+ const coverList=await hosted.call('popular',1);
+ assert.equal(coverList.items[0].cover,'https://cdn.asurascans.com/covers/0123.webp');
+ assert.equal(coverList.items[1].cover,null);
+ assert.deepEqual(Array.from(coverList.items[1].coverDiagnostic.kinds),
+   ['image-hostname=images.unknown.invalid']);
+ assert(!JSON.stringify(coverList).includes('PRIVATE'));
+ const spoof=createRuntime({request(req){
+   return {body:JSON.stringify({data:[
+    {title:'Spoof',slug:'spoof',public_url:'/comics/spoof-abc12345',
+     cover:'https://cdn.asurascans.com.fake.invalid/img.jpg'},
+    {title:'Subdomain',slug:'subdomain',public_url:'/comics/subdomain-abc12345',
+     cover:'https://images.cdn.asurascans.com/img.jpg'},
+    {title:'HTTP',slug:'http',public_url:'/comics/http-abc12345',
+     cover:'http://cdn.asurascans.com/img.jpg'}
+   ],meta:{has_more:false}})};
+ }});
+ const rejected=await spoof.call('popular',1);
+ assert(rejected.items.every(x=>x.cover===null));
+ assert.equal(spoof.calls.length,1);
  const prior=r.calls.length;
  for(const [method,arg] of [['details','https://evil.invalid/comics/xyz'],
    ['chapters','http://asurascans.com/comics/xyz'],
