@@ -15,8 +15,21 @@ struct BackupPreferenceValue: Codable {
     let doubleValue: Double?
     let boolValue: Bool?
     let dataBase64: String?
+    // Optional to preserve decoding of existing .mr12backup formatVersion 1.
+    let stringArrayValue: [String]?
 
     static func encode(_ value: Any) -> BackupPreferenceValue? {
+        if let strings = value as? [String] {
+            // A backup may be opened from Files: constrain user-controlled data.
+            guard strings.count <= 10_000,
+                  strings.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 2_048 })
+                else { return nil }
+            return BackupPreferenceValue(
+                kind: "stringArray",
+                stringValue: nil, integerValue: nil, doubleValue: nil,
+                boolValue: nil, dataBase64: nil, stringArrayValue: strings
+            )
+        }
         if let value = value as? String {
             return BackupPreferenceValue(
                 kind: "string",
@@ -24,7 +37,8 @@ struct BackupPreferenceValue: Codable {
                 integerValue: nil,
                 doubleValue: nil,
                 boolValue: nil,
-                dataBase64: nil
+                dataBase64: nil,
+                stringArrayValue: nil
             )
         }
 
@@ -35,7 +49,8 @@ struct BackupPreferenceValue: Codable {
                 integerValue: nil,
                 doubleValue: nil,
                 boolValue: value,
-                dataBase64: nil
+                dataBase64: nil,
+                stringArrayValue: nil
             )
         }
 
@@ -46,7 +61,8 @@ struct BackupPreferenceValue: Codable {
                 integerValue: value,
                 doubleValue: nil,
                 boolValue: nil,
-                dataBase64: nil
+                dataBase64: nil,
+                stringArrayValue: nil
             )
         }
 
@@ -57,7 +73,8 @@ struct BackupPreferenceValue: Codable {
                 integerValue: nil,
                 doubleValue: value,
                 boolValue: nil,
-                dataBase64: nil
+                dataBase64: nil,
+                stringArrayValue: nil
             )
         }
 
@@ -68,7 +85,8 @@ struct BackupPreferenceValue: Codable {
                 integerValue: nil,
                 doubleValue: nil,
                 boolValue: nil,
-                dataBase64: value.base64EncodedString()
+                dataBase64: value.base64EncodedString(),
+                stringArrayValue: nil
             )
         }
 
@@ -77,6 +95,11 @@ struct BackupPreferenceValue: Codable {
 
     func decodedValue() -> Any? {
         switch kind {
+        case "stringArray":
+            guard let strings = stringArrayValue, strings.count <= 10_000,
+                  strings.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 2_048 })
+                else { return nil }
+            return strings
         case "string":
             return stringValue
         case "bool":
@@ -144,7 +167,8 @@ final class BackupManager {
         "reader.scaleMode",
         "reader.preloadNextChapter",
         "updates.feed.v1",
-        "backgroundUpdates.enabled"
+        "backgroundUpdates.enabled",
+        "library.pinned.sources.v1"
     ]
 
     init(

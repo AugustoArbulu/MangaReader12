@@ -87,6 +87,9 @@ jobs:
       - name: Test Build52 bounded image compatibility geometry (Swift offline)
         run: python3 ci/test_build52_image_engine.py
 
+      - name: Test Build53 pinned favorites in portable backup (Swift offline)
+        run: python3 ci/test_build53_backup_pins.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
