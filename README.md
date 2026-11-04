@@ -1,6 +1,11 @@
-# MangaReader12 — Milestone 0 bootstrap
+# WebReader — leitor para iOS 12
 
-Provisional project name for the iOS 12 manga/manhwa/manhua reader project.
+O aplicativo passou a ser exibido como **WebReader** a partir da Build 54.
+Os nomes internos `MangaReader12` no repositório, projeto Xcode,
+identificador `com.example.MangaReader12`, banco e backups são preservados
+deliberadamente para permitir instalar sobre a versão anterior sem migrar dados.
+
+Esta seção histórica registra as restrições originais do Milestone 0.
 
 ## Canonical constraints
 
