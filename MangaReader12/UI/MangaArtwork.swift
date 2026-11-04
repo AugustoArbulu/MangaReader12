@@ -815,6 +815,27 @@ final class MangaDetailsHeaderCell: UITableViewCell {
 }
 
 
+// Keiyoushi icons are bundled as original PNGs in Assets.xcassets.
+// Match the adapter identity, never guess from the source display name.
+private enum KeiyoushiSourceIconAssets {
+    private static let assetBySourceID: [String: String] = [
+        "kei.asurascans.en": "KeiAsuraScans",
+        "kei.weebcentral.en": "KeiWeebCentral",
+        "kei.webtoons.en": "KeiWebtoons",
+        "kei.hotcomics": "KeiHotComics",
+        "kei.comix": "KeiComix",
+        "kei.vortexscans": "KeiVortexScans",
+        "kei.toongod": "KeiToonGod",
+        "kei.madaradex": "KeiMadaraDex",
+        "org.mangareader12.mangadex": "KeiMangaDex"
+    ]
+
+    static func image(for sourceID: String) -> UIImage? {
+        guard let asset = assetBySourceID[sourceID] else { return nil }
+        return UIImage(named: asset)
+    }
+}
+
 final class SourceIconCell: UITableViewCell {
     static let reuseIdentifier = "SourceIconCell"
 
@@ -823,6 +844,7 @@ final class SourceIconCell: UITableViewCell {
     private let titleView = UILabel()
     private let subtitleView = UILabel()
     private var representedURL: String?
+    private var representedSourceID: String?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -883,6 +905,7 @@ final class SourceIconCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         representedURL = nil
+        representedSourceID = nil
         iconView.image = nil
         fallbackLabel.isHidden = false
     }
@@ -890,27 +913,43 @@ final class SourceIconCell: UITableViewCell {
     func configure(
         title: String,
         subtitle: String?,
-        iconURL: String?
+        iconURL: String?,
+        sourceID: String
     ) {
         titleView.text = title
         subtitleView.text = subtitle
         representedURL = iconURL
+        representedSourceID = sourceID
         iconView.image = nil
+        iconView.contentMode = .scaleAspectFill
         fallbackLabel.text = initials(for: title)
         fallbackLabel.isHidden = false
         applyPalette()
 
+        // Exact Keiyoushi source asset: available instantly, including offline.
+        if let official = KeiyoushiSourceIconAssets.image(for: sourceID) {
+            iconView.image = official
+            iconView.backgroundColor = .clear
+            iconView.contentMode = .scaleAspectFit
+            fallbackLabel.isHidden = true
+            return
+        }
+
+        // Preserve the existing HTTPS icon / initials fallback for other sources.
         CoverImageLoader.shared.load(
             urlString: iconURL,
             allowedDomains: []
         ) { [weak self] image in
             guard let self = self,
-                  self.representedURL == iconURL else {
+                  self.representedURL == iconURL,
+                  self.representedSourceID == sourceID else {
                 return
             }
 
             if let image = image {
                 self.iconView.image = image
+                self.iconView.backgroundColor = .clear
+                self.iconView.contentMode = .scaleAspectFit
                 self.fallbackLabel.isHidden = true
             }
         }
