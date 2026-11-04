@@ -31,9 +31,12 @@ assert "case invalidImagePayload" in data
 assert "ChapterDownloadError.invalidImagePayload" in data
 
 pbx = (ROOT / "MangaReader12.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
-assert pbx.count("CURRENT_PROJECT_VERSION = 46;") == 2
+import re
+versions = re.findall(r"CURRENT_PROJECT_VERSION = (\\d+);", pbx)
+assert len(versions) == 2 and versions[0] == versions[1]
+assert int(versions[0]) >= 46, "ImageIO validation must remain enabled after Build46"
 settings = (ROOT / "MangaReader12/UI/MainTabBarController.swift").read_text(encoding="utf-8")
-assert "Build 46 • compatível com iOS 12.0" in settings
+assert f"Build {versions[0]} • compatível com iOS 12.0" in settings
 
 
 def chunk(name: bytes, payload: bytes) -> bytes:
