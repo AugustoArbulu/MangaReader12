@@ -1,5 +1,8 @@
 # HANDOFF COMPLETO — ROADMAP MangaReader12 (iOS 12)
 
+> **STATUS NOVO, 2026-11-04:** Este roadmap contém fases históricas. Para o estado de fato após Build 53, veja [HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md](HANDOFF_MANGAREADER12_BUILDS51_53_2026-11-04.md). **Não** recriar seleção de capítulos (até 5 por lote), feed de Updates, ou indicadores de não lidos: já estão no código. A Build 51 foi relatada como funcional; Builds 52/53 aguardam QA física. O foco de compatibilidade é WebP/ImageIO limitado, e AVIF segue apenas detectado.
+
+
 > **Atualização após execução do roadmap (2026-11-01):** R1-A/R1-B e início de R1-D já foram implementados no **Build37** (PR #49); **Webtoons EN 0.1.9** oferece categorias de rankings, gêneros experimentais e Recentes (Originals do dia) via PR #52. **R2-A**, o monitor somente de leitura do Keiyoushi, foi integrado no PR #50. A versão nativa Build37 e a fonte 0.1.9 aguardam validação física; a referência comprovada ainda é Build36 + Webtoons 0.1.7. **Leia o novo handoff:** docs/HANDOFF_BUILD37_WEBTOONS019_R2_2026-11-01.md. Os trechos abaixo descrevem o planejamento original antes desses PRs e devem ser interpretados como histórico, não como status atualizado.
 
 
