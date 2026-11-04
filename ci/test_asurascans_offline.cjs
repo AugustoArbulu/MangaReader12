@@ -219,7 +219,7 @@ async function main(){
  assert.equal(longList[349].number,1);
  assert.equal(large.calls.length,1);
  const malformed=createRuntime({select(html,spec){
-   return {details:[item({props:'[0,{"title":"Truncated'}],
+   return {details:[item({props:'[0,{"title":"Truncated'})],
      chapters:[item({props:PROPS.chapters})]};
  }});
  const malformedDetails=await malformed.call('details',A);
