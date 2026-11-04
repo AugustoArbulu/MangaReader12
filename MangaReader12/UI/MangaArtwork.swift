@@ -176,10 +176,17 @@ enum WebPImageDecoder {
 
         // Avoid integer overflow and unbounded allocations on older iPads.
         let w = Int(width), h = Int(height)
-        guard w <= maxPixels / h, w <= Int(Int32.max) / 4 else { return nil }
-        let stride = w * 4
-        let totalBytes = stride * h
+        // Decode oversized public pages at a bounded resolution rather than
+        // rejecting the entire chapter. Never allocate source-size RGBA first.
+        guard w <= 128_000_000 / h else { return nil }
+        guard let scaled = ImageCompatibilityGeometry.scaled(
+            width: w, height: h, maxPixels: maxPixels, maxDimension: 32_768
+        ) else { return nil }
+        let scaledWidth = scaled.0, scaledHeight = scaled.1
+        let stride = scaledWidth * 4
+        let totalBytes = stride * scaledHeight
         guard totalBytes <= maxPixels * 4 else { return nil }
+        let needsScaling = scaledWidth != w || scaledHeight != h
 
         // Explicit BGRA output avoids libwebp's implicit large allocations.
         // The decoder writes into this Swift-owned bounded buffer.
@@ -190,6 +197,13 @@ enum WebPImageDecoder {
             return data.withUnsafeBytes { source in
                 guard let input = source.baseAddress?
                     .assumingMemoryBound(to: UInt8.self) else { return false }
+                if needsScaling {
+                    return MR12WebPDecodePageScaledBGRA(
+                        input, data.count, output, totalBytes,
+                        Int32(scaledWidth), Int32(scaledHeight),
+                        Int32(stride)
+                    ) == 1
+                }
                 return WebPDecodeBGRAInto(input, data.count, output,
                                          totalBytes, Int32(stride)) != nil
             }
@@ -212,7 +226,7 @@ enum WebPImageDecoder {
         }
         guard let provider = CGDataProvider(data: pixels as CFData),
               let cgImage = CGImage(
-                width: w, height: h,
+                width: scaledWidth, height: scaledHeight,
                 bitsPerComponent: 8, bitsPerPixel: 32,
                 bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGBitmapInfo.byteOrder32Little.union(
@@ -224,6 +238,103 @@ enum WebPImageDecoder {
     }
 }
 // END WEBP_IMAGE_DECODER
+
+// BEGIN IMAGE_COMPATIBILITY_GEOMETRY
+// Pure math shared by WebP and ImageIO; independently compiled on host Swift.
+// Reject impossible sizes before allocating any decoded pixel buffers.
+enum ImageCompatibilityGeometry {
+    static func scaled(
+        width: Int, height: Int, maxPixels: Int, maxDimension: Int
+    ) -> (Int, Int)? {
+        guard width > 0, height > 0, maxPixels > 0, maxDimension > 0,
+              width <= 100_000, height <= 100_000,
+              width <= 128_000_000 / height else { return nil }
+        let pixels = width * height
+        let ratio = min(
+            1.0, min(
+                Double(maxDimension) / Double(max(width, height)),
+                sqrt(Double(maxPixels) / Double(pixels))
+            )
+        )
+        guard ratio.isFinite, ratio > 0 else { return nil }
+        let targetWidth = max(1, Int((Double(width) * ratio).rounded(.down)))
+        let targetHeight = max(1, Int((Double(height) * ratio).rounded(.down)))
+        guard targetWidth <= maxDimension, targetHeight <= maxDimension,
+              targetWidth <= maxPixels / targetHeight else { return nil }
+        return (targetWidth, targetHeight)
+    }
+}
+// END IMAGE_COMPATIBILITY_GEOMETRY
+
+// BEGIN IMAGE_COMPATIBILITY_ENGINE
+// Central image path for cover, online reader and offline reader on iOS 12.
+// Magic bytes, not the server's Content-Type, choose the codec. AVIF is
+// diagnosed but deliberately not advertised as decodable on iOS 12.
+enum ImageCompatibilityDecoder {
+    private static let maximumEncodedBytes = 20 * 1024 * 1024
+    static let readerPixelBudget = 24_000_000
+    static let coverMaxDimension = 420
+
+    static func cover(_ data: Data) -> UIImage? {
+        if WebPImageDecoder.isWebP(data) {
+            return WebPImageDecoder.thumbnail(from: data)
+        }
+        return native(data, maxPixels: coverMaxDimension * coverMaxDimension,
+                      maxDimension: coverMaxDimension)
+    }
+
+    static func page(_ data: Data) -> UIImage? {
+        if WebPImageDecoder.isWebP(data) {
+            return WebPImageDecoder.image(from: data)
+        }
+        return native(data, maxPixels: readerPixelBudget, maxDimension: 32_768)
+    }
+
+    private static func native(
+        _ data: Data, maxPixels: Int, maxDimension: Int
+    ) -> UIImage? {
+        guard !data.isEmpty, data.count <= maximumEncodedBytes else { return nil }
+        // PDF, AVIF, challenges and arbitrary HTML never fall back to
+        // UIImage(data:) or an unbounded full-image decode.
+        let format = ImageResponseDiagnostics.format(data)
+        guard ["PNG", "JPEG", "GIF", "HEIC"].contains(format),
+              let source = CGImageSourceCreateWithData(
+                data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary
+              ), CGImageSourceGetCount(source) > 0,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                  as? [String: Any],
+              let width = properties[kCGImagePropertyPixelWidth as String] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight as String] as? NSNumber,
+              let size = ImageCompatibilityGeometry.scaled(
+                width: width.intValue, height: height.intValue,
+                maxPixels: maxPixels, maxDimension: maxDimension
+              ) else { return nil }
+        let needsScaling = size.0 != width.intValue || size.1 != height.intValue
+        let bitmap: CGImage?
+        if needsScaling {
+            let maximumSide = max(size.0, size.1)
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: maximumSide
+            ]
+            bitmap = CGImageSourceCreateThumbnailAtIndex(
+                source, 0, options as CFDictionary
+            )
+        } else {
+            bitmap = CGImageSourceCreateImageAtIndex(
+                source, 0,
+                [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            )
+        }
+        guard let image = bitmap, image.width > 0, image.height > 0,
+              image.width <= maxPixels / image.height else { return nil }
+        return UIImage(cgImage: image)
+    }
+}
+// END IMAGE_COMPATIBILITY_ENGINE
 
 // A bounded thumbnail pipeline for older iOS devices. One HTTP client per
 // active transfer is retained until completion; at most three are active.
@@ -381,26 +492,7 @@ final class CoverImageLoader {
     // Draw only a thumbnail. A single full-size cover image can otherwise
     // consume substantial RAM after decompression on older devices.
     private func decodeCover(_ data: Data) -> UIImage? {
-        // Decode WebP directly to a bounded thumbnail, including covers
-        // larger than the former 4 MP full-resolution allocation ceiling.
-        if WebPImageDecoder.isWebP(data) {
-            return WebPImageDecoder.thumbnail(from: data)
-        }
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-            return UIImage(data: data)
-        }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: 420
-        ]
-        if let cgImage = CGImageSourceCreateThumbnailAtIndex(
-            source, 0, options as CFDictionary
-        ) {
-            return UIImage(cgImage: cgImage)
-        }
-        return UIImage(data: data)
+        return ImageCompatibilityDecoder.cover(data)
     }
 
     private func remember(_ image: UIImage, for key: String) {

@@ -41,9 +41,11 @@ assert "min(420" in ART
 assert "CGDataProvider(data: pixels as CFData)" in ART
 assert "maximumReaderPixels = 24_000_000" in ART
 assert "maximumCoverPixels = 4_000_000" in ART
-assert "WebPImageDecoder.image(from: response.data)" in READER
-assert READER.count("WebPImageDecoder.image(from: data)") == 2
+assert "ImageCompatibilityDecoder.page(response.data)" in READER
+assert READER.count("ImageCompatibilityDecoder.page(data)") == 2
 assert "WebPImageDecoder.image(from: data) != nil" in DOWNLOAD
+assert "MR12WebPDecodePageScaledBGRA" in BRIDGE
+assert "MR12WebPDecodePageScaledBGRA(" in ART
 assert "CGImageSourceGetStatusAtIndex" in DOWNLOAD
 assert "PNG requires its final IEND chunk" in DOWNLOAD
 
