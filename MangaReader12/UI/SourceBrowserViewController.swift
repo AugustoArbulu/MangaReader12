@@ -104,7 +104,8 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         configureBrowseHeader()
         applyTheme()
 
-        if sourceRecord.manifest.id == "kei.webtoons.en" {
+        if sourceRecord.manifest.id == "kei.webtoons.en" ||
+            sourceRecord.manifest.id == "kei.asurascans.en" {
             navigationItem.rightBarButtonItem = UIBarButtonItem(
                 title: "Testar capas",
                 style: .plain,
@@ -406,7 +407,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
     }
 
     @objc private func diagnoseCoverTapped() {
-        guard sourceRecord.manifest.id == "kei.webtoons.en",
+        guard ["kei.webtoons.en", "kei.asurascans.en"].contains(sourceRecord.manifest.id),
               coverDiagnostic == nil else { return }
         guard let runtime = runtime, !items.isEmpty else {
             showMessage(
@@ -435,7 +436,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
         samples: [SourceMangaSummary],
         chosenDirectly: Bool
     ) {
-        guard sourceRecord.manifest.id == "kei.webtoons.en",
+        guard ["kei.webtoons.en", "kei.asurascans.en"].contains(sourceRecord.manifest.id),
               let runtime = runtime, coverDiagnostic == nil,
               !samples.isEmpty else { return }
 
@@ -448,6 +449,8 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             summaries: samples,
             runtime: runtime,
             allowedDomains: sourceRecord.manifest.domains,
+            sourceName: sourceRecord.manifest.name,
+            supportsDOMInspect: sourceRecord.manifest.id == "kei.webtoons.en",
             inspectSource: chosenDirectly
         )
         coverDiagnostic = diagnostic
@@ -707,7 +710,7 @@ final class SourceBrowserViewController: UITableViewController, UISearchBarDeleg
             self?.hideWork(work)
         }
         hide.backgroundColor = ThemeManager.shared.palette.secondaryText
-        guard sourceRecord.manifest.id == "kei.webtoons.en" else {
+        guard ["kei.webtoons.en", "kei.asurascans.en"].contains(sourceRecord.manifest.id) else {
             return [hide]
         }
         let coverProbe = UITableViewRowAction(style: .normal, title: "Testar capa") {
@@ -1496,6 +1499,8 @@ private struct WebtoonsDetailsCoverTrace: Decodable {
 private final class WebtoonsCoverDiagnostic {
     private let summaries: [SourceMangaSummary]
     private let inspectSource: Bool
+    private let sourceName: String
+    private let supportsDOMInspect: Bool
     private let runtime: JavaScriptSourceRuntime
     private let domains: [String]
     private var client: HTTPClient?
@@ -1506,10 +1511,14 @@ private final class WebtoonsCoverDiagnostic {
         summaries: [SourceMangaSummary],
         runtime: JavaScriptSourceRuntime,
         allowedDomains: [String],
+        sourceName: String,
+        supportsDOMInspect: Bool,
         inspectSource: Bool = false
     ) {
         self.summaries = Array(summaries.prefix(3))
         self.inspectSource = inspectSource
+        self.sourceName = sourceName
+        self.supportsDOMInspect = supportsDOMInspect
         self.runtime = runtime
         self.domains = allowedDomains
     }
@@ -1519,7 +1528,7 @@ private final class WebtoonsCoverDiagnostic {
         lines = [
             "iOS: " + UIDevice.current.systemVersion,
             "App: " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"),
-            "Fonte: Webtoons.com EN",
+            "Fonte: " + sourceName,
             inspectSource
                 ? "Amostra: 1 capa escolhida pelo usuário (sem título no relatório)"
                 : "Amostras: até 3 capas visíveis (sem títulos no relatório)",
@@ -1545,7 +1554,7 @@ private final class WebtoonsCoverDiagnostic {
                     case .success(let trace):
                         self.appendObservation(trace)
                     case .failure:
-                        self.lines.append("Metadados indisponíveis. Atualize Webtoons EN para 0.1.5.")
+                        self.lines.append("Metadados de capa indisponíveis na fonte instalada.")
                     }
                     self.runImageProbes()
                 }
@@ -1597,7 +1606,7 @@ private final class WebtoonsCoverDiagnostic {
                 case .success(let manga):
                     // Only inspect the metadata cached by the same details()
                     // request; no second HTML GET or per-title background scan.
-                    if self.inspectSource {
+                    if self.inspectSource && self.supportsDOMInspect {
                         self.runtime.callDecoded(
                             "inspectDetailsCover",
                             arguments: [first.id],
@@ -1730,6 +1739,7 @@ private final class WebtoonsCoverDiagnostic {
                     label + ": HTTP " + String(response.statusCode) +
                     ", tipo=" + String(mime.prefix(64)) +
                     ", bytes=" + String(response.data.count) +
+                    ", formato=" + ImageResponseDiagnostics.format(response.data) +
                     ", UIImage=" + (decoded ? "SIM" : "NÃO") +
                     ", host final=" + finalHost + latency
                 )
