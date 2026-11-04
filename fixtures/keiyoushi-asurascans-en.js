@@ -9,10 +9,13 @@
   var site = 'https://asurascans.com';
   var api = 'https://api.asurascans.com/api';
   var sourceID = 'kei.asurascans.en';
-  var version = '0.1.1';
+  var version = '0.1.2';
   var PER_PAGE = 20;
   var siteRE = /^https:\/\/(?:www\.)?asurascans\.com(?=\/|[?#]|$)/i;
   var apiRE = /^https:\/\/api\.asurascans\.com(?=\/|[?#]|$)/i;
+  // Public CDN associated with the site's media; exact HTTPS hostname only.
+  // Never use this origin for HTML/API requests or unknown sibling hosts.
+  var mediaRE = /^https:\/\/cdn\.asurascans\.com(?=\/|[?#]|$)/i;
   var seriesRE = /^https:\/\/(?:www\.)?asurascans\.com\/comics\/([A-Za-z0-9-]{1,180})\/?(?:[?#].*)?$/i;
   var stableSeriesRE = /^https:\/\/(?:www\.)?asurascans\.com\/series\/([A-Za-z0-9-]{1,180})\/?(?:[?#].*)?$/i;
   var chapterRE = /^https:\/\/(?:www\.)?asurascans\.com\/comics\/([A-Za-z0-9-]{1,180})\/chapter\/([0-9]+(?:\.[0-9]+)?)\/?(?:[?#].*)?$/i;
@@ -84,11 +87,11 @@
   }
   function safeImage(value) {
     var url = resolve(site + '/', value);
-    // The media CDN inventory is NOT yet verified; allow only documented
-    // site and API origins until physical observation/review.
+    // Only exact public site, API and observed first-party media origins.
+    // Unknown image hostnames remain blocked; never guess CDN wildcards.
     if (!url) return {url: null, host: null};
     var host = hostname(url);
-    return {url: siteRE.test(url) || apiRE.test(url) ? url : null, host: host};
+    return {url: siteRE.test(url) || apiRE.test(url) || mediaRE.test(url) ? url : null, host: host};
   }
   function request(url, accept, done) {
     if (!siteRE.test(url) && !apiRE.test(url)) {
@@ -172,10 +175,24 @@
   }
   function astroProp(item) {
     var value = attr(item, 'props');
-    if (typeof value !== 'string' || value.length > 2500000) {
-      throw new Error('Astro property missing or too large');
+    // The Build46 inert DOM bridge silently omitted attributes over 4096
+    // characters. Build47 accepts bounded props on real astro-island nodes.
+    if (!value) {
+      throw new Error('Asura Astro props missing (Build 47 required for large Astro attributes, or page markup changed)');
     }
-    return unAstro(JSON.parse(value), 0);
+    if (typeof value !== 'string' || value.length > 2000000) {
+      throw new Error('Asura Astro props exceed bounded 2 MB parser limit');
+    }
+    var parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch (e) {
+      // Do not surface the raw props, URL, auth state or arbitrary JS errors.
+      // Truncated/malformed props must never trigger a bypass or auto retry.
+      throw new Error('Asura Astro props contain incomplete/invalid JSON (' +
+        value.length + ' characters; no automatic retry)');
+    }
+    return unAstro(parsed, 0);
   }
   function findAstro(details, name) {
     var candidates = list(details, name);
@@ -351,7 +368,18 @@
         var cover=safeImage(m.cover || m.coverUrl);
         if(cover.host && !cover.url && missingMediaHosts.indexOf(cover.host)<0 &&
             missingMediaHosts.length < 3) missingMediaHosts.push(cover.host);
-        items.push({id: canonical,title:m.title.trim(),cover:cover.url,url:publicURL});
+        items.push({
+          id: canonical, title: m.title.trim(), cover: cover.url, url: publicURL,
+          coverDiagnostic: {
+            matched: true, coverFound: !!cover.url,
+            fields: ['asura-cover'],
+            attributes: cover.host ? ['image-hostname'] : [],
+            kinds: cover.host ? ['image-hostname=' + cover.host] : [],
+            outputClass: cover.url ? 'permitted-https' :
+              (cover.host ? 'host-not-allowed' : 'missing'),
+            outputLength: cover.url ? cover.url.length : 0
+          }
+        });
       }
       if (json.data.length && !items.length) {
         fail(done,'Asura API did not contain compatible series URLs');return;
