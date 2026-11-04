@@ -25,6 +25,25 @@ O código também realiza cópia temporária e tratamento de instalações conco
 
 **Fontes de código:** `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst.m`, `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst_entitlements.plist` e `https://github.com/akemin-dayo/AppSync/blob/master/appinst/Makefile`. Inspeção estática não comprova que a instalação funciona com a variante específica do pacote presente no aparelho.
 
+### Avanço de Fase 2: auditoria estática de pacote rootful
+
+Localizei o pacote correspondente ao ambiente do aparelho no espelho **`Legacy-Me/repo`**:
+
+- `debs/ai.akemi.appinst_2.1.1_iphoneos-arm~akemi-git-235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a.deb`
+- **Tamanho no espelho:** `59716` bytes;
+- **SHA-256 publicado no índice do próprio espelho:** `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`;
+- o mesmo espelho distribui uma variante `iphoneos-arm64`, que não substitui a variante rootful `iphoneos-arm` usada em iOS12.
+
+**Advertência:** esse SHA-256 **NÃO é um hash oficial autenticado da desenvolvedora**. Conferi o anúncio de arquivo/indexação do espelho, mas ainda **não** confirmei o conteúdo binário do pacote instalado, a identidade com o artefato de `cydia.akemi.ai`, nem a cadeia de assinatura APT. O repositório oficial do projeto AppSync no GitHub publica releases do AppSync Unified, mas a lista consultada **não trouxe um asset separado do `appinst`** para comparar diretamente. É obrigatório manter `official_origin_verified = false`.
+
+Para adiantar a análise sem riscos, acrescentei:
+
+- `ci/audit_appinst_deb.py` — auditor de `.deb` **somente leitura**, executável em host Python3. Inspeciona arquivo `ar`, `debian-binary`, metadados Debian `control`, arquitetura, versão, `data.tar`, localização esperada `usr/bin/appinst`, scripts de manutenção e links/paths perigosos. Imprime hash local e se é igual ao **hash do espelho**, mas **nunca aprova sua autenticidade oficial**.
+- `ci/test_audit_appinst_deb.py` — gera `.deb` artificiais offline, testando versão/arquitetura incorretas, caminhos `../`, links simbólicos absolutos, executáveis `setuid`, membros duplicados, scripts de manutenção e formato inválido.
+- Integração com GitHub Actions, sem `dpkg -i`, sem chamar `appinst`, sem executar scripts, sem buscar binários por rede.
+
+**Uso futuro, sem instalar nada:** `python3 ci/audit_appinst_deb.py "/caminho/para/appinst-2.1.1-iphoneos-arm.deb"`. A saída deve ser interpretada como *relatório estrutural*, **não** como certificado de procedência. Se houver uma cópia do `.deb` realmente instalado no iPhone, seu hash também deve ser confrontado separadamente com o arquivo do espelho e com um identificador confiável da distribuição oficial, caso seja localizado.
+
 ## 2. Integração verificada no repositório
 
 - **Nome público:** WebReader. **Bundle ID real:** `com.example.MangaReader12`, **executable:** `MangaReader12`, **deployment target** 12.0. **Nunca mudar ID/contêiner** durante atualização. Bundle ID igual é necessário, mas não garante preservação em todo modelo de assinatura/entitlement.
@@ -81,7 +100,7 @@ Campos do payload assinado: `schemaVersion`, `application`, `bundleId`, `channel
 
 ## 6. Estado deste PR e próxima tarefa
 
-- **Concluído nesta etapa:** auditoria de projeto e distribuição, integração documental, proposta de assinatura, simulador offline de manifestos host e teste CI. Nenhum comando privilegiado executado; nenhuma IPA nova publicada; `main` preservada até aprovação do PR.
+- **Concluído nesta etapa:** auditoria de projeto e distribuição, integração documental, proposta de assinatura, simulador offline de manifestos host, auditoria estrutural de `.deb` em Python e testes adversariais CI. Nenhum comando privilegiado executado; nenhuma IPA nova publicada; `main` preservada até aprovação do PR.
 - **Pendente:** validação independente do `.deb` 2.1.1 vindo do espelho; experimento isolado com appinst no dispositivo; pinagem de chave pública real; publicação autorizada de Release, HTTPS real no iOS12; downloader; helper/IPC; instalação; QA de preservação de dados.
 - **Regra de segurança:** não baixar IPAs de manifestos não autenticados e não iniciar instalação a partir do WebReader antes de confirmação expressa do usuário e testes do auxiliar.
 
