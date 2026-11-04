@@ -7,6 +7,7 @@ enum ReaderDisplayMode: Int {
 
 enum ReaderError: Error, LocalizedError {
     case invalidImage
+    case invalidImageResponse(String)
     case httpStatus(Int)
     case noPages
 
@@ -14,6 +15,8 @@ enum ReaderError: Error, LocalizedError {
         switch self {
         case .invalidImage:
             return "The downloaded page is not a valid image."
+        case .invalidImageResponse(let safeDescription):
+            return "The downloaded page is not a valid image. " + safeDescription
         case .httpStatus(let status):
             return "Image server returned HTTP \(status)."
         case .noPages:
@@ -222,7 +225,14 @@ final class ReaderImageLoader {
                 }
                 output = .success(image)
             } else {
-                output = .failure(ReaderError.invalidImage)
+                output = .failure(ReaderError.invalidImageResponse(
+                    ImageResponseDiagnostics.summary(
+                        data: response.data,
+                        headers: response.headers,
+                        status: response.statusCode,
+                        url: request.page.imageUrl
+                    )
+                ))
             }
         case .failure(let error):
             output = .failure(error)
