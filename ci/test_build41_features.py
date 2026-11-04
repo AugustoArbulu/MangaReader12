@@ -52,7 +52,12 @@ class Build41ReaderLibraryTests(unittest.TestCase):
         self.assertIn("class LibraryGridCoverCell: UICollectionViewCell", library)
         self.assertIn("CoverImageLoader.shared.load(", library)
         self.assertIn("self?.open(record: record)", library)
-        self.assertIn("return (self.records, self.metrics)", library)
+        # Build56 extends the grid snapshot with local source-name metadata.
+        # Both shapes preserve the original Library records and reading metrics.
+        self.assertTrue(
+            "return (self.records, self.metrics)" in library
+            or "return (self.records, self.metrics, self.sourceNames)" in library
+        )
         self.assertIn('title: "Lista"', library)
         self.assertIn("if isMovingFromParent", library)
         self.assertIn("func applyLocalFilters()", library)
