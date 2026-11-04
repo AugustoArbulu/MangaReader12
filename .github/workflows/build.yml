@@ -75,6 +75,12 @@ jobs:
       - name: Verify Build43 Comix C2 safety contract (offline)
         run: python3 ci/test_comix_c2_contract.py
 
+      - name: Prepare SHA256-pinned libwebp 1.6.0 for iOS arm64
+        run: ./ci/prepare_libwebp_ios.sh
+
+      - name: Test native libwebp decoding with valid/truncated WebP (offline)
+        run: python3 ci/test_build49_webp.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
