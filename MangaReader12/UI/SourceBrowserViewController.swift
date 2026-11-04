@@ -1733,14 +1733,23 @@ private final class WebtoonsCoverDiagnostic {
                     $0.key.lowercased() == "content-type"
                 }?.value ?? "(ausente)"
                 let mime = contentType.components(separatedBy: ";").first ?? contentType
-                let decoded = UIImage(data: response.data) != nil
+                // Test the same decoder as the real cover loader. iOS 12
+                // UIImage(data:) alone always rejects WebP, even on Build 50.
+                let webp = WebPImageDecoder.isWebP(response.data)
+                let size = webp ? WebPImageDecoder.dimensions(of: response.data) : nil
+                let decoded = webp
+                    ? WebPImageDecoder.thumbnail(from: response.data) != nil
+                    : UIImage(data: response.data) != nil
                 let finalHost = URL(string: response.finalURL)?.host ?? "(desconhecido)"
+                let dimensions = size.map { String($0.0) + "x" + String($0.1) }
+                    ?? "(indisponível)"
                 self.lines.append(
                     label + ": HTTP " + String(response.statusCode) +
                     ", tipo=" + String(mime.prefix(64)) +
                     ", bytes=" + String(response.data.count) +
                     ", formato=" + ImageResponseDiagnostics.format(response.data) +
-                    ", UIImage=" + (decoded ? "SIM" : "NÃO") +
+                    ", dimensões=" + dimensions +
+                    ", decodificador-app=" + (decoded ? "SIM" : "NÃO") +
                     ", host final=" + finalHost + latency
                 )
                 completion(response.statusCode == 429)
