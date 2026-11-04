@@ -188,7 +188,7 @@
       parsed = JSON.parse(value);
     } catch (e) {
       // Do not surface the raw props, URL, auth state or arbitrary JS errors.
-      // Truncated/malformed props must never trigger a bypass or auto retry.
+      // Truncated/malformed props must fail closed without automatic retry.
       throw new Error('Asura Astro props contain incomplete/invalid JSON (' +
         value.length + ' characters; no automatic retry)');
     }
