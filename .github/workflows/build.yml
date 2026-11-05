@@ -123,6 +123,9 @@ jobs:
       - name: Verify in-app releases screen remains fail-closed (no real requests)
         run: python3 ci/test_app_updates_screen.py
 
+      - name: Verify isolated IPC diagnostic launch cannot access Library or background updates
+        run: python3 ci/test_ipc_probe_launch.py
+
       - name: Test native iOS12 HEAD-only GitHub HTTPS probe with mock network
         run: python3 ci/test_webreader_https_probe.py
 
