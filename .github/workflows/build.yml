@@ -162,6 +162,9 @@ jobs:
       - name: Test private IPA copy and held-descriptor snapshot (offline; no installer)
         run: python3 ci/test_webreader_private_snapshot.py
 
+      - name: Test portable IPC field-kit verifier with malformed fixtures (offline)
+        run: python3 ci/test_verify_ipc_field_kit.py
+
       - name: Test actual separate-process unprivileged helper UNIX socket (host)
         run: python3 ci/test_webreader_helper_probe.py
 
@@ -279,6 +282,9 @@ jobs:
             WebReader-TLS-Probe-iOS12-unsigned.ipa \
             WebReader-IPC-Probe-iOS12-unsigned.ipa
 
+      - name: Independently verify packed IPC kit hashes, bundle identity and ARM64 (host)
+        run: python3 ci/verify_ipc_field_kit.py --directory .
+
       - name: Upload isolated iOS12 IPC diagnostic IPA (not a release)
         uses: actions/upload-artifact@v4
         with:
@@ -299,6 +305,7 @@ jobs:
             WebReader-Helper-Ping-iOS12
             WebReader-Helper-Ping-iOS12.sha256
             docs/WEBREADER_IPC_DEVICE_TEST_PHASE6B_2026-11-05.md
+            ci/verify_ipc_field_kit.py
 
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
