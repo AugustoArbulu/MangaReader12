@@ -490,3 +490,25 @@ cópia da IPA no appinst com permissões de trabalho 0777.
 Nenhum download, instalação, helper rootful, token/chave de produção,
 IPA Build57, release ou merge foi realizado. A main e a Build56
 instalada seguem intactas.
+
+
+### Fase 6B — kit físico diagnóstico IPC separado, SEM instalador (2026-11-05)
+
+A Fase 6A teve **CI verde**: GitHub Actions **#1144**, commit `54ad1e0a6180081ff5ce22bf0b6d3a809807ff1c`; foram aprovados o PING/PONG C/C, o PING/PONG Swift/C, compilação do binário C para ARM64 iOS12, builds Debug/Release iOS12 e auditoria da IPA. Esse resultado é específico daquele commit, não é teste físico no iPhone.
+
+A Fase 6B deixa preparado um pacote exclusivo de QA física:
+
+- `ci/package_ipc_probe_ipa.sh`: empacota, somente a partir do build Release verificado, uma **IPA separada** `WebReader-IPC-Probe-iOS12-unsigned.ipa`. Identificador `com.example.MangaReader12.ipcprobe`, nome visível `WebReader IPC Test`; não sobrescreve a IPA principal nem injeta o helper C.
+- `ci/test_ipc_probe_ipa.py`: compara as IPAs de produção Build56, TLS e IPC, garantindo três identificadores únicos, executável idêntico por SHA-256, versão/min iOS iguais, rótulos próprios e árvore de arquivos não alterada.
+- `AppDelegate.swift`: reconhece o identificador IPC e inicia apenas `WebReaderAppUpdatesViewController`, sem instanciar `MainTabBarController` ou agendar/realizar atualizações da Biblioteca. `resetRootViewController` respeita o modo diagnóstico.
+- `WebReaderAppUpdatesViewController.swift`: no modo IPC exibe apenas versão e seção de diagnóstico local (2 seções), removendo controles de leitura/release e sonda HTTPS. Modo normal preserva todas as 6 seções.
+- `ci/test_ipc_probe_launch.py`: protege as condições de boot e isolamento da UI.
+- `ci/webreader_helper_probe.c`: agora também tem `selftest` não privilegiado, que não cria socket, para separar erros de execução de erros de IPC. Janela do servidor de 60 s e aviso `WRPING_READY`.
+- `.github/workflows/build.yml`: empacota/testa as duas IPAs de diagnóstico no CI, compila e aplica assinatura ad hoc de teste ao binário ARM64/iOS12, e faz uploads separados da IPA IPC e do helper sem privilegiamento. Upload habilitado para PR e push, **não é GitHub Release**.
+
+O roteiro detalhado de teste iOS12/Chimera está em
+`docs/WEBREADER_IPC_DEVICE_TEST_PHASE6B_2026-11-05.md`.
+
+**Limites:** a assinatura ad hoc não garante execução por padrão em Chimera, o terminal deve executar o programa como usuário mobile, não root, e o sandbox pode proibir processo externo de alcançar o diretório WR do app. PING/PONG não autentica assinatura nem habilita instalação. Nenhum artefato físico foi instalado no iPhone e nenhuma atualização de Build56 foi publicada. Chave de produção `nil`, sem helper privilegiado nem execução `appinst`. PR #90 permanece Draft, `main` intocada.
+
+**Gate imediato:** CI macOS do HEAD exato 6B deve ficar verde e publicar artefatos antes de solicitar teste no dispositivo; corrigir qualquer erro de empacotamento, teste de identidade, compilação ou assinatura.
