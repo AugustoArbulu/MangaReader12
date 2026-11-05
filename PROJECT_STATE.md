@@ -1,5 +1,7 @@
 # PROJECT_STATE
 
+> **Updater Fase 5C — fingerprint read-only de appinst (2026-11-05):** no PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90), auditor do DEB agora mede SHA-256/tamanho do **executável** `usr/bin/appinst` e rejeita pseudoarquivos; comparador offline confere hash informado do iPhone com o binário do pacote, sem transferir ou executar o executável. Mesmo que os hashes coincidam, procedência oficial e autorização para instalação permanecem **NÃO verificadas**. CI deve ser conferido no HEAD. Build 56 e `main` preservadas. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
 > **Fase 5B — bloqueio de IPAs malformadas antes do staging (2026-11-05):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora exige auditoria ZIP/Info.plist completa **após SHA256 e antes de manter uma IPA baixada**. O `WebReaderIPAStager` rejeita mesmo um ZIP com hash assinado correto quando a estrutura é inválida; testes atualizados usam IPA sintética completa via `URLProtocol`. **Aguardando CI deste commit**; nenhuma chave de produção, Release do WebReader, `appinst` ou instalação estão habilitados. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 
