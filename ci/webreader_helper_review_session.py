@@ -102,6 +102,16 @@ class ReviewSessionLedger:
         self._validate_peer(peer_context)
         if type(request) is not ParsedReviewRequest:
             raise ReviewSessionRejected("unparsed client request")
+        # Defense in depth: reject manually constructed dataclasses bypassing
+        # the strict JSON parser, rather than trusting their Python type.
+        if (type(request.build) is not int or
+                not 1 <= request.build <= 2_147_483_647 or
+                type(request.manifest_sha256) is not str or
+                not HEX256.fullmatch(request.manifest_sha256) or
+                type(request.nonce) is not str or
+                not HEX256.fullmatch(request.nonce) or
+                request.nonce == request.manifest_sha256):
+            raise ReviewSessionRejected("invalid parsed request fields")
         self._expire(now)
         if len(self._pending) >= self.max_pending:
             raise ReviewSessionRejected("too many pending review challenges")
