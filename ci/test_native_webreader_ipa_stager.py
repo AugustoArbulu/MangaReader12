@@ -15,6 +15,7 @@ FILES = [
     CORE / "WebReaderStrictJSON.swift",
     CORE / "WebReaderUpdateManifestVerifier.swift",
     CORE / "WebReaderUpdateChecker.swift",
+    CORE / "WebReaderGitHubReleaseParser.swift",
     CORE / "WebReaderNativeIPAAuditor.swift",
     CORE / "WebReaderIPAStager.swift",
 ]
