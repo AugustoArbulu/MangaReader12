@@ -111,6 +111,9 @@ jobs:
       - name: Test offline signed release manifest preparation with ephemeral key
         run: python3 ci/test_prepare_signed_webreader_update.py
 
+      - name: Verify Python OpenSSL signed release with native iOS12 Swift Security
+        run: python3 ci/test_cross_language_webreader_release.py
+
       - name: Test native iOS12 Security.framework update manifest signature policy
         run: python3 ci/test_native_webreader_update_verifier.py
 
