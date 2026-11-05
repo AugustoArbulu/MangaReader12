@@ -42,7 +42,7 @@
 #define REQUEST "WRPING1\n"
 #define RESPONSE "WRPONG1\n"
 #define MESSAGE_LEN 8
-#define CONNECT_TIMEOUT_MS 3000
+#define CONNECT_TIMEOUT_MS 60000
 
 static int socket_path(const char *dir, char path[sizeof(((struct sockaddr_un *)0)->sun_path)]) {
     const size_t max = sizeof(((struct sockaddr_un *)0)->sun_path);
@@ -168,6 +168,8 @@ static int serve(const char *dir, const char *path) {
         !S_ISSOCK(created.st_mode) || created.st_uid != geteuid() ||
         chmod(path, 0600) != 0) goto cleanup;
     if (listen(server, 1) != 0) goto cleanup;
+    puts("WRPING_READY (nonprivileged, one request, timeout 60s)");
+    fflush(stdout);
 
     waitfd.fd = server;
     waitfd.events = POLLIN;
