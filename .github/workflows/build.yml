@@ -108,6 +108,9 @@ jobs:
       - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
         run: python3 ci/test_webreader_update_manifest.py
 
+      - name: Test native iOS12 Security.framework update manifest signature policy
+        run: python3 ci/test_native_webreader_update_verifier.py
+
       - name: Audit appinst .deb format with malicious offline fixtures (no installation)
         run: python3 ci/test_audit_appinst_deb.py
 

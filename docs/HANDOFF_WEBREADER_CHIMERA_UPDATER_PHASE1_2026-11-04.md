@@ -96,6 +96,14 @@ Usar no host: `python3 ci/validate_webreader_ipa.py WebReader-iOS12-unsigned.ipa
 
 **Limitação:** a validação host Python não substitui o analisador Swift/iOS12 futuro nem a auditoria de `appinst`, assinatura da publicação ou preservação dos dados durante a instalação.
 
+### Preparação da Fase 3 — verificador nativo (ainda não habilitado)
+
+Adicionada à branch a unidade Swift `MangaReader12/Core/WebReaderUpdateManifestVerifier.swift`, compilada no target iOS12. Utiliza `Security.framework` (`SecKeyCreateWithData`, `SecKeyVerifySignature` com `ecdsaSignatureMessageX962SHA256`) para autenticar o **payload bruto** assinado por ECDSA P-256, seguindo o protocolo host v1. Só aceita chaves públicas EC X9.63 descomprimidas de **65 bytes**, identidade `com.example.MangaReader12`, canal development, build mais nova, tamanho/hash, SO compatível e URL HTTPS do release oficial do projeto.
+
+`ci/test_native_webreader_update_verifier.py` compila **o mesmo arquivo Swift real** em macOS com Security.framework, cria uma chave efêmera (apenas em diretório de teste) e confirma aceitação da mensagem válida, rejeição de assinatura adulterada, host/ID/versão errados, campo extra e **ausência de chave pública**.
+
+**Esta unidade NÃO consulta a internet, NÃO baixa IPA, NÃO inicia appinst, NÃO instala pacotes e NÃO está ligada à interface**. Não contém chave de produção, token, segredo ou endereço ativo de manifesto. Não representa uma Build 57 funcional. O projeto iOS mantém `CURRENT_PROJECT_VERSION=56` e a `main` não é alterada. O verificador só poderá ser usado em produção após provisionamento de chave de release autêntica e mecanismo de publicação autorizado. A inspeção de duplicidade de chaves JSON na implementação Swift ainda precisa ser harmonizada com o validador Python antes de ativação (o payload é verificado *antes* de interpretar qualquer campo).
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

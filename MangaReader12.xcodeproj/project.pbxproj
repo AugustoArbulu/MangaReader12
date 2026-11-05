@@ -47,6 +47,7 @@
 		A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ComixBrowserProbeViewController.swift */; };
 		A10000000000000000000028 /* libwebp-COPYING.txt in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* libwebp-COPYING.txt */; };
 		A10000000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* Assets.xcassets */; };
+		A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +93,7 @@
 		A20000000000000000000027 /* ComixBrowserProbeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComixBrowserProbeViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* libwebp-COPYING.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "libwebp-COPYING.txt"; sourceTree = "<group>"; };
 		A20000000000000000000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdateManifestVerifier.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +154,7 @@
 				A2000000000000000000001E /* BackupManager.swift */,
 				A20000000000000000000022 /* StorageManager.swift */,
 				A20000000000000000000025 /* SafeCBZArchive.swift */,
+				A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -349,6 +352,7 @@
 				A10000000000000000000024 /* SafeCBZArchive.swift in Sources */,
 				A10000000000000000000025 /* LocalComicsViewController.swift in Sources */,
 				A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */,
+				A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
