@@ -39,6 +39,31 @@ O workflow da branch cria e valida três artefatos distintos:
    separada, existente de fases anteriores; não é necessária
    para o PING/PONG.
 
+### Conferência independente no PC (sem executar o helper)
+
+O ZIP **WebReader-IPC-iOS12-FieldTest-Kit** também inclui
+`ci/verify_ipc_field_kit.py`, um verificador Python 3 que lê os
+arquivos **sem instalar nem executar nada**. Depois de extrair o ZIP
+no computador, execute a partir da pasta extraída:
+
+```powershell
+python ci/verify_ipc_field_kit.py --directory .
+```
+
+O resultado esperado é um JSON com `"status": "PASS"` e
+`"installation_authorized": false`. O script compara os SHA-256
+ao conteúdo real, exige que a IPA tenha o identificador
+`com.example.MangaReader12.ipcprobe`, build 56 e iOS mínimo
+12.0, sem modo de background fetch, e verifica que o helper
+é um executável Mach-O ARM64. Caso haja erro, **não transfira**
+os arquivos e envie o erro no chat.
+
+Essa checagem não valida a assinatura de código nem a procedência
+oficial do executável: use apenas o artefato da execução CI
+aprovada e não reenvios de terceiros. Os SHA-256 dentro do mesmo
+ZIP detectam corrupção acidental, mas não substituem uma assinatura
+confiável de publicação.
+
 Os artefatos são uploads temporários de **GitHub Actions**,
 não releases oficiais nem atualizações instaláveis a partir
 da tela do WebReader. A IPA do diagnóstico é empacotada sem
