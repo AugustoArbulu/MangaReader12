@@ -11,16 +11,18 @@ permissions:
 
 jobs:
   oneapp:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Pin iOS12-capable Xcode
+      - name: Select Xcode 16.0 solely for experimental iOS12 compatibility probe
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
           xcodebuild -version
+          echo 'iOS12 deployment target must remain 12.0; Xcode16 compilation is unsupported for production.'
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = '18.0'
 
       - name: Prepare original WebReader icons and pinned WebP library
         run: |
