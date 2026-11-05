@@ -7,6 +7,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var checker: WebReaderUpdateChecker?
     private var checking = false
     private var lastResult: WebReaderUpdateCheckResult = .disabled
+    private var httpsProbe: WebReaderReleaseHTTPSProbe?
+    private var testingHTTPS = false
+    private var httpsResults: [WebReaderHTTPSProbeResult] = []
 
     private var installedBuild: Int {
         let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
@@ -43,17 +46,24 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         super.viewWillDisappear(animated)
         // Leaving this screen cannot accidentally trigger a later action.
         checker?.cancel()
+        httpsProbe?.cancel()
+        httpsProbe = nil
+        testingHTTPS = false
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return 4
+        return 5
     }
 
     override func tableView(
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return section == 2 && availableUpdate != nil ? 2 : 1
+        if section == 2 { return availableUpdate != nil ? 2 : 1 }
+        if section == 4 {
+            return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
+        }
+        return 1
     }
 
     override func tableView(
@@ -63,7 +73,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 0: return "VERSÃO INSTALADA"
         case 1: return "CANAL DO APLICATIVO"
         case 2: return "ATUALIZAÇÕES DISPONÍVEIS"
-        default: return "SEGURANÇA"
+        case 3: return "SEGURANÇA"
+        default: return "DIAGNÓSTICO HTTPS (iOS 12)"
         }
     }
 
@@ -78,6 +89,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 2:
             return "Consultar a versão não baixa nem instala uma IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
+        case 4:
+            return "Teste manual de TLS padrão usando apenas HEAD. " +
+                "Uma resposta HTTP, inclusive 403/404, indica conexão HTTPS " +
+                "com aquele servidor, não a existência de uma atualização. " +
+                "O teste da raiz do CDN não valida um asset IPA específico."
         default:
             return nil
         }
@@ -93,6 +109,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         cell.detailTextLabel?.numberOfLines = 0
         cell.accessoryView = nil
         cell.accessibilityHint = nil
+        cell.accessibilityLabel = nil
         cell.accessoryType = .none
         cell.selectionStyle = .none
         cell.isUserInteractionEnabled = true
@@ -139,11 +156,37 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 )
             }
 
-        default:
+        case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
                 "O download e a instalação pelo Chimera só serão " +
                 "habilitados depois da validação do canal e do instalador."
+
+        case (4, 0):
+            cell.textLabel?.text = testingHTTPS ?
+                "Testando conexões HTTPS…" : "Testar HTTPS do GitHub"
+            cell.detailTextLabel?.text =
+                "Somente HEAD • TLS padrão • nenhum download"
+            if !testingHTTPS {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (4, let row) where row <= httpsResults.count:
+            let item = httpsResults[row - 1]
+            cell.textLabel?.text = item.label
+            cell.detailTextLabel?.text = item.reportLine
+            cell.accessibilityLabel = item.reportLine
+
+        case (4, _):
+            cell.textLabel?.text = "Copiar relatório HTTPS"
+            cell.detailTextLabel?.text =
+                "Somente hosts, códigos HTTP e erros de conexão"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        default:
+            break
         }
         return cell
     }
@@ -178,6 +221,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
+        if indexPath.section == 4 {
+            if indexPath.row == 0 {
+                startHTTPSProbe()
+            } else if !httpsResults.isEmpty &&
+                indexPath.row == httpsResults.count + 1 {
+                copyHTTPSReport()
+            }
+            return
+        }
         guard indexPath.section == 2, indexPath.row == 0,
               WebReaderUpdateChannel.isConfigured, !checking
         else { return }
@@ -198,6 +250,48 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 self.tableView.reloadData()
             }
         }
+    }
+
+    private func startHTTPSProbe() {
+        guard !testingHTTPS else { return }
+        testingHTTPS = true
+        httpsResults = []
+        tableView.reloadData()
+
+        let current = WebReaderReleaseHTTPSProbe()
+        httpsProbe = current
+        current.run { [weak self] values in
+            DispatchQueue.main.async {
+                guard let self = self, self.httpsProbe === current else {
+                    return
+                }
+                self.httpsProbe = nil
+                self.testingHTTPS = false
+                self.httpsResults = values
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func copyHTTPSReport() {
+        guard !httpsResults.isEmpty else { return }
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let ios = String(version.majorVersion) + "." +
+            String(version.minorVersion) + "." + String(version.patchVersion)
+        let lines = [
+            "WebReader • Diagnóstico HTTPS somente leitura",
+            "App: " + installedBuildLabel,
+            "iOS: " + ios,
+            "HTTPS padrão; somente HEAD; sem login, IPA ou instalação"
+        ] + httpsResults.map { $0.reportLine }
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let alert = UIAlertController(
+            title: "Relatório copiado",
+            message: "Os resultados HTTPS estão prontos para compartilhar.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
