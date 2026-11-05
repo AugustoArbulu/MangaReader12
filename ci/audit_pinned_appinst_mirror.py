@@ -11,6 +11,7 @@ import gzip
 import hashlib
 import zlib
 import json
+import re
 from pathlib import Path
 import sys
 from urllib.error import URLError
@@ -76,26 +77,41 @@ def package_stanzas(index: str):
         fields = {}
         for line in paragraph.splitlines():
             if line.startswith((" ", "\t")):
+                # RFC822 continuation lines (e.g. Description) are irrelevant.
                 continue
             if ": " not in line:
                 continue
             key, value = line.split(": ", 1)
-            if key not in fields:
-                fields[key] = value.strip()
+            if key in fields:
+                raise VerificationError("duplicate field in publisher index")
+            fields[key] = value.strip()
         if fields:
             yield fields
 
 def matching_official_entry(index: str):
+    matches = []
     for fields in package_stanzas(index):
         if (fields.get("Package") == "ai.akemi.appinst"
             and fields.get("Version") == "2.1.1"
             and fields.get("Architecture") == "iphoneos-arm"):
-            return {
-                "filename": fields.get("Filename"),
-                "size": fields.get("Size"),
-                "sha256": fields.get("SHA256"),
-            }
-    return None
+            digest = fields.get("SHA256", "")
+            size = fields.get("Size", "")
+            filename = fields.get("Filename", "")
+            if not re.fullmatch(r"[a-fA-F0-9]{64}", digest):
+                raise VerificationError("invalid SHA-256 in publisher index")
+            if not re.fullmatch(r"[0-9]{1,9}", size) or not 0 < int(size) <= MAX_ARCHIVE_RESPONSE:
+                raise VerificationError("invalid size in publisher index")
+            if (not filename or filename.startswith("/") or
+                "\\" in filename or any(part in ("", ".", "..") for part in filename.split("/"))):
+                raise VerificationError("unsafe filename in publisher index")
+            matches.append({
+                "filename": filename,
+                "size": size,
+                "sha256": digest.lower(),
+            })
+    if len(matches) > 1:
+        raise VerificationError("ambiguous duplicate appinst publisher entries")
+    return matches[0] if matches else None
 
 def main():
     deb = fetch_limited(MIRROR_URL, MAX_ARCHIVE_RESPONSE, "raw.githubusercontent.com")
@@ -123,6 +139,7 @@ def main():
                 "status": "entry-found-on-publisher-https-host",
                 "entry": entry,
                 "digest_matches": entry["sha256"] == digest,
+                "size_matches": int(entry["size"]) == len(deb),
             }
             break
         except (URLError, TimeoutError, OSError, VerificationError) as error:
@@ -146,8 +163,8 @@ def main():
         "execution_performed": False,
     }
     print(json.dumps(result, indent=2))
-    if official["digest_matches"] is False:
-        raise VerificationError("publisher index digest differs from mirror file")
+    if official["digest_matches"] is False or official.get("size_matches") is False:
+        raise VerificationError("publisher index checksum/size differs from mirror file")
     # A matching index is NOT a signature of the package, and we have not
     # compared the version installed on the user's iPhone.
     print("PASS: mirror DEB structurally inspected; publisher authenticity NOT established.")
