@@ -15,7 +15,7 @@ enum WebReaderChimeraSelfTest {
                 "WebReader Chimera Test • iOS 12",
                 "Resultado: " + status,
                 detail,
-                "appinst: " + appinstPresence,
+                "appinst: " + WebReaderChimeraSelfTest.appinstPresence,
                 "Nenhuma IPA instalada; nenhum appinst executado"
             ].joined(separator: "\n")
         }
