@@ -17,7 +17,7 @@ enum WebReaderUpdateValidationError: Error {
     case disallowedURL
 }
 
-enum WebReaderUpdateProvenance {
+enum WebReaderUpdateProvenance: Equatable {
     case signedManifest
     case publicGitHubRelease
 }
