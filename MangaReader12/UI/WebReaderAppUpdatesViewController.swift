@@ -77,7 +77,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
-        if source == 5 { return 2 }
+        if source == 5 { return 3 }
         return 1
     }
 
@@ -222,6 +222,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
+        case (5, 2):
+            cell.textLabel?.text = "Copiar relatório do helper"
+            cell.detailTextLabel?.text =
+                "Resultado, versão e iOS • sem copiar caminho privado"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
         default:
             break
         }
@@ -271,6 +278,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if selectedSection == 5 {
             if indexPath.row == 0 { startHelperProbe() }
             if indexPath.row == 1 { copyHelperDirectory() }
+            if indexPath.row == 2 { copyHelperReport() }
             return
         }
         guard selectedSection == 2, indexPath.row == 0,
@@ -336,6 +344,31 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             title: "Pasta copiada",
             message: "Somente para teste manual do helper PING/PONG. " +
                 "Esse caminho não autoriza nenhuma instalação.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func copyHelperReport() {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let ios = String(version.majorVersion) + "." +
+            String(version.minorVersion) + "." + String(version.patchVersion)
+        let lines = [
+            "WebReader • Diagnóstico IPC não privilegiado",
+            "App: " + installedBuildLabel,
+            "iOS: " + ios,
+            "Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido"),
+            "Socket: UNIX local • PING/PONG somente",
+            "Pasta (comprimento UTF-8): " +
+                String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
+            helperReport,
+            "Sem appinst, root, download ou instalação"
+        ]
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let alert = UIAlertController(
+            title: "Relatório IPC copiado",
+            message: "Pode compartilhar o resultado sem expor o caminho da pasta.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
