@@ -157,6 +157,20 @@ Foram implementados **dois componentes novos de pré-produção**, sem ativar qu
 
 **Fluxo planejado para releases futuras:** proprietário provisiona chaves fora do repo → CI compila IPA com ID preservado → auditor independente revisa o pacote → script gera manifesto assinado local → proprietário publica **asset público de Release** e manifesto correspondente mediante aprovação → verificador iOS12 autentica → stager salva IPA verificada → somente então helper restrito pode pedir confirmação explícita e instalar. Nenhum desses passos de publicação e instalação foi realizado nesta fase.
 
+### Fase 4B — área de atualizações do aplicativo (05/11/2026)
+
+Foi implementada uma **tela UIKit exclusiva para releases do WebReader** em `MangaReader12/UI/WebReaderAppUpdatesViewController.swift`, acessível por **Ajustes → Atualizações do WebReader**. Ela é separada da aba `Atualizações` de capítulos e do controle de atualização da Biblioteca em background.
+
+- A tela apresenta a **versão efetivamente instalada** consultando `Bundle.main.CFBundleVersion`, status do canal de assinatura, ação de verificação *quando realmente habilitada*, notas do release assinado e estado de segurança do instalador.
+- Quando `WebReaderUpdateChannel.productionPublicKeyX963 == nil` (estado atual), exibe **"Verificação indisponível"**, não faz chamadas HTTP, não mostra um botão fictício de instalação nem atribui "atualizado" sem verificação. O texto explica que o canal de atualização ainda não foi publicado/autenticado.
+- Quando um dia houver uma chave pública legítima provisionada e um manifesto publicado, o usuário poderá fazer uma consulta **manual**. A ação chama `WebReaderUpdateChecker`, que valida ECDSA, versão e URL. A UI apresenta notas apenas após `.updateAvailable`; também apresenta falhas de rede/assinatura e resultado `.upToDate` sem declarar sucesso indevidamente.
+- A interface não chama `WebReaderIPAStager`, `appinst`, `dpkg`, processos privilegiados, download ou IPC. **Não há instalação ou download real habilitados.** Não há checagem automática, notificação push, polling de GitHub nem acesso aos dados da Biblioteca.
+- Separação visual: a preferência anterior “Atualização automática” é rotulada **"Atualização da Biblioteca"** para evitar que o usuário a confunda com atualizações do aplicativo. O app mantém a build nativa 56 na branch.
+- `ci/test_app_updates_screen.py` valida o wiring do Xcode, entrada em Ajustes, versão dinâmica na tela, condição fail-closed, renderização de release notes e ausência de chamadas de instalação. O GitHub Actions continua compilando iOS12 Debug/Release.
+- **Para teste físico** futuramente será necessária IPA nova e deliberada em branch apropriada; esta tela ainda **não está presente na Build 56 instalada no aparelho**. Não promover para `main` nem considerar a interface validada fisicamente só porque compila.
+
+A futura experiência será `Ajustes → Atualizações do WebReader` → consultar **releases oficiais assinados**, e não cada commit do GitHub. O download/instalação dependem de gates de chave real, distribuição HTTPS, origem do `appinst`, helper e testes de preservação de dados.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

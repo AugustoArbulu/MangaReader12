@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Updater — tela de releases (2026-11-05):** [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) inclui uma entrada distinta em **Ajustes → Atualizações do WebReader**, com versão instalada, situação do canal assinado e notas de release futuro; a antiga atualização em segundo plano agora está rotulada **Atualização da Biblioteca**. Como a chave de produção permanece `nil`, a tela informa **"Verificação indisponível"** sem consultar rede. **Nenhum download/instalador foi habilitado** e a tela ainda não existe na IPA Build 56 aprovada da `main`. Testes e CI pendentes nesta revisão; [handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Updater Fase 4 — manifesto e staging (2026-11-04):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) inclui gerador offline `ci/prepare_signed_webreader_update.py` que assina manifestos usando **chaves externas e privadas do usuário**, mais `WebReaderIPAStager.swift` com `URLSession`/CommonCrypto SHA-256 em streaming. Testes adversariais macOS/iOS12 com chave e rede simuladas; **CI pendente**, sem publicação, sem chave de produção, sem downloads reais, sem helper/instalação. **Build56 continua aprovada na main.** [Handoff técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 

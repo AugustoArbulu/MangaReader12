@@ -120,6 +120,9 @@ jobs:
       - name: Test native read-only UpdateChecker with mocked URLSession (zero real network)
         run: python3 ci/test_native_webreader_update_checker.py
 
+      - name: Verify in-app releases screen remains fail-closed (no real requests)
+        run: python3 ci/test_app_updates_screen.py
+
       - name: Test signed-metadata IPA staging with streaming SHA256 (no real network)
         run: python3 ci/test_native_webreader_ipa_stager.py
 
