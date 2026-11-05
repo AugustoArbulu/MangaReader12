@@ -222,6 +222,24 @@ jobs:
             WebReader-Appinst-Bridge-iOS12
             WebReader-Appinst-Bridge-iOS12.sha256
 
+      - name: Build two disposable iOS12 apps for safe appinst v1-to-v2 test
+        run: bash ci/build_appinst_disposable.sh
+
+      - name: Validate disposable iOS12 test IPA isolation and build identities
+        run: python3 ci/test_appinst_disposable_artifacts.py
+
+      - name: Upload disposable appinst version-1 and version-2 IPAs (NOT WebReader)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Appinst-Disposable-v1-v2-iOS12-QA
+          if-no-files-found: error
+          path: |
+            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa
+            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa.sha256
+            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa
+            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa.sha256
+            docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
