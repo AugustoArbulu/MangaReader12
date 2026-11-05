@@ -62,8 +62,21 @@ assert "A20000000000000000000031 /* WebReaderHelperPingProbe.swift */" in projec
 assert "posix_spawn" not in helper
 assert "appinst" not in helper or "install an IPA" in helper
 
-# No installer, automatic download, root helper or shell execution in UI.
-for forbidden in ("appinst(", "Process(", "posix_spawn", ".stage(", "dlopen(", "system("):
+# Explicit staging is allowed after a verified update and user confirmation.
+assert 'if source == 2 { return availableUpdate != nil ? 3 : 1 }' in screen
+assert '"Baixar IPA verificada"' in screen
+assert '"Compartilhar IPA verificada"' in screen
+assert 'UIAlertController(title: "Baixar IPA?"' in screen
+assert 'WebReaderIPAStager(verifiedUpdate: update)' in screen
+assert 'downloader.stage { [weak self, weak downloader] result in' in screen
+assert 'let current = availableUpdate' in screen
+assert 'WebReaderUpdateChannel.isConfigured' in screen
+assert 'stager?.cancel()' in screen
+assert 'UIActivityViewController(activityItems: [url]' in screen
+assert '"https://github.com/AugustoArbulu/MangaReader12/releases"' in screen
+assert 'guard !isIPCDiagnostic' in screen
+# No automatic installation, root helper or shell execution in UIKit.
+for forbidden in ("appinst(", "Process(", "posix_spawn(", "dlopen(", "system("):
     assert forbidden not in screen, forbidden
 
-print("PASS WebReader iOS12 updater screen wiring, fail-closed status, no install")
+print("PASS WebReader iOS12 update UI: signed manual staging/share; no install")
