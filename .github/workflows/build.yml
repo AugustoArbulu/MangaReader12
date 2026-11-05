@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# PR and branch push share one lane; only the latest commit needs full
+# iOS12 compilation and diagnostic artifact uploads. Do not cancel main.
+concurrency:
+  group: webreader-ios12-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
+
 jobs:
   build:
     runs-on: macos-14
