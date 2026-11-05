@@ -65,7 +65,11 @@ assert "posix_spawn" not in helper
 assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
-assert 'if source == 2 { return availableUpdate != nil ? 3 : 1 }' in screen
+assert 'if source == 2 { return availableUpdate != nil ? 4 : 1 }' in screen
+assert '"Copiar comando appinst (manual)"' in screen
+assert 'copyManualAppinstCommand(file)' in screen
+assert 'UIPasteboard.general.string = "appinst " + quotedPath' in screen
+assert 'message: "A IPA já foi baixada e verificada.' in screen
 assert '"Baixar IPA verificada"' in screen
 assert "update.provenance == .publicGitHubRelease" in screen
 assert '"Compartilhar IPA verificada"' in screen
