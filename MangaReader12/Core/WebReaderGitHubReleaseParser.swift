@@ -49,6 +49,7 @@ enum WebReaderGitHubReleaseParser {
               let number = asset["size"] as? NSNumber,
               CFGetTypeID(number) != CFBooleanGetTypeID(),
               number.int64Value > 0, number.int64Value <= maximumIPA,
+              number.doubleValue == Double(number.int64Value),
               let digestField = asset["digest"] as? String,
               digestField.hasPrefix("sha256:"),
               digestField.count == 71,
