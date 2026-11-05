@@ -232,8 +232,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "refusing privileged/root execution\n");
         return 2;
     }
+    if (argc == 2 && strcmp(argv[1], "selftest") == 0) {
+        puts("WEBREADER_HELPER_SELFTEST_OK (non-root, no installer)");
+        return 0;
+    }
     if (argc != 3 || socket_path(argv[2], path) != 0) {
-        fprintf(stderr, "usage: webreader-helper-probe {serve|probe} /private/absolute/dir\n");
+        fprintf(stderr, "usage: webreader-helper-probe selftest | {serve|probe} /private/absolute/dir\n");
         return 2;
     }
     if (strcmp(argv[1], "serve") == 0) return serve(argv[2], path);
