@@ -176,6 +176,20 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(existing.read_bytes(), b'PRESERVE NEW FILE')
         moved.unlink()
 
+    def test_context_exit_closes_and_removes_temp_snapshot(self):
+        with self.snapshot() as snap:
+            self.assertTrue(snap.verify_snapshot())
+            self.assertEqual(len(list(self.private.iterdir())), 1)
+        self.assertEqual(list(self.private.iterdir()), [])
+
+    def test_invalid_internal_random_token_rejected(self):
+        for token in ('../escape', 'x'*32, '', 'A'*32, 7):
+            with self.subTest(token=token):
+                with patch('webreader_private_snapshot.secrets.token_hex', return_value=token):
+                    with self.assertRaises(SnapshotRejected):
+                        self.snapshot()
+                self.assertEqual(list(self.private.iterdir()), [])
+
     def test_untrusted_filename_cannot_escape(self):
         for filename in ['../'+LEAF, LEAF+'/../other.ipa',
                          'WebReader-build57-no-uuid.ipa', '/tmp/file.ipa']:
