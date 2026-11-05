@@ -75,7 +75,7 @@ enum WebReaderHelperPingProbe {
         let socketPath = directory.appendingPathComponent(socketName).path
         var entry = stat()
         if socketPath.withCString({ lstat($0, &entry) }) != 0 {
-            return .unavailable
+            return errno == ENOENT ? .unavailable : .unsafePath
         }
         guard (entry.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK),
               entry.st_uid == geteuid(),
@@ -102,19 +102,20 @@ enum WebReaderHelperPingProbe {
         guard fd >= 0 else { return .rejected }
         defer { _ = Darwin.close(fd) }
         var noSigPipe: Int32 = 1
-        _ = setsockopt(
+        guard setsockopt(
             fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe,
             socklen_t(MemoryLayout<Int32>.size)
-        )
+        ) == 0 else { return .rejected }
         var timeout = timeval(tv_sec: 2, tv_usec: 0)
-        _ = setsockopt(
+        guard setsockopt(
             fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
             socklen_t(MemoryLayout<timeval>.size)
-        )
-        _ = setsockopt(
-            fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
-            socklen_t(MemoryLayout<timeval>.size)
-        )
+        ) == 0,
+            setsockopt(
+                fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                socklen_t(MemoryLayout<timeval>.size)
+            ) == 0
+        else { return .rejected }
         let connected = withUnsafePointer(to: &address) { ptr -> Int32 in
             return ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 Darwin.connect(fd, $0, socklen_t(addressSize))
