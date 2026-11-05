@@ -56,6 +56,8 @@ def check(base_path, tls_path, ipc_path):
         tls.get("CFBundleDisplayName") != "WebReader TLS Test" or
         ipc.get("CFBundleDisplayName") != "WebReader IPC Test"):
         raise DiagnosticIPARejected("incorrect diagnostic display names")
+    if ipc.get("UIBackgroundModes") is not None:
+        raise DiagnosticIPARejected("IPC diagnostic must not request background execution")
     if stable_bin != ipc_bin or stable_bin != tls_bin:
         raise DiagnosticIPARejected("diagnostic apps changed the WebReader executable")
     if stable_names != ipc_names or stable_names != tls_names:
