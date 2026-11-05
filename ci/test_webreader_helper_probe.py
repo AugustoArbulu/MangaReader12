@@ -15,7 +15,7 @@ import time
 import unittest
 
 SOURCE = Path(__file__).with_name("webreader_helper_probe.c")
-SOCKET = "webreader-helper-probe-v1.sock"
+SOCKET = "wrp.sock"
 
 
 class HelperPingTests(unittest.TestCase):
