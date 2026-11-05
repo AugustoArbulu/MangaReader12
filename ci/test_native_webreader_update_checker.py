@@ -10,6 +10,7 @@ SOURCES = [
     BASE / "WebReaderStrictJSON.swift",
     BASE / "WebReaderUpdateManifestVerifier.swift",
     BASE / "WebReaderUpdateChecker.swift",
+    BASE / "WebReaderGitHubReleaseParser.swift",
 ]
 HARNESS = r'''
 import Foundation
