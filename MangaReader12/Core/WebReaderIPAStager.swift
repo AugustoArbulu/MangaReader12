@@ -56,7 +56,9 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     /// Explicit, manual staging. Even with a valid update object, this is
     /// fail-closed when no production key has been configured in the app.
     func stage(completion callback: @escaping (WebReaderIPAStageResult) -> Void) {
-        guard WebReaderUpdateChannel.isConfigured || testProtocolClasses != nil else {
+        guard WebReaderUpdateChannel.isConfigured ||
+            update.provenance == .publicGitHubRelease ||
+            testProtocolClasses != nil else {
             callback(.failed(.disabled))
             return
         }
