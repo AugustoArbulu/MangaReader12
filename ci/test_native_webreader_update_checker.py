@@ -192,7 +192,61 @@ StubManifestURLProtocol.responseBody = asJSON([
 ])
 expectFailure(.invalidSignedManifest)
 
-print("PASS: iOS12 read-only UpdateChecker enforces signed-only, bounded, fail-closed URLSession checks")
+// Public personal channel: no publisher key or GitHub token, URLProtocol only.
+func runPublicGitHubCheck() -> WebReaderUpdateCheckResult {
+    let checker = WebReaderUpdateChecker(
+        installedBuild: 56, installedIOS: ios,
+        protocolClasses: [StubManifestURLProtocol.self],
+        usePublicGitHubReleases: true
+    )
+    let done = DispatchSemaphore(value: 0)
+    var outcome: WebReaderUpdateCheckResult?
+    checker.check { result in
+        outcome = result
+        done.signal()
+    }
+    check(done.wait(timeout: .now() + 8) == .success, "GitHub API stub completed")
+    return outcome!
+}
+StubManifestURLProtocol.responseBody = asJSON([
+    "tag_name": "build57", "draft": false, "prerelease": false,
+    "published_at": "2026-11-05T03:00:00Z",
+    "body": "Novidades no WebReader",
+    "assets": [[
+        "name": "WebReader-iOS12-unsigned.ipa",
+        "size": 17300000,
+        "digest": "sha256:" + String(repeating: "a", count: 64),
+        "state": "uploaded",
+        "browser_download_url":
+            "https://github.com/AugustoArbulu/MangaReader12/releases/download/" +
+            "build57/WebReader-iOS12-unsigned.ipa"
+    ]]
+])
+StubManifestURLProtocol.responseStatus = 200
+switch runPublicGitHubCheck() {
+case .updateAvailable(let update):
+    check(update.build == 57, "public GitHub release build")
+    check(update.provenance == .publicGitHubRelease, "trust provenance")
+default: fatalError("real URLSession must accept public GitHub release fixture")
+}
+StubManifestURLProtocol.responseStatus = 404
+switch runPublicGitHubCheck() {
+case .upToDate: break
+default: fatalError("no public GitHub release should be a safe no-update")
+}
+StubManifestURLProtocol.responseStatus = 403
+switch runPublicGitHubCheck() {
+case .failed(.unexpectedHTTPStatus(403)): break
+default: fatalError("GitHub API rate-limit/access error must fail")
+}
+StubManifestURLProtocol.responseStatus = 200
+StubManifestURLProtocol.responseBody = Data("INVALID".utf8)
+switch runPublicGitHubCheck() {
+case .failed(.invalidGitHubRelease): break
+default: fatalError("invalid GitHub release JSON must fail")
+}
+
+print("PASS: signed channel remains closed; public GitHub API is bounded and SHA-bound")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-update-checker-") as work:
     root = Path(work)
