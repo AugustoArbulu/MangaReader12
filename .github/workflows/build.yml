@@ -138,6 +138,9 @@ jobs:
       - name: Test exact pinned mirror index policy (no external requests)
         run: python3 ci/test_audit_pinned_appinst_mirror.py
 
+      - name: Test device-vs-DEB fingerprint policy with synthetic binaries (offline)
+        run: python3 ci/test_compare_appinst_fingerprint.py
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
