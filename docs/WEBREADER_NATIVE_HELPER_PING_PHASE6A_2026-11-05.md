@@ -15,7 +15,7 @@ e mínima com um processo separado:
 - ci/webreader_helper_probe.c — programa POSIX (macOS/Linux/iOS 12 ARM64),
   sem privilégios e explicitamente incapaz de executar instalação.
   Opera com dois comandos locais de linha de comando: "serve" e "probe".
-  Serve uma única conexão UNIX-domain SOCK_STREAM, lê SOMENTE
+  Espera até 60 s por uma única conexão UNIX-domain SOCK_STREAM, anuncia WRPING_READY depois de listen, lê SOMENTE
   os 8 bytes ASCII "WRPING1\n", e responde SOMENTE "WRPONG1\n".
   Recusa execução com EUID 0 (root); não chama appinst, shells,
   posix_spawn, LSApplicationWorkspace, dpkg nem outras operações.
@@ -83,7 +83,7 @@ autenticação forte de processo da futura instalação.
 5. Ainda dentro do mesmo ambiente e com o socket ativo,
    tocar em Testar helper; o resultado esperado é PONG
    recebido, explicitamente rotulado NÃO autenticado.
-6. O programa C encerra após um PING ou 3 s sem conexão;
+6. O programa C encerra após um PING ou 60 s sem conexão;
    não permanece residente nem instala nada.
 
 O passo 4 não foi testado em iPhone; permissões do sandbox de
