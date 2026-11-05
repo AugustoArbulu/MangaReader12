@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 
@@ -92,7 +93,7 @@ class PrivateSnapshot:
         return self
 
     def __exit__(self, *_):
-        self.close()
+        self.remove_for_test()
 
 
 def prepare_private_snapshot(source_root: Path, staged_leaf: str,
@@ -139,6 +140,8 @@ def prepare_private_snapshot(source_root: Path, staged_leaf: str,
             raise SnapshotRejected("unsafe original staged IPA")
 
         token = secrets.token_hex(16)
+        if type(token) is not str or not re.fullmatch(r"[0-9a-f]{32}", token):
+            raise SnapshotRejected("invalid internal snapshot token")
         tmp_leaf = ".incoming-" + token + ".tmp"
         final_leaf = "verified-" + token + ".ipa"
         new_fd = os.open(tmp_leaf, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW,
