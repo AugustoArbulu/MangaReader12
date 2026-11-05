@@ -205,14 +205,27 @@ Para medir o HTTPS no **iOS 12.5.8 real** sem atualizar/desinstalar o WebReader 
 | `github.com` — página `releases` | **HTTP 200** | Conexão HTTPS e acesso à página do GitHub Releases |
 | `release-assets.githubusercontent.com/` — raiz do CDN | **HTTP 404** | **HTTPS/TLS funcionou**, mas a raiz do host não é um asset válido; 404 não é `NSURLError -1200` |
 
-**Conclusão física limitada:** a pilha TLS padrão do aparelho **consegue negociar HTTPS com esses três hosts**. Isso remove a hipótese de incompatibilidade geral de certificados TLS nesses domínios, mas não testa a URL temporária assinada de um arquivo de Release, integridade SHA-256 de IPA, redirecionamentos reais ou instalação `appinst`. Não declarar o atualizador funcional ainda.
+**Conclusão física (primeiro teste):** a pilha TLS padrão do aparelho **consegue negociar HTTPS com esses três hosts**. O primeiro relatório sozinho não testava a URL temporária assinada de um arquivo de Release; esse ponto foi validado separadamente no teste físico Fase 4D abaixo. Isso ainda não verifica integridade de IPA, assinatura do manifesto ou instalação `appinst`. Não declarar o atualizador funcional ainda.
 
-**Próximo diagnóstico implementado, ainda sem resultado físico:** acrescentada uma **quarta requisição HEAD** para um asset público, pequeno e fixo do projeto oficial **GitHub CLI**:
+**Segundo teste físico (Fase 4D) — APROVADO em 2026-11-05:** a quarta requisição HEAD para um asset público, pequeno e fixo do projeto oficial **GitHub CLI**:
 `https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_checksums.txt`. Consultamos os metadados publicados via API oficial GitHub: release v2.103.2 publicado em 2026-10-23, asset de **1.971 bytes** e tipo `text/plain; charset=utf-8`. Não é uma IPA, não pertence ao WebReader e não será baixado.
 
 - Somente essa quarta sonda pode seguir **até dois** redirecionamentos para `release-assets.githubusercontent.com` ou `objects.githubusercontent.com`, com **HTTPS obrigatório**, sem portas customizadas nem credenciais. As três sondas anteriores continuam rejeitando todos os redirecionamentos.
 - Todos os requests permanecem **HEAD**, sem cookies, autenticação, download ou consumo de corpo. O relatório indica host final e quantidade de redirects, sem imprimir query de URL temporária do CDN.
 - `ci/test_webreader_https_probe.py` verifica agora quatro endpoints e a lista de destinos aprovados/negados, incluindo hosts arbitrários, HTTP, URL com credenciais, porta e cadeia excessiva.
+**Relatório da segunda execução física, fornecido pelo usuário:** iOS `12.5.8`, app interno Build `56`, HTTPS padrão, método HEAD, sem login, download ou instalação.
+
+| Verificação | Host inicial → host final | Resposta física |
+| --- | --- | --- |
+| Manifesto (GitHub Raw) | `raw.githubusercontent.com` | **HTTP 200** |
+| GitHub Releases | `github.com` | **HTTP 200** |
+| CDN de assets (raiz) | `release-assets.githubusercontent.com` | **HTTP 404** (TLS funcionou; raiz inexistente) |
+| **Asset real GitHub CLI** | `github.com` → `release-assets.githubusercontent.com` | **HTTP 200, redirects: 1** |
+
+**Veredito: APROVADO para o caminho HTTPS de acesso a um asset público real do GitHub Releases no iOS 12.5.8**, inclusive redirecionamento autorizado até o CDN. A consulta foi HEAD e não transferiu/armazenou o asset. O HTTP 404 do host raiz não impede o HTTP 200 do asset verdadeiro. Nenhuma alteração na Build 56 principal foi observada neste teste isolado.
+
+**Permanecem NÃO VALIDADOS:** publicação de Release do WebReader, manifesto de produção assinado e chave pública pinada, download completo com SHA-256 e identidade da IPA no iOS 12, permissões/sandbox para helper, procedência oficial do `appinst` instalado, instalação segura pelo Chimera e preservação real dos dados. Sem autorizar execução privilegiada ou criar release de produção apenas com este diagnóstico.
+
 - Mesmo HTTP 200 no asset alheio **não** prova que o nosso futuro Release WebReader existe ou que a instalação será segura. A compatibilidade da URL real `WebReader-iOS12-unsigned.ipa` continua pendente da publicação controlada de um Release assinado.
 
 ## 4. Etapas obrigatórias antes de instalar IPAs
