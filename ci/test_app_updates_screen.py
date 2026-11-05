@@ -49,6 +49,9 @@ assert "CURRENT_PROJECT_VERSION = 56;" in project
 assert "WebReaderHelperPingProbe.run" in screen
 assert "startHelperProbe()" in screen
 assert "copyHelperDirectory()" in screen
+assert "copyHelperReport()" in screen
+assert '"Copiar relatório do helper"' in screen
+assert '"Sem appinst, root, download ou instalação"' in screen
 assert '"HELPER LOCAL (DIAGNÓSTICO)"' in screen
 assert "NÃO autenticado" in helper
 assert "static func inspect(directory override: URL? = nil)" in helper
