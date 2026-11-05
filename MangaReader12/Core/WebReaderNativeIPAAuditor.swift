@@ -236,6 +236,8 @@ enum WebReaderNativeIPAAuditor {
             }
             let unixType = (attributes >> 16) & 0xF000
             guard unixType == 0 || unixType == 0x8000 || unixType == 0x4000,
+                  (unixType != 0x4000 || directory),
+                  (unixType != 0x8000 || !directory),
                   (!directory || (compressed == 0 && expanded == 0)),
                   (method != 0 || compressed == expanded),
                   UInt64(expanded) <= maxExpandedTotal - expandedTotal else {
@@ -243,8 +245,8 @@ enum WebReaderNativeIPAAuditor {
             }
             expandedTotal += UInt64(expanded)
             if name == plistName {
-                guard expanded > 0, expanded <= maxPlistBytes,
-                      compressed > 0, compressed <= maxPlistBytes else {
+                guard expanded > 0, expanded <= UInt32(maxPlistBytes),
+                      compressed > 0, compressed <= UInt32(maxPlistBytes) else {
                     throw WebReaderIPAAuditError.excessiveSize
                 }
             }
