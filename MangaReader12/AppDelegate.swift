@@ -7,7 +7,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     // The separate IPA is a connectivity diagnostic, not a second reader.
     // It must never instantiate the Library/Explore tabs or schedule updates.
     private var isIPCProbe: Bool {
-        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe"
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" ||
+            Bundle.main.bundleIdentifier == "com.example.MangaReader12.chimeraoneapp"
     }
 
     private func makeRootController() -> UIViewController {
