@@ -10,6 +10,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var httpsProbe: WebReaderReleaseHTTPSProbe?
     private var testingHTTPS = false
     private var httpsResults: [WebReaderHTTPSProbeResult] = []
+    private var testingHelper = false
+    private var helperReport = "Ainda não testado"
 
     private var installedBuild: Int {
         let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
@@ -52,7 +54,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return 5
+        return 6
     }
 
     override func tableView(
@@ -63,6 +65,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if section == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
+        if section == 5 { return 2 }
         return 1
     }
 
@@ -74,7 +77,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 1: return "CANAL DO APLICATIVO"
         case 2: return "ATUALIZAÇÕES DISPONÍVEIS"
         case 3: return "SEGURANÇA"
-        default: return "DIAGNÓSTICO HTTPS (iOS 12)"
+        case 4: return "DIAGNÓSTICO HTTPS (iOS 12)"
+        default: return "HELPER LOCAL (DIAGNÓSTICO)"
         }
     }
 
@@ -89,6 +93,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 2:
             return "Consultar a versão não baixa nem instala uma IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
+        case 5:
+            return "Este teste usa um socket local no sandbox e só envia " +
+                "PING/PONG. Não verifica assinatura de código, não inicia um " +
+                "helper, não instala IPA e não concede permissões do Chimera."
         case 4:
             return "Teste manual de TLS padrão usando apenas HEAD. " +
                 "Uma resposta HTTP, inclusive 403/404, indica conexão HTTPS " +
@@ -186,6 +194,22 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
+        case (5, 0):
+            cell.textLabel?.text = testingHelper ?
+                "Testando comunicação local…" : "Testar helper de diagnóstico"
+            cell.detailTextLabel?.text = helperReport
+            if !testingHelper {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (5, 1):
+            cell.textLabel?.text = "Copiar pasta para o teste local"
+            cell.detailTextLabel?.text =
+                "Só para teste manual do PING/PONG; não é caminho de instalação"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
         default:
             break
         }
@@ -231,6 +255,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
+        if indexPath.section == 5 {
+            if indexPath.row == 0 { startHelperProbe() }
+            if indexPath.row == 1 { copyHelperDirectory() }
+            return
+        }
         guard indexPath.section == 2, indexPath.row == 0,
               WebReaderUpdateChannel.isConfigured, !checking
         else { return }
@@ -272,6 +301,32 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 self.tableView.reloadData()
             }
         }
+    }
+
+    private func startHelperProbe() {
+        guard !testingHelper else { return }
+        testingHelper = true
+        helperReport = "Conexão local; nenhuma operação privilegiada"
+        tableView.reloadData()
+        WebReaderHelperPingProbe.run { [weak self] result in
+            guard let self = self else { return }
+            self.testingHelper = false
+            self.helperReport = result.report
+            self.tableView.reloadData()
+        }
+    }
+
+    private func copyHelperDirectory() {
+        UIPasteboard.general.string =
+            WebReaderHelperPingProbe.diagnosticDirectory.path
+        let alert = UIAlertController(
+            title: "Pasta copiada",
+            message: "Somente para teste manual do helper PING/PONG. " +
+                "Esse caminho não autoriza nenhuma instalação.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     private func copyHTTPSReport() {
