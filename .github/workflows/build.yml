@@ -147,6 +147,9 @@ jobs:
       - name: Test one-shot helper review session replay and expiration (offline)
         run: python3 ci/test_webreader_helper_review_session.py
 
+      - name: Test safe staged-IPA file descriptor preflight (offline; no installer)
+        run: python3 ci/test_webreader_helper_file_preflight.py
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
