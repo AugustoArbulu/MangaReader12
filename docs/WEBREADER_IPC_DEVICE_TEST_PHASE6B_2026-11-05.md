@@ -76,6 +76,8 @@ injetado no bundle do app.
 4. Abrir **WebReader IPC Test**, tocar **Testar helper de
    diagnóstico**. Como não foi iniciado um servidor, o
    esperado é "não encontrado (normal sem instalação)".
+   Toque em **Copiar relatório do helper** e cole o resultado
+   no chat. O relatório não inclui o caminho privado completo.
 5. Tocar **Copiar pasta para o teste local**. O path é um
    diretório **WR dentro do container do app de diagnóstico**.
    Seu valor concreto vem do aparelho; não copiar caminhos
