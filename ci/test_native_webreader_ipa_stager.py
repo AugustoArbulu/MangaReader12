@@ -7,12 +7,15 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from test_validate_webreader_ipa import make_ipa
+
 ROOT = Path(__file__).resolve().parent.parent
 CORE = ROOT / "MangaReader12/Core"
 FILES = [
     CORE / "WebReaderStrictJSON.swift",
     CORE / "WebReaderUpdateManifestVerifier.swift",
     CORE / "WebReaderUpdateChecker.swift",
+    CORE / "WebReaderNativeIPAAuditor.swift",
     CORE / "WebReaderIPAStager.swift",
 ]
 HARNESS = r'''
@@ -80,7 +83,10 @@ var err: Unmanaged<CFError>?
 let secret = SecKeyCreateRandomKey(attrs as CFDictionary, &err)!
 let publicKey = SecKeyCopyPublicKey(secret)!
 let pubBytes = SecKeyCopyExternalRepresentation(publicKey, &err)! as Data
-let sample = Data([0x50, 0x4B, 0x03, 0x04]) + Data(repeating: 0x4D, count: 1800)
+// Actual valid synthetic ZIP/IPA generated offline by the Python fixture.
+let sample = try! Data(contentsOf: URL(
+    fileURLWithPath: CommandLine.arguments[1]
+))
 let expectedDigest = sha256(sample)
 let releaseURL = "https://github.com/AugustoArbulu/MangaReader12/releases/download/build57/WebReader-iOS12-unsigned.ipa"
 var payload: [String: Any] = [
@@ -189,11 +195,21 @@ notZip["sha256"] = sha256(plain)
 IPAStubProtocol.body = plain
 fail(signedManifest(notZip), .integrityMismatch)
 
+// Valid SHA-256 and ZIP magic are not sufficient: reject a corrupt ZIP.
+let corruptZIP = Data([0x50, 0x4B, 0x03, 0x04]) +
+    Data(repeating: 0x42, count: 50)
+var brokenMetadata = payload
+brokenMetadata["ipaSize"] = corruptZIP.count
+brokenMetadata["sha256"] = sha256(corruptZIP)
+IPAStubProtocol.body = corruptZIP
+fail(signedManifest(brokenMetadata), .invalidIPA)
+
 let remaining = try! FileManager.default.contentsOfDirectory(atPath: scratch.path)
 check(remaining.isEmpty, "failed downloads leave no IPA or partial files")
-print("PASS native verified IPA stager: signed metadata, streaming SHA256, size, ZIP magic, no production network")
+print("PASS native IPA stager: signed SHA256 plus complete ZIP/Info.plist identity checks, zero real network")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-stage-integration-") as dir:
+    fixture, _ = make_ipa(Path(dir), build="57")
     main = Path(dir) / "main.swift"
     output = Path(dir) / "test"
     main.write_text(HARNESS)
@@ -202,4 +218,4 @@ with tempfile.TemporaryDirectory(prefix="webreader-stage-integration-") as dir:
          str(main), "-framework", "Security", "-o", str(output)],
         check=True
     )
-    subprocess.run([str(output)], check=True)
+    subprocess.run([str(output), str(fixture)], check=True)
