@@ -291,3 +291,23 @@ O teste físico HTTPS da Fase 4D foi aprovado em iOS **12.5.8**: GitHub Raw 200,
 - GitHub Actions artifacts REST (URLs temporárias): https://docs.github.com/en/rest/actions/artifacts
 - GitHub Releases REST (distribuição proposta): https://docs.github.com/en/rest/releases/releases
 - Projeto WebReader, estado de referência: https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md
+
+
+### Fase 5C — fingerprint do appinst no pacote vs. iPhone (2026-11-05)
+
+A auditoria anterior inspecionava apenas a estrutura e o SHA-256 do arquivo `.deb` de um **espelho não oficial**. Esse hash **não é o hash do executável `/usr/bin/appinst`** presente no telefone.
+
+**Implementação nesta branch experimental (PR #90, sem merge):**
+
+1. `ci/audit_appinst_deb.py` agora lê exclusivamente a entrada de arquivo regular `usr/bin/appinst` dentro do TAR em memória, calcula SHA-256 e tamanho de seu conteúdo, exige arquivo não vazio e rejeita um diretório disfarçado nesse caminho. Nunca extrai o executável para disco, não roda pacote, `dpkg`, scripts nem `appinst`.
+2. `ci/audit_pinned_appinst_mirror.py` inclui no relatório o SHA-256 do **executável do espelho** em campo próprio, separado do SHA do `.deb`, para evitar comparações erradas.
+3. `ci/compare_appinst_fingerprint.py` compara offline o hash de um binário que o usuário relata ter no iPhone com o hash extraído do `.deb` fornecido localmente. Exemplo host: `python3 ci/compare_appinst_fingerprint.py pacote.deb --installed-sha256 HASH_64_HEX`. Não acessa o aparelho, não baixa pacote e sai com status 2 quando há divergência.
+4. `ci/test_audit_appinst_deb.py` e `ci/test_compare_appinst_fingerprint.py` incluem fixtures sintéticas para diretório/arquivo vazio, digest do binário (não do pacote), hash divergente, texto inválido e política explicitamente sem permissão de instalação. Teste novo ligado ao `build.yml`.
+
+**Coleta física futura, apenas leitura:** se o usuário optar por realizar a conferência, calcular localmente no iPhone SHA-256 de `/usr/bin/appinst` com uma ferramenta de hashing já instalada, sem executar `appinst` e sem transferir o binário. Nunca compartilhar arquivos pessoais, tokens ou saída de terminal contendo outras informações. O valor é apenas uma declaração fornecida pelo dispositivo; não uma atestação independente.
+
+**Interpretação inegociável:** (a) hash igual implica somente identidade provável dos bytes entre o arquivo relatado e o executável do `.deb` escolhido; (b) hash divergente implica não equivalência e proíbe usar aquele pacote como referência; (c) nenhum resultado autentica um espelho, garante inocuidade do executável, prova o estado real do aparelho ou autoriza execução privilegiada. Mesmo com match, `original_publisher_provenance_verified=false` e `privileged_installer_authorized=false`.
+
+**Gate ainda bloqueado:** a distribuição oficial indicada pela autora é `https://cydia.akemi.ai/`. Sem uma cópia oficial autenticada e comparação independente, não considerar confiável o `appinst` de terceiros e não iniciar helper. O aplicativo estável Build 56 não recebeu nenhuma dessas mudanças. Nenhum novo Release/IPA de produção, chave assinada ou ação no iPhone foi executado.
+
+**Validação CI:** conferir execução no HEAD exato do PR #90 após commits desta fase; CI verde não substitui teste físico nem autenticação da origem.
