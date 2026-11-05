@@ -34,7 +34,11 @@ class ReviewChallenge:
 class ReviewAssessment:
     requested_build: int
     manifest_sha256_matches_independent_check: bool
-    install_authorized: bool = False
+
+    @property
+    def install_authorized(self):
+        # A caller cannot turn a successful review into a permission flag.
+        return False
 
 
 @dataclass(frozen=True)
@@ -101,6 +105,8 @@ class ReviewSessionLedger:
         self._expire(now)
         if len(self._pending) >= self.max_pending:
             raise ReviewSessionRejected("too many pending review challenges")
+        if len(self._correlations) >= self.max_pending * 4:
+            raise ReviewSessionRejected("too many recent review correlations")
         if any(peer is peer_context and nonce == request.nonce
                for peer, nonce, _ in self._correlations):
             raise ReviewSessionRejected("replayed client correlation nonce")
@@ -153,7 +159,6 @@ class ReviewSessionLedger:
         return ReviewAssessment(
             requested_build=pending.request.build,
             manifest_sha256_matches_independent_check=True,
-            install_authorized=False,
         )
 
     def cancel_review(self, challenge_token, peer_context):
