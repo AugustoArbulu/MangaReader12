@@ -144,6 +144,9 @@ jobs:
       - name: Test strict helper IPC proposal contract (offline; no privileged operations)
         run: python3 ci/test_webreader_helper_request_contract.py
 
+      - name: Test one-shot helper review session replay and expiration (offline)
+        run: python3 ci/test_webreader_helper_review_session.py
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
