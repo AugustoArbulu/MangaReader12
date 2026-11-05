@@ -325,3 +325,32 @@ A auditoria anterior inspecionava apenas a estrutura e o SHA-256 do arquivo `.de
 **Importante:** NÃO existe helper instalado nem serviço IPC real nesta fase; apenas um parser de referência que **nunca concede permissão para instalação**. O hash/nonce vindos do cliente não são autoridade. Um futuro processo privilegiado deve obter credenciais do peer pelo sistema, revalidar o manifesto assinado e a IPA diretamente dos bytes que irá usar, manter a validação e a instalação sem janela de troca de arquivo (TOCTOU) e não permitir comandos, caminhos ou URLs fornecidos pelo app.
 
 **Estado:** Fase 5D implementada em branch isolada, aguardando CI no HEAD mais recente. Não criar chave de produção, release, instalação, merge, nem alterar a Build 56. O PR #90 permanece draft.
+
+
+### Fase 5E — anti-replay, expiração e sessão isolada do helper (2026-11-05)
+
+**Fase 5D CI VERDE:** GitHub Actions `41974713773`, testando o contrato
+do helper e os demais testes do PR sem falha. O código ainda é exclusivamente
+host/offline.
+
+Fase 5E acrescentou `ci/webreader_helper_review_session.py` com
+`ReviewSessionLedger`: challenge aleatório de servidor (64 hex; 256 bits),
+uma confirmação apenas, TTL padrão de 30 segundos, limite de oito solicitações
+pendentes, histórico curto limitado de correlações, bloqueio por replay e
+vínculo ao contexto da conexão. Falha de build/hash invalida a confirmação
+em vez de reutilizar o token; cancelamento e desconexão revogam pedidos
+pendentes. `ReviewAssessment.install_authorized` permanece **False**
+por construção, mesmo quando todos os campos simulados coincidem.
+
+A nova suíte `ci/test_webreader_helper_review_session.py` testa reuso de
+challenge e nonce, cliente diferente, expiração, cancelamento, excesso de
+solicitações, tipos e hashes forjados e limites de armazenamento.
+Entrou na CI da branch. A descrição técnica detalhada está em
+[docs/WEBREADER_HELPER_REPLAY_PHASE5E_2026-11-05.md](WEBREADER_HELPER_REPLAY_PHASE5E_2026-11-05.md).
+
+**Limites fundamentais:** contexto de peer e digest independentemente verificado
+são **simulações**, não credenciais reais de IPC; hash fornecido pelo cliente
+não é assinatura; challenge não autentica a IPA nem autoriza instalação.
+Não há daemon, `appinst`, chaves de produção, helper, Release ou IPA nova.
+Build 56/`main` preservadas, PR #90 Draft, sem merge.
+**CI da Fase 5E deve ser confirmada no HEAD exato antes de aprová-la.**
