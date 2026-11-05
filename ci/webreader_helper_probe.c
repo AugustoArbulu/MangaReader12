@@ -152,6 +152,9 @@ static int serve(const char *dir, const char *path) {
     timeouts(server);
     memset(&address, 0, sizeof(address));
     address.sun_family = AF_UNIX;
+#if defined(__APPLE__)
+    address.sun_len = (uint8_t)sizeof(address);
+#endif
     memcpy(address.sun_path, path, strlen(path) + 1);
     umask(0077);
     if (bind(server, (const struct sockaddr *)&address, sizeof(address)) != 0)
@@ -198,6 +201,9 @@ static int probe(const char *dir, const char *path) {
     timeouts(fd);
     memset(&address, 0, sizeof(address));
     address.sun_family = AF_UNIX;
+#if defined(__APPLE__)
+    address.sun_len = (uint8_t)sizeof(address);
+#endif
     memcpy(address.sun_path, path, strlen(path) + 1);
     if (connect(fd, (const struct sockaddr *)&address, sizeof(address)) != 0)
         goto cleanup;
