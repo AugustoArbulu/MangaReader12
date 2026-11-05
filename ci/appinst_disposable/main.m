@@ -32,11 +32,7 @@
             @"NÃO - registro inicial não encontrado." :
             @"Versão 1: registro local criado para teste.");
     NSString *body = [NSString stringWithFormat:
-        @"APP DESCARTÁVEL - NÃO É O WEBREADER\n\n"
-         "Versão instalada: %@\n\n"
-         "Registro salvo: %@\n\n"
-         "Persistência dos dados: %@\n\n"
-         "Não há rede, login, Biblioteca ou conteúdo.",
+        @"APP DESCARTÁVEL - NÃO É O WEBREADER\n\nVersão instalada: %@\n\nRegistro salvo: %@\n\nPersistência dos dados: %@\n\nNão há rede, login, Biblioteca ou conteúdo.",
         version, marker, result];
     UIViewController *controller = [[UIViewController alloc] init];
     controller.view.backgroundColor = [UIColor whiteColor];
