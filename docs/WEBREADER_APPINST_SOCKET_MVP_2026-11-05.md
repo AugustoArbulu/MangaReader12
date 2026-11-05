@@ -83,3 +83,44 @@ processo mobile persistente para dispensar o terminal a cada
 atualização, mantendo confirmação explícita no aplicativo.
 
 Status: implementação experimental no PR #90, sem merge e sem Release.
+## Kit descartável de teste de instalação v1 -> v2
+
+Artefato de CI: WebReader-Appinst-Disposable-v1-v2-iOS12-QA.
+Contém duas IPAs SEM WebReader, com mesmo Bundle ID distinto:
+com.example.WebReaderAppinstDisposableTest.
+
+- WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa: build 1.
+- WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa: build 2.
+- Checksums SHA-256 separados, calculados na CI.
+- Aplicativo simples WR Appinst Test, sem Internet, Biblioteca,
+  contas, fontes ou dados do WebReader.
+- Na primeira abertura, grava a chave NSUserDefaults
+  webreader-appinst-disposable-data = WR-DISPOSABLE-SAVED-V1.
+- Na versão 2, informa SIM somente se encontrar essa chave
+  com o valor que a versão 1 gravou.
+
+Procedimento SOMENTE depois de CI verde e PING do socket aprovado:
+
+1. Instalar a versão 1 do WR Appinst Test usando o método existente
+   no iPhone (Chimera + AppSync Unified + appinst).
+2. Abrir WR Appinst Test e confirmar que aparece Versão instalada: 1
+   e registro local criado. Não excluir o aplicativo.
+3. Atualizar apenas este mesmo Bundle ID com a IPA da versão 2,
+   usando appinst em terminal, após confirmar que o arquivo correto
+   é a IPA descartável (não WebReader).
+4. Abrir WR Appinst Test novamente: deve mostrar Versão instalada: 2
+   e Persistência dos dados: SIM.
+5. Se a versão não mudar, o registro sumir ou o app não abrir,
+   relatar os erros e NÃO tentar atualizar a Build56 principal.
+
+A ponte C restrita atualmente exige IPA preparada dentro da pasta
+WebReaderUpdates do mesmo container do socket, com nome
+WebReader-build<N>-UUID.ipa. O app descartável NÃO será instalado
+automaticamente pela nova UI nesta fase; este teste é via appinst
+manual e não depende de publicar GitHub Release do WebReader.
+
+Essas IPAs descartáveis não são releases de produção. A versão 2
+tem a mesma identidade da versão 1 para testar uma ATUALIZAÇÃO.
+Não instalar a IPA principal do WebReader como se fosse a de teste.
+
+Status: empacotamento no workflow; validar na CI antes do teste físico.
