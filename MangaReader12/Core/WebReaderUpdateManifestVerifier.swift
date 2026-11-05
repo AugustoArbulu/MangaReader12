@@ -17,6 +17,11 @@ enum WebReaderUpdateValidationError: Error {
     case disallowedURL
 }
 
+enum WebReaderUpdateProvenance {
+    case signedManifest
+    case publicGitHubRelease
+}
+
 struct WebReaderVerifiedUpdate {
     let build: Int
     let minimumIOS: String
@@ -25,6 +30,9 @@ struct WebReaderVerifiedUpdate {
     let sha256: String
     let publishedAt: String
     let releaseNotes: [String]
+    // This marker describes *where* the app obtained the metadata.
+    // It is not proof for a future privileged installer.
+    var provenance: WebReaderUpdateProvenance = .signedManifest
 }
 
 enum WebReaderUpdateManifestVerifier {
