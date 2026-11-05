@@ -311,3 +311,17 @@ A auditoria anterior inspecionava apenas a estrutura e o SHA-256 do arquivo `.de
 **Gate ainda bloqueado:** a distribuição oficial indicada pela autora é `https://cydia.akemi.ai/`. Sem uma cópia oficial autenticada e comparação independente, não considerar confiável o `appinst` de terceiros e não iniciar helper. O aplicativo estável Build 56 não recebeu nenhuma dessas mudanças. Nenhum novo Release/IPA de produção, chave assinada ou ação no iPhone foi executado.
 
 **Validação CI:** conferir execução no HEAD exato do PR #90 após commits desta fase; CI verde não substitui teste físico nem autenticação da origem.
+
+
+### Fase 5D — contrato de IPC proposto para o helper (2026-11-05)
+
+**Fase 5C — CI verde:** no commit `e7d6d0688df3b0753409f7fc323d960cf3c7ebeb`, execução GitHub Actions `41973178913`, job de build concluído com **success**. A Fase 5C identifica o binário `appinst` dentro do DEB, mas a origem oficial ainda **não** foi comprovada.
+
+**Implementação Fase 5D somente host/offline:**
+- `ci/webreader_helper_request_contract.py`: parser estrito de até 2048 bytes para proposta `request-install-review`, bundle fixo `com.example.MangaReader12`, build int32 positivo, SHA256 do manifesto e nonce em 64 hex minúsculos distintos, JSON sem chaves duplicadas; nenhum campo extra, URL, arquivo, comando, `argv`, shell ou autorização.
+- `ci/test_webreader_helper_request_contract.py`: entradas adversariais (operação indevida, alvo forjado, caminhos, shell, JSON duplicado via escape, bytes inválidos, overflow, campos e tipos inválidos). Integrado ao `build.yml`.
+- `docs/WEBREADER_HELPER_IPC_CONTRACT_PHASE5D_2026-11-05.md`: ameaça, fronteira de confiança, requisitos de identidade do peer, revalidação independente da assinatura e do mesmo descritor/bytes IPA, anti-replay, confirmação explícita, backup e testes isolados.
+
+**Importante:** NÃO existe helper instalado nem serviço IPC real nesta fase; apenas um parser de referência que **nunca concede permissão para instalação**. O hash/nonce vindos do cliente não são autoridade. Um futuro processo privilegiado deve obter credenciais do peer pelo sistema, revalidar o manifesto assinado e a IPA diretamente dos bytes que irá usar, manter a validação e a instalação sem janela de troca de arquivo (TOCTOU) e não permitir comandos, caminhos ou URLs fornecidos pelo app.
+
+**Estado:** Fase 5D implementada em branch isolada, aguardando CI no HEAD mais recente. Não criar chave de produção, release, instalação, merge, nem alterar a Build 56. O PR #90 permanece draft.
