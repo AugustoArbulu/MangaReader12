@@ -74,6 +74,7 @@ class BridgeTests(unittest.TestCase):
         proc = self.cli("selftest")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("non-root, no installation", proc.stdout)
+        self.assertIn("APPINST_PATH_PRESENT /usr/bin/appinst (not executed)", proc.stdout)
         self.assertFalse(self.marker.exists())
 
     def test_inspect_checks_sha_without_installing(self):
