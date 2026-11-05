@@ -317,6 +317,24 @@ jobs:
             WebReader-TLS-Probe-iOS12-unsigned.ipa
             WebReader-TLS-Probe-iOS12-unsigned.ipa.sha256
 
+      - name: Package ONE iOS12 Chimera test IPA with embedded PING helper (no installer)
+        run: |
+          bash ci/package_chimera_oneapp_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Helper-Ping-iOS12
+
+      - name: Verify single-IPA Chimera test has isolated identity and only read-only helper
+        run: python3 ci/test_chimera_oneapp_ipa.py
+
+      - name: Upload ONE ready-to-test Chimera IPA (no extra helper file required)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Chimera-OneApp-iOS12-TEST
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-Test-iOS12-unsigned.ipa
+            WebReader-Chimera-Test-iOS12-unsigned.ipa.sha256
+
       - name: Package isolated iOS12 IPC diagnostic IPA (CI only; not a release)
         run: |
           bash ci/package_ipc_probe_ipa.sh \
