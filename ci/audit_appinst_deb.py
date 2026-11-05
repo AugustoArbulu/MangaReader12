@@ -95,7 +95,7 @@ def normalize_entry_path(name: str) -> str:
 
 
 def inspect_tar(data: bytes, control_archive: bool) -> tuple:
-    entries, controls, scripts, total = [], {}, [], 0
+    entries, controls, scripts, total, executables = [], {}, [], 0, {}
     visited = set()
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r|*") as tf:
@@ -134,11 +134,24 @@ def inspect_tar(data: bytes, control_archive: bool) -> tuple:
                         controls["control"] = stream.read(MAX_CONTROL_FILE_SIZE + 1)
                         if len(controls["control"]) != member.size:
                             raise PackageRejected("control metadata length mismatch")
+                if not control_archive and name == "usr/bin/appinst":
+                    if not member.isfile() or member.size == 0:
+                        raise PackageRejected("appinst payload is not a nonempty regular file")
+                    stream = tf.extractfile(member)
+                    if stream is None:
+                        raise PackageRejected("appinst payload is unreadable")
+                    payload = stream.read(MAX_TAR_ENTRY_SIZE + 1)
+                    if len(payload) != member.size:
+                        raise PackageRejected("appinst payload size mismatch")
+                    executables[name] = {
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "bytes": len(payload),
+                    }
     except (OSError, EOFError, tarfile.TarError, ValueError, OverflowError) as error:
         if isinstance(error, PackageRejected):
             raise
         raise PackageRejected("malformed compressed tar") from error
-    return entries, controls, scripts
+    return entries, controls, scripts, executables
 
 
 def control_fields(raw: bytes) -> dict:
@@ -183,10 +196,10 @@ def audit_bytes(data: bytes) -> dict:
     parts = parse_ar(data)
     control_member = next(k for k in parts if k.startswith("control.tar"))
     payload_member = next(k for k in parts if k.startswith("data.tar"))
-    control_entries, controls, scripts = inspect_tar(
+    control_entries, controls, scripts, _ = inspect_tar(
         _legacy_lzma_member(control_member, parts[control_member]), True
     )
-    data_entries, _, _ = inspect_tar(
+    data_entries, _, _, executables = inspect_tar(
         _legacy_lzma_member(payload_member, parts[payload_member]), False
     )
     if "control" not in controls:
@@ -195,8 +208,8 @@ def audit_bytes(data: bytes) -> dict:
     for key, expected in REQUIRED_CONTROL.items():
         if fields.get(key) != expected:
             raise PackageRejected(f"wrong {key}")
-    if "usr/bin/appinst" not in data_entries:
-        raise PackageRejected("no expected rootful /usr/bin/appinst")
+    if "usr/bin/appinst" not in executables:
+        raise PackageRejected("no nonempty regular rootful /usr/bin/appinst")
     return {
         "package": fields["Package"],
         "version": fields["Version"],
@@ -208,6 +221,8 @@ def audit_bytes(data: bytes) -> dict:
         "data_entries": data_entries,
         "maintainer_scripts": scripts,
         "installed_appinst_path": "usr/bin/appinst",
+        "appinst_executable_sha256": executables["usr/bin/appinst"]["sha256"],
+        "appinst_executable_bytes": executables["usr/bin/appinst"]["bytes"],
         "official_origin_verified": False,
         "eligible_for_privileged_installation": False,
         "notice": (
