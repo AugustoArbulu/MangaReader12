@@ -156,6 +156,26 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(victim.read_bytes(), b'KEEP ME')
         self.assertEqual(list(self.private.iterdir()), [victim])
 
+    def test_existing_temporary_name_is_never_deleted(self):
+        token = 'c'*32
+        preexisting = self.private / ('.incoming-'+token+'.tmp')
+        preexisting.write_bytes(b'KEEP TEMPORARY VICTIM')
+        with patch('webreader_private_snapshot.secrets.token_hex', return_value=token):
+            with self.assertRaises(SnapshotRejected):
+                self.snapshot()
+        self.assertEqual(preexisting.read_bytes(), b'KEEP TEMPORARY VICTIM')
+        self.assertEqual(list(self.private.iterdir()), [preexisting])
+
+    def test_cleanup_does_not_delete_a_replaced_filename(self):
+        snap = self.snapshot()
+        existing = next(self.private.iterdir())
+        moved = self.private / 'moved-original.ipa'
+        existing.rename(moved)
+        existing.write_bytes(b'PRESERVE NEW FILE')
+        snap.remove_for_test()
+        self.assertEqual(existing.read_bytes(), b'PRESERVE NEW FILE')
+        moved.unlink()
+
     def test_untrusted_filename_cannot_escape(self):
         for filename in ['../'+LEAF, LEAF+'/../other.ipa',
                          'WebReader-build57-no-uuid.ipa', '/tmp/file.ipa']:
