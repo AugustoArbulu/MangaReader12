@@ -439,3 +439,54 @@ no helper, autenticidade do peer IPC, auditoria completa IPA, backups
 separados de MR12Backup e de capítulos offline; somente então
 considerar um instalador controlado. PR #90 permanece Draft, main e
 Build 56 intocadas. Sem Build 57, release, chave ou helper real.
+
+
+### Fase 6A — primeiro IPC nativo funcional no código (2026-11-05)
+
+Após a revisão de rumo com o usuário (menos simulações abstratas, mais
+componentes verificáveis), a branch adicionou um **programa C separado
+e uma sonda Swift iOS12** que implementam uma troca real de
+PING/PONG por UNIX-domain socket, em modo de diagnóstico sem privilégios.
+
+- ci/webreader_helper_probe.c: compilável em macOS/Linux/iOS12 ARM64.
+  EUID 0 é proibido; aceita apenas comandos de CLI locais serve/probe
+  e protocolo fixo REQUEST=WRPING1+\n / RESPONSE=WRPONG1+\n,
+  exatamente 8 bytes cada; uma conexão e termina. O servidor
+  obriga diretório próprio 0700, socket 0600 e mesmo UID via
+  getpeereid (Darwin) ou SO_PEERCRED (Linux). Nome curto wrp.sock
+  para respeitar sockaddr_un.sun_path no iOS12. Sem appinst, shell,
+  process spawn, IPA, download ou API privada.
+- MangaReader12/Core/WebReaderHelperPingProbe.swift: compilado no
+  target iOS12 experimental, cria WR no próprio NSHomeDirectory()
+  no toque manual e consulta o socket. Mesmo-UID e PONG NÃO SÃO
+  autenticação de assinatura de código, muito menos autorização
+  para instalar.
+- WebReaderAppUpdatesViewController: seção separada "HELPER LOCAL
+  (DIAGNÓSTICO)" com teste PING e cópia do caminho do diretório.
+  Não inicia o servidor nem baixa/instala IPA.
+- ci/test_webreader_helper_probe.py: compila no host e verifica PING
+  real em processos separados, rejeição de operações estranhas,
+  diretórios e sockets suspeitos, inexistência de root, input ruim
+  e preservação de arquivo preexistente.
+- ci/test_native_webreader_helper_ping.py: compila a MESMA sonda
+  Swift (Darwin) e a conecta ao servidor C em outro processo macOS.
+  Verifica PONG real, helper ausente e arquivo que não é socket.
+- .github/workflows/build.yml: executa os dois testes no macOS-14,
+  compila C para ARM64 iOS12 e gera artefato
+  WebReader-Helper-Ping-iOS12-NONINSTALLER somente na branch.
+- ci/test_app_updates_screen.py e MangaReader12.xcodeproj/project.pbxproj
+  atualizados para incluir a sonda, manter versão 56 e testar que
+  nenhuma instalação foi adicionada.
+
+Detalhes e protocolo: [Fase 6A](WEBREADER_NATIVE_HELPER_PING_PHASE6A_2026-11-05.md).
+
+**Estado de validação:** código/testes adicionados no PR #90 Draft,
+AGUARDANDO CI para o HEAD exato. O binário iOS12 ainda NÃO foi
+executado no aparelho, a conectividade com o sandbox do Chimera
+ainda NÃO foi fisicamente comprovada. A futura implementação
+privilegiada exige peer autenticado, manifesto real assinado,
+ZIP/IPA íntegro no mesmo FD, backup testado e resolução da segunda
+cópia da IPA no appinst com permissões de trabalho 0777.
+Nenhum download, instalação, helper rootful, token/chave de produção,
+IPA Build57, release ou merge foi realizado. A main e a Build56
+instalada seguem intactas.
