@@ -1684,7 +1684,7 @@ final class SettingsViewController: UITableViewController {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        return 8
+        return 9
     }
 
     override func tableView(
@@ -1727,8 +1727,8 @@ final class SettingsViewController: UITableViewController {
             cell.selectionStyle = .default
 
         case 3:
-            cell.textLabel?.text = "Atualização automática"
-            cell.detailTextLabel?.text = "Oportunista: o iOS 12 decide quando executar em segundo plano"
+            cell.textLabel?.text = "Atualização da Biblioteca"
+            cell.detailTextLabel?.text = "Busca capítulos novos em segundo plano quando o iOS permitir"
             cell.accessoryType = .none
 
             let toggle = UISwitch()
@@ -1763,6 +1763,13 @@ final class SettingsViewController: UITableViewController {
         case 6:
             cell.textLabel?.text = "Comix • teste do navegador"
             cell.detailTextLabel?.text = "Abrir manualmente o site em WebKit (iOS 12)"
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+
+        case 7:
+            cell.textLabel?.text = "Atualizações do WebReader"
+            cell.detailTextLabel?.text = "Versão instalada, releases assinados e novidades"
             cell.accessoryType = .disclosureIndicator
             cell.accessoryView = nil
             cell.selectionStyle = .default
@@ -1819,6 +1826,12 @@ final class SettingsViewController: UITableViewController {
         case 6:
             navigationController?.pushViewController(
                 ComixBrowserProbeViewController(),
+                animated: true
+            )
+
+        case 7:
+            navigationController?.pushViewController(
+                WebReaderAppUpdatesViewController(),
                 animated: true
             )
 
