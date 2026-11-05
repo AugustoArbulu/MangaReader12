@@ -12,6 +12,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var httpsResults: [WebReaderHTTPSProbeResult] = []
     private var testingHelper = false
     private var helperReport = "Ainda não testado"
+    private var testingAppinstBridge = false
+    private var appinstBridgeReport = "Ponte appinst não testada"
     private var stager: WebReaderIPAStager?
     private var stagingIPA = false
     private var stagedIPAURL: URL?
@@ -86,7 +88,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
-        if source == 5 { return 3 }
+        if source == 5 { return 4 }
         return 1
     }
 
@@ -115,9 +117,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             return "O download exige sua confirmação e validação de SHA-256/IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
         case 5:
-            return "Este teste usa um socket local no sandbox e só envia " +
-                "PING/PONG. Não verifica assinatura de código, não inicia um " +
-                "helper, não instala IPA e não concede permissões do Chimera."
+            return "Testes locais PING/PONG, sem instalação. " +
+                "A ponte appinst usa um socket separado e encerra depois " +
+                "de uma conexão. Para instalar, é necessário reiniciá-la."
         case 4:
             return "Teste manual de TLS padrão usando apenas HEAD. " +
                 "Uma resposta HTTP, inclusive 403/404, indica conexão HTTPS " +
@@ -276,9 +278,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
 
         case (5, 1):
-            cell.textLabel?.text = "Copiar pasta para o teste local"
+            cell.textLabel?.text = "Copiar pasta do socket (Chimera)"
             cell.detailTextLabel?.text =
-                "Só para teste manual do PING/PONG; não é caminho de instalação"
+                "Pasta WR do app • usada pelos dois testes locais"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -288,6 +290,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 "Resultado, versão e iOS • sem copiar caminho privado"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
+
+        case (5, 3):
+            cell.textLabel?.text = testingAppinstBridge ?
+                "Testando socket appinst…" : "Testar ponte appinst (PING)"
+            cell.detailTextLabel?.text = appinstBridgeReport
+            if !testingAppinstBridge {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
 
         default:
             break
@@ -341,6 +352,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             if indexPath.row == 0 { startHelperProbe() }
             if indexPath.row == 1 { copyHelperDirectory() }
             if indexPath.row == 2 { copyHelperReport() }
+            if indexPath.row == 3 { testAppinstBridgeConnection() }
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -597,6 +609,19 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         present(alert, animated: true)
     }
 
+    private func testAppinstBridgeConnection() {
+        guard !testingAppinstBridge else { return }
+        testingAppinstBridge = true
+        appinstBridgeReport = "PING em socket wri.sock • sem executar appinst"
+        tableView.reloadData()
+        WebReaderAppinstSocket.checkConnection { [weak self] result in
+            guard let self = self else { return }
+            self.testingAppinstBridge = false
+            self.appinstBridgeReport = result.text
+            self.tableView.reloadData()
+        }
+    }
+
     private func copyHelperReport() {
         let version = ProcessInfo.processInfo.operatingSystemVersion
         let ios = String(version.majorVersion) + "." +
@@ -610,7 +635,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             "Pasta (comprimento UTF-8): " +
                 String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
             helperReport,
-            "Sem appinst, root, download ou instalação"
+            "Ponte appinst (PING): " + appinstBridgeReport,
+            "Nenhum comando appinst executado neste diagnóstico"
         ]
         UIPasteboard.general.string = lines.joined(separator: "\n")
         let alert = UIAlertController(
