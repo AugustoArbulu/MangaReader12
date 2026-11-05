@@ -632,3 +632,30 @@ o SHA é informado pelo app; appinst recopia IPA; a ponte não resolve
 por si só procedência da IPA nem TOCTOU pós-leitura. Sem root daemon,
 sem publicação Release, sem merge, sem atualização automática ativa
 no aparelho, main e Build56 preservadas.
+
+### MVP4 — aplicativo descartável para testar appinst sem tocar na Build56 (05/11/2026)
+
+Agora há um pacote CI com duas versões do mesmo app iOS12 pequeno,
+em separado de todos os identificadores do WebReader:
+- ci/appinst_disposable/main.m: interface UIKit que persiste um marcador
+  NSUserDefaults em v1 e sinaliza se o marcador sobrevive em v2.
+- ci/build_appinst_disposable.sh: clang arm64 iOS12 + duas IPAs com
+  Bundle ID fixo com.example.WebReaderAppinstDisposableTest,
+  CFBundleVersion 1 e 2, e SHA-256 para cada arquivo.
+- ci/test_appinst_disposable_artifacts.py: audita Bundle ID, iOS12,
+  Info.plist, Mach-O arm64 e isolamento da IPA principal.
+- .github/workflows/build.yml publica o artefato
+  WebReader-Appinst-Disposable-v1-v2-iOS12-QA, sem Release oficial.
+
+Objetivo: instalar v1 com appinst, abrir e gravar o marcador;
+instalar v2 SOBRE o mesmo aplicativo, reabrir e observar
+Persistência dos dados: SIM. Nunca excluir v1 antes de atualizar.
+
+O teste é manual com a ferramenta appinst já existente e NÃO
+depende do GitHub Releases do WebReader, que ainda está sem releases.
+Este é um aplicativo de teste; nenhuma versão de WebReader é
+instalada/modificada. Ver instruções em
+docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md.
+
+**Estado:** aguarda CI no HEAD exato depois de mudanças de código
+e documentação. PR #90 Draft, main e Build56 intactas.
