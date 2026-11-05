@@ -90,7 +90,9 @@ class SwiftAgainstNativeHelperTests(unittest.TestCase):
         )
         try:
             for _ in range(150):
-                if self.sock.exists(): break
+                if self.sock.exists():
+                    self.assertIn(b"WRPING_READY", server.stdout.readline())
+                    break
                 if server.poll() is not None:
                     self.fail("C helper exited early: " + server.communicate()[1].decode())
                 time.sleep(0.01)
