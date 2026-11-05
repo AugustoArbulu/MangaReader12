@@ -173,6 +173,10 @@ class ReviewSessionLedger:
 
     def cancel_review(self, challenge_token, peer_context):
         self._validate_peer(peer_context)
+        if type(challenge_token) is not str or not HEX256.fullmatch(
+            challenge_token
+        ):
+            return False
         pending = self._pending.get(challenge_token)
         if pending is None or pending.peer_context is not peer_context:
             return False
