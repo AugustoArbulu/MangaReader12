@@ -198,6 +198,9 @@ jobs:
       - name: Test mobile appinst bridge against fake executable (no installation)
         run: python3 ci/test_webreader_appinst_bridge.py
 
+      - name: Test actual Swift-to-C appinst socket against fake installer (macOS, offline)
+        run: python3 ci/test_native_webreader_appinst_socket.py
+
       - name: Compile isolated mobile appinst bridge for ARM64 iOS12 (not executed)
         run: |
           xcrun --sdk iphoneos clang \
