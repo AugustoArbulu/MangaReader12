@@ -42,6 +42,11 @@ enum WebReaderUpdateManifestVerifier {
         guard !envelopeData.isEmpty, envelopeData.count <= maxEnvelopeBytes else {
             throw WebReaderUpdateValidationError.oversizedEnvelope
         }
+        // Foundation's JSONSerialization does not reject duplicate keys.
+        // Check raw bytes first, including Unicode-escaped equivalent keys.
+        guard WebReaderStrictJSON.accepts(envelopeData) else {
+            throw WebReaderUpdateValidationError.invalidEnvelope
+        }
         guard let envelope = try? JSONSerialization.jsonObject(
                 with: envelopeData, options: []
             ) as? [String: Any],
@@ -84,6 +89,11 @@ enum WebReaderUpdateManifestVerifier {
             payload as CFData, signature as CFData, &verifyError
         ) else {
             throw WebReaderUpdateValidationError.signatureRejected
+        }
+        // The exact signed bytes must have unique decoded keys throughout.
+        // Otherwise Foundation could silently choose a conflicting duplicate.
+        guard WebReaderStrictJSON.accepts(payload) else {
+            throw WebReaderUpdateValidationError.invalidPayload
         }
         // Never use unsigned fields from the wrapper for install policy.
         guard let manifest = try? JSONSerialization.jsonObject(
