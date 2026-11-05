@@ -16,6 +16,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var stagingIPA = false
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando validação do canal"
+    private var stagedSHA256: String?
+    private var installationRunning = false
+    private var installationReport = "Ponte mobile ainda não conectada"
 
     // The isolated com.example.MangaReader12.ipcprobe IPA exposes only
     // version info and the local PING diagnostic; never the release controls.
@@ -79,7 +82,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     ) -> Int {
         let source = sectionType(section)
         if source == 1 { return 2 }
-        if source == 2 { return availableUpdate != nil ? 4 : 1 }
+        if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -212,12 +215,33 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                     "Instalação automática ainda não ativada"
             }
 
+        case (2, 4):
+            if let file = stagedIPAURL, let sha = stagedSHA256,
+                let update = availableUpdate, sha == update.sha256,
+                FileManager.default.fileExists(atPath: file.path) {
+                cell.textLabel?.text = installationRunning ?
+                    "Aguardando resultado do appinst…" :
+                    "Instalar atualização (Chimera)"
+                cell.detailTextLabel?.text = installationRunning ?
+                    "A instalação pode fechar o WebReader" :
+                    installationReport
+                if !installationRunning {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            } else {
+                cell.textLabel?.text = "Instalação indisponível"
+                cell.detailTextLabel?.text =
+                    "Baixe e valide uma IPA para habilitar a solicitação"
+            }
+
         case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
                 "Download de release oficial via HTTPS, SHA-256 e inspeção IPA. " +
                 "Não há assinatura independente do editor neste modo. " +
-                "Instalação automática via appinst ainda indisponível."
+                "O appinst requer um processo mobile separado em execução " +
+                "e sua confirmação explícita. Sem instalação silenciosa."
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -343,10 +367,17 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
+        if selectedSection == 2, indexPath.row == 4 {
+            confirmAppinstInstallation()
+            return
+        }
         guard selectedSection == 2, indexPath.row == 0,
               !isIPCDiagnostic, !checking
         else { return }
         checking = true
+        stagedIPAURL = nil
+        stagedSHA256 = nil
+        installationReport = "Ponte mobile ainda não conectada"
         tableView.reloadData()
 
         let current = WebReaderUpdateChecker(
@@ -405,12 +436,67 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 switch result {
                 case .staged(let url):
                     self.stagedIPAURL = url
+                    self.stagedSHA256 = update.sha256
                     self.ipaStatus = "IPA verificada e salva no aparelho"
                 case .failed(let failure):
+                    self.stagedIPAURL = nil
+                    self.stagedSHA256 = nil
                     self.ipaStatus = self.stageFailureMessage(failure)
                 }
                 self.tableView.reloadData()
             }
+        }
+    }
+
+    private func confirmAppinstInstallation() {
+        guard !isIPCDiagnostic, !installationRunning, !stagingIPA,
+              let update = availableUpdate,
+              update.provenance == .publicGitHubRelease,
+              let file = stagedIPAURL, stagedSHA256 == update.sha256,
+              FileManager.default.fileExists(atPath: file.path)
+        else { return }
+        let summary = "Build " + String(update.build) +
+            " • atualização do WebReader pelo appinst. " +
+            "O processo mobile deve estar iniciado no Chimera. " +
+            "Confirme que fez backup da Biblioteca e dos capítulos offline. " +
+            "A instalação poderá fechar o aplicativo."
+        let alert = UIAlertController(
+            title: "Instalar atualização pelo Chimera?",
+            message: summary, preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(
+            title: "Confirmar instalação", style: .destructive
+        ) { [weak self] _ in
+            self?.requestAppinstInstallation(file: file, sha256: update.sha256)
+        })
+        present(alert, animated: true)
+    }
+
+    private func requestAppinstInstallation(file: URL, sha256: String) {
+        guard !isIPCDiagnostic, !installationRunning, !stagingIPA,
+              let update = availableUpdate,
+              update.provenance == .publicGitHubRelease,
+              stagedIPAURL == file, stagedSHA256 == sha256,
+              update.sha256 == sha256,
+              FileManager.default.fileExists(atPath: file.path)
+        else { return }
+        installationRunning = true
+        installationReport = "Conectando ao instalador mobile do Chimera…"
+        tableView.reloadData()
+        WebReaderAppinstSocket.install(
+            ipaURL: file, expectedSHA256: sha256
+        ) { [weak self] result in
+            guard let self = self else { return }
+            self.installationRunning = false
+            self.installationReport = result.text
+            self.tableView.reloadData()
+            let alert = UIAlertController(
+                title: "Resultado do appinst", message: result.text,
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
         }
     }
 
