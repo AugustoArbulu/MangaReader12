@@ -32,6 +32,34 @@ class IndexPolicyTests(unittest.TestCase):
             "5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09")
         self.assertEqual(entry["size"], "59716")
 
+    def test_duplicate_exact_package_entries_rejected(self):
+        with self.assertRaises(VerificationError):
+            matching_official_entry(TEXT + "\n" + TEXT.split("\n\n")[1] + "\n")
+
+    def test_invalid_package_digest_rejected(self):
+        with self.assertRaises(VerificationError):
+            matching_official_entry(TEXT.replace(
+                "5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09",
+                "not-a-sha256"
+            ))
+
+    def test_invalid_size_rejected(self):
+        with self.assertRaises(VerificationError):
+            matching_official_entry(TEXT.replace("Size: 59716", "Size: NaN"))
+
+    def test_unsafe_publisher_filename_rejected(self):
+        with self.assertRaises(VerificationError):
+            matching_official_entry(TEXT.replace(
+                "Filename: debs/appinst-2.1.1.deb",
+                "Filename: ../../untrusted.deb"
+            ))
+
+    def test_duplicate_control_field_rejected(self):
+        with self.assertRaises(VerificationError):
+            matching_official_entry(TEXT.replace(
+                "Size: 59716", "Size: 59716\nSize: 10"
+            ))
+
     def test_gzip_index(self):
         self.assertEqual(unpack_index(gzip.compress(TEXT.encode()), "Packages.gz"), TEXT)
 
