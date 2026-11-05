@@ -21,11 +21,19 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var stagedSHA256: String?
     private var installationRunning = false
     private var installationReport = "Ponte mobile ainda não conectada"
+    private var runningOneAppTest = false
+    private var oneAppReport = "Toque em Testar Chimera para começar."
 
     // The isolated com.example.MangaReader12.ipcprobe IPA exposes only
     // version info and the local PING diagnostic; never the release controls.
+    private var isChimeraOneApp: Bool {
+        return Bundle.main.bundleIdentifier ==
+            "com.example.MangaReader12.chimeraoneapp"
+    }
+
     private var isIPCDiagnostic: Bool {
-        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe"
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" ||
+            isChimeraOneApp
     }
 
     private func sectionType(_ displayedSection: Int) -> Int {
@@ -58,6 +66,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         super.viewDidLoad()
         title = "Atualizações do WebReader"
         if isIPCDiagnostic { title = "WebReader IPC Test" }
+        if isChimeraOneApp { title = "WebReader Chimera Test" }
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
@@ -83,6 +92,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         numberOfRowsInSection section: Int
     ) -> Int {
         let source = sectionType(section)
+        if isChimeraOneApp {
+            return source == 5 ? 2 : 1
+        }
         if source == 1 { return 2 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
@@ -95,6 +107,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     override func tableView(
         _ tableView: UITableView, titleForHeaderInSection section: Int
     ) -> String? {
+        if isChimeraOneApp && sectionType(section) == 5 {
+            return "TESTE AUTOMÁTICO (SEM INSTALAÇÃO)"
+        }
         switch sectionType(section) {
         case 0: return "VERSÃO INSTALADA"
         case 1: return "CANAL DO APLICATIVO"
@@ -108,6 +123,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     override func tableView(
         _ tableView: UITableView, titleForFooterInSection section: Int
     ) -> String? {
+        if isChimeraOneApp && sectionType(section) == 5 {
+            return "Um único teste local. Não baixa IPAs e não executa appinst. " +
+                "A Build 56 principal permanece instalada separadamente."
+        }
         switch sectionType(section) {
         case 1:
             return "Somente GitHub Releases públicos do repositório WebReader " +
@@ -147,6 +166,24 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         cell.isUserInteractionEnabled = true
         cell.textLabel?.textColor = ThemeManager.shared.palette.primaryText
         cell.detailTextLabel?.textColor = ThemeManager.shared.palette.secondaryText
+
+        if isChimeraOneApp && sectionType(indexPath.section) == 5 {
+            if indexPath.row == 0 {
+                cell.textLabel?.text = runningOneAppTest ?
+                    "Testando Chimera…" : "Testar Chimera"
+                cell.detailTextLabel?.text = oneAppReport
+                if !runningOneAppTest {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            } else {
+                cell.textLabel?.text = "Copiar resultado"
+                cell.detailTextLabel?.text = "Cole o relatório aqui no chat"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+            return cell
+        }
 
         switch (sectionType(indexPath.section), indexPath.row) {
         case (0, _):
@@ -339,6 +376,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
         let selectedSection = sectionType(indexPath.section)
+        if isChimeraOneApp && selectedSection == 5 {
+            if indexPath.row == 0 { runOneAppTest() }
+            if indexPath.row == 1 { copyOneAppReport() }
+            return
+        }
         if selectedSection == 4 {
             if indexPath.row == 0 {
                 startHTTPSProbe()
@@ -556,6 +598,31 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             message: "A IPA já foi baixada e verificada. O comando não foi " +
                 "executado. Antes de atualizar o WebReader principal, " +
                 "teste o appinst em um aplicativo descartável e faça backup.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func runOneAppTest() {
+        guard isChimeraOneApp, !runningOneAppTest else { return }
+        runningOneAppTest = true
+        oneAppReport = "Iniciando helper local • sem instalar aplicativos"
+        tableView.reloadData()
+        WebReaderChimeraSelfTest.run { [weak self] report in
+            guard let self = self else { return }
+            self.runningOneAppTest = false
+            self.oneAppReport = report.text
+            self.tableView.reloadData()
+        }
+    }
+
+    private func copyOneAppReport() {
+        guard isChimeraOneApp else { return }
+        UIPasteboard.general.string = oneAppReport
+        let alert = UIAlertController(
+            title: "Resultado copiado",
+            message: "Cole o relatório aqui no chat. Nenhum app foi instalado.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
