@@ -48,8 +48,10 @@ enum WebReaderHelperPingProbe {
 
     /// Only create an app-owned diagnostic directory on explicit user action.
     /// A future root helper must NEVER accept this path as trusted input.
-    private static func inspect() -> Result {
-        let directory = diagnosticDirectory
+    /// Directory override is used by offline native test harnesses only.
+    /// Production UI uses its short, app-owned data-container path.
+    static func inspect(directory override: URL? = nil) -> Result {
+        let directory = override ?? diagnosticDirectory
         let fileManager = FileManager.default
         do {
             try fileManager.createDirectory(
