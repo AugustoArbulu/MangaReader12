@@ -170,6 +170,8 @@ jobs:
             ci/webreader_helper_probe.c \
             -o WebReader-Helper-Ping-iOS12
           file WebReader-Helper-Ping-iOS12
+          codesign --force --sign - --timestamp=none WebReader-Helper-Ping-iOS12
+          codesign --verify --verbose WebReader-Helper-Ping-iOS12
           shasum -a 256 WebReader-Helper-Ping-iOS12 > WebReader-Helper-Ping-iOS12.sha256
 
       - name: Upload standalone nonprivileged IPC diagnostic (not a DEB or release)
