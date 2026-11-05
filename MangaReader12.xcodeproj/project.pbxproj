@@ -52,6 +52,7 @@
 		A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* WebReaderStrictJSON.swift */; };
 		A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* WebReaderIPAStager.swift */; };
 		A1000000000000000000002E /* WebReaderAppUpdatesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */; };
+		A1000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -102,6 +103,7 @@
 		A2000000000000000000002C /* WebReaderStrictJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderStrictJSON.swift; sourceTree = "<group>"; };
 		A2000000000000000000002D /* WebReaderIPAStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderIPAStager.swift; sourceTree = "<group>"; };
 		A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderAppUpdatesViewController.swift; sourceTree = "<group>"; };
+		A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderReleaseHTTPSProbe.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -166,6 +168,7 @@
 				A2000000000000000000002B /* WebReaderUpdateChecker.swift */,
 				A2000000000000000000002C /* WebReaderStrictJSON.swift */,
 				A2000000000000000000002D /* WebReaderIPAStager.swift */,
+				A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -369,6 +372,7 @@
 				A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */,
 				A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */,
 				A1000000000000000000002E /* WebReaderAppUpdatesViewController.swift in Sources */,
+				A1000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

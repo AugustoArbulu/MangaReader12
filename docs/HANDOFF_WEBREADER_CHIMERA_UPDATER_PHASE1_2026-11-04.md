@@ -171,6 +171,18 @@ Foi implementada uma **tela UIKit exclusiva para releases do WebReader** em `Man
 
 A futura experiência será `Ajustes → Atualizações do WebReader` → consultar **releases oficiais assinados**, e não cada commit do GitHub. O download/instalação dependem de gates de chave real, distribuição HTTPS, origem do `appinst`, helper e testes de preservação de dados.
 
+### Fase 4C — diagnóstico HTTPS manual no iOS 12 (2026-11-05)
+
+Acrescentamos uma ferramenta **somente leitura e acionada pelo usuário** na tela `Ajustes → Atualizações do WebReader`, para investigar conectividade com os domínios de distribuição antes de configurar o canal assinado ou um helper de jailbreak. A mudança não altera as bibliotecas, os dados do usuário ou o versionamento da Build 56.
+
+- `MangaReader12/Core/WebReaderReleaseHTTPSProbe.swift` executa **apenas HTTP HEAD** por `URLSessionConfiguration.ephemeral` com validação padrão de certificados; sem cookies, credenciais, cache, ATS bypass, download, `appinst` ou scripts. Não segue redirecionamentos.
+- Endpoints fixos: `raw.githubusercontent.com` (documento público do repositório), `github.com` (página de releases) e `release-assets.githubusercontent.com` (raiz do host CDN). **Não são URLs fornecidas pelo usuário** e não usam tokens.
+- A seção **DIAGNÓSTICO HTTPS (iOS 12)** exibe `Testar HTTPS do GitHub` e, após a execução, três resultados (host e status HTTP ou domínio/código de erro). Um toque em **Copiar relatório HTTPS** gera texto que não inclui cookies, IP, headers, caminhos privados ou dados de biblioteca.
+- **Interpretação:** qualquer resposta HTTP (inclusive 302, 403 ou 404) demonstra que a requisição chegou à camada HTTP daquela origem, com a verificação TLS padrão vigente; **não significa** que haja um release autorizado, que um CDN entregue uma IPA real ou que o instalador seja compatível. Os erros SSL de URLSession, como `NSURLErrorDomain -1200`, ficam identificados por domínio e código.
+- `ci/test_webreader_https_probe.py` compila a fonte Swift real, simula HTTP 200/302/403 e erro TLS -1200 via `URLProtocol` e confirma métodos HEAD/hosts fixos/continuidade após falha, sem qualquer rede.
+- A chave pública de produção continua `nil`, logo o **UpdateChecker** e o **IPAStager** permanecem inativos. **Esta função diagnóstica pode executar HEAD manualmente mesmo sem chave**, pois não trata metadados como confiáveis nem baixa arquivos.
+- **Não é teste físico:** a compatibilidade efetiva dos três hosts no iOS 12.5.8 só poderá ser medida com uma IPA de teste deliberada e instalada no aparelho. E a raiz do CDN não representa a URL final temporária de um asset específico de Release.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

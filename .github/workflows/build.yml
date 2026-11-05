@@ -123,6 +123,9 @@ jobs:
       - name: Verify in-app releases screen remains fail-closed (no real requests)
         run: python3 ci/test_app_updates_screen.py
 
+      - name: Test native iOS12 HEAD-only GitHub HTTPS probe with mock network
+        run: python3 ci/test_webreader_https_probe.py
+
       - name: Test signed-metadata IPA staging with streaming SHA256 (no real network)
         run: python3 ci/test_native_webreader_ipa_stager.py
 

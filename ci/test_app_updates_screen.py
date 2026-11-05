@@ -22,6 +22,12 @@ assert "cell.textLabel?.text = \"Atualização da Biblioteca\"" in tabs
 assert "BackgroundLibraryUpdateManager.shared.isEnabled" in tabs
 assert "WebReaderUpdateChannel.isConfigured" in screen
 assert "WebReaderUpdateChecker(" in screen
+assert "WebReaderReleaseHTTPSProbe()" in screen
+assert 'cell.textLabel?.text = testingHTTPS ?' in screen
+assert '"Testar HTTPS do GitHub"' in screen
+assert 'UIPasteboard.general.string = lines.joined(separator: "\\n")' in screen
+assert "return 5" in screen
+
 assert "current.check { [weak self] result in" in screen
 assert "statusDescription" in screen
 assert "update.releaseNotes.joined(" in screen
@@ -36,6 +42,8 @@ assert "static var isConfigured: Bool { return productionPublicKeyX963 != nil }"
 assert project.count("WebReaderAppUpdatesViewController.swift in Sources") == 2
 assert project.count("WebReaderAppUpdatesViewController.swift */ = {isa = PBXFileReference") == 1
 assert "A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */" in project
+assert project.count("WebReaderReleaseHTTPSProbe.swift in Sources") == 2
+assert "A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */" in project
 assert "CURRENT_PROJECT_VERSION = 56;" in project
 
 # No installer, automatic download, root helper or shell execution in UI.
