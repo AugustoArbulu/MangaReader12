@@ -18,6 +18,7 @@ enum WebReaderIPAStageFailure: Error, Equatable {
     case unexpectedContentType
     case sizeMismatch
     case integrityMismatch
+    case invalidIPA
 }
 
 enum WebReaderIPAStageResult {
@@ -303,6 +304,23 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         reader.close()
         guard bytesRead == 4 && magic == [0x50, 0x4B, 0x03, 0x04] else {
             finish(.failed(.integrityMismatch))
+            return
+        }
+        // The downloaded file is NOT eligible for staging until its
+        // complete ZIP directory, local headers, executable and Info.plist
+        // independently match the authenticated manifest. No extraction.
+        do {
+            let version = Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleVersion"
+            ) as? String
+            let installedBuild = Int(version ?? "") ?? 0
+            _ = try WebReaderNativeIPAAuditor.inspect(
+                ipaURL: fileURL, signedUpdate: update,
+                installedBuild: installedBuild,
+                installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+            )
+        } catch {
+            finish(.failed(.invalidIPA))
             return
         }
         let destination = destinationDirectory.appendingPathComponent(
