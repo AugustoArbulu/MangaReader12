@@ -6,7 +6,7 @@ import Darwin
 /// authenticate release signatures or authorize any privileged operation.
 /// A matching PONG only proves a same-UID process replied at this socket.
 enum WebReaderHelperPingProbe {
-    private static let socketName = "webreader-helper-probe-v1.sock"
+    private static let socketName = "wrp.sock"
     private static let request = Array("WRPING1\n".utf8)
     private static let expected = Array("WRPONG1\n".utf8)
 
