@@ -50,6 +50,7 @@
 		A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */; };
 		A1000000000000000000002B /* WebReaderUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* WebReaderUpdateChecker.swift */; };
 		A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* WebReaderStrictJSON.swift */; };
+		A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* WebReaderIPAStager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +99,7 @@
 		A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdateManifestVerifier.swift; sourceTree = "<group>"; };
 		A2000000000000000000002B /* WebReaderUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdateChecker.swift; sourceTree = "<group>"; };
 		A2000000000000000000002C /* WebReaderStrictJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderStrictJSON.swift; sourceTree = "<group>"; };
+		A2000000000000000000002D /* WebReaderIPAStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderIPAStager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +163,7 @@
 				A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */,
 				A2000000000000000000002B /* WebReaderUpdateChecker.swift */,
 				A2000000000000000000002C /* WebReaderStrictJSON.swift */,
+				A2000000000000000000002D /* WebReaderIPAStager.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -361,6 +364,7 @@
 				A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */,
 				A1000000000000000000002B /* WebReaderUpdateChecker.swift in Sources */,
 				A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */,
+				A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -117,6 +117,9 @@ jobs:
       - name: Test native read-only UpdateChecker with mocked URLSession (zero real network)
         run: python3 ci/test_native_webreader_update_checker.py
 
+      - name: Test signed-metadata IPA staging with streaming SHA256 (no real network)
+        run: python3 ci/test_native_webreader_ipa_stager.py
+
       - name: Audit appinst .deb format with malicious offline fixtures (no installation)
         run: python3 ci/test_audit_appinst_deb.py
 

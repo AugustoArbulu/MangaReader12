@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Updater Fase 4 — manifesto e staging (2026-11-04):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) inclui gerador offline `ci/prepare_signed_webreader_update.py` que assina manifestos usando **chaves externas e privadas do usuário**, mais `WebReaderIPAStager.swift` com `URLSession`/CommonCrypto SHA-256 em streaming. Testes adversariais macOS/iOS12 com chave e rede simuladas; **CI pendente**, sem publicação, sem chave de produção, sem downloads reais, sem helper/instalação. **Build56 continua aprovada na main.** [Handoff técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Updater Fase 3 — JSON estrito (2026-11-04):** branch do [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora rejeita JSON com chaves duplicadas no **envelope** e no **payload assinado**, incluindo chaves com escapes Unicode e objetos aninhados, por `WebReaderStrictJSON.swift`. Testes Swift compilam o parser real, sem rede nem instalação; **CI desta alteração ainda precisa confirmar aprovação**, e Build 56 permanece referência física em `main`. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 

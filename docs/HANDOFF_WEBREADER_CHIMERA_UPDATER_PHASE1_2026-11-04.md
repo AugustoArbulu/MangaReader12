@@ -132,6 +132,31 @@ Corrigido na branch com `MangaReader12/Core/WebReaderStrictJSON.swift`, validado
 
 A alteração reforça o validador, mas **não elimina** os bloqueios para distribuição/instalação: origem do `.deb` instalada ainda não autenticada, sem canal oficial assinado e sem ensaio físico com app descartável. A `main` segue na Build 56.
 
+### Fase 4 — preparação de Release assinado e download verificado (2026-11-04)
+
+Foram implementados **dois componentes novos de pré-produção**, sem ativar qualquer atualização no aparelho:
+
+**1. Preparação offline e auditável do manifesto assinado**
+
+- `ci/prepare_signed_webreader_update.py`: recebe um **IPA existente** e caminhos para chaves privada e pública **provisionadas pelo proprietário fora do repositório**. Lê o `Info.plist`, invoca a auditoria real de identidade/ZIP compatível com iOS 12, calcula SHA-256 e tamanho, inclui notas, versão e URL imutável esperada de `GitHub Releases`.
+- Os bytes exatos do payload JSON são assinados com OpenSSL ECDSA P-256/SHA-256; o resultado é conferido com o `ci/webreader_update_manifest.py` usando a chave pública correspondente antes de gravar um **arquivo local com permissões 0600**.
+- Rejeita **build antiga, bundle incorreto, notas inválidas, divergência entre chaves, caminhos de chaves dentro do repo, saída já existente, arquivo IPA inválido e versão iOS incompatível**.
+- **Não publica Release, não gera nem armazena chaves de produção, não modifica o IPA e não faz requisição à rede.** Publicação do asset e manifesto dependerá de autorização expressa e revisão do canal de entrega. O `ipaUrl` assinado é apenas uma **URL planejada**, não uma prova de que o asset existe.
+- `ci/test_prepare_signed_webreader_update.py` usa **IPA sintética, chaves efêmeras e diretório temporário** para testar a assinatura ponta a ponta, rejeição de adulteração e políticas negativas. Não inserir nem mesmo chaves de teste estáticas no GitHub.
+
+**2. Download e staging nativo sob verificação criptográfica**
+
+- `MangaReader12/Core/WebReaderIPAStager.swift` usa `URLSessionDataDelegate`, `OutputStream` e `CommonCrypto CC_SHA256` incremental para baixar em pedaços, sem alocar um arquivo de IPA inteiro em memória.
+- Exige um `WebReaderVerifiedUpdate` obtido a partir de manifesto autenticado; compara novamente URL de Release do repo, versão, hash e tamanho, exige **HTTPS**, só aceita redirecionamentos limitados para hosts de assets do GitHub e não envia cookies/credenciais. Rejeita HTTP diferente de 200, conteúdo HTML, arquivo maior/menor, SHA incorreto, ZIP sem magic `PK\x03\x04` e falhas de escrita.
+- Trabalha em diretório privado de staging (`Application Support/WebReaderUpdates`); arquivo parcial é descartado após falha, pacote aprovado mantém nome único para inspeção futura. **Não descompacta, não executa, não chama `appinst` e não substitui a versão instalada**.
+- **Importante:** o stager valida o hash e o prefixo ZIP, mas **não** substitui a auditoria de `Info.plist`, caminhos do ZIP e identidade do executável na etapa privilegiada. O pacote precisa de uma **segunda validação independente no auxiliar**, com validação de proveniência e autorização de usuário.
+- `WebReaderUpdateChannel.productionPublicKeyX963` permanece `nil`, e **nenhuma tela chama o stager**; sem chave provisionada, ele retorna `.disabled` antes de abrir conexão ou criar arquivos.
+- `ci/test_native_webreader_ipa_stager.py` utiliza `URLProtocol` simulado, payload SHA-256 assinado com chave de teste efêmera, fragmentação da resposta, arquivo correto, hash errado, arquivo truncado, excesso de bytes, HTTP 403, HTML e ZIP inválido; também verifica limpeza de arquivos parciais e bloqueio sem chave de produção.
+
+**Resultados de hardware ainda não demonstrados:** não foi testada a resposta real do CDN de Releases no TLS do iOS 12.5.8 nem a disponibilidade do staging para futuro helper. Há uma diferença entre **staging autenticado** e **instalação privilegiada funcional**; esta fase só implementa o primeiro.
+
+**Fluxo planejado para releases futuras:** proprietário provisiona chaves fora do repo → CI compila IPA com ID preservado → auditor independente revisa o pacote → script gera manifesto assinado local → proprietário publica **asset público de Release** e manifesto correspondente mediante aprovação → verificador iOS12 autentica → stager salva IPA verificada → somente então helper restrito pode pedir confirmação explícita e instalar. Nenhum desses passos de publicação e instalação foi realizado nesta fase.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado
