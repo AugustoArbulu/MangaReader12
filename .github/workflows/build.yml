@@ -141,6 +141,9 @@ jobs:
       - name: Test device-vs-DEB fingerprint policy with synthetic binaries (offline)
         run: python3 ci/test_compare_appinst_fingerprint.py
 
+      - name: Test strict helper IPC proposal contract (offline; no privileged operations)
+        run: python3 ci/test_webreader_helper_request_contract.py
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
