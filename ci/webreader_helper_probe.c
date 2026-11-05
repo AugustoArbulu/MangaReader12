@@ -12,8 +12,12 @@
  * non-root processes can exchange a fixed local message. No socket reply
  * authenticates a production release, code signature, or future root helper.
  */
-#define _GNU_SOURCE
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE 1
+#else
+#define _GNU_SOURCE 1
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
