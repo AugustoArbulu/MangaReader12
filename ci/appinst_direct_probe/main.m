@@ -28,11 +28,7 @@ static NSString *WRRunHelpProbe(void) {
     uid_t uid = getuid();
     uid_t euid = geteuid();
     NSMutableString *report = [NSMutableString stringWithFormat:
-        @"WebReader • Teste direto appinst\n"
-         "iOS: %@\n"
-         "UID: %u | EUID: %u\n"
-         "Destino: /usr/bin/appinst\n"
-         "Argumento: --help (nenhuma IPA)\n",
+        @"WebReader • Teste direto appinst\niOS: %@\nUID: %u | EUID: %u\nDestino: /usr/bin/appinst\nArgumento: --help (nenhuma IPA)\n",
          [UIDevice currentDevice].systemVersion, (unsigned)uid, (unsigned)euid];
 
     if (![[NSBundle mainBundle].bundleIdentifier
