@@ -12,6 +12,7 @@
  * non-root processes can exchange a fixed local message. No socket reply
  * authenticates a production release, code signature, or future root helper.
  */
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <fcntl.h>
@@ -46,8 +47,8 @@ static int socket_path(const char *dir, char path[sizeof(((struct sockaddr_un *)
     len = strlen(dir);
     if (len == 1 || len + 1 + strlen(SOCKET_NAME) >= max) return -1;
     if (dir[len - 1] == '/' || strstr(dir, "/../") || strstr(dir, "/./") ||
-        strstr(dir, "//") || strstr(dir, "/..") == dir + len - 3 ||
-        strstr(dir, "/.") == dir + len - 2) return -1;
+        strstr(dir, "//") || (len >= 3 && strcmp(dir + len - 3, "/..") == 0) ||
+        (len >= 2 && strcmp(dir + len - 2, "/.") == 0)) return -1;
     memset(path, 0, max);
     memcpy(path, dir, len);
     path[len] = '/';
@@ -132,7 +133,7 @@ static void remove_own_socket(const char *path, const struct stat *created) {
 }
 
 static int serve(const char *dir, const char *path) {
-    int dfd = -1, server = -1, client = -1, result = 1;
+    int dfd = -1, server = -1, client = -1, result = 1, bound = 0;
     struct stat created;
     struct sockaddr_un address;
     struct pollfd waitfd;
@@ -141,7 +142,8 @@ static int serve(const char *dir, const char *path) {
 
     dfd = trusted_directory(dir);
     if (dfd < 0) { fprintf(stderr, "private directory required\n"); goto cleanup; }
-    if (lstat(path, &created) == 0 || errno != ENOENT) {
+    struct stat occupied;
+    if (lstat(path, &occupied) == 0 || errno != ENOENT) {
         fprintf(stderr, "socket name already occupied\n");
         goto cleanup;
     }
@@ -154,8 +156,10 @@ static int serve(const char *dir, const char *path) {
     umask(0077);
     if (bind(server, (const struct sockaddr *)&address, sizeof(address)) != 0)
         goto cleanup;
-    if (chmod(path, 0600) != 0 || lstat(path, &created) != 0 ||
-        !S_ISSOCK(created.st_mode) || created.st_uid != geteuid()) goto cleanup;
+    bound = 1;
+    if (lstat(path, &created) != 0 ||
+        !S_ISSOCK(created.st_mode) || created.st_uid != geteuid() ||
+        chmod(path, 0600) != 0) goto cleanup;
     if (listen(server, 1) != 0) goto cleanup;
 
     waitfd.fd = server;
@@ -174,7 +178,7 @@ static int serve(const char *dir, const char *path) {
 cleanup:
     if (client >= 0) close(client);
     if (server >= 0) close(server);
-    if (created.st_ino != 0) remove_own_socket(path, &created);
+    if (bound && created.st_ino != 0) remove_own_socket(path, &created);
     if (dfd >= 0) close(dfd);
     return result;
 }
