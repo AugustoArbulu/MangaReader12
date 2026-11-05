@@ -48,6 +48,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Atualizações do WebReader"
+        if isIPCDiagnostic { title = "WebReader IPC Test" }
         tableView.tableFooterView = UIView()
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
