@@ -13,7 +13,7 @@ xcrun --sdk iphoneos clang \
   -arch arm64 -miphoneos-version-min=12.0 \
   -fobjc-arc -Os -Wall -Wextra -Werror \
   -isysroot "$SDK" \
-  -framework UIKit -framework Foundation \
+  -framework UIKit -framework Foundation -framework CoreGraphics \
   ci/appinst_disposable/main.m \
   -o "$TEMP/WRDisposable"
 for VERSION in 1 2; do
