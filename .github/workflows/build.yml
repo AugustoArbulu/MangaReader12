@@ -153,6 +153,33 @@ jobs:
       - name: Test private IPA copy and held-descriptor snapshot (offline; no installer)
         run: python3 ci/test_webreader_private_snapshot.py
 
+      - name: Test actual separate-process unprivileged helper UNIX socket (host)
+        run: python3 ci/test_webreader_helper_probe.py
+
+      - name: Test actual native Darwin Swift client vs C helper (host)
+        run: python3 ci/test_native_webreader_helper_ping.py
+
+      - name: Compile ARM64 iOS12 nonprivileged IPC diagnostic (no installer)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_helper_probe.c \
+            -o WebReader-Helper-Ping-iOS12
+          file WebReader-Helper-Ping-iOS12
+          shasum -a 256 WebReader-Helper-Ping-iOS12 > WebReader-Helper-Ping-iOS12.sha256
+
+      - name: Upload standalone nonprivileged IPC diagnostic (not a DEB or release)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Helper-Ping-iOS12-NONINSTALLER
+          if-no-files-found: error
+          path: |
+            WebReader-Helper-Ping-iOS12
+            WebReader-Helper-Ping-iOS12.sha256
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
