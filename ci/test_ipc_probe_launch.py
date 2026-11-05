@@ -23,6 +23,10 @@ assert 'completionHandler(.noData)' in delegate
 assert 'let root = makeRootController()' in delegate
 assert 'info["CFBundleIdentifier"] = "com.example.MangaReader12.ipcprobe"' in package
 assert 'info["CFBundleDisplayName"] = "WebReader IPC Test"' in package
+assert 'return isIPCDiagnostic ? 2 : 6' in ui
+assert 'return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection' in ui
+assert 'switch (sectionType(indexPath.section), indexPath.row)' in ui
+assert 'let selectedSection = sectionType(indexPath.section)' in ui
 assert 'WebReaderHelperPingProbe.run' in ui
 assert '"HELPER LOCAL (DIAGNÓSTICO)"' in ui
 assert 'productionPublicKeyX963: Data? = nil' in manifest
