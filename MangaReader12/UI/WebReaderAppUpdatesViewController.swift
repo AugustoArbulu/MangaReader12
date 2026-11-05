@@ -105,8 +105,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     ) -> String? {
         switch sectionType(section) {
         case 1:
-            return "Apenas releases publicados e autenticados do WebReader " +
-                "serão reconhecidos. Commits ou artefatos temporários do " +
+            return "Somente GitHub Releases públicos do repositório WebReader " +
+                "são consultados. Commits ou artefatos temporários do " +
                 "GitHub Actions não são atualizações disponíveis."
         case 2:
             return "O download exige sua confirmação e validação de SHA-256/IPA. " +
@@ -151,12 +151,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
 
         case (1, 0):
             cell.textLabel?.text = "Canal de lançamentos"
-            if WebReaderUpdateChannel.isConfigured {
-                cell.detailTextLabel?.text = "Assinatura configurada • consulta manual"
-            } else {
-                cell.detailTextLabel?.text =
-                    "Não ativado • aguardando publicação e chave confiável"
-            }
+            cell.detailTextLabel?.text =
+                "GitHub Releases público • HTTPS • verificação manual"
 
         case (1, 1):
             cell.textLabel?.text = "Abrir GitHub Releases"
@@ -165,20 +161,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             cell.selectionStyle = .default
 
         case (2, 0):
-            if checking {
-                cell.textLabel?.text = "Verificando…"
-                cell.detailTextLabel?.text = "Validando o manifesto assinado"
-            } else if !WebReaderUpdateChannel.isConfigured {
-                cell.textLabel?.text = "Verificação indisponível"
-                cell.detailTextLabel?.text =
-                    "O canal oficial ainda não está configurado"
-            } else {
-                cell.textLabel?.text = "Verificar atualizações"
-                cell.detailTextLabel?.text = statusDescription
+            cell.textLabel?.text = checking ?
+                "Verificando GitHub Releases…" : "Verificar atualizações"
+            cell.detailTextLabel?.text = checking ?
+                "Consultando Release e hash SHA-256" : statusDescription
+            if !checking {
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
                 cell.accessibilityHint =
-                    "Consulta somente o manifesto assinado; não instala o app"
+                    "Consulta o GitHub; download só após confirmação"
             }
 
         case (2, 1):
@@ -210,7 +201,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
-                "Download com manifesto assinado, SHA-256 e inspeção IPA. " +
+                "Download de release oficial via HTTPS, SHA-256 e inspeção IPA. " +
+                "Não há assinatura independente do editor neste modo. " +
                 "Instalação automática via appinst ainda indisponível."
 
         case (4, 0):
@@ -268,12 +260,12 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var statusDescription: String {
         switch lastResult {
         case .disabled:
-            return "Canal ainda não ativado"
+            return "Canal de consulta desabilitado"
         case .upToDate:
             return "Nenhum release assinado mais recente encontrado"
         case .updateAvailable(let update):
             return "Build " + String(update.build) +
-                " identificada e autenticada • instalação indisponível"
+                " encontrada no GitHub • instalação ainda indisponível"
         case .failed(let error):
             switch error {
             case .busy: return "Uma verificação já está em andamento"
@@ -287,6 +279,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 return "Manifesto maior que o limite permitido"
             case .invalidSignedManifest:
                 return "A assinatura ou o conteúdo do manifesto é inválido"
+            case .invalidGitHubRelease:
+                return "GitHub Release sem IPA/hash confiável ou metadados inválidos"
             }
         }
     }
@@ -329,14 +323,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             return
         }
         guard selectedSection == 2, indexPath.row == 0,
-              WebReaderUpdateChannel.isConfigured, !checking
+              !isIPCDiagnostic, !checking
         else { return }
         checking = true
         tableView.reloadData()
 
         let current = WebReaderUpdateChecker(
             installedBuild: installedBuild,
-            installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+            installedIOS: ProcessInfo.processInfo.operatingSystemVersion,
+            usePublicGitHubReleases: true
         )
         checker = current
         current.check { [weak self] result in
@@ -352,8 +347,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
 
     private func confirmIPADownload() {
         guard !isIPCDiagnostic, !stagingIPA,
-              WebReaderUpdateChannel.isConfigured,
-              let update = availableUpdate else { return }
+              let update = availableUpdate,
+              update.provenance == .publicGitHubRelease ||
+                WebReaderUpdateChannel.isConfigured else { return }
         let mb = Double(update.ipaSize) / (1024 * 1024)
         let message = String(format:
             "Build %d • %.1f MB. Baixar e validar agora? " +
@@ -369,7 +365,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
 
     private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
         guard !isIPCDiagnostic, !stagingIPA,
-              WebReaderUpdateChannel.isConfigured,
+              update.provenance == .publicGitHubRelease ||
+                WebReaderUpdateChannel.isConfigured,
               let current = availableUpdate,
               current.build == update.build, current.sha256 == update.sha256
         else { return }
