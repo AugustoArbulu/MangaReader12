@@ -65,3 +65,56 @@ appinst automaticamente nem como teste de interface por enquanto.
 `feat/chimera-updater-phase1-protocol-audit`, sem merge, sem execução
 de appinst, sem nova IPA instalada no iPhone. A UI e o parser de
 GitHub precisam de CI verde no commit exato antes de uso físico.
+
+
+## Ponte CLI para appinst (05/11/2026)
+
+Foi adicionado ci/webreader_appinst_bridge.c. Este executável C
+SEPARADO DO APLICATIVO contém uma chamada real a appinst, portanto
+não deve ser executado no iPhone para instalar o WebReader agora.
+
+Operações:
+- selftest: comprova execução como usuário mobile; recusa root.
+  Não usa appinst.
+- inspect IPA SHA256: checa nome, caminho do container WebReader,
+  arquivo regular sem symlink/hardlink, ownership/permissões,
+  limite de tamanho, prefixo PK e SHA-256. Não instala.
+- install-confirmed IPA SHA256 I-CONFIRM-INSTALL: somente para
+  testes futuros em aplicativo descartável após consentimento.
+  Revalida o arquivo e chama o binário fixo /usr/bin/appinst por
+  posix_spawn, sem shell nem path de executável fornecido por IPC.
+
+O caminho da IPA no iOS deve ser o staging conhecido:
+  /private/var/mobile/Containers/Data/Application/<UUID>/
+  Library/Application Support/WebReaderUpdates/
+  WebReader-build<build>-<UUID>.ipa
+O alias padrão /var/mobile/... também é aceito.
+
+A suíte ci/test_webreader_appinst_bridge.py usa um executável
+FAKE no macOS, enraizamento de teste compilado especificamente
+para a CI, e conteúdo sintético que NÃO é IPA instalável.
+Ela testa confirmação, SHA, prefixos, versões de filename,
+symlinks/hardlinks, comportamento em falha e argumentos
+transmitidos exclusivamente ao executável fixo.
+
+CI compila um Mach-O ARM64 iOS12 assinado ad hoc e publica somente
+artefato de Actions denominado
+WebReader-Appinst-Bridge-iOS12-MOBILE-PREVIEW. Não é Release,
+não é .deb e não é automaticamente instalado no telefone.
+
+### Limitações explícitas
+
+- Este SHA é fornecido pelo chamador: não substitui a validação
+  GitHub HTTPS, nem prova assinatura independente de editor.
+- O programa C não implementa auditoria completa ZIP/Info.plist;
+  o WebReaderIPAStager deve tê-la realizado antes.
+- O descritor de IPA é fechado antes de appinst abrir o caminho
+  e appinst ainda recopia a IPA: não há garantia de identidade
+  fim-a-fim do arquivo; teste com app descartável é indispensável.
+- Esta primeira ponte é uma FERRAMENTA CLI. A integração com o
+  botão Atualizar dentro do app ainda depende do IPC físico Chimera.
+- Não executar install-confirmed no WebReader principal sem
+  comprovar a preservação de dados e um backup separado.
+
+Status: commit experimental PR #90, aguardando CI no HEAD, sem
+execução real, sem merge e sem tocar na Build56/main.
