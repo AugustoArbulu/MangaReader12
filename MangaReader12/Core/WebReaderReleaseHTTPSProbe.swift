@@ -10,15 +10,21 @@ struct WebReaderHTTPSProbeResult {
     let httpStatus: Int?
     let errorDomain: String?
     let errorCode: Int?
+    let finalHost: String?
+    let redirectsFollowed: Int
 
     var reportLine: String {
+        let destination = finalHost != nil && finalHost != host ?
+            " → " + (finalHost ?? host) : ""
+        let suffix = redirectsFollowed > 0 ?
+            " • redirects: " + String(redirectsFollowed) : ""
         if let status = httpStatus {
-            return label + " [" + host + "]: HTTPS respondeu, HTTP " +
-                String(status)
+            return label + " [" + host + destination + "]: HTTPS respondeu, HTTP " +
+                String(status) + suffix
         }
         let domain = errorDomain ?? "desconhecido"
-        return label + " [" + host + "]: falha " + domain + " " +
-            String(errorCode ?? 0)
+        return label + " [" + host + destination + "]: falha " + domain + " " +
+            String(errorCode ?? 0) + suffix
     }
 }
 
@@ -49,6 +55,15 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
         Endpoint(
             label: "CDN de assets",
             url: URL(string: "https://release-assets.githubusercontent.com/")!
+        ),
+        // Verified GitHub CLI public Release v2.103.2; 1,971-byte
+        // checksums asset, tested with HEAD ONLY. It is not a WebReader IPA.
+        Endpoint(
+            label: "Asset real (GitHub CLI)",
+            url: URL(string:
+                "https://github.com/cli/cli/releases/download/v2.103.2/" +
+                "gh_2.103.2_checksums.txt"
+            )!
         )
     ]
 
@@ -61,6 +76,27 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
     private var onFinish: (([WebReaderHTTPSProbeResult]) -> Void)?
     private var results: [WebReaderHTTPSProbeResult] = []
     private var position = 0
+    private var redirectCount = 0
+
+    /// A GitHub Release asset may redirect to a signed, temporary CDN URL.
+    /// No redirects are permitted for the first three fixed diagnostic URLs.
+    /// Never follows to an arbitrary website, a plain HTTP URL or a URL with
+    /// embedded credentials. The request remains HEAD throughout.
+    static func permitsAssetRedirect(
+        _ url: URL, forEndpointIndex index: Int, alreadyFollowed: Int
+    ) -> Bool {
+        guard index == 3, alreadyFollowed < 2,
+              let components = URLComponents(
+                url: url, resolvingAgainstBaseURL: false
+              ),
+              components.scheme == "https",
+              components.user == nil, components.password == nil,
+              components.port == nil,
+              components.host == "release-assets.githubusercontent.com" ||
+                  components.host == "objects.githubusercontent.com"
+        else { return false }
+        return true
+    }
 
     init(testProtocolClasses: [AnyClass]? = nil) {
         self.testProtocols = testProtocolClasses
@@ -73,6 +109,7 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
             self.onFinish = completion
             self.results = []
             self.position = 0
+            self.redirectCount = 0
 
             let config = URLSessionConfiguration.ephemeral
             config.urlCache = nil
@@ -117,6 +154,7 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
             return
         }
         let endpoint = Self.endpoints[position]
+        redirectCount = 0
         var request = URLRequest(
             url: endpoint.url,
             cachePolicy: .reloadIgnoringLocalCacheData,
@@ -136,9 +174,26 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        // A 3xx HTTP response is useful TLS evidence; never follow the URL
-        // or claim that a release asset was downloaded.
-        completionHandler(nil)
+        // Follow only known GitHub release-asset hosts for the dedicated
+        // GitHub CLI checksum probe. The other three probes never redirect.
+        // Authentication or a WebReader update is NEVER inferred from this.
+        stateQueue.async {
+            guard self.session === session,
+                  self.activeTask === task,
+                  self.onFinish != nil,
+                  let next = request.url,
+                  request.httpMethod == "HEAD",
+                  Self.permitsAssetRedirect(
+                      next, forEndpointIndex: self.position,
+                      alreadyFollowed: self.redirectCount
+                  )
+            else {
+                completionHandler(nil)
+                return
+            }
+            self.redirectCount += 1
+            completionHandler(request)
+        }
     }
 
     func urlSession(
@@ -171,7 +226,9 @@ final class WebReaderReleaseHTTPSProbe: NSObject, URLSessionDataDelegate,
                 host: endpoint.url.host ?? "desconhecido",
                 httpStatus: status,
                 errorDomain: status == nil ? nsError?.domain : nil,
-                errorCode: status == nil ? nsError?.code : nil
+                errorCode: status == nil ? nsError?.code : nil,
+                finalHost: task.response?.url?.host,
+                redirectsFollowed: self.redirectCount
             ))
             self.activeTask = nil
             self.position += 1
