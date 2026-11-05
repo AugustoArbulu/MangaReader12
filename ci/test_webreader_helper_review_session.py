@@ -100,6 +100,13 @@ class ReviewSessionTests(unittest.TestCase):
         replacement = self.begin(nonce="d" * 64)
         self.assertNotEqual(second.token, replacement.token)
 
+    def test_cancel_malformed_token_is_safe_and_does_not_consume(self):
+        ch = self.begin()
+        for malformed in ([], {}, None, 123, "0", "G" * 64):
+            with self.subTest(malformed=malformed):
+                self.assertFalse(self.ledger.cancel_review(malformed, self.peer))
+        self.assertFalse(self.confirm(ch).install_authorized)
+
     def test_peer_disconnected_revokes_all_reviews(self):
         first = self.begin()
         second = self.begin(nonce="c" * 64)
