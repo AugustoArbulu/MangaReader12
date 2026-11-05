@@ -131,6 +131,23 @@ class ReviewSessionTests(unittest.TestCase):
         with self.assertRaises(ReviewSessionRejected):
             malformed.begin_review(request(), self.peer, now=1)
 
+    def test_recent_correlation_history_is_bounded(self):
+        for i in range(8):
+            ch = self.begin(nonce=format(i + 200, "064x"))
+            self.confirm(ch)
+        with self.assertRaises(ReviewSessionRejected):
+            self.begin(nonce=format(300, "064x"), now=102)
+        # Old correlations expire and are then pruned.
+        fresh = self.begin(nonce=format(300, "064x"), now=131)
+        self.assertTrue(fresh.token)
+
+    def test_review_result_cannot_be_promoted_by_mutating_property(self):
+        ch = self.begin()
+        assessed = self.confirm(ch)
+        with self.assertRaises((AttributeError, TypeError)):
+            assessed.install_authorized = True
+        self.assertFalse(assessed.install_authorized)
+
     def test_derived_request_cannot_smuggle_extra_fields(self):
         with self.assertRaises(ReviewSessionRejected):
             self.ledger.begin_review({"build": 57}, self.peer, now=1)
