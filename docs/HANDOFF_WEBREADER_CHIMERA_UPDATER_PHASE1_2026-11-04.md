@@ -589,3 +589,46 @@ Não há integração com botão Instalar nesta fase.
 Matriz: ci/test_webreader_appinst_bridge.py na CI e compilação
 Debug/Release do WebReader precisam estar verdes no HEAD exato.
 Sem merge na main, sem mudança da Build56 e sem instalação real.
+
+### MVP3 — botão de instalação conectado à ponte appinst por socket (05/11/2026)
+
+A prioridade aprovada pelo usuário continua sendo GitHub Releases -> baixar
+IPA -> verificar SHA/Info.plist -> confirmar -> appinst. Nenhum merge/main.
+
+Implementado na branch feat/chimera-updater-phase1-protocol-audit:
+- MangaReader12/Core/WebReaderAppinstSocket.swift: protocolo C/Swift de
+  uma única conexão em wri.sock (pasta WR do sandbox), com credencial de
+  peer mesmo UID, PING e pedido de instalar (path, SHA, confirmação).
+- ci/webreader_appinst_bridge.c: novo modo serve-once, aguarda uma conexão
+  mobile em até 60s, rejeita path de container diferente e hash inválido,
+  executa /usr/bin/appinst por posix_spawn somente para pedido válido.
+  Resposta WRDONE1/WRFAIL1. EUID root é recusado. Não executa shell.
+- WebReaderAppUpdatesViewController.swift: após download e staging
+  verificado de release público, habilita botão Instalar atualização
+  (Chimera), mostra alerta com build e backup, exige confirmação,
+  envia pedido ao socket e exibe o resultado. O app NÃO inicia o CLI.
+- A IPA WebReader IPC Test (identidade separada) inclui teste
+  Testar ponte appinst (PING), que nunca chama instalador.
+- ci/test_native_webreader_appinst_socket.py: teste nativo Swift <-> C
+  com appinst falso e IPA sintética (7 cenários), sem instalação.
+- Xcode projeto e GitHub Actions atualizados para compilar cliente
+  Swift e ensaiar servidor C, incluindo arm64/iOS12.
+
+**Validação:** o teste de integração com appinst falso já passou em
+um workflow intermediário. Precisamos de CI verde do HEAD EXATO
+após as últimas alterações na UI e docs. Não alegar que o Chimera
+físico foi testado, nem que o sistema atualiza sem terminal.
+
+**Próxima ação real:** após CI do HEAD verde, baixar WebReader IPC
+Test e o bridge iOS12 preview, e validar SOMENTE serve-once + PING
+como mobile. Esse passo não instala IPA; verificar sandbox/permissões.
+Roteiro: docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md.
+Depois testar instalação de um aplicativo descartável (consentimento
+do usuário) e, caso funcione, preparar serviço mobile persistente
+para dispensar terminal. Não tocar a Build56 real até backup e QA.
+
+**Limites:** protocolo mesmo UID não autentica assinatura do processo;
+o SHA é informado pelo app; appinst recopia IPA; a ponte não resolve
+por si só procedência da IPA nem TOCTOU pós-leitura. Sem root daemon,
+sem publicação Release, sem merge, sem atualização automática ativa
+no aparelho, main e Build56 preservadas.
