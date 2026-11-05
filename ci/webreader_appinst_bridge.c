@@ -69,7 +69,8 @@ static int check_uuid(const char *s) {
                      (s[i] >= 'a' && s[i] <= 'f') ||
                      (s[i] >= 'A' && s[i] <= 'F'))) return 0;
     }
-    return s[36] == '\0' || s[36] == '/';
+    /* Parent container UUID is followed by '/', IPA leaf UUID by ".ipa". */
+    return s[36] == '\0' || s[36] == '/' || s[36] == '.';
 }
 
 static int check_leaf(const char *file) {
