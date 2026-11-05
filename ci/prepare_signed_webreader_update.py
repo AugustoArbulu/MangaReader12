@@ -71,6 +71,20 @@ def prepare(
     private_key = ensure_external(private_key)
     public_key = ensure_external(public_key)
     notes_file = ensure_external(notes_file)
+    if private_key.stat().st_mode & 0o077:
+        raise ReleasePreparationRejected("private signing key permissions must be 0600")
+    try:
+        key_check = subprocess.run(
+            ["openssl", "ec", "-pubin", "-in", str(public_key),
+             "-text", "-noout"],
+            check=False, capture_output=True, timeout=10
+        )
+        if (key_check.returncode != 0 or
+            b"ASN1 OID: prime256v1" not in key_check.stdout or
+            b"Public-Key: (256 bit)" not in key_check.stdout):
+            raise ReleasePreparationRejected("release key must be ECDSA P-256")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ReleasePreparationRejected("could not check release key type") from exc
     output = ensure_external(output, required=False)
     if output.exists() or output.is_symlink():
         raise ReleasePreparationRejected("output already exists; refusing overwrite")
