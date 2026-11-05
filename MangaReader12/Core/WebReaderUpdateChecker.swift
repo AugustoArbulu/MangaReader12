@@ -45,7 +45,9 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
     private let protocolClasses: [AnyClass]?
     private let stateLock = NSLock()
 
-    private static let maxResponseBytes = 128 * 1024
+    private var maxResponseBytes: Int {
+        return usePublicGitHubReleases ? 128 * 1024 : 64 * 1024
+    }
     private var session: URLSession?
     private var currentTask: URLSessionDataTask?
     private var completion: ((WebReaderUpdateCheckResult) -> Void)?
@@ -176,7 +178,7 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
             finish(.failed(.unexpectedContentType))
             return
         }
-        guard response.expectedContentLength <= Int64(Self.maxResponseBytes) else {
+        guard response.expectedContentLength <= Int64(maxResponseBytes) else {
             completionHandler(.cancel)
             finish(.failed(.oversizedResponse))
             return
@@ -194,7 +196,7 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
             stateLock.unlock()
             return
         }
-        if data.count > Self.maxResponseBytes - accumulatedData.count {
+        if data.count > maxResponseBytes - accumulatedData.count {
             stateLock.unlock()
             dataTask.cancel()
             finish(.failed(.oversizedResponse))
