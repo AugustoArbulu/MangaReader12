@@ -160,7 +160,6 @@ jobs:
         run: python3 ci/test_native_webreader_helper_ping.py
 
       - name: Compile ARM64 iOS12 nonprivileged IPC diagnostic (no installer)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
         run: |
           xcrun --sdk iphoneos clang \
             -std=c11 -Os -Wall -Wextra -Werror \
