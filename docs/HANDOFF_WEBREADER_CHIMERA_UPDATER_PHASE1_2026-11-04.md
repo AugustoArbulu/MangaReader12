@@ -386,3 +386,56 @@ como autorização de instalação; install_authorized == False.
 devem ser conferidas; appinst de origem oficial segue inconclusivo;
 sem helper, sem IPA ou Release de produção, sem chaves, sem execução
 rootful. PR #90 Draft separado da main; Build 56 intacta.
+
+
+### Fase 5G — cópia privada com descritor retido e auditoria de origem appinst (2026-11-05)
+
+**Fase 5E CI verde:** commit db348c39..., execução 41975720367.
+**Fase 5F CI verde:** commit e52d2ecf..., execução 41976689318.
+Essas aprovações valem para os commits exatos, não atestam dispositivo.
+
+**Fase 5G implementada na branch e testada localmente:** em
+ci/webreader_private_snapshot.py, um protótipo host-only faz streaming
+do arquivo preparado para uma pasta privada presumida confiável,
+utilizando descritores, O_NOFOLLOW/O_EXCL, bytes SHA-256, no-clobber,
+fsync, cópia chmod 0400 e segunda verificação do hash sobre descritor
+somente leitura que continua aberto. Rejeita troca/mutação durante a
+cópia, symlink/hardlink, arquivo especial, path fora do padrão,
+metadados divergentes e permissões inseguras. A rotina de cleanup
+verifica dev/inode, não apaga arquivos existentes após colisão e
+fecha descritores ao sair de um context manager.
+
+A nova suíte ci/test_webreader_private_snapshot.py foi incluída no
+workflow e passou **20 testes offline em Linux**. **Aguardando CI macOS
+no HEAD exato desta fase.** Nenhum desses testes é uma operação
+privilegiada. A pasta privada nos testes é do mesmo UID do processo;
+não comprova separação real de privilégios no iPhone.
+
+**Descoberta na fonte OFICIAL appinst 2.1.1:**
+https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst.m
+A implementação usa NSTemporaryDirectory()/appinst, pede modo
+de diretório 0777, cria uma segunda cópia de IPA com copyItemAtPath e
+passa o caminho dessa cópia ao LSApplicationWorkspace (iOS >=8).
+Portanto, a manutenção da identidade dos bytes dentro de nossa
+cópia privada não assegura identidade fim-a-fim se um instalador
+posteriormente recopia esses bytes em outra área. A exploração depende
+do ambiente e permissões dos diretórios pais: **é risco pendente de
+validação**, não comprometimento comprovado. O appinst de terceiro
+instalado no aparelho ainda não foi autenticado contra um original
+publicado pela autora.
+
+**Gate de instalação bloqueado:** até que o diretório temporário do
+appinst seja comprovadamente inacessível a terceiros ou a operação
+seja substituída por um mecanismo auditado, nenhum helper/instalação
+automaticamente privilegiada será publicado.
+
+Documentação ampliada:
+docs/WEBREADER_HELPER_SNAPSHOT_PHASE5G_2026-11-05.md
+
+Gates posteriores: verificar CI exata da Fase 5G; obter origem oficial
+autenticada de appinst; diagnóstico local de permissões e instalação
+somente de app descartável após consentimento; manifesto P-256 pinado
+no helper, autenticidade do peer IPC, auditoria completa IPA, backups
+separados de MR12Backup e de capítulos offline; somente então
+considerar um instalador controlado. PR #90 permanece Draft, main e
+Build 56 intocadas. Sem Build 57, release, chave ou helper real.
