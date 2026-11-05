@@ -11,9 +11,10 @@ enum WebReaderHelperPingProbe {
     private static let expected = Array("WRPONG1\n".utf8)
 
     static var diagnosticDirectory: URL {
-        return FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        )[0].appendingPathComponent("WebReaderProbeIPC", isDirectory: true)
+        // A short path is required by Darwin's sockaddr_un.sun_path (104 bytes).
+        // This folder is inside the app's own data container, not /var or /tmp.
+        return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("WR", isDirectory: true)
     }
 
     enum Result {
