@@ -34,6 +34,8 @@ assert info.get("MinimumOSVersion") == "12.0"
 info["CFBundleIdentifier"] = "com.example.MangaReader12.ipcprobe"
 info["CFBundleDisplayName"] = "WebReader IPC Test"
 info["CFBundleName"] = "WebReaderIPC"
+# The diagnostic app does not request background fetch capability.
+info.pop("UIBackgroundModes", None)
 with path.open("wb") as f:
     plistlib.dump(info, f)
 PY
