@@ -24,6 +24,7 @@ enum WebReaderUpdateCheckError: Error, Equatable {
     case unexpectedContentType
     case oversizedResponse
     case invalidSignedManifest
+    case invalidGitHubRelease
 }
 
 enum WebReaderUpdateCheckResult {
@@ -37,13 +38,14 @@ enum WebReaderUpdateCheckResult {
 /// An injectable URLProtocol allows 100% offline tests with temporary keys.
 final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
     private let manifestURL: URL
+    private let usePublicGitHubReleases: Bool
     private let pinnedPublicKeyX963: Data?
     private let installedBuild: Int
     private let installedIOS: OperatingSystemVersion
     private let protocolClasses: [AnyClass]?
     private let stateLock = NSLock()
 
-    private static let maxResponseBytes = 64 * 1024
+    private static let maxResponseBytes = 128 * 1024
     private var session: URLSession?
     private var currentTask: URLSessionDataTask?
     private var completion: ((WebReaderUpdateCheckResult) -> Void)?
@@ -54,9 +56,11 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         publicKeyX963: Data? = WebReaderUpdateChannel.productionPublicKeyX963,
         installedBuild: Int,
         installedIOS: OperatingSystemVersion,
-        protocolClasses: [AnyClass]? = nil
+        protocolClasses: [AnyClass]? = nil,
+        usePublicGitHubReleases: Bool = false
     ) {
         self.manifestURL = manifestURL
+        self.usePublicGitHubReleases = usePublicGitHubReleases
         self.pinnedPublicKeyX963 = publicKeyX963
         self.installedBuild = installedBuild
         self.installedIOS = installedIOS
@@ -67,17 +71,19 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
     /// Calls completion exactly once (on the caller's thread when disabled,
     /// otherwise on URLSession's delegate queue). UIKit callers dispatch to main.
     func check(completion: @escaping (WebReaderUpdateCheckResult) -> Void) {
-        guard let key = pinnedPublicKeyX963,
-            key.count == 65, key.first == 0x04
-        else {
-            completion(.disabled)
-            return
-        }
-        guard manifestURL.absoluteString ==
-            WebReaderUpdateChannel.developmentManifestURL.absoluteString
-        else {
-            completion(.failed(.unsupportedManifestURL))
-            return
+        if !usePublicGitHubReleases {
+            guard let key = pinnedPublicKeyX963,
+                key.count == 65, key.first == 0x04
+            else {
+                completion(.disabled)
+                return
+            }
+            guard manifestURL.absoluteString ==
+                WebReaderUpdateChannel.developmentManifestURL.absoluteString
+            else {
+                completion(.failed(.unsupportedManifestURL))
+                return
+            }
         }
 
         stateLock.lock()
@@ -100,11 +106,14 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         }
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         var request = URLRequest(
-            url: manifestURL, cachePolicy: .reloadIgnoringLocalCacheData,
+            url: usePublicGitHubReleases ?
+                WebReaderGitHubReleaseParser.apiURL : manifestURL,
+            cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 12
         )
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("WebReader-iOS12-PersonalUpdater", forHTTPHeaderField: "User-Agent")
         let task = session.dataTask(with: request)
         self.session = session
         self.currentTask = task
@@ -152,7 +161,12 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         }
         guard http.statusCode == 200 else {
             completionHandler(.cancel)
-            finish(.failed(.unexpectedHTTPStatus(http.statusCode)))
+            if usePublicGitHubReleases && http.statusCode == 404 {
+                // Public repository has no published latest Release yet.
+                finish(.upToDate)
+            } else {
+                finish(.failed(.unexpectedHTTPStatus(http.statusCode)))
+            }
             return
         }
         guard let mime = http.mimeType?.lowercased(),
@@ -202,6 +216,13 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         guard active else { return }
         if error != nil {
             finish(.failed(.transport))
+            return
+        }
+        if usePublicGitHubReleases {
+            finish(WebReaderGitHubReleaseParser.parse(
+                bytes, installedBuild: installedBuild,
+                installedIOS: installedIOS
+            ))
             return
         }
         guard let key = pinnedPublicKeyX963 else {
