@@ -23,6 +23,8 @@ assert "cell.textLabel?.text = \"Atualização da Biblioteca\"" in tabs
 assert "BackgroundLibraryUpdateManager.shared.isEnabled" in tabs
 assert "WebReaderUpdateChannel.isConfigured" in screen
 assert "WebReaderUpdateChecker(" in screen
+assert "usePublicGitHubReleases: true" in screen
+assert "WebReaderGitHubReleaseParser.swift in Sources" in project
 assert "WebReaderReleaseHTTPSProbe()" in screen
 assert 'cell.textLabel?.text = testingHTTPS ?' in screen
 assert '"Testar HTTPS do GitHub"' in screen
@@ -33,10 +35,10 @@ assert "current.check { [weak self] result in" in screen
 assert "statusDescription" in screen
 assert "update.releaseNotes.joined(" in screen
 assert "Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\")" in screen
-assert "Verificação indisponível" in screen
-assert "ainda não está configurado" in screen
+assert "Verificar atualizações" in screen
+assert "GitHub Releases público • HTTPS" in screen
 assert "instalação pelo Chimera ainda está em desenvolvimento" in screen
-assert "Apenas releases publicados e autenticados" in screen
+assert "Somente GitHub Releases públicos" in screen
 assert "GitHub Actions não são atualizações disponíveis" in screen
 assert "productionPublicKeyX963: Data? = nil" in checker
 assert "static var isConfigured: Bool { return productionPublicKeyX963 != nil }" in checker
@@ -65,6 +67,7 @@ assert "appinst" not in helper or "install an IPA" in helper
 # Explicit staging is allowed after a verified update and user confirmation.
 assert 'if source == 2 { return availableUpdate != nil ? 3 : 1 }' in screen
 assert '"Baixar IPA verificada"' in screen
+assert "update.provenance == .publicGitHubRelease" in screen
 assert '"Compartilhar IPA verificada"' in screen
 assert 'UIAlertController(title: "Baixar IPA?"' in screen
 assert 'WebReaderIPAStager(verifiedUpdate: update)' in screen
