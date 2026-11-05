@@ -126,6 +126,9 @@ jobs:
       - name: Test native read-only UpdateChecker with mocked URLSession (zero real network)
         run: python3 ci/test_native_webreader_update_checker.py
 
+      - name: Test direct public GitHub Releases parser and SHA-256 policy (Swift offline)
+        run: python3 ci/test_public_github_release_parser.py
+
       - name: Verify in-app releases screen remains fail-closed (no real requests)
         run: python3 ci/test_app_updates_screen.py
 
