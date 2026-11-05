@@ -57,6 +57,8 @@ class HelperPingTests(unittest.TestCase):
         self.addCleanup(self._kill_if_needed, process)
         for _ in range(150):
             if self.socket.exists():
+                ready = process.stdout.readline()
+                self.assertIn(b"WRPING_READY", ready)
                 return process
             if process.poll() is not None:
                 out, err = process.communicate(timeout=1)
