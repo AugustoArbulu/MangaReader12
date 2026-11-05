@@ -150,6 +150,9 @@ jobs:
       - name: Test safe staged-IPA file descriptor preflight (offline; no installer)
         run: python3 ci/test_webreader_helper_file_preflight.py
 
+      - name: Test private IPA copy and held-descriptor snapshot (offline; no installer)
+        run: python3 ci/test_webreader_private_snapshot.py
+
       - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
         run: python3 ci/audit_pinned_appinst_mirror.py
 
