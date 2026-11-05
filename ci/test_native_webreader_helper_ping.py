@@ -21,6 +21,7 @@ C_SOURCE = HERE / "webreader_helper_probe.c"
 
 HARNESS = r'''
 import Foundation
+import Darwin
 @main struct PingHarness {
     static func main() {
         guard CommandLine.arguments.count == 2 else { exit(99) }
