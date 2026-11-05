@@ -93,7 +93,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             return "Teste manual de TLS padrão usando apenas HEAD. " +
                 "Uma resposta HTTP, inclusive 403/404, indica conexão HTTPS " +
                 "com aquele servidor, não a existência de uma atualização. " +
-                "O teste da raiz do CDN não valida um asset IPA específico."
+                "A quarta sonda testa um asset público do GitHub CLI com " +
+                "HEAD/redirects restritos, mas não baixa nem valida a IPA WebReader."
         default:
             return nil
         }
