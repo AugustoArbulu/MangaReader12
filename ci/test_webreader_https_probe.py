@@ -74,38 +74,67 @@ func perform() -> [WebReaderHTTPSProbeResult] {
     return output
 }
 
-ensure(WebReaderReleaseHTTPSProbe.endpoints.count == 3,
-       "three fixed GitHub diagnostic endpoints")
+ensure(WebReaderReleaseHTTPSProbe.endpoints.count == 4,
+       "four fixed GitHub diagnostic endpoints")
 for item in WebReaderReleaseHTTPSProbe.endpoints {
     ensure(item.url.scheme == "https", "must use HTTPS")
 }
 let normal = perform()
-ensure(normal.count == 3, "results count")
+ensure(normal.count == 4, "results count")
 ensure(normal[0].httpStatus == 200, "raw HEAD 200")
 ensure(normal[1].httpStatus == 302, "GitHub redirect status only")
 ensure(normal[2].httpStatus == 403, "CDN HTTP 403 still demonstrates TLS")
 ensure(normal[2].reportLine.contains("HTTP 403"), "HTTP failure preserved")
+ensure(normal[3].httpStatus == 302, "real asset HEAD redirect fixture")
+ensure(normal[3].label == "Asset real (GitHub CLI)", "verified fixed asset label")
+ensure(WebReaderReleaseHTTPSProbe.permitsAssetRedirect(
+    URL(string: "https://release-assets.githubusercontent.com/blob?sig=fixture")!,
+    forEndpointIndex: 3, alreadyFollowed: 0
+), "allow only asset redirect to GitHub CDN")
+ensure(WebReaderReleaseHTTPSProbe.permitsAssetRedirect(
+    URL(string: "https://objects.githubusercontent.com/blob?sig=fixture")!,
+    forEndpointIndex: 3, alreadyFollowed: 1
+), "allow second asset redirect to alternate GitHub CDN")
+for invalid in [
+    "http://release-assets.githubusercontent.com/blob",
+    "https://example.com/file",
+    "https://username:secret@release-assets.githubusercontent.com/blob",
+    "https://release-assets.githubusercontent.com:444/file"
+] {
+    ensure(!WebReaderReleaseHTTPSProbe.permitsAssetRedirect(
+        URL(string: invalid)!, forEndpointIndex: 3, alreadyFollowed: 0
+    ), "reject unsafe asset redirect")
+}
+ensure(!WebReaderReleaseHTTPSProbe.permitsAssetRedirect(
+    URL(string: "https://release-assets.githubusercontent.com/blob")!,
+    forEndpointIndex: 2, alreadyFollowed: 0
+), "never redirect CDN-root probe")
+ensure(!WebReaderReleaseHTTPSProbe.permitsAssetRedirect(
+    URL(string: "https://release-assets.githubusercontent.com/blob")!,
+    forEndpointIndex: 3, alreadyFollowed: 2
+), "bounded asset redirect chain")
 ensure(normal.allSatisfy({ $0.errorDomain == nil }), "HTTP is not TLS failure")
 
 FakeHTTPSProtocol.lock.lock()
 let firstRequests = FakeHTTPSProtocol.requests
 FakeHTTPSProtocol.simulateTLSFailure = true
 FakeHTTPSProtocol.lock.unlock()
-ensure(firstRequests.count == 3, "exactly one HEAD per host")
+ensure(firstRequests.count == 4, "exactly one HEAD per probe")
 ensure(firstRequests.allSatisfy({ $0.1 == "HEAD" }), "HEAD only")
 ensure(firstRequests.map({ $0.0 }) == [
     "raw.githubusercontent.com", "github.com",
-    "release-assets.githubusercontent.com"
+    "release-assets.githubusercontent.com", "github.com"
 ], "fixed host set and order")
 
 let failing = perform()
-ensure(failing.count == 3, "still returns complete diagnostic after failure")
+ensure(failing.count == 4, "still returns complete diagnostic after failure")
 ensure(failing[0].httpStatus == nil, "synthetic TLS error has no HTTP status")
 ensure(failing[0].errorDomain == NSURLErrorDomain, "NSError domain")
 ensure(failing[0].errorCode == -1200, "TLS -1200 maintained")
 ensure(failing[0].reportLine.contains("-1200"), "copyable status")
 ensure(failing[1].httpStatus == 302, "continues after TLS failure")
-print("PASS iOS12 read-only GitHub HEAD diagnostics, HTTP vs TLS distinction")
+ensure(failing[3].httpStatus == 302, "asset HEAD remains observable")
+print("PASS iOS12 GitHub HEAD diagnostic and bounded asset CDN redirect policy")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-https-probe-") as tmp:
     root = Path(tmp)
