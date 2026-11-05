@@ -34,7 +34,7 @@
 #include <sys/uio.h>
 #endif
 
-#define SOCKET_NAME "webreader-helper-probe-v1.sock"
+#define SOCKET_NAME "wrp.sock"
 #define REQUEST "WRPING1\n"
 #define RESPONSE "WRPONG1\n"
 #define MESSAGE_LEN 8
