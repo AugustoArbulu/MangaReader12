@@ -77,6 +77,29 @@ class ReleaseSignerTests(unittest.TestCase):
             self.sign()
         self.assertFalse(self.out.exists())
 
+    def test_reject_non_p256_signing_public_key(self):
+        rsa_private = self.root / "rsa-private.pem"
+        subprocess.run(
+            ["openssl", "genpkey", "-algorithm", "RSA",
+             "-pkeyopt", "rsa_keygen_bits:2048",
+             "-out", str(rsa_private)],
+            check=True, capture_output=True
+        )
+        subprocess.run(
+            ["openssl", "pkey", "-in", str(rsa_private),
+             "-pubout", "-out", str(self.pub)],
+            check=True, capture_output=True
+        )
+        with self.assertRaises(ReleasePreparationRejected):
+            self.sign()
+        self.assertFalse(self.out.exists())
+
+    def test_reject_insecure_private_key_permissions(self):
+        self.key.chmod(0o644)
+        with self.assertRaises(ReleasePreparationRejected):
+            self.sign()
+        self.assertFalse(self.out.exists())
+
     def test_reject_unsigned_manifest_tamper(self):
         self.sign()
         encoded = json.loads(self.out.read_bytes())
