@@ -19,6 +19,11 @@ Esta etapa não utiliza appinst.
 
 ## Artefatos do GitHub Actions
 
+O workflow publica também o artefato único
+**WebReader-IPC-iOS12-FieldTest-Kit**, contendo a IPA IPC, o
+executável, os respectivos SHA-256 e este roteiro. Esse ZIP é
+o caminho mais simples para baixar tudo pelo PC.
+
 O workflow da branch cria e valida três artefatos distintos:
 
 1. **WebReader-IPC-Probe-iOS12-NONINSTALLER**: contém
@@ -48,7 +53,9 @@ mecanismo já disponível no iPhone e de sua compatibilidade.
 
 O app IPC mostra só a versão e seção HELPER LOCAL (DIAGNÓSTICO).
 Não cria LibraryViewController/ExploreViewController nem agenda
-BackgroundLibraryUpdateManager no lançamento. O app base segue
+BackgroundLibraryUpdateManager no lançamento. A IPA de diagnóstico
+também retira a capacidade UIBackgroundModes/fetch do Info.plist,
+sem retirar essa configuração do aplicativo principal. O app base segue
 com a interface original. Ao reconstruir as três IPAs, a CI
 confronta CFBundleIdentifier, CFBundleExecutable, CFBundleVersion
 e hashes do executável, além de impedir que o helper C seja
