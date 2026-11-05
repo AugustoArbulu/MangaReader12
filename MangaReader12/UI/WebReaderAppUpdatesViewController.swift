@@ -79,7 +79,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     ) -> Int {
         let source = sectionType(section)
         if source == 1 { return 2 }
-        if source == 2 { return availableUpdate != nil ? 3 : 1 }
+        if source == 2 { return availableUpdate != nil ? 4 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -196,6 +196,20 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 cell.detailTextLabel?.text = ipaStatus
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
+            }
+
+        case (2, 3):
+            if let file = stagedIPAURL,
+                FileManager.default.fileExists(atPath: file.path) {
+                cell.textLabel?.text = "Copiar comando appinst (manual)"
+                cell.detailTextLabel?.text =
+                    "Somente para teste • a instalação não será iniciada pelo app"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            } else {
+                cell.textLabel?.text = "appinst: aguarda IPA verificada"
+                cell.detailTextLabel?.text =
+                    "Instalação automática ainda não ativada"
             }
 
         case (3, _):
@@ -322,6 +336,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
+        if selectedSection == 2, indexPath.row == 3 {
+            if let file = stagedIPAURL,
+               FileManager.default.fileExists(atPath: file.path) {
+                copyManualAppinstCommand(file)
+            }
+            return
+        }
         guard selectedSection == 2, indexPath.row == 0,
               !isIPCDiagnostic, !checking
         else { return }
@@ -420,6 +441,27 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 at: IndexPath(row: 2, section: 2))
         }
         present(activity, animated: true)
+    }
+
+    private func copyManualAppinstCommand(_ file: URL) {
+        guard !isIPCDiagnostic, let update = availableUpdate,
+              update.provenance == .publicGitHubRelease,
+              stagedIPAURL == file,
+              FileManager.default.fileExists(atPath: file.path)
+        else { return }
+        // Escape a POSIX single-quoted path. We only copy; never execute it.
+        let quotedPath = "'" +
+            file.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        UIPasteboard.general.string = "appinst " + quotedPath
+        let alert = UIAlertController(
+            title: "Comando copiado",
+            message: "A IPA já foi baixada e verificada. O comando não foi " +
+                "executado. Antes de atualizar o WebReader principal, " +
+                "teste o appinst em um aplicativo descartável e faça backup.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     private func startHTTPSProbe() {
