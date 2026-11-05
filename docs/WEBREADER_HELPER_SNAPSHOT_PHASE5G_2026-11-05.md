@@ -16,8 +16,11 @@ O código tem apenas operações de arquivos temporários **no host** e não
 faz parte do target iOS. Não usa IPC, root, Chimera, AppSync ou appinst.
 Nenhuma IPA foi instalada e nenhum Release foi publicado.
 
-Foram executados localmente **16 testes offline em Linux — sucesso**.
+Foram executados localmente **20 testes offline em Linux — sucesso**.
 A CI do GitHub/macOS precisa confirmar este HEAD separadamente.
+Foram acrescentados testes de colisão do nome temporário e de cleanup
+após troca de inode, encerramento via context manager e recusa de tokens
+aleatórios inválidos, sem apagar arquivos preexistentes.
 
 ## Modelo de cópia verificada
 
