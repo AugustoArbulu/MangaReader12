@@ -135,6 +135,8 @@ def main():
         "architecture": audit["architecture"],
         "package_bytes": len(deb),
         "installed_executable_path": audit["installed_appinst_path"],
+        "appinst_executable_sha256_from_mirror": audit["appinst_executable_sha256"],
+        "appinst_executable_size_from_mirror": audit["appinst_executable_bytes"],
         "maintainer_script_names": audit["maintainer_scripts"],
         "publisher_index": official,
         "publisher_index_errors": errors,
