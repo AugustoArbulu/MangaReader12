@@ -104,6 +104,20 @@ Adicionada à branch a unidade Swift `MangaReader12/Core/WebReaderUpdateManifest
 
 **Esta unidade NÃO consulta a internet, NÃO baixa IPA, NÃO inicia appinst, NÃO instala pacotes e NÃO está ligada à interface**. Não contém chave de produção, token, segredo ou endereço ativo de manifesto. Não representa uma Build 57 funcional. O projeto iOS mantém `CURRENT_PROJECT_VERSION=56` e a `main` não é alterada. O verificador só poderá ser usado em produção após provisionamento de chave de release autêntica e mecanismo de publicação autorizado. A inspeção de duplicidade de chaves JSON na implementação Swift ainda precisa ser harmonizada com o validador Python antes de ativação (o payload é verificado *antes* de interpretar qualquer campo).
 
+### Preparação da Fase 3 — UpdateChecker nativo, **sem configuração de produção**
+
+Foi adicionada a unidade `MangaReader12/Core/WebReaderUpdateChecker.swift`, compilada no target iOS 12, mas ainda **não utilizada pela UI**. Ela interpreta resultados de atualização de maneira exclusivamente **read-only** e somente após autenticação pelo `WebReaderUpdateManifestVerifier`.
+
+- O endpoint **fixo e permitido** é `https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/updates/channel-development-v1.json` (endereço planejado; **o manifesto ainda não foi publicado**). Sem suporte a URLs fornecidas por usuário, repositórios de terceiros, redirects ou credenciais.
+- A chave `WebReaderUpdateChannel.productionPublicKeyX963` está intencionalmente `nil`. Portanto, no app distribuído, `check()` retorna `.disabled` sem criar sessão ou fazer request. **Nenhum segredo ou chave de release foi criado ou incluído**.
+- Para testes locais exclusivamente, o inicializador permite injetar uma chave de **teste efêmera** e `URLProtocol` simulado no host. Não há requisições reais a GitHub nos testes.
+- `URLSessionConfiguration.ephemeral`, sem cookies/cache/credential storage, timeouts curtos, GET restrito, TLS padrão sem exceções, redirect recusado. Exige HTTP 200 e `application/json` ou `text/json`, respeita `Content-Length`, interrompe resposta após 64 KiB, rejeita respostas malformadas ou assinatura inválida.
+- Resultados tipados: `disabled`, `updateAvailable`, `upToDate` (somente quando há manifesto autenticado mas sem build nova), `failed`. Não salva arquivo nem toca no banco SQLite, dados do usuário, código de fontes, downloads ou execução de processos.
+- `ci/test_native_webreader_update_checker.py` compila os **arquivos Swift de produção** e executa `URLProtocol` de simulação, com rejeições de host indevido, chave ausente/errada, 403, HTML e payload maior que 64 KiB; também testa update válido e versão já instalada.
+- **Não está habilitada atualização automática, download de IPA, appinst, helper de jailbreak, menu de update ou notificação de versão**. O mesmo `CFBundleVersion=56` permanece. As funções só serão conectadas à interface após provisionamento autenticado da chave de release e aprovação de distribuição.
+
+Antes de ativar este módulo, harmonizar também a rejeição de **chaves JSON duplicadas** entre parser Swift e protocolo host, tratar rotação/revogação de chave, testar HTTPS no iOS 12.5.8 e validar os artefatos da publicação.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

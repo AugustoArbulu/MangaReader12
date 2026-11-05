@@ -111,6 +111,9 @@ jobs:
       - name: Test native iOS12 Security.framework update manifest signature policy
         run: python3 ci/test_native_webreader_update_verifier.py
 
+      - name: Test native read-only UpdateChecker with mocked URLSession (zero real network)
+        run: python3 ci/test_native_webreader_update_checker.py
+
       - name: Audit appinst .deb format with malicious offline fixtures (no installation)
         run: python3 ci/test_audit_appinst_deb.py
 

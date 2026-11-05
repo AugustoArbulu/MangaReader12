@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Atualizador — UpdateChecker somente leitura (2026-11-04):** branch do PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora inclui `WebReaderUpdateChecker.swift` com `URLSession` limitado, assinatura P-256 e endpoint fixo; a chave pública de produção é `nil`, portanto **nenhuma consulta real está habilitada**. Testes com `URLProtocol` simulado são adicionados ao CI. A Build 56 segue aprovada e a `main` permanece inalterada; não há update in-app funcional. [Handoff técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Atualizador Chimera — auditoria estendida (04/11/2026):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) em draft. CI fez leitura dos bytes reais do `appinst 2.1.1 iphoneos-arm` do espelho: metadados/estrutura válidos, SHA-256 igual ao índice do espelho, payload `usr/bin/appinst` com `data.tar.lzma`, sem scripts de manutenção. **Origem oficial não verificada** porque `cydia.akemi.ai` não respondeu e o arquivo instalado no iPhone não foi comparado. Nenhuma instalação executada. [Relatório técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 
