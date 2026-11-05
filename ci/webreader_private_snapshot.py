@@ -32,12 +32,13 @@ class PrivateSnapshot:
     This does NOT authorize installation. Cleanup is caller-controlled in this
     host prototype. Real privileged storage must not be writable by the app.
     """
-    def __init__(self, fd, root_fd, leaf, size, digest):
+    def __init__(self, fd, root_fd, leaf, size, digest, dev, ino):
         self._fd = fd
         self._root_fd = root_fd
         self._leaf = leaf
         self.size = size
         self.sha256 = digest
+        self._identity = (dev, ino)
 
     @property
     def installer_authorized(self):
@@ -75,11 +76,15 @@ class PrivateSnapshot:
         self.close()
         if self._root_fd is not None:
             try:
-                os.unlink(self._leaf, dir_fd=self._root_fd)
+                named = os.stat(self._leaf, dir_fd=self._root_fd,
+                                follow_symlinks=False)
+                if (named.st_dev, named.st_ino) == self._identity:
+                    os.unlink(self._leaf, dir_fd=self._root_fd)
             except FileNotFoundError:
                 pass
-            os.close(self._root_fd)
-            self._root_fd = None
+            finally:
+                os.close(self._root_fd)
+                self._root_fd = None
 
     def __enter__(self):
         if self._fd is None:
@@ -113,6 +118,7 @@ def prepare_private_snapshot(source_root: Path, staged_leaf: str,
     src_dfd = dst_dfd = src_fd = new_fd = verified_fd = None
     tmp_leaf = final_leaf = None
     installed_final_link = False
+    created_tmp = False
     succeeded = False
     try:
         src_dfd = os.open(source_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -137,6 +143,7 @@ def prepare_private_snapshot(source_root: Path, staged_leaf: str,
         final_leaf = "verified-" + token + ".ipa"
         new_fd = os.open(tmp_leaf, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW,
                          0o600, dir_fd=dst_dfd)
+        created_tmp = True
         hasher = hashlib.sha256()
         total = 0
         zip_prefix = b""
@@ -195,7 +202,8 @@ def prepare_private_snapshot(source_root: Path, staged_leaf: str,
             raise SnapshotRejected("private copy hash mismatch")
         os.lseek(verified_fd, 0, os.SEEK_SET)
         snapshot = PrivateSnapshot(verified_fd, dst_dfd, final_leaf,
-                                   total, expected_sha256)
+                                   total, expected_sha256,
+                                   final_st.st_dev, final_st.st_ino)
         verified_fd = None
         dst_dfd = None  # Ownership transferred to the held snapshot.
         succeeded = True
@@ -208,7 +216,7 @@ def prepare_private_snapshot(source_root: Path, staged_leaf: str,
         if new_fd is not None:
             os.close(new_fd)
         if dst_dfd is not None:
-            if tmp_leaf is not None:
+            if created_tmp and tmp_leaf is not None:
                 try: os.unlink(tmp_leaf, dir_fd=dst_dfd)
                 except OSError: pass
             if installed_final_link and not succeeded:
