@@ -55,7 +55,10 @@ enum WebReaderAppinstSocket {
         }
     }
 
-    private static func performInstall(ipaURL: URL, sha: String) -> Result {
+    private static func performInstall(
+        ipaURL: URL, sha: String,
+        directory: URL = WebReaderHelperPingProbe.diagnosticDirectory
+    ) -> Result {
         guard ipaURL.isFileURL,
               sha.range(of: "^[a-f0-9]{64}$",
                         options: .regularExpression) != nil
@@ -72,7 +75,8 @@ enum WebReaderAppinstSocket {
         request.append(contentsOf: bytes)
         request.append(contentsOf: sha.utf8)
         request.append(confirmation)
-        return exchange(request: request, expectingInstall: true)
+        return exchange(request: request, expectingInstall: true,
+                        directory: directory)
     }
 
     private static func exchange(
@@ -182,5 +186,12 @@ enum WebReaderAppinstSocket {
     static func hostProbe(directory: URL) -> Result {
         return exchange(request: inspectHeader, expectingInstall: false,
                         directory: directory)
+    }
+
+    /// Only for deterministic macOS CI against a fake appinst binary.
+    static func hostInstall(
+        directory: URL, ipaURL: URL, sha256: String
+    ) -> Result {
+        return performInstall(ipaURL: ipaURL, sha: sha256, directory: directory)
     }
 }
