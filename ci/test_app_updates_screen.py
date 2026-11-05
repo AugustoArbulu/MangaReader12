@@ -12,6 +12,7 @@ tabs = (ROOT / "MangaReader12/UI/MainTabBarController.swift").read_text()
 screen = (ROOT / "MangaReader12/UI/WebReaderAppUpdatesViewController.swift").read_text()
 checker = (ROOT / "MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
 project = (ROOT / "MangaReader12.xcodeproj/project.pbxproj").read_text()
+helper = (ROOT / "MangaReader12/Core/WebReaderHelperPingProbe.swift").read_text()
 
 assert "final class WebReaderAppUpdatesViewController: UITableViewController" in screen
 assert "title = \"Atualizações do WebReader\"" in screen
@@ -26,7 +27,7 @@ assert "WebReaderReleaseHTTPSProbe()" in screen
 assert 'cell.textLabel?.text = testingHTTPS ?' in screen
 assert '"Testar HTTPS do GitHub"' in screen
 assert 'UIPasteboard.general.string = lines.joined(separator: "\\n")' in screen
-assert "return 5" in screen
+assert "return 6" in screen
 
 assert "current.check { [weak self] result in" in screen
 assert "statusDescription" in screen
@@ -45,6 +46,18 @@ assert "A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */" 
 assert project.count("WebReaderReleaseHTTPSProbe.swift in Sources") == 2
 assert "A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */" in project
 assert "CURRENT_PROJECT_VERSION = 56;" in project
+assert "WebReaderHelperPingProbe.run" in screen
+assert "startHelperProbe()" in screen
+assert "copyHelperDirectory()" in screen
+assert '"HELPER LOCAL (DIAGNÓSTICO)"' in screen
+assert "NÃO autenticado" in helper
+assert "static func inspect(directory override: URL? = nil)" in helper
+assert 'private static let socketName = "wrp.sock"' in helper
+assert project.count("WebReaderHelperPingProbe.swift in Sources") == 2
+assert project.count("WebReaderHelperPingProbe.swift */ = {isa = PBXFileReference") == 1
+assert "A20000000000000000000031 /* WebReaderHelperPingProbe.swift */" in project
+assert "posix_spawn" not in helper
+assert "appinst" not in helper or "install an IPA" in helper
 
 # No installer, automatic download, root helper or shell execution in UI.
 for forbidden in ("appinst(", "Process(", "posix_spawn", ".stage(", "dlopen(", "system("):
