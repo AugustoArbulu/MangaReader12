@@ -53,7 +53,9 @@ assert "startHelperProbe()" in screen
 assert "copyHelperDirectory()" in screen
 assert "copyHelperReport()" in screen
 assert '"Copiar relatório do helper"' in screen
-assert '"Sem appinst, root, download ou instalação"' in screen
+assert '"Nenhum comando appinst executado neste diagnóstico"' in screen
+assert '"Testar ponte appinst (PING)"' in screen
+assert "WebReaderAppinstSocket.checkConnection" in screen
 assert '"HELPER LOCAL (DIAGNÓSTICO)"' in screen
 assert "NÃO autenticado" in helper
 assert "static func inspect(directory override: URL? = nil)" in helper
@@ -66,6 +68,7 @@ assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
 assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
+assert 'if source == 5 { return 4 }' in screen
 assert '"Instalar atualização (Chimera)"' in screen
 assert 'confirmAppinstInstallation()' in screen
 assert 'WebReaderAppinstSocket.install(' in screen
