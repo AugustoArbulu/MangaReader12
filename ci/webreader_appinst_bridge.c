@@ -23,6 +23,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdint.h>
@@ -57,6 +60,14 @@ extern char **environ;
 #define PREFIX "/Library/Application Support/WebReaderUpdates/"
 #define LEAF_PREFIX "WebReader-build"
 #define CONFIRMATION "I-CONFIRM-INSTALL"
+#define SOCKET_NAME "wri.sock"
+#define INSTALL_HEADER "WRINST1\n"
+#define SOCKET_PING "WRPING1\n"
+#define SOCKET_PONG "WRPONG1\n"
+#define SOCKET_SUCCESS "WRDONE1\n"
+#define SOCKET_FAILURE "WRFAIL1\n"
+#define MAX_REQUEST_PATH 1024
+#define SOCKET_WAIT_MS 60000
 
 static int check_uuid(const char *s) {
     int i;
@@ -217,6 +228,171 @@ static int invoke_appinst(const char *path) {
     return 9;
 }
 
+
+static int send_all(int fd, const char *data, size_t len) {
+    size_t sent = 0;
+    while (sent < len) {
+#if defined(MSG_NOSIGNAL)
+        ssize_t n = send(fd, data + sent, len - sent, MSG_NOSIGNAL);
+#else
+        ssize_t n = send(fd, data + sent, len - sent, 0);
+#endif
+        if (n <= 0) return 0;
+        sent += (size_t)n;
+    }
+    return 1;
+}
+
+static int recv_all(int fd, char *data, size_t len) {
+    size_t consumed = 0;
+    while (consumed < len) {
+        ssize_t n = recv(fd, data + consumed, len - consumed, 0);
+        if (n <= 0) return 0;
+        consumed += (size_t)n;
+    }
+    return 1;
+}
+
+/* The helper is started manually with an app-owned <container>/WR directory.
+   It cannot accept a staged IPA located in a DIFFERENT app container. */
+static int same_app_container(const char *dir, const char *file) {
+    char real_dir[PATH_MAX], real_file[PATH_MAX];
+    const char *suffix = "/WR";
+    size_t len;
+    if (!realpath(dir, real_dir) || !realpath(file, real_file)) return 0;
+    len = strlen(real_dir);
+    if (len <= 3 || strcmp(real_dir + len - 3, suffix) != 0) return 0;
+    real_dir[len - 3] = '\0';
+    if (strncmp(real_file, real_dir, strlen(real_dir)) != 0) return 0;
+    return strncmp(real_file + strlen(real_dir), PREFIX,
+                   sizeof(PREFIX) - 1) == 0;
+}
+
+static int verify_socket_directory(const char *dir, char *path, size_t capacity) {
+    int fd;
+    struct stat st;
+    size_t len;
+    char resolved[PATH_MAX];
+    if (!dir || dir[0] != '/' || !realpath(dir, resolved) ||
+        strcmp(dir, resolved) != 0) return 0;
+    len = strlen(dir);
+    if (len + 1 + strlen(SOCKET_NAME) + 1 > capacity) return 0;
+    fd = open(dir, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) return 0;
+    if (fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
+        st.st_uid != geteuid() || (st.st_mode & 0077) != 0) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+    if (strcmp(dir + len - 3, "/WR") != 0) return 0;
+    snprintf(path, capacity, "%s/%s", dir, SOCKET_NAME);
+    return 1;
+}
+
+static int same_mobile_peer(int fd) {
+#if defined(__APPLE__)
+    uid_t uid;
+    gid_t gid;
+    return getpeereid(fd, &uid, &gid) == 0 && uid == geteuid();
+#else
+    (void)fd;
+    return 0;  /* Socket mode only implemented on Darwin/iOS12. */
+#endif
+}
+
+static int socket_request(int connection, const char *directory) {
+    char header[8], two[2], path[MAX_REQUEST_PATH + 1], digest[65];
+    char consent[sizeof(CONFIRMATION)];
+    unsigned int length;
+    if (!recv_all(connection, header, 8)) return 1;
+    if (memcmp(header, SOCKET_PING, 8) == 0) {
+        return send_all(connection, SOCKET_PONG, 8) ? 0 : 1;
+    }
+    if (memcmp(header, INSTALL_HEADER, 8) != 0 ||
+        !recv_all(connection, two, 2)) return 1;
+    length = ((unsigned char)two[0] << 8) | (unsigned char)two[1];
+    if (length < 70 || length > MAX_REQUEST_PATH) return 1;
+    if (!recv_all(connection, path, length) ||
+        !recv_all(connection, digest, 64) ||
+        !recv_all(connection, consent, sizeof(CONFIRMATION) - 1))
+        return 1;
+    path[length] = '\0';
+    digest[64] = '\0';
+    consent[sizeof(CONFIRMATION) - 1] = '\0';
+    if (memchr(path, '\0', length) ||
+        memcmp(consent, CONFIRMATION, sizeof(CONFIRMATION) - 1) != 0 ||
+        !same_app_container(directory, path) || !verified_file(path, digest)) {
+        (void)send_all(connection, SOCKET_FAILURE, 8);
+        return 1;
+    }
+    /* Once only. A future background agent needs stronger code-identity
+       attestation; this mobile-user socket is not a privileged service. */
+    if (invoke_appinst(path) == 0) {
+        return send_all(connection, SOCKET_SUCCESS, 8) ? 0 : 1;
+    }
+    (void)send_all(connection, SOCKET_FAILURE, 8);
+    return 1;
+}
+
+static int serve_once(const char *directory) {
+    int listener = -1, connection = -1, result = 1, created = 0;
+    struct sockaddr_un address;
+    struct stat initial, current;
+    struct pollfd waiting;
+    char path[sizeof(address.sun_path)];
+    struct timeval timeout = {180, 0};
+    memset(&initial, 0, sizeof(initial));
+    if (!verify_socket_directory(directory, path, sizeof(path))) {
+        fputs("rejected socket directory\n", stderr);
+        return 2;
+    }
+    /* Do not remove a socket/file belonging to another process. */
+    if (lstat(path, &current) == 0 || errno != ENOENT) return 3;
+    listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) return 4;
+    memset(&address, 0, sizeof(address));
+    address.sun_family = AF_UNIX;
+#if defined(__APPLE__)
+    address.sun_len = (uint8_t)sizeof(address);
+#endif
+    memcpy(address.sun_path, path, strlen(path) + 1);
+    umask(0077);
+    if (bind(listener, (const struct sockaddr *)&address, sizeof(address)) != 0)
+        goto finish;
+    created = 1;
+    if (chmod(path, 0600) != 0 || lstat(path, &initial) != 0 ||
+        !S_ISSOCK(initial.st_mode) || initial.st_uid != geteuid() ||
+        listen(listener, 1) != 0) goto finish;
+    puts("WRAPPINST_READY (one request, non-root, 60s timeout)");
+    fflush(stdout);
+    waiting.fd = listener;
+    waiting.events = POLLIN;
+    waiting.revents = 0;
+    if (poll(&waiting, 1, SOCKET_WAIT_MS) != 1 ||
+        !(waiting.revents & POLLIN)) goto finish;
+    connection = accept(listener, NULL, NULL);
+    if (connection < 0 || !same_mobile_peer(connection)) goto finish;
+#if defined(SO_NOSIGPIPE)
+    int enabled = 1;
+    (void)setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE,
+                     &enabled, sizeof(enabled));
+#endif
+    (void)setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO,
+                     &timeout, sizeof(timeout));
+    (void)setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO,
+                     &timeout, sizeof(timeout));
+    result = socket_request(connection, directory);
+finish:
+    if (connection >= 0) close(connection);
+    if (listener >= 0) close(listener);
+    if (created && initial.st_ino != 0 &&
+        lstat(path, &current) == 0 && S_ISSOCK(current.st_mode) &&
+        current.st_dev == initial.st_dev && current.st_ino == initial.st_ino)
+        (void)unlink(path);
+    return result;
+}
+
 int main(int argc, char **argv) {
     if (geteuid() == 0) {
         fputs("Refusing root: this mobile-user bridge is nonprivileged\n", stderr);
@@ -232,6 +408,9 @@ int main(int argc, char **argv) {
             puts("APPINST_PATH_UNAVAILABLE /usr/bin/appinst (not executed)");
         }
         return 0;
+    }
+    if (argc == 3 && strcmp(argv[1], "serve-once") == 0) {
+        return serve_once(argv[2]);
     }
     if (argc >= 2 && strcmp(argv[1], "inspect") == 0 && argc == 4) {
         if (!verified_file(argv[2], argv[3])) {
@@ -251,7 +430,7 @@ int main(int argc, char **argv) {
          * for a disposable-app validation after explicit user approval. */
         return invoke_appinst(argv[2]);
     }
-    fputs("Usage: selftest | inspect <ipa> <sha256> | "
+    fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256> | "
           "install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n", stderr);
     return 2;
 }
