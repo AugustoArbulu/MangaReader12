@@ -138,6 +138,13 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        stateLock.lock()
+        let current = self.session === session && currentTask === dataTask
+        stateLock.unlock()
+        guard current else {
+            completionHandler(.cancel)
+            return
+        }
         guard let http = response as? HTTPURLResponse else {
             completionHandler(.cancel)
             finish(.failed(.transport))
@@ -169,7 +176,7 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         didReceive data: Data
     ) {
         stateLock.lock()
-        guard currentTask?.taskIdentifier == dataTask.taskIdentifier else {
+        guard self.session === session && currentTask === dataTask else {
             stateLock.unlock()
             return
         }
@@ -189,7 +196,7 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         didCompleteWithError error: Error?
     ) {
         stateLock.lock()
-        let active = currentTask?.taskIdentifier == task.taskIdentifier
+        let active = self.session === session && currentTask === task
         let bytes = accumulatedData
         stateLock.unlock()
         guard active else { return }
