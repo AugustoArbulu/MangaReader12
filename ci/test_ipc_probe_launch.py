@@ -28,6 +28,8 @@ assert 'return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection' 
 assert 'switch (sectionType(indexPath.section), indexPath.row)' in ui
 assert 'let selectedSection = sectionType(indexPath.section)' in ui
 assert 'WebReaderHelperPingProbe.run' in ui
+assert '"Copiar relatório do helper"' in ui
+assert '"Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido")' in ui
 assert '"HELPER LOCAL (DIAGNÓSTICO)"' in ui
 assert 'productionPublicKeyX963: Data? = nil' in manifest
 assert '"WRPING1\\n"' in probe and '"WRPONG1\\n"' in probe
