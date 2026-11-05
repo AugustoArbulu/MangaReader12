@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Fase 5B — bloqueio de IPAs malformadas antes do staging (2026-11-05):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora exige auditoria ZIP/Info.plist completa **após SHA256 e antes de manter uma IPA baixada**. O `WebReaderIPAStager` rejeita mesmo um ZIP com hash assinado correto quando a estrutura é inválida; testes atualizados usam IPA sintética completa via `URLProtocol`. **Aguardando CI deste commit**; nenhuma chave de produção, Release do WebReader, `appinst` ou instalação estão habilitados. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Fase 5A — auditor Swift de IPA (2026-11-05):** branch do [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) incorpora `WebReaderNativeIPAAuditor.swift`, com SHA-256 integral, ZIP central/local, verificação de caminhos/links, `Info.plist`, bundle/build/iOS, sem extração/instalação. Testes host de IPAs malformadas e da **IPA real** do CI; **CI pendente neste checkpoint**. A chave de produção permanece nil, Build 56 de `main` aprovada, sem helper nem `appinst`. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 
