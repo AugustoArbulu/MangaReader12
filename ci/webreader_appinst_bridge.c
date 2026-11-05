@@ -223,7 +223,14 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (argc == 2 && strcmp(argv[1], "selftest") == 0) {
+        struct stat installed;
         puts("WEBREADER_APPINST_BRIDGE_PRESENT (non-root, no installation)");
+        if (lstat(APPINST_BINARY, &installed) == 0 &&
+            S_ISREG(installed.st_mode) && (installed.st_mode & 0111)) {
+            puts("APPINST_PATH_PRESENT /usr/bin/appinst (not executed)");
+        } else {
+            puts("APPINST_PATH_UNAVAILABLE /usr/bin/appinst (not executed)");
+        }
         return 0;
     }
     if (argc >= 2 && strcmp(argv[1], "inspect") == 0 && argc == 4) {
