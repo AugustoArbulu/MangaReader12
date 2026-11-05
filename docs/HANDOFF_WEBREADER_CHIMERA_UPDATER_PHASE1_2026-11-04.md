@@ -228,6 +228,21 @@ Para medir o HTTPS no **iOS 12.5.8 real** sem atualizar/desinstalar o WebReader 
 
 - Mesmo HTTP 200 no asset alheio **não** prova que o nosso futuro Release WebReader existe ou que a instalação será segura. A compatibilidade da URL real `WebReader-iOS12-unsigned.ipa` continua pendente da publicação controlada de um Release assinado.
 
+### Fase 5A — pré-validação nativa completa de IPA (2026-11-05)
+
+O teste físico HTTPS da Fase 4D foi aprovado em iOS **12.5.8**: GitHub Raw 200, GitHub Releases 200, raiz do CDN 404 (TLS válido), asset real GitHub CLI **200 após um redirecionamento** até `release-assets.githubusercontent.com`. Esse resultado não autentica uma IPA nem instala atualizações.
+
+**Novo código da Fase 5A:** `MangaReader12/Core/WebReaderNativeIPAAuditor.swift` inspeciona uma IPA **somente leitura** usando Foundation, Compression e CommonCrypto disponíveis no iOS12; não extrai ZIP nem invoca o instalador. Recebe metadados de um `WebReaderVerifiedUpdate` e verifica novamente:
+
+1. Tamanho e **SHA-256 integral** do arquivo físico, comparados aos valores assinados.
+2. Estrutura ZIP com índice central, cabeçalhos locais consistentes, offsets, limites de expansão, contagem de entradas, métodos stored/DEFLATE, proibição de ZIP64/criptografia/links e caminhos `../`, absoluto ou fora de `Payload/MangaReader12.app/`. Rejeição de nomes repetidos incluindo case-fold Unicode.
+3. Presença de `Payload/MangaReader12.app/MangaReader12` e `Info.plist`; descompressão **apenas do Info.plist** (até 1 MiB) e conferência de CRC32.
+4. Identidade `CFBundleIdentifier=com.example.MangaReader12`, `CFBundleDisplayName=WebReader`, executável, `CFBundleVersion` maior que a instalada e igual à build do manifesto; `MinimumOSVersion` igual ao valor assinado e compatível com iOS 12.5.8.
+
+`ci/test_native_webreader_ipa_auditor.py` compila a fonte Swift real em macOS e testa ZIP stored/DEFLATE, bundle errado, downgrade, metadados assinados divergentes, mínimo iOS errado, caminhos inseguros, links, duplicatas, cabeçalhos/CRC adulterados, ZIP truncado e compressão não suportada. **O próprio IPA real da Build 56 gerado pelo CI** também será verificado com o mesmo Swift na etapa pós-empacotamento (baseline `installedBuild=55` somente para esse teste; nenhum update ocorre).
+
+**Limites:** esta Fase 5A adiciona auditor independente ao projeto e aos testes; a instalação continua completamente desligada. O `WebReaderIPAStager` ainda não aciona automaticamente essa auditoria até a validação da execução real e a revisão do contrato de erros. Um futuro helper privilegiado deve **revalidar os mesmos critérios por conta própria**, e não confiar num arquivo apenas porque o aplicativo normal declarou SHA correto. Nada foi publicado no GitHub Releases; não foi criada chave de produção e não foi chamada a ferramenta `appinst`.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

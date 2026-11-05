@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Fase 5A — auditor Swift de IPA (2026-11-05):** branch do [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) incorpora `WebReaderNativeIPAAuditor.swift`, com SHA-256 integral, ZIP central/local, verificação de caminhos/links, `Info.plist`, bundle/build/iOS, sem extração/instalação. Testes host de IPAs malformadas e da **IPA real** do CI; **CI pendente neste checkpoint**. A chave de produção permanece nil, Build 56 de `main` aprovada, sem helper nem `appinst`. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Fase 4D APROVADA FISICAMENTE (2026-11-05, iOS 12.5.8):** usuário testou `WebReader TLS Test` com `URLSession` padrão e somente HEAD. GitHub Raw **HTTP 200**, GitHub Releases **HTTP 200**, raiz do CDN **HTTP 404** (HTTPS válido), e asset real GitHub CLI **HTTP 200 após 1 redirect** `github.com → release-assets.githubusercontent.com`. Isso comprova o caminho TLS e redirects de um asset público real de Releases, **sem download da IPA**. Ainda faltam manifesto assinado/Release próprio, verificação SHA-256 física e autenticação do `appinst` instalado + helper restrito; **não habilitar instalação**. PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) em draft e Build 56 de `main` intacta. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 

@@ -129,6 +129,9 @@ jobs:
       - name: Test signed-metadata IPA staging with streaming SHA256 (no real network)
         run: python3 ci/test_native_webreader_ipa_stager.py
 
+      - name: Test native iOS12 full IPA archive and identity preflight (malicious fixtures)
+        run: python3 ci/test_native_webreader_ipa_auditor.py
+
       - name: Audit appinst .deb format with malicious offline fixtures (no installation)
         run: python3 ci/test_audit_appinst_deb.py
 
@@ -185,6 +188,11 @@ jobs:
             --sha256-file WebReader-iOS12-unsigned.ipa.sha256 \
             --installed-build 55 \
             --installed-ios 12.5.8
+
+      - name: Verify actual CI-built Build56 IPA with native Swift ZIP/Info.plist auditor
+        run: |
+          python3 ci/test_native_webreader_ipa_auditor.py \
+            --real-ipa WebReader-iOS12-unsigned.ipa
 
       - name: Package isolated iOS12 HTTPS diagnostic IPA (branch push only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
