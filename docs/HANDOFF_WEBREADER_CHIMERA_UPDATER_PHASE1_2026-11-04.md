@@ -116,7 +116,21 @@ Foi adicionada a unidade `MangaReader12/Core/WebReaderUpdateChecker.swift`, comp
 - `ci/test_native_webreader_update_checker.py` compila os **arquivos Swift de produção** e executa `URLProtocol` de simulação, com rejeições de host indevido, chave ausente/errada, 403, HTML e payload maior que 64 KiB; também testa update válido e versão já instalada.
 - **Não está habilitada atualização automática, download de IPA, appinst, helper de jailbreak, menu de update ou notificação de versão**. O mesmo `CFBundleVersion=56` permanece. As funções só serão conectadas à interface após provisionamento autenticado da chave de release e aprovação de distribuição.
 
-Antes de ativar este módulo, harmonizar também a rejeição de **chaves JSON duplicadas** entre parser Swift e protocolo host, tratar rotação/revogação de chave, testar HTTPS no iOS 12.5.8 e validar os artefatos da publicação.
+A rejeição de **chaves JSON duplicadas** foi acrescentada ao verificador Swift e testada offline conforme a seção seguinte. Ainda será necessário definir rotação/revogação de chave, testar HTTPS no iOS 12.5.8 e validar a publicação antes de ativar qualquer atualização.
+
+### Fase 3 — endurecimento do parser de manifesto JSON (2026-11-04)
+
+A Fase 3 tinha uma divergência importante: o validador Python rejeita chaves JSON duplicadas (`object_pairs_hook`), mas `Foundation.JSONSerialization` **não** fornece rejeição equivalente. Isso permite interpretações ambíguas do mesmo documento.
+
+Corrigido na branch com `MangaReader12/Core/WebReaderStrictJSON.swift`, validador **nativo e de uso interno**, compilado no iOS 12:
+
+- Faz a leitura dos bytes UTF-8 com parser recursivo limitado a **32 níveis** e **4.096 valores**, sem requests, alocação ilimitada ou execução dinâmica.
+- Rejeita chaves repetidas em **todos os objetos**, incluindo chaves repetidas equivalentes após decodificação de escapes Unicode (ex.: `"name"` e `"\\u006eame"`), dentro de objetos ou arrays; também rejeita strings/escapes/números/trailing data malformados.
+- As verificações de **envelope** ocorrem antes de `JSONSerialization`; a verificação de **payload** acontece nos bytes exatos **após autenticação ECDSA** e **antes** da leitura de campos de versão, URL, bundle e SHA.
+- As chaves de teste são efêmeras. Não há chave pública de produção, chave privada, manifesto publicado, download de IPA nem invocação de `appinst`.
+- As suítes `ci/test_native_webreader_update_verifier.py` e `ci/test_native_webreader_update_checker.py` compilam os arquivos Swift reais no macOS e testam duplicatas em envelopes, payloads **corretamente assinados**, escapes Unicode e profundidade, além das regressões de rede e assinatura.
+
+A alteração reforça o validador, mas **não elimina** os bloqueios para distribuição/instalação: origem do `.deb` instalada ainda não autenticada, sem canal oficial assinado e sem ensaio físico com app descartável. A `main` segue na Build 56.
 
 ## 4. Etapas obrigatórias antes de instalar IPAs
 

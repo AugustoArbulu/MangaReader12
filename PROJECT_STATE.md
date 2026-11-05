@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Updater Fase 3 — JSON estrito (2026-11-04):** branch do [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora rejeita JSON com chaves duplicadas no **envelope** e no **payload assinado**, incluindo chaves com escapes Unicode e objetos aninhados, por `WebReaderStrictJSON.swift`. Testes Swift compilam o parser real, sem rede nem instalação; **CI desta alteração ainda precisa confirmar aprovação**, e Build 56 permanece referência física em `main`. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Atualizador — UpdateChecker somente leitura (2026-11-04):** branch do PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora inclui `WebReaderUpdateChecker.swift` com `URLSession` limitado, assinatura P-256 e endpoint fixo; a chave pública de produção é `nil`, portanto **nenhuma consulta real está habilitada**. Testes com `URLProtocol` simulado são adicionados ao CI. A Build 56 segue aprovada e a `main` permanece inalterada; não há update in-app funcional. [Handoff técnico](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 

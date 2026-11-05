@@ -7,6 +7,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 BASE = ROOT / "MangaReader12/Core"
 SOURCES = [
+    BASE / "WebReaderStrictJSON.swift",
     BASE / "WebReaderUpdateManifestVerifier.swift",
     BASE / "WebReaderUpdateChecker.swift",
 ]
@@ -170,6 +171,25 @@ let randomPrivate = SecKeyCreateRandomKey(attributes as CFDictionary, &wrongKeyE
 let randomPublic = SecKeyCopyPublicKey(randomPrivate)!
 let randomKeyBytes = SecKeyCopyExternalRepresentation(randomPublic, &wrongKeyError)! as Data
 expectFailure(.invalidSignedManifest, key: randomKeyBytes)
+
+
+// Duplicate keys in a correctly signed payload cannot be treated as a new build.
+let signedPayload = asJSON(payload)
+let signedPayloadText = String(data: signedPayload, encoding: .utf8)!
+let duplicateText = "{\"bundleId\":\"com.example.MangaReader12\"," +
+    String(signedPayloadText.dropFirst())
+let duplicateBytes = Data(duplicateText.utf8)
+var duplicateSignError: Unmanaged<CFError>?
+let duplicateSignature = SecKeyCreateSignature(
+    privateKey, .ecdsaSignatureMessageX962SHA256,
+    duplicateBytes as CFData, &duplicateSignError
+)! as Data
+StubManifestURLProtocol.responseBody = asJSON([
+    "schemaVersion": 1, "algorithm": "ecdsa-p256-sha256",
+    "payload": duplicateBytes.base64EncodedString(),
+    "signature": duplicateSignature.base64EncodedString()
+])
+expectFailure(.invalidSignedManifest)
 
 print("PASS: iOS12 read-only UpdateChecker enforces signed-only, bounded, fail-closed URLSession checks")
 '''

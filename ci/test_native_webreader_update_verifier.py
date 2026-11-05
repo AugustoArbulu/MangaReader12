@@ -11,6 +11,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "MangaReader12/Core/WebReaderUpdateManifestVerifier.swift"
+STRICT_SOURCE = ROOT / "MangaReader12/Core/WebReaderStrictJSON.swift"
 
 HARNESS = r'''
 import Foundation
@@ -63,6 +64,21 @@ func signedEnvelope(_ details: [String: Any]) -> Data {
         "signature": signature.base64EncodedString()
     ])
 }
+
+func signedRawPayload(_ message: Data) -> Data {
+    var signError: Unmanaged<CFError>?
+    let signature = SecKeyCreateSignature(
+        privateKey, .ecdsaSignatureMessageX962SHA256,
+        message as CFData, &signError
+    )! as Data
+    return json([
+        "schemaVersion": 1,
+        "algorithm": "ecdsa-p256-sha256",
+        "payload": message.base64EncodedString(),
+        "signature": signature.base64EncodedString()
+    ])
+}
+
 func accept(_ envelope: Data, key: Data = publicX963) -> WebReaderVerifiedUpdate {
     return try! WebReaderUpdateManifestVerifier.verify(
         envelopeData: envelope,
@@ -119,6 +135,51 @@ var tooLarge = payload
 tooLarge["ipaSize"] = 1024 * 1024 * 1024
 reject(signedEnvelope(tooLarge))
 
+
+// Malformed and ambiguous JSON must not be interpreted by Foundation.
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"name":"a","name":"b"}"#.utf8
+)), "literal duplicate rejected")
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"name":"a","\u006eame":"b"}"#.utf8
+)), "Unicode-escaped duplicate rejected")
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"root":[{"x":1,"\u0078":2}]}"#.utf8
+)), "nested duplicate in array rejected")
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"outer":{"a":1,"a":2}}"#.utf8
+)), "nested duplicate rejected")
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"a":1,"b":01}"#.utf8
+)), "invalid numeric JSON rejected")
+check(WebReaderStrictJSON.accepts(json(payload)), "valid signed payload accepted")
+
+let originalPayloadString = String(data: json(payload), encoding: .utf8)!
+let literalDuplicatePayload = "{\"bundleId\":\"com.example.MangaReader12\"," +
+    String(originalPayloadString.dropFirst())
+reject(signedRawPayload(Data(literalDuplicatePayload.utf8)))
+let escapedDuplicatePayload =
+    "{\"\\u0062undleId\":\"com.example.MangaReader12\"," +
+    String(originalPayloadString.dropFirst())
+reject(signedRawPayload(Data(escapedDuplicatePayload.utf8)))
+
+// A duplicate in the outer envelope must fail even if payload is signed.
+let originalEnvelopeString = String(data: good, encoding: .utf8)!
+let duplicateEnvelopeString = originalEnvelopeString.replacingOccurrences(
+    of: "\"algorithm\":",
+    with: "\"algorithm\":\"ecdsa-p256-sha256\",\"algorithm\":"
+)
+check(duplicateEnvelopeString != originalEnvelopeString, "envelope mutated")
+reject(Data(duplicateEnvelopeString.utf8))
+
+// Reject excessive nesting and trailing bytes before Foundation accepts it.
+let nestedJSON = String(repeating: "[", count: 34) + "0" +
+    String(repeating: "]", count: 34)
+check(!WebReaderStrictJSON.accepts(Data(nestedJSON.utf8)), "depth bound")
+check(!WebReaderStrictJSON.accepts(Data(
+    #"{"x":true} trailing"#.utf8
+)), "trailing bytes")
+
 // Fails closed when no production key is configured.
 reject(good, key: Data())
 reject(Data(repeating: 0, count: 65537))
@@ -131,7 +192,7 @@ with tempfile.TemporaryDirectory(prefix="webreader-native-signature-") as folder
     main.write_text(HARNESS)
     binary = temp / "native-security-test"
     subprocess.run(
-        ["swiftc", "-swift-version", "5", str(SOURCE), str(main),
+        ["swiftc", "-swift-version", "5", str(STRICT_SOURCE), str(SOURCE), str(main),
          "-framework", "Security", "-o", str(binary)],
         check=True
     )
