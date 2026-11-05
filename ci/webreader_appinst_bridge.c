@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -273,8 +274,12 @@ static int verify_socket_directory(const char *dir, char *path, size_t capacity)
     struct stat st;
     size_t len;
     char resolved[PATH_MAX];
-    if (!dir || dir[0] != '/' || !realpath(dir, resolved) ||
-        strcmp(dir, resolved) != 0) return 0;
+    if (!dir || dir[0] != '/' || !realpath(dir, resolved)) return 0;
+    if (strcmp(dir, resolved) != 0) {
+        /* iOS12 commonly reports /var/... while realpath is /private/var/... */
+        if (strncmp(dir, "/var/", 5) != 0 ||
+            strcmp(dir + 4, resolved + 12) != 0) return 0;
+    }
     len = strlen(dir);
     if (len + 1 + strlen(SOCKET_NAME) + 1 > capacity) return 0;
     fd = open(dir, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
@@ -285,7 +290,7 @@ static int verify_socket_directory(const char *dir, char *path, size_t capacity)
         return 0;
     }
     close(fd);
-    if (strcmp(dir + len - 3, "/WR") != 0) return 0;
+    if (len < 4 || strcmp(dir + len - 3, "/WR") != 0) return 0;
     snprintf(path, capacity, "%s/%s", dir, SOCKET_NAME);
     return 1;
 }
