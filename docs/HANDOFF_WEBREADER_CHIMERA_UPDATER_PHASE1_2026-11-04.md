@@ -354,3 +354,35 @@ não é assinatura; challenge não autentica a IPA nem autoriza instalação.
 Não há daemon, `appinst`, chaves de produção, helper, Release ou IPA nova.
 Build 56/`main` preservadas, PR #90 Draft, sem merge.
 **CI da Fase 5E deve ser confirmada no HEAD exato antes de aprová-la.**
+
+
+### Fase 5F — pré-inspeção da IPA preparada por descritor (2026-11-05)
+
+Criado ci/webreader_helper_file_preflight.py como protótipo Python
+host-only: a partir de pasta de origem confiável e nome restrito
+WebReader-build<build>-<UUID>.ipa, abre diretório/arquivo com O_NOFOLLOW,
+O_DIRECTORY, O_NONBLOCK e dir_fd (sem seguir o symlink final),
+confere tipo regular, nlink == 1, dono/permissões, tamanho, SHA-256,
+prefixo PK, identidade do inode e timestamps antes/depois e identidade
+da entrada ao final. Rejeita caminhos/versões arbitrárias, links,
+FIFO, arquivo substituído ou modificado durante a leitura.
+
+ci/test_webreader_helper_file_preflight.py: 13 testes adversariais
+APROVADOS LOCALMENTE EM LINUX, ainda sujeitos à CI macOS da branch.
+A nova suíte foi integrada a .github/workflows/build.yml.
+Documentação: docs/WEBREADER_HELPER_FILE_PREFLIGHT_PHASE5F_2026-11-05.md.
+
+**Aviso de segurança:** o descritor é fechado após o teste, logo
+não elimina TOCTOU entre inspeção e eventual instalação. Os valores
+esperados aqui são injetados nos testes, não autenticados pelo helper
+real. O prefixo PK não atesta ZIP seguro, a função não autentica
+o manifesto nem confere Info.plist. Um helper real precisará autenticar
+o peer, chaves/assinaturas, usar pasta própria de origem confiável,
+revalidar a IPA completa e manter os mesmos bytes protegidos até
+que o instalador os consuma. Nunca usar o resultado deste protótipo
+como autorização de instalação; install_authorized == False.
+
+**Gates:** CI da fase 5E (#1058) e da fase 5F no HEAD atual
+devem ser conferidas; appinst de origem oficial segue inconclusivo;
+sem helper, sem IPA ou Release de produção, sem chaves, sem execução
+rootful. PR #90 Draft separado da main; Build 56 intacta.
