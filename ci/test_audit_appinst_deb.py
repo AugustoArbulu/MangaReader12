@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline test fixtures for read-only appinst .deb audit. No jailbreak needed."""
 import gzip
+import hashlib
 import io
 import lzma
 import tarfile
@@ -20,6 +21,9 @@ def tar_archive(entries):
             elif kind == "link":
                 info.type = tarfile.SYMTYPE
                 info.linkname = "/etc/passwd"
+                f.addfile(info)
+            elif kind == "dir":
+                info.type = tarfile.DIRTYPE
                 f.addfile(info)
             elif kind == "setuid":
                 info.size = len(contents)
@@ -63,6 +67,35 @@ class DebianAuditTests(unittest.TestCase):
         self.assertFalse(result["official_origin_verified"])
         self.assertFalse(result["eligible_for_privileged_installation"])
         self.assertFalse(result["matches_observed_mirror_sha256"])
+
+    def test_executable_sha256_is_of_file_not_deb(self):
+        result = audit_bytes(package())
+        fake_executable = b"FAKE-MACHO-NO-EXECUTION"
+        self.assertEqual(
+            result["appinst_executable_sha256"],
+            hashlib.sha256(fake_executable).hexdigest()
+        )
+        self.assertEqual(result["appinst_executable_bytes"], len(fake_executable))
+        self.assertNotEqual(result["appinst_executable_sha256"], result["sha256"])
+        self.assertFalse(result["official_origin_verified"])
+
+    def test_directory_masquerading_as_appinst_is_rejected(self):
+        def directory_payload(members):
+            members[2] = (
+                "data.tar.gz", tar_archive([("./usr/bin/appinst", b"", "dir")])
+            )
+            return members
+        with self.assertRaises(PackageRejected):
+            audit_bytes(package(changes=directory_payload))
+
+    def test_empty_appinst_binary_is_rejected(self):
+        def empty_payload(members):
+            members[2] = (
+                "data.tar.gz", tar_archive([("./usr/bin/appinst", b"", "file")])
+            )
+            return members
+        with self.assertRaises(PackageRejected):
+            audit_bytes(package(changes=empty_payload))
 
     def test_postinst_script_flagged_not_executed(self):
         result = audit_bytes(package(control_extra=[(
