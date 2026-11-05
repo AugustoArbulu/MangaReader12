@@ -102,6 +102,15 @@ class HelperPingTests(unittest.TestCase):
         self.assertNotEqual(process.returncode, 0)
         self.assertEqual(self.socket.read_bytes(), b"KEEP ORIGINAL")
 
+    def test_selftest_without_socket_or_privileges(self):
+        result = subprocess.run(
+            [str(self.binary), "selftest"],
+            capture_output=True, text=True, timeout=5
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WEBREADER_HELPER_SELFTEST_OK", result.stdout)
+        self.assertFalse(self.socket.exists())
+
     def test_arbitrary_operations_disallowed(self):
         for operation in ["install", "execute", "--shell", "release", "status"]:
             with self.subTest(operation=operation):
