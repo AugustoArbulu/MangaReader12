@@ -13,6 +13,16 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var testingHelper = false
     private var helperReport = "Ainda não testado"
 
+    // The isolated com.example.MangaReader12.ipcprobe IPA exposes only
+    // version info and the local PING diagnostic; never the release controls.
+    private var isIPCDiagnostic: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe"
+    }
+
+    private func sectionType(_ displayedSection: Int) -> Int {
+        return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection
+    }
+
     private var installedBuild: Int {
         let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         return Int(raw ?? "") ?? 0
@@ -54,25 +64,26 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return 6
+        return isIPCDiagnostic ? 2 : 6
     }
 
     override func tableView(
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        if section == 2 { return availableUpdate != nil ? 2 : 1 }
-        if section == 4 {
+        let source = sectionType(section)
+        if source == 2 { return availableUpdate != nil ? 2 : 1 }
+        if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
-        if section == 5 { return 2 }
+        if source == 5 { return 2 }
         return 1
     }
 
     override func tableView(
         _ tableView: UITableView, titleForHeaderInSection section: Int
     ) -> String? {
-        switch section {
+        switch sectionType(section) {
         case 0: return "VERSÃO INSTALADA"
         case 1: return "CANAL DO APLICATIVO"
         case 2: return "ATUALIZAÇÕES DISPONÍVEIS"
@@ -85,7 +96,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     override func tableView(
         _ tableView: UITableView, titleForFooterInSection section: Int
     ) -> String? {
-        switch section {
+        switch sectionType(section) {
         case 1:
             return "Apenas releases publicados e autenticados do WebReader " +
                 "serão reconhecidos. Commits ou artefatos temporários do " +
@@ -125,7 +136,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         cell.textLabel?.textColor = ThemeManager.shared.palette.primaryText
         cell.detailTextLabel?.textColor = ThemeManager.shared.palette.secondaryText
 
-        switch (indexPath.section, indexPath.row) {
+        switch (sectionType(indexPath.section), indexPath.row) {
         case (0, _):
             cell.textLabel?.text = installedBuildLabel
             cell.detailTextLabel?.text = "WebReader • iOS 12.0 ou posterior"
@@ -246,7 +257,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
     ) {
         tableView.deselectRow(at: indexPath, animated: true)
-        if indexPath.section == 4 {
+        let selectedSection = sectionType(indexPath.section)
+        if selectedSection == 4 {
             if indexPath.row == 0 {
                 startHTTPSProbe()
             } else if !httpsResults.isEmpty &&
@@ -255,12 +267,12 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
-        if indexPath.section == 5 {
+        if selectedSection == 5 {
             if indexPath.row == 0 { startHelperProbe() }
             if indexPath.row == 1 { copyHelperDirectory() }
             return
         }
-        guard indexPath.section == 2, indexPath.row == 0,
+        guard selectedSection == 2, indexPath.row == 0,
               WebReaderUpdateChannel.isConfigured, !checking
         else { return }
         checking = true
