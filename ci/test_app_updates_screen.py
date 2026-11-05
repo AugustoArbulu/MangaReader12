@@ -65,7 +65,14 @@ assert "posix_spawn" not in helper
 assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
-assert 'if source == 2 { return availableUpdate != nil ? 4 : 1 }' in screen
+assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
+assert '"Instalar atualização (Chimera)"' in screen
+assert 'confirmAppinstInstallation()' in screen
+assert 'WebReaderAppinstSocket.install(' in screen
+assert 'title: "Confirmar instalação", style: .destructive' in screen
+assert 'stagedSHA256 == update.sha256' in screen
+assert 'self.stagedSHA256 = update.sha256' in screen
+assert "WebReaderAppinstSocket.swift in Sources" in project
 assert '"Copiar comando appinst (manual)"' in screen
 assert 'copyManualAppinstCommand(file)' in screen
 assert 'UIPasteboard.general.string = "appinst " + quotedPath' in screen
