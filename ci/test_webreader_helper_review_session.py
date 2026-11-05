@@ -148,6 +148,18 @@ class ReviewSessionTests(unittest.TestCase):
             assessed.install_authorized = True
         self.assertFalse(assessed.install_authorized)
 
+    def test_directly_constructed_invalid_request_rejected(self):
+        invalid = [
+            request(build=True), request(build=0),
+            request(build=2_147_483_648),
+            request(nonce="A" * 64),
+            request(digest="not-a-sha"),
+            request(nonce="a" * 64),
+        ]
+        for item in invalid:
+            with self.subTest(item=item), self.assertRaises(ReviewSessionRejected):
+                self.ledger.begin_review(item, self.peer, now=100)
+
     def test_derived_request_cannot_smuggle_extra_fields(self):
         with self.assertRaises(ReviewSessionRejected):
             self.ledger.begin_review({"build": 57}, self.peer, now=1)
