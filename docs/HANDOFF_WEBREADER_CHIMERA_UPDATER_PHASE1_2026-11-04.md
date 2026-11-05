@@ -512,3 +512,37 @@ O roteiro detalhado de teste iOS12/Chimera está em
 **Limites:** a assinatura ad hoc não garante execução por padrão em Chimera, o terminal deve executar o programa como usuário mobile, não root, e o sandbox pode proibir processo externo de alcançar o diretório WR do app. PING/PONG não autentica assinatura nem habilita instalação. Nenhum artefato físico foi instalado no iPhone e nenhuma atualização de Build56 foi publicada. Chave de produção `nil`, sem helper privilegiado nem execução `appinst`. PR #90 permanece Draft, `main` intocada.
 
 **Gate imediato:** CI macOS do HEAD exato 6B deve ficar verde e publicar artefatos antes de solicitar teste no dispositivo; corrigir qualquer erro de empacotamento, teste de identidade, compilação ou assinatura.
+
+
+### Fase 6B2 — kit IPC verificável fora do CI (2026-11-05)
+
+A CI da Fase 6B mais recente estava em fila (#1190 e seguintes).
+Foi adicionado controle de concorrência em `.github/workflows/build.yml`
+para não desperdiçar os runners macOS verificando commits antigos
+da mesma branch: eventos push/PR compartilham a lane e a versão
+atual substitui execuções anteriores (exceto `main`).
+
+Novo `ci/verify_ipc_field_kit.py`: ferramenta portável Python 3,
+read-only, executada no PC após extrair o artefato
+`WebReader-IPC-iOS12-FieldTest-Kit`, que compara o hash de
+`WebReader-IPC-Probe-iOS12-unsigned.ipa` e
+`WebReader-Helper-Ping-iOS12` com os `.sha256` incluídos,
+verifica que a IPA tem Bundle ID `com.example.MangaReader12.ipcprobe`,
+build 56, mínimo iOS 12.0, nome WebReader IPC Test, sem
+`UIBackgroundModes`, e verifica header Mach-O arm64 do executável.
+Não executa o binário, não valida assinatura nem confia em IPAs
+de terceiros. O protótipo não concede instalação (campo false).
+Deve ser executado com `python ci/verify_ipc_field_kit.py --directory .`
+a partir da pasta extraída, após CI verde. Em caso de falha,
+não transferir arquivos ao telefone.
+
+Nova suíte `ci/test_verify_ipc_field_kit.py` exercita pacotes
+fictícios com hashes corrompidos, identidades diferentes, modo
+de background, arquitetura errada, links e entradas ZIP
+duplicadas; adicionada à CI. O verificador é incluído no
+artefato único e executado pelo workflow sobre o pacote
+real após empacotamento.
+
+**Gate:** CI do HEAD exato dessa versão ainda não foi confirmada;
+não executar testes no iPhone antes do verde. Build 56/`main`
+intactas, PR #90 Draft e sem execução do instalador.
