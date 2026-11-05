@@ -145,11 +145,12 @@ enum WebReaderHelperPingProbe {
         var answer = [UInt8](repeating: 0, count: expected.count)
         var received = 0
         while received < answer.count {
+            let remaining = answer.count - received
             let count = answer.withUnsafeMutableBytes { buffer -> Int in
                 guard let start = buffer.baseAddress else { return -1 }
                 return Darwin.recv(
                     fd, start.advanced(by: received),
-                    answer.count - received, 0
+                    remaining, 0
                 )
             }
             guard count > 0 else { return .rejected }
