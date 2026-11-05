@@ -282,6 +282,18 @@ jobs:
             WebReader-IPC-Probe-iOS12-unsigned.ipa
             WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
 
+      - name: Upload complete iOS12 IPC field-test kit (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-IPC-iOS12-FieldTest-Kit
+          if-no-files-found: error
+          path: |
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+            WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
+            WebReader-Helper-Ping-iOS12
+            WebReader-Helper-Ping-iOS12.sha256
+            docs/WEBREADER_IPC_DEVICE_TEST_PHASE6B_2026-11-05.md
+
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
         with:
