@@ -186,6 +186,30 @@ jobs:
             --installed-build 55 \
             --installed-ios 12.5.8
 
+      - name: Package isolated iOS12 HTTPS diagnostic IPA (branch push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+        run: |
+          ./ci/package_tls_probe_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+
+      - name: Assert diagnostic IPA has distinct bundle ID and preserves original
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+        run: |
+          python3 ci/test_tls_probe_ipa.py \
+            WebReader-iOS12-unsigned.ipa \
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+
+      - name: Upload standalone HTTPS diagnostic app (not a release)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-TLS-Probe-iOS12-Experimental
+          if-no-files-found: error
+          path: |
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+            WebReader-TLS-Probe-iOS12-unsigned.ipa.sha256
+
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4
         with:

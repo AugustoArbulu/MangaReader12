@@ -183,6 +183,18 @@ Acrescentamos uma ferramenta **somente leitura e acionada pelo usuário** na tel
 - A chave pública de produção continua `nil`, logo o **UpdateChecker** e o **IPAStager** permanecem inativos. **Esta função diagnóstica pode executar HEAD manualmente mesmo sem chave**, pois não trata metadados como confiáveis nem baixa arquivos.
 - **Não é teste físico:** a compatibilidade efetiva dos três hosts no iOS 12.5.8 só poderá ser medida com uma IPA de teste deliberada e instalada no aparelho. E a raiz do CDN não representa a URL final temporária de um asset específico de Release.
 
+### Fase 4C.1 — IPA física de diagnóstico **isolada** (2026-11-05)
+
+Para medir o HTTPS no **iOS 12.5.8 real** sem atualizar/desinstalar o WebReader aprovado, a CI da branch `feat/chimera-updater-phase1-protocol-audit` agora empacota **uma segunda IPA não assinada** somente em eventos de `push` dessa branch, nunca como GitHub Release:
+
+- `ci/package_tls_probe_ipa.sh` cria uma **cópia** do `.app` compilado, preserva a IPA principal e altera **somente na cópia** `CFBundleIdentifier` para `com.example.MangaReader12.httpsprobe`, `CFBundleDisplayName` para **WebReader TLS Test** e `CFBundleName` para **WebReaderTLS**. Mantém executável e iOS mínimo 12.0, com versão interna 56 (não é uma Build 57).
+- `ci/test_tls_probe_ipa.py` compara `Info.plist` da IPA de teste e da IPA principal, exigindo identificadores distintos, para impedir substituição do aplicativo real.
+- Artefato de CI (quando verde): **`WebReader-TLS-Probe-iOS12-Experimental`**, contendo `WebReader-TLS-Probe-iOS12-unsigned.ipa` e SHA-256. Não é uma atualização oficial; para testar será necessário assinar normalmente a IPA em procedimento voluntário, **sem executar `appinst` no WebReader**.
+- O app de teste é uma cópia do WebReader em **sandbox distinto**. Por segurança não deve ser usado como Biblioteca principal e **não substitui** o app já instalado; apenas navegue para **Ajustes → Atualizações do WebReader → Testar HTTPS do GitHub → Copiar relatório HTTPS**.
+- O relatório mede os três hosts fixos usando a verificação TLS padrão do iOS12. **Não prova** acesso ao ativo específico de Release nem autenticidade do `appinst`, e não envolve instalação automática.
+
+**QA físico pendente:** instalação da IPA isolada, coleta do relatório e comparação com Safari iOS12 onde necessário. Sem confirmação física, não classificar compatibilidade como aprovada.
+
 ## 4. Etapas obrigatórias antes de instalar IPAs
 
 ### A — Autenticidade de appinst e experimento isolado

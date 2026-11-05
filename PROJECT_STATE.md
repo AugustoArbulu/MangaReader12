@@ -1,5 +1,8 @@
 # PROJECT_STATE
 
+> **Updater Fase 4C.1 — IPA TLS isolada (2026-11-05):** CI da branch do [PR #90](https://github.com/AugustoArbulu/MangaReader12/pull/90) agora gera `WebReader-TLS-Probe-iOS12-unsigned.ipa` em artefato próprio, com **Bundle ID com.example.MangaReader12.httpsprobe** e nome **WebReader TLS Test**. É uma cópia da Build 56 em sandbox distinto, apenas para medir HEAD/TLS no iOS 12.5.8; não é Build 57, Release oficial ou instalador. Teste de comparativo Info.plist obrigatório no CI; **main estável e banco do WebReader não são modificados**. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
+
+
 > **Updater Fase 4C — TLS diagnóstico manual (2026-11-05):** PR [#90](https://github.com/AugustoArbulu/MangaReader12/pull/90) implementa `WebReaderReleaseHTTPSProbe.swift` com **HEAD** fixo para `raw.githubusercontent.com`, `github.com` e `release-assets.githubusercontent.com`, sem redirects, cookies ou downloads. Nova seção em Ajustes mostra e copia status HTTP/erros TLS; 403/404 não são contados como atualizações disponíveis. Testes `URLProtocol` totalmente offline; **CI e teste físico ainda pendentes neste checkpoint**. O UpdateChecker de produção segue desativado e **main/Build56 preservados**. [Handoff](docs/HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md).
 
 
