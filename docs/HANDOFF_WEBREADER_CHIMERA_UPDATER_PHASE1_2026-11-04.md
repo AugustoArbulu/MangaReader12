@@ -546,3 +546,46 @@ real após empacotamento.
 **Gate:** CI do HEAD exato dessa versão ainda não foi confirmada;
 não executar testes no iPhone antes do verde. Build 56/`main`
 intactas, PR #90 Draft e sem execução do instalador.
+
+
+### MVP2 — primeira ponte CLI real para appinst (05/11/2026, tarde)
+
+Nova implementação concreta no PR #90:
+- ci/webreader_appinst_bridge.c: ferramenta separada, C para
+  ARM64/iOS12, recusa EUID root. Modo selftest não executa nada;
+  modo inspect valida localmente uma IPA preparada pela UI
+  (caminho estrito do container, WebReader-build<N>-UUID.ipa,
+  dono mobile, sem symlinks/hardlinks, tamanho e SHA-256).
+- Comando install-confirmed exige confirmação textual literal
+  I-CONFIRM-INSTALL, valida SHA e chama o caminho fixo
+  /usr/bin/appinst via posix_spawn, nunca via shell. Tem timeout
+  e mensagens distintas para sucesso/erro. Este comando é real,
+  por isso **NÃO USAR NA BUILD56** antes de teste descartável.
+- ci/test_webreader_appinst_bridge.py: CI compila com binário
+  fake_appinst.sh e raiz de staging sintética embutida somente
+  em testes; nunca chama appinst de verdade. Testes negativos
+  de consentimento/argumentos, hash, caminho e links.
+- .github/workflows/build.yml: testa a ponte com appinst falso,
+  compila C para ARM64/iOS12 com codesign ad hoc, e publica
+  WebReader-Appinst-Bridge-iOS12-MOBILE-PREVIEW apenas como
+  artefato Actions experimental (não instala, não faz Release).
+- A tela WebReaderAppUpdatesViewController recebeu o fallback
+  **Copiar comando appinst (manual)**, disponível somente depois
+  de download/inspeção IPA bem-sucedidos. Copia o comando citado
+  com escape POSIX e avisa sobre teste com app descartável;
+  o app não o executa, não abre terminal nem solicita root.
+- O fluxo de verificação/baixa no GitHub segue separado do
+  modo de publicação P-256 anterior e exige release real
+  (o repositório ainda não tem GitHub Release publicado).
+
+Limites que NÃO devem ser omitidos: o CLI não comprova por
+conta própria a assinatura de editor ou conteúdo ZIP completo;
+o descritor é fechado antes de appinst abrir o arquivo. appinst
+recopia IPA no seu temporário, podendo criar janela TOCTOU.
+Não chamar a ponte automaticamente pelo aplicativo antes do
+teste físico do IPC no Chimera e dos dados em app descartável.
+Não há integração com botão Instalar nesta fase.
+
+Matriz: ci/test_webreader_appinst_bridge.py na CI e compilação
+Debug/Release do WebReader precisam estar verdes no HEAD exato.
+Sem merge na main, sem mudança da Build56 e sem instalação real.
