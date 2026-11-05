@@ -2,7 +2,7 @@ import UIKit
 
 /// In-app home for future signed WebReader application releases.
 /// This is deliberately SEPARATE from the existing chapter Updates tab and
-/// background Library updater. No appinst, IPA install, download, or IPC here.
+/// background Library updater. This screen may stage an authenticated IPA but never installs or runs appinst.
 final class WebReaderAppUpdatesViewController: UITableViewController {
     private var checker: WebReaderUpdateChecker?
     private var checking = false
@@ -12,6 +12,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var httpsResults: [WebReaderHTTPSProbeResult] = []
     private var testingHelper = false
     private var helperReport = "Ainda não testado"
+    private var stager: WebReaderIPAStager?
+    private var stagingIPA = false
+    private var stagedIPAURL: URL?
+    private var ipaStatus = "Aguardando validação do canal"
 
     // The isolated com.example.MangaReader12.ipcprobe IPA exposes only
     // version info and the local PING diagnostic; never the release controls.
@@ -59,6 +63,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         super.viewWillDisappear(animated)
         // Leaving this screen cannot accidentally trigger a later action.
         checker?.cancel()
+        stager?.cancel()
         httpsProbe?.cancel()
         httpsProbe = nil
         testingHTTPS = false
@@ -73,7 +78,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         numberOfRowsInSection section: Int
     ) -> Int {
         let source = sectionType(section)
-        if source == 2 { return availableUpdate != nil ? 2 : 1 }
+        if source == 1 { return 2 }
+        if source == 2 { return availableUpdate != nil ? 3 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -103,7 +109,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 "serão reconhecidos. Commits ou artefatos temporários do " +
                 "GitHub Actions não são atualizações disponíveis."
         case 2:
-            return "Consultar a versão não baixa nem instala uma IPA. " +
+            return "O download exige sua confirmação e validação de SHA-256/IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
         case 5:
             return "Este teste usa um socket local no sandbox e só envia " +
@@ -143,7 +149,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             cell.detailTextLabel?.text = "WebReader • iOS 12.0 ou posterior"
             cell.accessibilityLabel = "Versão instalada: " + installedBuildLabel
 
-        case (1, _):
+        case (1, 0):
             cell.textLabel?.text = "Canal de lançamentos"
             if WebReaderUpdateChannel.isConfigured {
                 cell.detailTextLabel?.text = "Assinatura configurada • consulta manual"
@@ -151,6 +157,12 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 cell.detailTextLabel?.text =
                     "Não ativado • aguardando publicação e chave confiável"
             }
+
+        case (1, 1):
+            cell.textLabel?.text = "Abrir GitHub Releases"
+            cell.detailTextLabel?.text = "Consultar lançamentos no GitHub"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
 
         case (2, 0):
             if checking {
@@ -177,11 +189,29 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 )
             }
 
+        case (2, 2):
+            if stagingIPA {
+                cell.textLabel?.text = "Baixando e validando IPA…"
+                cell.detailTextLabel?.text = "Saia da tela para cancelar"
+            } else if let file = stagedIPAURL,
+                FileManager.default.fileExists(atPath: file.path) {
+                cell.textLabel?.text = "Compartilhar IPA verificada"
+                cell.detailTextLabel?.text =
+                    "Exportar para instalação manual; não instala sozinha"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            } else {
+                cell.textLabel?.text = "Baixar IPA verificada"
+                cell.detailTextLabel?.text = ipaStatus
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
         case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
-                "O download e a instalação pelo Chimera só serão " +
-                "habilitados depois da validação do canal e do instalador."
+                "Download com manifesto assinado, SHA-256 e inspeção IPA. " +
+                "Instalação automática via appinst ainda indisponível."
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -281,6 +311,23 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             if indexPath.row == 2 { copyHelperReport() }
             return
         }
+        if selectedSection == 1, indexPath.row == 1 {
+            let url = URL(string:
+                "https://github.com/AugustoArbulu/MangaReader12/releases"
+            )!
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            return
+        }
+        if selectedSection == 2, indexPath.row == 2 {
+            guard !stagingIPA else { return }
+            if let file = stagedIPAURL,
+               FileManager.default.fileExists(atPath: file.path) {
+                shareStagedIPA(file)
+            } else {
+                confirmIPADownload()
+            }
+            return
+        }
         guard selectedSection == 2, indexPath.row == 0,
               WebReaderUpdateChannel.isConfigured, !checking
         else { return }
@@ -301,6 +348,81 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 self.tableView.reloadData()
             }
         }
+    }
+
+    private func confirmIPADownload() {
+        guard !isIPCDiagnostic, !stagingIPA,
+              WebReaderUpdateChannel.isConfigured,
+              let update = availableUpdate else { return }
+        let mb = Double(update.ipaSize) / (1024 * 1024)
+        let message = String(format:
+            "Build %d • %.1f MB. Baixar e validar agora? " +
+            "O aplicativo NÃO será instalado automaticamente.", update.build, mb)
+        let alert = UIAlertController(title: "Baixar IPA?", message: message,
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Baixar", style: .default) {
+            [weak self] _ in self?.startIPADownload(update)
+        })
+        present(alert, animated: true)
+    }
+
+    private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
+        guard !isIPCDiagnostic, !stagingIPA,
+              WebReaderUpdateChannel.isConfigured,
+              let current = availableUpdate,
+              current.build == update.build, current.sha256 == update.sha256
+        else { return }
+        stagingIPA = true
+        ipaStatus = "Baixando e verificando hash, versão e conteúdo da IPA"
+        tableView.reloadData()
+        let downloader = WebReaderIPAStager(verifiedUpdate: update)
+        stager = downloader
+        downloader.stage { [weak self, weak downloader] result in
+            DispatchQueue.main.async {
+                guard let self = self, let downloader = downloader,
+                      self.stager === downloader else { return }
+                self.stager = nil
+                self.stagingIPA = false
+                switch result {
+                case .staged(let url):
+                    self.stagedIPAURL = url
+                    self.ipaStatus = "IPA verificada e salva no aparelho"
+                case .failed(let failure):
+                    self.ipaStatus = self.stageFailureMessage(failure)
+                }
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func stageFailureMessage(_ failure: WebReaderIPAStageFailure) -> String {
+        switch failure {
+        case .disabled: return "Canal de lançamentos assinado não configurado"
+        case .busy: return "Já existe um download em andamento"
+        case .invalidRelease: return "Release fora das regras do WebReader"
+        case .storage: return "Não foi possível salvar a IPA"
+        case .transport: return "Download HTTPS não concluído"
+        case .redirectRejected: return "Redirecionamento de download não permitido"
+        case .unexpectedHTTPStatus(let code): return "Resposta HTTP " + String(code)
+        case .unexpectedContentType: return "Formato HTTP inesperado"
+        case .sizeMismatch: return "Tamanho da IPA não corresponde ao manifesto"
+        case .integrityMismatch: return "SHA-256 da IPA incorreto"
+        case .invalidIPA: return "Estrutura ou identidade da IPA inválida"
+        }
+    }
+
+    private func shareStagedIPA(_ url: URL) {
+        guard !isIPCDiagnostic,
+              FileManager.default.fileExists(atPath: url.path) else { return }
+        let activity = UIActivityViewController(activityItems: [url],
+            applicationActivities: nil)
+        if let popover = activity.popoverPresentationController {
+            popover.sourceView = tableView
+            popover.sourceRect = tableView.rectForRow(
+                at: IndexPath(row: 2, section: 2))
+        }
+        present(activity, animated: true)
     }
 
     private func startHTTPSProbe() {
