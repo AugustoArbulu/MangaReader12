@@ -45,6 +45,13 @@ def main():
     assert '"/usr/bin/appinst"' in source
     assert '(char *)"--help"' in source
     assert 'posix_spawn(&child, binary, NULL, NULL, arguments, environ)' in source
+    assert 'Diagnóstico lstat:' in source
+    assert 'Diagnóstico access(X_OK):' in source
+    assert 'Tentando posix_spawn diretamente' in source
+    diagnostic = source.split("    // Read-only metadata probes are advisory:", 1)[1]
+    before_spawn = diagnostic.split("    char * const arguments[]", 1)[0]
+    assert "return report;" not in before_spawn.split('if (lstat(binary, &st) != 0)', 1)[1].split('else if (!S_ISREG(st.st_mode))', 1)[0]
+    assert "return report;" not in before_spawn.split('if (access(binary, X_OK) != 0)', 1)[1]
     assert "UIAlertController" in source
     assert "Arquivos temporários" not in source or "temporári" in source
     assert "pode limpar arquivos temporários" in source
