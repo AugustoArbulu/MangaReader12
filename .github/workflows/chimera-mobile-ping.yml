@@ -23,6 +23,9 @@ jobs:
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
 
+      - name: Test native Swift IPC error stages against FAKE appinst
+        run: python3 ci/test_native_webreader_appinst_socket.py
+
       - name: Test PING-only mobile bridge with no installer code
         run: python3 ci/test_chimera_ping_only_bridge.py
 
