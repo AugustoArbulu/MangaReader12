@@ -1,4 +1,4 @@
-name: WebReader Build64 Personal Updater Manual QA
+name: WebReader Build64 FIX2 Installed App ID QA
 
 on:
   push:
@@ -14,6 +14,7 @@ on:
       - 'ci/chimera_webreader_qa.entitlements'
       - 'ci/test_webreader_build64_qa_ipa.py'
       - 'ci/check_build64_upgrade_compatibility.py'
+      - 'ci/test_build64_upgrade_compatibility.py'
       - 'ci/test_app_updates_screen.py'
       - 'ci/test_chimera_build62_install_admission.py'
       - '.github/workflows/chimera-build64-manual-qa.yml'
@@ -33,29 +34,25 @@ jobs:
     steps:
       - name: Checkout experimental branch
         uses: actions/checkout@v4
-
       - name: Select Xcode 16.4 for iOS12 ARM64 build
         run: |
           sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
-
       - name: App updates screen and blocked live installer tests
         run: |
           python3 ci/test_app_updates_screen.py
           python3 ci/test_chimera_build62_install_admission.py
-
+          python3 ci/test_build64_upgrade_compatibility.py
       - name: Offline native IPA validation and download tests
         run: |
           python3 ci/test_native_webreader_ipa_stager.py
           python3 ci/test_validate_webreader_ipa.py
-
       - name: Prepare icons and pinned WebP library
         run: |
           chmod +x ci/*.sh
           python3 ci/prepare_webreader_icons.py
           ./ci/prepare_libwebp_ios.sh
-
       - name: Compile WebReader for arm64 iOS12 without signing
         run: |
           xcodebuild \
@@ -69,21 +66,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             clean build
           test -f "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
-
-      - name: Sign and package isolated Build64 IPA (same Bundle ID, no install)
+      - name: Sign and package isolated Build64 FIX2 IPA (same Bundle ID, no install)
         run: |
           bash ci/package_webreader_build64_qa_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app" \
-            WebReader-Build64-QA-iOS12-adhoc.ipa
-
-      - name: Verify SHA256, app signature, application ID, and iOS12 compatibility
+            WebReader-Build64-FIX2-iOS12-adhoc.ipa
+      - name: Verify SHA256, signature, iOS12 and installed application ID
         run: |
           python3 ci/test_webreader_build64_qa_ipa.py \
-            WebReader-Build64-QA-iOS12-adhoc.ipa \
-            --sha256-file WebReader-Build64-QA-iOS12-adhoc.ipa.sha256 \
+            WebReader-Build64-FIX2-iOS12-adhoc.ipa \
+            --sha256-file WebReader-Build64-FIX2-iOS12-adhoc.ipa.sha256 \
             > WebReader-Build64-QA-audit.json
           cat WebReader-Build64-QA-audit.json
-
       - name: Compare package identity against the installed application
         id: upgrade_identity
         run: |
@@ -96,25 +90,23 @@ jobs:
               result = json.load(file)
           print("approved=" + str(result["upgradeIdentityMatch"]).lower())
           PY
-
       - name: Upload IPA only when the installed app identity matches
         if: steps.upgrade_identity.outputs.approved == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Build64-PersonalUpdater-ManualQA-iOS12
+          name: WebReader-Build64-FIX2-ManualQA-iOS12
           if-no-files-found: error
           retention-days: 14
           path: |
-            WebReader-Build64-QA-iOS12-adhoc.ipa
-            WebReader-Build64-QA-iOS12-adhoc.ipa.sha256
+            WebReader-Build64-FIX2-iOS12-adhoc.ipa
+            WebReader-Build64-FIX2-iOS12-adhoc.ipa.sha256
             WebReader-Build64-QA-audit.json
             WebReader-Build64-identity-gate.json
-
       - name: Upload rejection report only when identity differs
         if: steps.upgrade_identity.outputs.approved != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Build64-Blocked-UpgradeIdentity
+          name: WebReader-Build64-FIX2-Blocked-UpgradeIdentity
           if-no-files-found: error
           path: |
             WebReader-Build64-QA-audit.json

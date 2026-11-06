@@ -2,11 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Chimera + AppSync QA only. Synthetic prefix is not an Apple
-       Developer Team ID or provisioning profile. Unlike the earlier
-       unsigned Build64, this app has an application-identifier. No claim
-       that Build56's existing signature shares the same team identity. -->
+  <!-- Build64 personal QA: copy EXACT installed Build56 application-identifier
+       as reported by Filza on 2026-11-06. An ad-hoc signature is not a
+       provisioning profile and does not prove publisher/team identity. -->
   <key>application-identifier</key>
-  <string>WRQA000001.com.example.MangaReader12</string>
+  <string>AR5SFJC432.com.example.MangaReader12.AR5SFJC432</string>
 </dict>
 </plist>

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Build64 personal updater QA IPA audit. Offline, read-only, no installation.
-
-Invoke after package_webreader_build64_qa_ipa.sh to validate a real iOS
-build, its identity, and a checksum. The test never connects to a device.
-"""
+"""Build64 iOS12 QA archive audit: signature + exact installed application ID."""
 import argparse
 import hashlib
 import json
@@ -16,14 +12,14 @@ import zipfile
 
 from validate_webreader_ipa import validate_ipa, IPARejected
 
+INSTALLED_APP_ID = "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
 
 def audit(ipa: Path, checksum: Path):
     digest_parts = checksum.read_text("utf-8").strip().split()
     if len(digest_parts) != 2 or digest_parts[1] != ipa.name:
         raise ValueError("checksum must refer to the exact QA IPA")
     sha256 = digest_parts[0]
-    expected = hashlib.sha256(ipa.read_bytes()).hexdigest()
-    if sha256 != expected:
+    if hashlib.sha256(ipa.read_bytes()).hexdigest() != sha256:
         raise ValueError("SHA256 mismatch")
     report = validate_ipa(ipa, sha256, installed_build=56,
                           installed_ios="12.5.8")
@@ -32,19 +28,14 @@ def audit(ipa: Path, checksum: Path):
     with zipfile.ZipFile(ipa) as archive:
         name = "Payload/MangaReader12.app/"
         plist = plistlib.loads(archive.read(name + "Info.plist"))
-        if plist["CFBundleVersion"] != "64":
-            raise ValueError("QA CFBundleVersion mismatch")
-        if plist["MinimumOSVersion"] != "12.0":
-            raise ValueError("iOS12 minimum changed")
+        if plist["CFBundleVersion"] != "64" or plist["MinimumOSVersion"] != "12.0":
+            raise ValueError("QA build or minimum iOS mismatch")
         executable = archive.read(name + "MangaReader12")
         if len(executable) < 8 or executable[:4] != b"\xcf\xfa\xed\xfe":
-            raise ValueError("not a thin arm64 Mach-O application")
+            raise ValueError("not a thin ARM64 Mach-O executable")
         if struct.unpack_from("<I", executable, 4)[0] != 0x0100000C:
             raise ValueError("unexpected Mach-O CPU type")
-
-    # Extract only for read-only codesign inspection, not installation.
-    # A ZIP/IPA that passes the hash test can still lack an App ID.
-    with tempfile.TemporaryDirectory(prefix="wr64-adhoc-qa-") as directory:
+    with tempfile.TemporaryDirectory(prefix="wr64-fix2-qa-") as directory:
         subprocess.run(
             ["/usr/bin/ditto", "-x", "-k", str(ipa.resolve()), directory],
             check=True, capture_output=True, text=True
@@ -58,10 +49,9 @@ def audit(ipa: Path, checksum: Path):
             ["codesign", "-d", "--entitlements", ":-", str(app)],
             check=True, capture_output=True
         )
-        entitlements = plistlib.loads(signature.stdout)
-        expected = "WRQA000001.com.example.MangaReader12"
-        if entitlements != {"application-identifier": expected}:
-            raise ValueError("missing or mismatched application-identifier")
+        signed = plistlib.loads(signature.stdout)
+        if signed != {"application-identifier": INSTALLED_APP_ID}:
+            raise ValueError("application-identifier differs from installed Build56")
     assert report["installation_performed"] is False
     assert report["signature_or_origin_verified"] is False
     return {"status": "PASS", "build": 64,
@@ -70,9 +60,8 @@ def audit(ipa: Path, checksum: Path):
             "sha256": sha256,
             "bytes": report["bytes"],
             "adHocSignatureVerified": True,
-            "applicationIdentifier": "WRQA000001.com.example.MangaReader12",
+            "applicationIdentifier": INSTALLED_APP_ID,
             "installationPerformed": False}
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

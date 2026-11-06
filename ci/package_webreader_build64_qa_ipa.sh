@@ -1,9 +1,7 @@
 #!/bin/bash
-# Build64 personal WebReader IPA for explicit Filza QA only.
-# This package is never published as a GitHub Release or installed by CI.
-# The repository's stable Build56 metadata is not modified.
+# Build64 personal WebReader IPA for explicit Filza QA only; no in-app install.
+# Preserve main and stable Build56; do not sign the repository source tree.
 set -euo pipefail
-
 if [[ $# -ne 2 ]]; then
   echo "usage: package_webreader_build64_qa_ipa.sh APP_PATH OUTPUT_IPA" >&2
   exit 2
@@ -19,7 +17,6 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/Payload"
 /usr/bin/ditto "$APP_PATH" "$TMP/Payload/MangaReader12.app"
 APP="$TMP/Payload/MangaReader12.app"
-
 python3 - "$APP/Info.plist" <<'PY'
 from pathlib import Path
 import plistlib
@@ -35,10 +32,8 @@ assert (path.parent / "MangaReader12").is_file()
 info["CFBundleVersion"] = "64"
 path.write_bytes(plistlib.dumps(info, sort_keys=True))
 PY
-
-# AppSync may relax provisioning but does not create app entitlements.
-# Build60's disposable QA required an application-identifier entitlement.
-# Sign the COMPLETE bundle AFTER finalizing Info.plist.
+# FILZA rejects upgrade if this string differs from the installed app's
+# application-identifier entitlement; AppSync alone does not correct that.
 ENTITLEMENTS="$(cd "$(dirname "$0")/.." && pwd)/ci/chimera_webreader_qa.entitlements"
 codesign --force --sign - --timestamp=none --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --verbose=2 "$APP"
@@ -49,16 +44,15 @@ from pathlib import Path
 import sys
 signed = plistlib.loads(Path(sys.argv[1]).read_bytes())
 info = plistlib.loads(Path(sys.argv[2]).read_bytes())
-expected = "WRQA000001." + info["CFBundleIdentifier"]
+expected = "AR5SFJC432." + info["CFBundleIdentifier"] + ".AR5SFJC432"
 assert info["CFBundleVersion"] == "64"
 assert signed == {"application-identifier": expected}, signed
-print("PASS: ad hoc signed Build64 has correct application-identifier")
+print("PASS: candidate application-identifier equals installed Build56 Filza string")
 PY
-
 (
   cd "$TMP"
   /usr/bin/zip -qry "$OLDPWD/$OUTPUT" Payload
 )
 shasum -a 256 "$OUTPUT" > "$OUTPUT.sha256"
-echo "Build64 QA-only ad hoc signed IPA created; same bundle ID, no installer"
+echo "Build64 FIX2 manual QA IPA signed; installer inactive."
 echo "SHA256 manifest: $OUTPUT.sha256"
