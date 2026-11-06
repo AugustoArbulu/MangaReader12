@@ -70,7 +70,7 @@ assert "appinst" not in helper or "install an IPA" in helper
 # Explicit staging is allowed after a verified update and user confirmation.
 assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
 assert 'if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }' in screen
-assert '"Instalar atualização (Chimera)"' in screen
+assert '"Instalar atualização (Chimera)"' not in screen
 assert 'build60DisposableAvailable' in screen
 assert '"Teste completo Build 60"' in screen
 assert 'copyBuild60DisposableProcedure()' in screen
@@ -78,16 +78,20 @@ assert 'copyBuild60DisposableProcedure()' in screen
 # as a separate quoted Swift expression.
 assert 'run-disposable-qa I-CONFIRM-DISPOSABLE-ONLY' in screen
 assert 'WebReader-Chimera-Disposable-Gate-iOS12' in screen
-assert 'confirmAppinstInstallation()' in screen
-assert 'WebReaderAppinstSocket.install(' in screen
-assert 'title: "Confirmar instalação", style: .destructive' in screen
-assert 'stagedSHA256 == update.sha256' in screen
+# Build62: public GitHub SHA256 + localhost must never reach appinst.
+assert 'confirmAppinstInstallation()' not in screen
+assert 'requestAppinstInstallation(' not in screen
+assert 'WebReaderAppinstSocket.install(' not in screen
+assert 'Instalação pelo Chimera bloqueada' in screen
+assert 'Aguardando identidade do solicitante e assinatura editorial' in screen
+assert 'if selectedSection == 2, indexPath.row == 3 ||' in screen
+assert 'selectedSection == 2, indexPath.row == 4 { return }' in screen
 assert 'self.stagedSHA256 = update.sha256' in screen
 assert "WebReaderAppinstSocket.swift in Sources" in project
-assert '"Copiar comando appinst (manual)"' in screen
-assert 'copyManualAppinstCommand(file)' in screen
-assert 'UIPasteboard.general.string = "appinst " + quotedPath' in screen
-assert 'message: "A IPA já foi baixada e verificada.' in screen
+assert '"Copiar comando appinst (manual)"' not in screen
+assert 'copyManualAppinstCommand(' not in screen
+assert 'UIPasteboard.general.string = "appinst "' not in screen
+assert '"Instalação manual indisponível"' in screen
 assert '"Baixar IPA verificada"' in screen
 assert "update.provenance == .publicGitHubRelease" in screen
 assert '"Compartilhar IPA verificada"' in screen
@@ -104,4 +108,4 @@ assert 'guard !isIPCDiagnostic' in screen
 for forbidden in ("appinst(", "Process(", "posix_spawn(", "dlopen(", "system("):
     assert forbidden not in screen, forbidden
 
-print("PASS WebReader iOS12 update UI: signed manual staging/share; no install")
+print("PASS WebReader iOS12 update UI: verified export only; no install IPC or copied appinst command")
