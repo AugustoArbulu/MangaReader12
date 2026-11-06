@@ -37,7 +37,7 @@ def main():
         assert info["CFBundleIdentifier"] == "com.example.MangaReader12.ipcprobe"
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader IPC Test"
-        assert info["CFBundleVersion"] == "58"
+        assert info["CFBundleVersion"] == "59"
         assert info["MinimumOSVersion"] == "12.0"
         assert "UIBackgroundModes" not in info
         assert executable[:4] == b"\xcf\xfa\xed\xfe"
