@@ -1,0 +1,41 @@
+name: WebReader Build66 IPA Preflight Security QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build66_ipa_preflight.py'
+      - 'ci/test_build66_ipa_preflight.py'
+      - '.github/workflows/chimera-build66-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build66-preflight
+  cancel-in-progress: false
+
+jobs:
+  synthetic-preflight-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout experimental code
+        uses: actions/checkout@v4
+      - name: Run synthetic IPA negative tests
+        run: python3 -W ignore::UserWarning -m unittest discover -s ci -p 'test_build66_ipa_preflight.py' -v
+      - name: Ensure live installation remains disabled
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'DispatchQueue.main.async { completion(.rejected) }' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+      - name: Confirm preflight does not invoke installer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('ci/build66_ipa_preflight.py').read_text()
+          for forbidden in ('subprocess', 'os.system', 'posix_spawn', 'appinst(', 'requests.', 'urllib.request'):
+              assert forbidden not in code, forbidden
+          print('PASS: no installation or network invocation in preflight')
+          PY
