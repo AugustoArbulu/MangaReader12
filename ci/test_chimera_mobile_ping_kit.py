@@ -49,6 +49,9 @@ def main():
     assert b"WEBREADER_PING_ONLY" in helper
     assert b"WRLOOPBACK_READY" in helper
     assert b"LOOPBACK_ACCEPTED_127_0_0_1" in helper
+    assert b"WRPAIR_READY" in helper
+    assert b"WR-PAIR-CLIENT-V1" in helper
+    assert b"WR-PAIR-SERVER-V1" in helper
     nm = subprocess.run(
         ["xcrun", "nm", "-u", str(HELPER)], check=True,
         capture_output=True, text=True
