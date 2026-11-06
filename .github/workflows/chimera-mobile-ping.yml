@@ -61,6 +61,7 @@ jobs:
           python3 ci/prepare_webreader_icons.py
           ./ci/prepare_libwebp_ios.sh
           python3 ci/test_ipc_probe_launch.py
+          python3 ci/test_app_updates_screen.py
 
       - name: Build and audit TWO disposable iOS12 apps with isolated Bundle ID
         run: |
