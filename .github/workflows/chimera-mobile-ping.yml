@@ -68,7 +68,7 @@ jobs:
 
       - name: Package one IPC diagnostic IPA and checksum
         run: |
-          bash ci/package_ipc_probe_ipa.sh \
+          WEBREADER_IPC_PROBE_BUILD=57 bash ci/package_ipc_probe_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
             WebReader-IPC-Probe-iOS12-unsigned.ipa
 
