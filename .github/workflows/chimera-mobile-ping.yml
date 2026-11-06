@@ -32,16 +32,16 @@ jobs:
             -std=c11 -Os -Wall -Wextra -Werror -Wno-deprecated-declarations \
             -DWEBREADER_PING_ONLY -arch arm64 -miphoneos-version-min=12.0 \
             ci/webreader_appinst_bridge.c \
-            -o WebReader-Chimera-Mobile-Ping-Entitled-iOS12
+            -o WebReader-Chimera-Ping-DIAG-iOS12
           codesign --force --sign - --timestamp=none \
             --entitlements ci/chimera_mobile_ping.entitlements \
-            WebReader-Chimera-Mobile-Ping-Entitled-iOS12
-          codesign --verify --verbose WebReader-Chimera-Mobile-Ping-Entitled-iOS12
+            WebReader-Chimera-Ping-DIAG-iOS12
+          codesign --verify --verbose WebReader-Chimera-Ping-DIAG-iOS12
           /usr/libexec/PlistBuddy -c 'Print :com.apple.private.security.no-container' \
             ci/chimera_mobile_ping.entitlements | grep -x true
-          codesign -d --entitlements :- WebReader-Chimera-Mobile-Ping-Entitled-iOS12 > signed-entitlements.plist 2>/dev/null
+          codesign -d --entitlements :- WebReader-Chimera-Ping-DIAG-iOS12 > signed-entitlements.plist 2>/dev/null
           python3 -c "import plistlib; p=plistlib.load(open('signed-entitlements.plist','rb')); assert p=={'com.apple.private.security.no-container': True}, p"
-          shasum -a 256 WebReader-Chimera-Mobile-Ping-Entitled-iOS12 > WebReader-Chimera-Mobile-Ping-Entitled-iOS12.sha256
+          shasum -a 256 WebReader-Chimera-Ping-DIAG-iOS12 > WebReader-Chimera-Ping-DIAG-iOS12.sha256
 
       - name: Prepare iOS12 WebReader app assets
         run: |
@@ -75,11 +75,11 @@ jobs:
       - name: Upload one ZIP for external Chimera socket test
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Chimera-Mobile-PING-Kit-iOS12
+          name: WebReader-Chimera-Mobile-PING-DIAG-iOS12
           if-no-files-found: error
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
             WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
-            WebReader-Chimera-Mobile-Ping-Entitled-iOS12
-            WebReader-Chimera-Mobile-Ping-Entitled-iOS12.sha256
+            WebReader-Chimera-Ping-DIAG-iOS12
+            WebReader-Chimera-Ping-DIAG-iOS12.sha256
             docs/WEBREADER_PONTE_CHIMERA_PING_2026-11-06.md
