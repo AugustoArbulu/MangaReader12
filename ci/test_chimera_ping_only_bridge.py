@@ -5,6 +5,7 @@ Host exercises the exact C one-shot socket protocol without any appinst call.
 The built iPhone QA binary uses the same WEBREADER_PING_ONLY mode.
 """
 import os
+import select
 from pathlib import Path
 import socket
 import subprocess
@@ -108,6 +109,40 @@ class PingOnlyTests(unittest.TestCase):
         _, stderr = process.communicate(timeout=2)
         self.assertIn(b"WRDIAG: NO_CONNECTION", stderr)
         self.assertFalse(self.sock.exists())
+
+    def start_loopback(self):
+        process = subprocess.Popen(
+            [str(self.binary), "serve-loopback-once"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.addCleanup(self.stop, process)
+        readable, _, _ = select.select([process.stdout], [], [], 2)
+        if not readable:
+            self.fail("Loopback helper never reported READY")
+        ready = process.stdout.readline()
+        self.assertIn(b"WRLOOPBACK_READY", ready)
+        return process
+
+    def test_loopback_ping_only_listens_on_127_0_0_1(self):
+        process = self.start_loopback()
+        with socket.create_connection(("127.0.0.1", 38971), timeout=2) as client:
+            self.assertEqual(client.getpeername()[0], "127.0.0.1")
+            client.sendall(b"WRPING1\\n")
+            self.assertEqual(client.recv(8), b"WRPONG1\\n")
+        self.assertEqual(process.wait(timeout=3), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"WRDIAG: LOOPBACK_ACCEPTED_127_0_0_1", stderr)
+        self.assertIn(b"WRDIAG: PING matched; PONG send OK", stderr)
+        self.assertIn(b"WRDIAG: LOOPBACK_REQUEST_FINISHED result=0", stderr)
+
+    def test_loopback_refuses_install_header(self):
+        process = self.start_loopback()
+        with socket.create_connection(("127.0.0.1", 38971), timeout=2) as client:
+            client.sendall(b"WRINST1\\n")
+            self.assertEqual(client.recv(8), b"WRFAIL1\\n")
+        self.assertNotEqual(process.wait(timeout=3), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"WRDIAG: request header not PING", stderr)
 
     def test_cli_cannot_install_even_with_install_confirmed_flag(self):
         process = subprocess.run(
