@@ -819,16 +819,24 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             "App: " + installedBuildLabel,
             "iOS: " + ios,
             "Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido"),
-            isIPCDiagnostic ?
-                "Transporte atual: TCP 127.0.0.1:38971 • PING/PONG somente" :
-                "Socket: UNIX local • PING/PONG somente",
+            build60DisposableAvailable ?
+                "Transporte PING: TCP 127.0.0.1:38971 • sem instalação" :
+                (isIPCDiagnostic ?
+                    "Transporte PING: TCP 127.0.0.1:38971 • sem instalação" :
+                    "Socket: UNIX local • PING/PONG somente"),
+            build60DisposableAvailable ?
+                "Pareamento: TCP 127.0.0.1:38972 • somente posse de código" :
+                "Pareamento: ver campo de resultado abaixo",
             "Pasta (comprimento UTF-8): " +
                 String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
             helperReport,
             "Ponte appinst (PING): " + appinstBridgeReport,
             "Pareamento sem instalação: " +
                 (pairingDiagnosticAvailable ? pairingReport : "indisponível"),
-            "Nenhum comando appinst executado neste diagnóstico"
+            "Nenhum comando appinst executado neste diagnóstico",
+            build60DisposableAvailable ?
+                "Instalação do app descartável: teste SEPARADO no NewTerm" :
+                "Instalação do app descartável: indisponível"
         ]
         UIPasteboard.general.string = lines.joined(separator: "\n")
         let alert = UIAlertController(
