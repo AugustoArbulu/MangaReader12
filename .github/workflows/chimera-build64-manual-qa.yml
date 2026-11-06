@@ -13,6 +13,7 @@ on:
       - 'ci/package_webreader_build64_qa_ipa.sh'
       - 'ci/chimera_webreader_qa.entitlements'
       - 'ci/test_webreader_build64_qa_ipa.py'
+      - 'ci/check_build64_upgrade_compatibility.py'
       - 'ci/test_app_updates_screen.py'
       - 'ci/test_chimera_build62_install_admission.py'
       - '.github/workflows/chimera-build64-manual-qa.yml'
@@ -83,7 +84,21 @@ jobs:
             > WebReader-Build64-QA-audit.json
           cat WebReader-Build64-QA-audit.json
 
-      - name: Publish only manual QA artifact to Actions, never GitHub Release
+      - name: Compare package identity against the installed application
+        id: upgrade_identity
+        run: |
+          python3 ci/check_build64_upgrade_compatibility.py \
+            WebReader-Build64-QA-audit.json \
+            --output WebReader-Build64-identity-gate.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          with open("WebReader-Build64-identity-gate.json") as file:
+              result = json.load(file)
+          print("approved=" + str(result["upgradeIdentityMatch"]).lower())
+          PY
+
+      - name: Upload IPA only when the installed app identity matches
+        if: steps.upgrade_identity.outputs.approved == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: WebReader-Build64-PersonalUpdater-ManualQA-iOS12
@@ -93,3 +108,14 @@ jobs:
             WebReader-Build64-QA-iOS12-adhoc.ipa
             WebReader-Build64-QA-iOS12-adhoc.ipa.sha256
             WebReader-Build64-QA-audit.json
+            WebReader-Build64-identity-gate.json
+
+      - name: Upload rejection report only when identity differs
+        if: steps.upgrade_identity.outputs.approved != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build64-Blocked-UpgradeIdentity
+          if-no-files-found: error
+          path: |
+            WebReader-Build64-QA-audit.json
+            WebReader-Build64-identity-gate.json
