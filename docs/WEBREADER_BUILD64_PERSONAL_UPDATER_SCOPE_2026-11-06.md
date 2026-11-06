@@ -40,3 +40,28 @@ Preservar `main`, Build 56 e helper PING da Build 61; PR #90 continua experiment
 - **Objetivo final obrigatório:** o próprio WebReader deverá consultar o GitHub, detectar a nova versão, obter a IPA do Release, verificar integridade e identidade do pacote, solicitar confirmação explícita e instalar a atualização no dispositivo com o helper compatível com Chimera/`appinst`, sem e-mail, computador nem Filza.
 - **Após validação do atualizador integrado:** parar de usar o e-mail como mecanismo rotineiro de distribuição; e-mail somente como alternativa excepcional se o usuário solicitar ou houver falha de atualização. Não interpretar a preferência como autorização para envios automáticos em background.
 - **Preservação:** atualizar o mesmo app sem desinstalar, com backup e validação de manutenção da biblioteca, configurações e downloads. Nenhuma instalação silenciosa ou disparada por outros processos locais.
+
+## Incremento Build64 — implementação e QA automatizado
+
+Implementação na branch experimental, mantendo main intacta:
+- A tela de atualizações oferece instruções de instalação manual pelo Filza.
+- Antes de compartilhar uma IPA já baixada, a UI repete a inspeção nativa do arquivo (SHA-256, diretório ZIP, Info.plist, Bundle ID, build e iOS mínimo). Arquivo alterado é recusado, com orientação para baixar novamente.
+- \`WebReaderAppinstSocket.install\` segue rejeitando chamadas em produção; a Build61 não foi alterada.
+- Pipeline dedicado em \`.github/workflows/chimera-build64-manual-qa.yml\` testa a UI, a proibição do instalador real, o stager offline, compila WebReader ARM64/iOS12 e empacota IPA de QA com o mesmo Bundle ID do app estável. A branch fonte continua identificada como Build56; somente a IPA temporária tem CFBundleVersion=64.
+- CI concluído **SUCCESS**: https://github.com/AugustoArbulu/MangaReader12/actions/runs/42191908939
+- Artefato Actions: \`WebReader-Build64-PersonalUpdater-ManualQA-iOS12\` (id 13490441704), contendo IPA, checksum e relatório.
+- IPA: \`WebReader-Build64-QA-iOS12-unsigned.ipa\` (17.727.405 bytes).
+- SHA-256: \`5d0aaa951b000532896680f00ee9ef39aa3e18269fba2b3898549fe73bff97bd\`.
+- Relatório do CI: \`status=PASS\`, \`build=64\`, \`bundleID=com.example.MangaReader12\`, \`minimumIOS=12.0\`, \`installationPerformed=false\`.
+
+## Instruções de teste físico (somente depois de backup)
+
+A IPA de QA tem o **mesmo Bundle ID** do WebReader Build56, portanto instalá-la pelo Filza poderá **atualizar/substituir** o aplicativo instalado. A estrutura e o checksum passaram no CI, mas preservação real de dados e funcionamento em Chimera precisam de teste no iPad. Antes de instalar, fazer backup da biblioteca, configurações e downloads; **não desinstalar a Build56**. Confirmar que o bundle antigo é atualizado e que biblioteca/leitura offline permanecem.
+
+Abrir WebReader Build64 -> Configurações -> Atualizações do WebReader. Conferir que aparece "Como instalar pelo Filza", que a instalação Chimera permanece bloqueada e que não há instalação silenciosa. O fluxo completo de download/compartilhamento depende da publicação de um GitHub Release público com build superior ao instalado e ainda **não foi validado fisicamente**. Não tratar a ausência de Release como falha da tela.
+
+A IPA de QA **não** implementa atualização por appinst. Não conectar a Build61 ao instalador. O objetivo final continua download do GitHub + instalação confirmada dentro do WebReader.
+
+## Entrega
+
+O arquivo IPA excede o limite de anexo direto de 3 MB do Outlook conectado. Entregar link de download e checksum por e-mail (ou por chat), sem afirmar que IPA de 17 MB foi anexada. Após conclusão e avaliação do QA, continuar protótipo de helper de instalação controlado. Não publicar Release automática ou substituir o usuário.
