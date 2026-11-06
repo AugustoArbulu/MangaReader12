@@ -314,6 +314,12 @@ static int socket_request(int connection, const char *directory) {
     if (memcmp(header, SOCKET_PING, 8) == 0) {
         return send_all(connection, SOCKET_PONG, 8) ? 0 : 1;
     }
+#ifdef WEBREADER_PING_ONLY
+    /* Device QA binary cannot execute installer even if a client sends
+       a formally valid INSTALL request. PING is the only allowed opcode. */
+    (void)send_all(connection, SOCKET_FAILURE, 8);
+    return 1;
+#else
     if (memcmp(header, INSTALL_HEADER, 8) != 0 ||
         !recv_all(connection, two, 2)) return 1;
     length = ((unsigned char)two[0] << 8) | (unsigned char)two[1];
@@ -338,6 +344,7 @@ static int socket_request(int connection, const char *directory) {
     }
     (void)send_all(connection, SOCKET_FAILURE, 8);
     return 1;
+#endif
 }
 
 static int serve_once(const char *directory) {
@@ -404,6 +411,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (argc == 2 && strcmp(argv[1], "selftest") == 0) {
+#ifdef WEBREADER_PING_ONLY
+        puts("WEBREADER_PING_ONLY: no IPA installation supported");
+#else
         struct stat installed;
         puts("WEBREADER_APPINST_BRIDGE_PRESENT (non-root, no installation)");
         if (lstat(APPINST_BINARY, &installed) == 0 &&
@@ -412,11 +422,13 @@ int main(int argc, char **argv) {
         } else {
             puts("APPINST_PATH_UNAVAILABLE /usr/bin/appinst (not executed)");
         }
+#endif
         return 0;
     }
     if (argc == 3 && strcmp(argv[1], "serve-once") == 0) {
         return serve_once(argv[2]);
     }
+#ifndef WEBREADER_PING_ONLY
     if (argc >= 2 && strcmp(argv[1], "inspect") == 0 && argc == 4) {
         if (!verified_file(argv[2], argv[3])) {
             fputs("IPA path or SHA-256 rejected; no installation\n", stderr);
@@ -435,7 +447,12 @@ int main(int argc, char **argv) {
          * for a disposable-app validation after explicit user approval. */
         return invoke_appinst(argv[2]);
     }
+#endif
+#ifdef WEBREADER_PING_ONLY
+    fputs("Usage: selftest | serve-once <app-container/WR> (PING only)\n", stderr);
+#else
     fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256> | "
           "install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n", stderr);
+#endif
     return 2;
 }
