@@ -84,14 +84,16 @@ assert 'requestAppinstInstallation(' not in screen
 assert 'WebReaderAppinstSocket.install(' not in screen
 assert 'Instalação pelo Chimera bloqueada' in screen
 assert 'Aguardando identidade do solicitante e assinatura editorial' in screen
-assert 'if selectedSection == 2, indexPath.row == 3 ||' in screen
-assert 'selectedSection == 2, indexPath.row == 4 { return }' in screen
+assert 'if selectedSection == 2, indexPath.row == 3 {' in screen
+assert "showFilzaInstructions()" in screen
+assert 'if selectedSection == 2, indexPath.row == 4 { return }' in screen
 assert 'self.stagedSHA256 = update.sha256' in screen
 assert "WebReaderAppinstSocket.swift in Sources" in project
 assert '"Copiar comando appinst (manual)"' not in screen
 assert 'copyManualAppinstCommand(' not in screen
 assert 'UIPasteboard.general.string = "appinst "' not in screen
-assert '"Instalação manual indisponível"' in screen
+assert '"Como instalar pelo Filza"' in screen
+assert '"Instalação manual no Filza"' in screen
 assert '"Baixar IPA verificada"' in screen
 assert "update.provenance == .publicGitHubRelease" in screen
 assert '"Compartilhar IPA verificada"' in screen
@@ -102,6 +104,10 @@ assert 'let current = availableUpdate' in screen
 assert 'WebReaderUpdateChannel.isConfigured' in screen
 assert 'stager?.cancel()' in screen
 assert 'UIActivityViewController(activityItems: [url]' in screen
+assert "verifyingExport" in screen
+assert "WebReaderNativeIPAAuditor.inspect(" in screen
+assert 'self.ipaStatus = "IPA alterada ou inválida; baixe novamente"' in screen
+assert 'guard self.view.window != nil else { return }' in screen
 assert '"https://github.com/AugustoArbulu/MangaReader12/releases"' in screen
 assert 'guard !isIPCDiagnostic' in screen
 # No automatic installation, root helper or shell execution in UIKit.
