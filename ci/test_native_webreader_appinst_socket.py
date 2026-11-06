@@ -45,6 +45,7 @@ import Foundation
         case .completed: exit(0)
         case .unavailable: exit(3)
         case .rejected: exit(4)
+        case .diagnosticFailure: exit(4)
         case .failed: exit(5)
         }
     }
@@ -159,6 +160,33 @@ class NativeSocketIntegration(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PONG", result.stdout)
         self.assertEqual(server.wait(timeout=4), 0)
+        self.assertFalse(self.marker.exists())
+
+    def test_ping_rejects_non_socket_with_specific_stage(self):
+        fake = self.socket_dir / "wri.sock"
+        fake.write_text("not a socket")
+        try:
+            result = self.run_client("ping")
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            self.assertIn("wri.sock não é socket", result.stdout)
+            self.assertFalse(self.marker.exists())
+        finally:
+            fake.unlink(missing_ok=True)
+
+    def test_ping_rejects_unsafe_directory_with_specific_stage(self):
+        self.socket_dir.chmod(0o777)
+        try:
+            result = self.run_client("ping")
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            self.assertIn("permissões WR não são privadas", result.stdout)
+            self.assertFalse(self.marker.exists())
+        finally:
+            self.socket_dir.chmod(0o700)
+
+    def test_ping_without_server_preserves_unavailable(self):
+        result = self.run_client("ping")
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertIn("não está em execução", result.stdout)
         self.assertFalse(self.marker.exists())
 
     def test_bad_sha_fails_and_installer_not_called(self):
