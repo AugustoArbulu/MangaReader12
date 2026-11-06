@@ -8,12 +8,12 @@ A prova HMAC não autentica a assinatura nem o Bundle ID da aplicação. É INSE
 
 ## Conteúdo de UM artifact de GitHub Actions
 
-Artifact: WebReader-Chimera-Build60-OneBatch-iOS12
+Artifact: WebReader-Chimera-Build60-SignedQA-iOS12
 
 - WebReader-IPC-Probe-iOS12-unsigned.ipa — Build60 diagnóstica independente, HMAC e PING.
 - WebReader-Chimera-Ping-DIAG-iOS12 — apenas PING/HMAC, sem símbolos de instalação.
 - WebReader-Chimera-Disposable-Gate-iOS12 — helper específico do teste de atualização descartável; não possui listener de rede.
-- WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa e v2 — mesmo Bundle ID descartável, diferentes versões.
+- WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa e v2 — mesmo Bundle ID descartável, diferentes versões.
 - Hashes SHA-256 de cada artefato.
 
 O gate incorpora por compilação os dois hashes SHA-256 calculados após a construção das IPAs auditadas. Não aceita caminho, hash ou Bundle ID recebidos por TCP, Swift ou linha de comando. Os únicos comandos permitidos são selftest, inspect-v1, inspect-v2, install-v1, install-v2 e run-disposable-qa (orquestra v1→v2 em um comando, exigindo NEXT no meio). Instalação requer a frase literal I-CONFIRM-DISPOSABLE-ONLY.
@@ -50,3 +50,11 @@ Se aparecer zsh: killed, assinatura inválida, SHA diferente ou appinst falhar: 
 - Backup e confirmação específica do usuário para atualizar o WebReader.
 
 Estado preservado: PR #90 Draft na branch feat/chimera-updater-phase1-protocol-audit, main intocada, Build56 principal preservada, nenhum release publicado e nenhuma instalação real executada até teste físico autorizado.
+
+## Correção de assinatura após QA física inicial (06/11/2026)
+
+Usuário tentou instalar v1 com o gate Build60 aprovado e obteve `MIInstallerErrorDomain Code=3: Application is missing the application-identifier entitlement`. A conferência de ambas as IPAs pelo gate SHA-256 foi bem-sucedida, mas `appinst` falhou na validação do iOS. Nenhuma v1 foi instalada e nenhuma v2 executada.
+
+Correção na branch experimental: gerar **duas IPAs ad-hoc assinadas**, cada uma com entitlement `application-identifier` igual a `WRQA000001.com.example.WebReaderAppinstDisposableTest`, via `codesign` no pacote `.app` depois do Info.plist. O prefixo é um identificador sintético exclusivo do laboratório, **não** Team ID de assinatura Apple e **não** autentica autor no iOS sem jailbreak. Ambas as versões compartilham o mesmo App ID, necessário para testar atualização. CI agora audita assinatura de ambos os `.app`, suas entitlements exatas, `CodeResources` e igualdade dos bytes do segmento Mach-O __TEXT,__text. Gate e nomes de IPAs foram atualizados para sufixo `-adhoc.ipa` e hashes recompilados, para que o pacote antigo `-unsigned.ipa` não seja aceito por engano.
+
+**Não reutilizar o ZIP anterior** `WebReader-Chimera-Build60-OneBatch-iOS12`; aguardar CI verde do novo `WebReader-Chimera-Build60-SignedQA-iOS12`. Ainda não há prova física de instalação da versão ad-hoc.
