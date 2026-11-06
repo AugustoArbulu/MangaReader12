@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# Only the newest diagnostic build is useful. Do not occupy macOS runners
+# with superseded intermediate commits on the experimental feature branch.
+concurrency:
+  group: webreader-chimera-ipc-client-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ping-kit:
     runs-on: macos-15
