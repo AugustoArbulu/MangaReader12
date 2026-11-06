@@ -39,3 +39,11 @@
 2. Somente após SUCCESS, obter artefato, validar hash e assinatura, enviar as partes e os comandos em linhas isoladas.
 3. Teste físico voluntário depois de backup e confirmação no NewTerm de `OK`.
 4. Se Filza reportar nova incompatibilidade, interromper e diagnosticar sem limpar dados nem desinstalar.
+
+## Rechecagem de 06/11/2026 — 13h42 BRT
+
+- A run [#42247451036](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42247451036) foi consultada novamente após o retry: job `verified-export-only`, ID `128013439234`, estado **queued**, sem steps iniciados, e a API retornou lista **vazia** de artifacts. Portanto **nenhuma IPA FIX2 verificável foi produzida** nesta consulta.
+- Workflow conferido: runner `macos-15` com Xcode 16.4 e iOS SDK 18.5, build iOS12 arm64 e gate `upgradeIdentityMatch` antes de publicar a IPA. O empacotamento exige que a assinatura extraída contenha exatamente `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`.
+- A PR #90 permanece aberta, **Draft**, sem merge na `main`. Nenhuma mudança no app instalado, na assinatura ou no workflow foi feita nesta rechecagem.
+- A página pública do GitHub Status registra interrupções recentes de Actions em 04–05/11, já resolvidas. Não há prova de que esses incidentes expliquem esta fila específica; a classificação permanece **runner pendente, causa não confirmada**.
+- **Não disparar outro retry enquanto este job estiver queued; não enviar a FIX1; não inventar hash para FIX2.** Reavaliar jobs e artifacts quando o GitHub atualizar; apenas após SUCCESS e auditoria independente planejar entrega e instruções separadas para NewTerm2.
