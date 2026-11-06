@@ -78,7 +78,7 @@ jobs:
       - name: Upload one ZIP for external Chimera socket test
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Chimera-Mobile-PING-DIAG-iOS12
+          name: WebReader-IPC-Client-DIAG-iOS12
           if-no-files-found: error
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
