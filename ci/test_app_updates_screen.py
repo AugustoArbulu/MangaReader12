@@ -30,7 +30,7 @@ assert 'cell.textLabel?.text = testingHTTPS ?' in screen
 assert '"Testar HTTPS do GitHub"' in screen
 assert 'UIPasteboard.general.string = lines.joined(separator: "\\n")' in screen
 assert "return isIPCDiagnostic ? 2 : 6" in screen
-assert "if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }" in screen
+assert "if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }" in screen
 
 assert "current.check { [weak self] result in" in screen
 assert "statusDescription" in screen
@@ -69,8 +69,13 @@ assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
 assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
-assert 'if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }' in screen
+assert 'if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }' in screen
 assert '"Instalar atualização (Chimera)"' in screen
+assert 'build60DisposableAvailable' in screen
+assert '"Teste completo Build 60"' in screen
+assert 'copyBuild60DisposableProcedure()' in screen
+assert '"I-CONFIRM-DISPOSABLE-ONLY"' in screen
+assert 'WebReader-Chimera-Disposable-Gate-iOS12' in screen
 assert 'confirmAppinstInstallation()' in screen
 assert 'WebReaderAppinstSocket.install(' in screen
 assert 'title: "Confirmar instalação", style: .destructive' in screen
