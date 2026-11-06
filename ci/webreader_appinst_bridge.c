@@ -598,12 +598,17 @@ static int serve_pair_once(void) {
     char response[40] = {0};
     size_t i;
     int no_sigpipe = 1;
+    int reuse_address = 1;
 
     listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener < 0) {
         WR_DIAG("PAIR_SOCKET_FAILED errno=%d", errno);
         goto finish;
     }
+    /* Allow a new one-shot session after TCP TIME_WAIT; unlike
+       SO_REUSEPORT, SO_REUSEADDR does not authorize parallel listeners. */
+    (void)setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+                     &reuse_address, sizeof(reuse_address));
     memset(&local, 0, sizeof(local));
 #if defined(__APPLE__)
     local.sin_len = (uint8_t)sizeof(local);
@@ -611,7 +616,7 @@ static int serve_pair_once(void) {
     local.sin_family = AF_INET;
     local.sin_port = htons(PAIR_LOOPBACK_PORT);
     local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    /* Deliberately no SO_REUSEPORT or SO_REUSEADDR; do not share port. */
+    /* Never set SO_REUSEPORT; refuse an existing active listener. */
     if (bind(listener, (const struct sockaddr *)&local,
              (socklen_t)sizeof(local)) != 0 || listen(listener, 1) != 0) {
         WR_DIAG("PAIR_BIND_FAILED errno=%d", errno);
