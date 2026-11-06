@@ -18,6 +18,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var pairingReport = "Pareamento temporário ainda não testado"
     private var stager: WebReaderIPAStager?
     private var stagingIPA = false
+    private var verifyingExport = false
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando validação do canal"
     private var stagedSHA256: String?
@@ -236,11 +237,14 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             if stagingIPA {
                 cell.textLabel?.text = "Baixando e validando IPA…"
                 cell.detailTextLabel?.text = "Saia da tela para cancelar"
+            } else if verifyingExport {
+                cell.textLabel?.text = "Conferindo IPA antes de compartilhar…"
+                cell.detailTextLabel?.text = "Verificando novamente SHA-256, ZIP e Bundle ID"
             } else if let file = stagedIPAURL,
                 FileManager.default.fileExists(atPath: file.path) {
                 cell.textLabel?.text = "Compartilhar IPA verificada"
                 cell.detailTextLabel?.text =
-                    "Exportar para instalação manual; não instala sozinha"
+                    "Salvar pelo menu Compartilhar; instalar manualmente no Filza"
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
             } else {
@@ -251,9 +255,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
 
         case (2, 3):
-            cell.textLabel?.text = "Instalação manual indisponível"
+            cell.textLabel?.text = "Como instalar pelo Filza"
             cell.detailTextLabel?.text =
-                "É possível exportar a IPA, mas não emitir comando appinst"
+                "Instruções para abrir a IPA exportada sem computador"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
 
         case (2, 4):
             cell.textLabel?.text = "Instalação pelo Chimera bloqueada"
@@ -424,7 +430,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             return
         }
         if selectedSection == 2, indexPath.row == 2 {
-            guard !stagingIPA else { return }
+            guard !stagingIPA, !verifyingExport else { return }
             if let file = stagedIPAURL,
                FileManager.default.fileExists(atPath: file.path) {
                 shareStagedIPA(file)
@@ -433,10 +439,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
-        // Rows 3/4 deliberately never request appinst, even after a
-        // valid public GitHub Release / successful download / PING.
-        if selectedSection == 2, indexPath.row == 3 ||
-           selectedSection == 2, indexPath.row == 4 { return }
+        // Both rows remain non-installing. Manual Filza instructions are
+        // available; privileged Chimera installation is still disabled.
+        if selectedSection == 2, indexPath.row == 3 {
+            showFilzaInstructions()
+            return
+        }
+        if selectedSection == 2, indexPath.row == 4 { return }
         guard selectedSection == 2, indexPath.row == 0,
               !isIPCDiagnostic, !checking
         else { return }
@@ -463,7 +472,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     }
 
     private func confirmIPADownload() {
-        guard !isIPCDiagnostic, !stagingIPA,
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               let update = availableUpdate,
               update.provenance == .publicGitHubRelease ||
                 WebReaderUpdateChannel.isConfigured else { return }
@@ -481,7 +490,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     }
 
     private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
-        guard !isIPCDiagnostic, !stagingIPA,
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               update.provenance == .publicGitHubRelease ||
                 WebReaderUpdateChannel.isConfigured,
               let current = availableUpdate,
@@ -529,17 +538,67 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         }
     }
 
+    private func showFilzaInstructions() {
+        guard !isIPCDiagnostic else { return }
+        let text = "1. Toque em Baixar IPA verificada.\n" +
+            "2. Selecione Compartilhar IPA verificada e escolha Filza " +
+            "ou Salvar em Arquivos, se disponível.\n" +
+            "3. Abra a IPA no Filza e toque em Install.\n" +
+            "Não remova o WebReader instalado: faça backup da biblioteca " +
+            "e dos capítulos offline antes de atualizar."
+        let alert = UIAlertController(
+            title: "Instalação manual no Filza",
+            message: text, preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Entendi", style: .default))
+        present(alert, animated: true)
+    }
+
     private func shareStagedIPA(_ url: URL) {
-        guard !isIPCDiagnostic,
-              FileManager.default.fileExists(atPath: url.path) else { return }
-        let activity = UIActivityViewController(activityItems: [url],
-            applicationActivities: nil)
-        if let popover = activity.popoverPresentationController {
-            popover.sourceView = tableView
-            popover.sourceRect = tableView.rectForRow(
-                at: IndexPath(row: 2, section: 2))
+        guard !isIPCDiagnostic, !verifyingExport,
+              let update = availableUpdate,
+              stagedIPAURL == url, stagedSHA256 == update.sha256,
+              FileManager.default.fileExists(atPath: url.path) else {
+            ipaStatus = "IPA indisponível; baixe novamente"
+            stagedIPAURL = nil
+            stagedSHA256 = nil
+            tableView.reloadData()
+            return
         }
-        present(activity, animated: true)
+        // Files in Application Support can change after initial download.
+        // Re-audit the exact IPA just before presenting the iOS share sheet.
+        verifyingExport = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let valid = (try? WebReaderNativeIPAAuditor.inspect(
+                ipaURL: url, signedUpdate: update,
+                installedBuild: currentBuild, installedIOS: currentIOS
+            )) != nil
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.verifyingExport = false
+                guard self.stagedIPAURL == url else { return }
+                if !valid {
+                    self.stagedIPAURL = nil
+                    self.stagedSHA256 = nil
+                    self.ipaStatus = "IPA alterada ou inválida; baixe novamente"
+                    self.tableView.reloadData()
+                    return
+                }
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                let activity = UIActivityViewController(activityItems: [url],
+                    applicationActivities: nil)
+                if let popover = activity.popoverPresentationController {
+                    popover.sourceView = self.tableView
+                    popover.sourceRect = self.tableView.rectForRow(
+                        at: IndexPath(row: 2, section: 2))
+                }
+                self.present(activity, animated: true)
+            }
+        }
     }
 
     private func runOneAppTest() {
