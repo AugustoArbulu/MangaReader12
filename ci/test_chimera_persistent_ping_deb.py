@@ -50,7 +50,7 @@ def tar_items(raw, required_directories=()):
         members = tar.getmembers()
         assert len({m.name for m in members}) == len(members)
         assert all(m.isfile() or m.isdir() for m in members)
-        assert [m.name for m in members if m.isdir()] == list(required_directories)
+        assert [m.name for m in members if m.isdir()] == [name.rstrip('/') for name in required_directories]
         for m in members:
             assert m.uid == 0 and m.gid == 0, m.name
             assert not (m.mode & 0o022), m.name
