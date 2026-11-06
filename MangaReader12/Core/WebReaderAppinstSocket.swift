@@ -12,9 +12,12 @@ import CommonCrypto
 /// for a root daemon or treat a successful PONG as installer authorization.
 enum WebReaderAppinstSocket {
     private static let socketName = "wri.sock"
-    private static let installHeader = Data("WRINST1\n".utf8)
     private static let inspectHeader = Data("WRPING1\n".utf8)
+#if WEBREADER_HOST_TEST
+    // NEVER compiled into the iOS production client.
+    private static let installHeader = Data("WRINST1\n".utf8)
     private static let confirmation = Data("I-CONFIRM-INSTALL".utf8)
+#endif
 
     enum Result: Equatable {
         case unavailable
@@ -76,6 +79,8 @@ enum WebReaderAppinstSocket {
         DispatchQueue.main.async { completion(.rejected) }
     }
 
+#if WEBREADER_HOST_TEST
+    // Synthetic macOS FAKE-appinst regression harness only.
     private static func performInstall(
         ipaURL: URL, sha: String,
         directory: URL = WebReaderHelperPingProbe.diagnosticDirectory
@@ -99,6 +104,7 @@ enum WebReaderAppinstSocket {
         return exchange(request: request, expectingInstall: true,
                         directory: directory)
     }
+#endif
 
     private static func exchange(
         request: Data, expectingInstall: Bool,
@@ -440,10 +446,12 @@ enum WebReaderAppinstSocket {
                         directory: directory)
     }
 
-    /// Only for deterministic macOS CI against a fake appinst binary.
+#if WEBREADER_HOST_TEST
+    /// Only for deterministic macOS CI against a FAKE appinst binary.
     static func hostInstall(
         directory: URL, ipaURL: URL, sha256: String
     ) -> Result {
         return performInstall(ipaURL: ipaURL, sha: sha256, directory: directory)
     }
+#endif
 }
