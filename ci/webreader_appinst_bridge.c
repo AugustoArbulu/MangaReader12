@@ -70,6 +70,9 @@ extern char **environ;
 #define MAX_REQUEST_PATH 1024
 #define SOCKET_WAIT_MS 60000
 
+#ifndef WEBREADER_PING_ONLY
+/* Exclude all installer parsing, verification and process launch code
+   from the standalone, physically tested PING-only binary. */
 static int check_uuid(const char *s) {
     int i;
     if (!s) return 0;
@@ -230,6 +233,8 @@ static int invoke_appinst(const char *path) {
 }
 
 
+#endif /* !WEBREADER_PING_ONLY */
+
 static int send_all(int fd, const char *data, size_t len) {
     size_t sent = 0;
     while (sent < len) {
@@ -256,6 +261,7 @@ static int recv_all(int fd, char *data, size_t len) {
 
 /* The helper is started manually with an app-owned <container>/WR directory.
    It cannot accept a staged IPA located in a DIFFERENT app container. */
+#ifndef WEBREADER_PING_ONLY
 static int same_app_container(const char *dir, const char *file) {
     char real_dir[PATH_MAX], real_file[PATH_MAX];
     const char *suffix = "/WR";
@@ -268,6 +274,8 @@ static int same_app_container(const char *dir, const char *file) {
     return strncmp(real_file + strlen(real_dir), PREFIX,
                    sizeof(PREFIX) - 1) == 0;
 }
+
+#endif /* !WEBREADER_PING_ONLY */
 
 static int verify_socket_directory(const char *dir, char *path, size_t capacity) {
     int fd;
@@ -307,9 +315,14 @@ static int same_mobile_peer(int fd) {
 }
 
 static int socket_request(int connection, const char *directory) {
-    char header[8], two[2], path[MAX_REQUEST_PATH + 1], digest[65];
+    char header[8];
+#ifdef WEBREADER_PING_ONLY
+    (void)directory;
+#else
+    char two[2], path[MAX_REQUEST_PATH + 1], digest[65];
     char consent[sizeof(CONFIRMATION)];
     unsigned int length;
+#endif
     if (!recv_all(connection, header, 8)) return 1;
     if (memcmp(header, SOCKET_PING, 8) == 0) {
         return send_all(connection, SOCKET_PONG, 8) ? 0 : 1;
