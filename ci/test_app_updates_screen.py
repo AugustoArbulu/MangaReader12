@@ -30,6 +30,7 @@ assert 'cell.textLabel?.text = testingHTTPS ?' in screen
 assert '"Testar HTTPS do GitHub"' in screen
 assert 'UIPasteboard.general.string = lines.joined(separator: "\\n")' in screen
 assert "return isIPCDiagnostic ? 2 : 6" in screen
+assert "if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }" in screen
 
 assert "current.check { [weak self] result in" in screen
 assert "statusDescription" in screen
