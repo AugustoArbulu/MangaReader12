@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Standalone external-mobile PING bridge tests; NEVER compile install routines.
+
+Host exercises the exact C one-shot socket protocol without any appinst call.
+The built iPhone QA binary uses the same WEBREADER_PING_ONLY mode.
+"""
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+SOURCE = Path(__file__).with_name("webreader_appinst_bridge.c")
+SOCKET_NAME = "wri.sock"
+
+
+class PingOnlyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if sys.platform != "darwin":
+            raise unittest.SkipTest("Darwin UNIX sockets")
+        if os.geteuid() == 0:
+            raise unittest.SkipTest("Nonroot mobile process only")
+        cls.tmp = tempfile.TemporaryDirectory(prefix="wrp-", dir="/tmp")
+        cls.root = Path(cls.tmp.name).resolve()
+        cls.directory = cls.root / "WR"
+        cls.directory.mkdir(mode=0o700)
+        cls.binary = cls.root / "ping-only"
+        compile_result = subprocess.run(
+            ["xcrun", "clang", "-std=c11", "-Wall", "-Wextra", "-Werror",
+             "-Wno-deprecated-declarations", "-DWEBREADER_PING_ONLY",
+             str(SOURCE), "-o", str(cls.binary)],
+            capture_output=True, text=True, timeout=35
+        )
+        if compile_result.returncode:
+            raise AssertionError("PING-only bridge C compile failed:\n" +
+                                 compile_result.stderr)
+        # The PING-only executable does not even link to posix_spawn.
+        symbols = subprocess.run(["nm", "-u", str(cls.binary)],
+                                 capture_output=True, text=True, check=True)
+        if "posix_spawn" in symbols.stdout:
+            raise AssertionError("PING-only binary must never invoke appinst")
+        if b"/usr/bin/appinst" in cls.binary.read_bytes():
+            raise AssertionError("PING-only binary contains installer path")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.sock = self.directory / SOCKET_NAME
+
+    def start(self):
+        process = subprocess.Popen(
+            [str(self.binary), "serve-once", str(self.directory)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.addCleanup(self.stop, process)
+        for _ in range(100):
+            if self.sock.exists():
+                return process
+            if process.poll() is not None:
+                self.fail("Server did not start: " +
+                          process.communicate(timeout=2)[1].decode())
+            time.sleep(0.02)
+        self.fail("No socket created")
+
+    @staticmethod
+    def stop(process):
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=2)
+
+    def send(self, payload):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(3)
+            client.connect(str(self.sock))
+            client.sendall(payload)
+            return client.recv(8)
+
+    def test_read_only_ping_and_socket_removed(self):
+        process = self.start()
+        self.assertEqual(self.send(b"WRPING1\n"), b"WRPONG1\n")
+        self.assertEqual(process.wait(timeout=3), 0)
+        self.assertFalse(self.sock.exists())
+
+    def test_install_request_rejected_without_executing_anything(self):
+        process = self.start()
+        self.assertEqual(self.send(b"WRINST1\n"), b"WRFAIL1\n")
+        self.assertNotEqual(process.wait(timeout=3), 0)
+        self.assertFalse(self.sock.exists())
+
+    def test_cli_cannot_install_even_with_install_confirmed_flag(self):
+        process = subprocess.run(
+            [str(self.binary), "install-confirmed",
+             "/does/not/exist.ipa", "0" * 64, "I-CONFIRM-INSTALL"],
+            capture_output=True, text=True, timeout=3
+        )
+        self.assertNotEqual(process.returncode, 0)
+        self.assertIn("PING only", process.stderr)
+
+    def test_selftest_without_appinst_lookup(self):
+        process = subprocess.run(
+            [str(self.binary), "selftest"],
+            capture_output=True, text=True, timeout=3
+        )
+        self.assertEqual(process.returncode, 0)
+        self.assertIn("WEBREADER_PING_ONLY", process.stdout)
+        self.assertNotIn("APPINST_PATH_PRESENT", process.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
