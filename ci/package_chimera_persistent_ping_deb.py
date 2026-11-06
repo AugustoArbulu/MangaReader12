@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "WebReader-Chimera-Persistent-Ping-iOS12"
 PLIST = ROOT / "ci/com.example.webreader.pinglab.plist"
-OUT = ROOT / "WebReader-Chimera-Persistent-PingLab-iOS12.deb"
+OUT = ROOT / "WebReader-Chimera-Persistent-PingLab-iOS12-FIX1.deb"
 APP_PATH = "./usr/local/libexec/webreader-pinglab"
 DAEMON_PATH = "./Library/LaunchDaemons/com.example.webreader.pinglab.plist"
 PKG = "com.example.webreader.pinglab"
@@ -22,7 +22,7 @@ LABEL = "com.example.webreader.pinglab"
 
 CONTROL = """Package: com.example.webreader.pinglab
 Name: WebReader Persistent Ping QA
-Version: 0.1.0
+Version: 0.1.1
 Architecture: iphoneos-arm
 Section: Development
 Priority: optional
@@ -53,14 +53,23 @@ def pack_tar(items):
                       compresslevel=9) as tar:
         for name, content, mode in items:
             info = tarfile.TarInfo(name)
-            info.size = len(content)
             info.mode = mode
             info.uid = 0
             info.gid = 0
             info.mtime = 0
             info.uname = "root"
             info.gname = "wheel"
-            tar.addfile(info, io.BytesIO(content))
+            if content is None:
+                # Debian dpkg unpack requires explicit parents when absent.
+                # Build61 physical install failed because /usr/local/libexec
+                # did not exist and the original tar had no directory entries.
+                assert name.endswith("/")
+                info.type = tarfile.DIRTYPE
+                info.size = 0
+                tar.addfile(info)
+            else:
+                info.size = len(content)
+                tar.addfile(info, io.BytesIO(content))
     return data.getvalue()
 
 
@@ -93,6 +102,13 @@ def main():
         ("./prerm", PRERM.encode(), 0o755)
     ])
     data = pack_tar([
+        # Parent directories MUST precede payload files in data.tar.gz.
+        # Legacy Chimera devices may not have /usr/local or libexec.
+        ("./usr/", None, 0o755),
+        ("./usr/local/", None, 0o755),
+        ("./usr/local/libexec/", None, 0o755),
+        ("./Library/", None, 0o755),
+        ("./Library/LaunchDaemons/", None, 0o755),
         (APP_PATH, binary, 0o755),
         (DAEMON_PATH, PLIST.read_bytes(), 0o644)
     ])
