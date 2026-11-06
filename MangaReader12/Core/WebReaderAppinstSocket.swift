@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CommonCrypto
 
 /// Nonprivileged iOS12 client for the one-shot mobile-user appinst CLI bridge.
 ///
@@ -22,6 +23,8 @@ enum WebReaderAppinstSocket {
         case failed
         case diagnosticReady
         case diagnosticFailure(String)
+        case pairingAccepted
+        case pairingDenied
 
         var text: String {
             switch self {
@@ -37,6 +40,12 @@ enum WebReaderAppinstSocket {
                 return "Ponte mobile respondeu PONG; instalação não executada"
             case .diagnosticFailure(let detail):
                 return "Diagnóstico IPC: " + detail + " • nenhuma instalação executada"
+            case .pairingAccepted:
+                return "Código temporário validado nos dois sentidos; " +
+                    "NENHUMA IPA instalada e identidade do app NÃO autenticada"
+            case .pairingDenied:
+                return "Código temporário incorreto ou sessão consumida; " +
+                    "nenhuma instalação executada"
             }
         }
     }
@@ -281,6 +290,134 @@ enum WebReaderAppinstSocket {
         guard response == Array("WRPONG1\n".utf8)
         else { return rejected("resposta diferente de PONG") }
         return .diagnosticReady
+    }
+
+    /// Manual one-use proof-of-possession laboratory on 127.0.0.1:38972.
+    /// This MUST remain independent of installation and not be interpreted as
+    /// code-signature authentication. The code is never stored or sent raw.
+    static func checkPairedLoopback(
+        code: String, completion: @escaping (Result) -> Void
+    ) {
+        DispatchQueue.global(qos: .utility).async {
+            let result = pairLoopback(code: code)
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    private static func pairLoopback(code supplied: String) -> Result {
+        func failure(_ stage: String, _ number: Int32 = 0) -> Result {
+            return .diagnosticFailure("Pareamento " + stage +
+                " (errno=" + String(number) + ")")
+        }
+        let code = supplied.trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        let key = Array(code.utf8)
+        guard key.count == 16,
+              key.allSatisfy({ ($0 >= 48 && $0 <= 57) ||
+                               ($0 >= 65 && $0 <= 70) })
+        else { return failure("código deve ter 16 caracteres hexadecimais") }
+
+        // HMAC-SHA256 over a fresh server nonce. Distinct domain labels
+        // prevent replaying the client proof as a server proof.
+        func mac(_ domain: String, nonce: [UInt8]) -> [UInt8] {
+            let message = Array(domain.utf8) + nonce
+            var output = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+            key.withUnsafeBytes { keyBytes in
+                message.withUnsafeBytes { messageBytes in
+                    output.withUnsafeMutableBytes { outputBytes in
+                        CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA256),
+                               keyBytes.baseAddress, keyBytes.count,
+                               messageBytes.baseAddress, messageBytes.count,
+                               outputBytes.baseAddress)
+                    }
+                }
+            }
+            return output
+        }
+
+        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return failure("socket", errno) }
+        defer { _ = Darwin.close(fd) }
+        var noSigPipe: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0
+        else { return failure("NOSIGPIPE", errno) }
+        var timeout = timeval(tv_sec: 3, tv_usec: 0)
+        guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return failure("RCVTIMEO", errno) }
+        guard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return failure("SNDTIMEO", errno) }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = UInt16(38972).bigEndian
+        address.sin_addr = in_addr(s_addr: UInt32(0x7f000001).bigEndian)
+        let connected = withUnsafePointer(to: &address) { pointer -> Int32 in
+            return pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0,
+                    socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0 else { return failure("connect", errno) }
+
+        func writeAll(_ bytes: [UInt8]) -> Bool {
+            var written = 0
+            return bytes.withUnsafeBytes { buffer in
+                guard let base = buffer.baseAddress else { return false }
+                while written < bytes.count {
+                    let count = Darwin.send(fd, base.advanced(by: written),
+                                            bytes.count - written, 0)
+                    if count <= 0 { return false }
+                    written += count
+                }
+                return true
+            }
+        }
+        func readExact(_ length: Int) -> [UInt8]? {
+            var bytes = [UInt8](repeating: 0, count: length)
+            var received = 0
+            while received < length {
+                let remaining = length - received
+                let count = bytes.withUnsafeMutableBytes { buffer -> Int in
+                    guard let base = buffer.baseAddress else { return -1 }
+                    return Darwin.recv(fd, base.advanced(by: received),
+                                       remaining, 0)
+                }
+                if count <= 0 { return nil }
+                received += count
+            }
+            return bytes
+        }
+        guard writeAll(Array("WRPAIR1\n".utf8)) else {
+            return failure("enviar início", errno)
+        }
+        guard let challenge = readExact(24),
+              Array(challenge.prefix(8)) == Array("WRCHAL1\n".utf8)
+        else { return failure("desafio inválido") }
+        let nonce = Array(challenge.suffix(16))
+        let proof = Array("WRAUTH1\n".utf8) + mac("WR-PAIR-CLIENT-V1", nonce: nonce)
+        guard writeAll(proof) else { return failure("enviar prova", errno) }
+        guard let header = readExact(8) else {
+            return failure("resposta ausente", errno)
+        }
+        if header == Array("WRDENY1\n".utf8) { return .pairingDenied }
+        guard header == Array("WROKAY1\n".utf8),
+              let serverProof = readExact(32) else {
+            return failure("resposta inesperada")
+        }
+        let expected = mac("WR-PAIR-SERVER-V1", nonce: nonce)
+        var difference: UInt8 = 0
+        for i in 0..<32 { difference |= serverProof[i] ^ expected[i] }
+        guard difference == 0 else { return failure("prova do servidor inválida") }
+        return .pairingAccepted
+    }
+
+    /// Mac CI harness only; no UI installation paths call this.
+    static func hostPairProbe(code: String) -> Result {
+        return pairLoopback(code: code)
     }
 
     /// Host-only injection for the loopback PING integration test.
