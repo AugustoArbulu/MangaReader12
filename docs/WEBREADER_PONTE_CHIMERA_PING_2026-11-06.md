@@ -13,7 +13,8 @@ sem reutilizar o endpoint PING e **sem executar o appinst**.
   `WEBREADER_PING_ONLY`. A imagem assinada continua sem
   `posix_spawn`, código de instalação ou acesso a IPA.
 - Nova porta fixa `127.0.0.1:38972` (sem aceitar interfaces externas).
-  Listener sem SO_REUSEPORT e sem SO_REUSEADDR. Uma conexão e uma
+  Listener sem SO_REUSEPORT. SO_REUSEADDR permite reinício
+  após TCP TIME_WAIT, sem compartilhamento de listener ativo. Uma conexão e uma
   tentativa; após aceitar ou negar, ele encerra. Prazo de **120 s**
   para inserir o código.
 - Ao iniciar, helper usa `arc4random_buf` para gerar **64 bits**
@@ -46,6 +47,27 @@ sem reutilizar o endpoint PING e **sem executar o appinst**.
   uso único, cliente Swift e helper C nativos, ausência de
   símbolos de instalação no helper de diagnóstico.
 - `main`, WebReader Build56 e instalação permanecem intocados.
+
+### Validação CI da Build59 (ainda não no dispositivo)
+
+**GitHub Actions #53: SUCCESS**
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/42169033923
+
+Artifact `WebReader-Chimera-Pairing-Lab-iOS12`, ID `13479513928`.
+Contém somente os arquivos de teste `WebReader-IPC-Probe-iOS12-unsigned.ipa`
+(Build59) e `WebReader-Chimera-Ping-DIAG-iOS12` assinado, com respectivos
+SHA-256. Foram concluídos:
+- 14 testes nativos Swift/C (inclusive pareamento HMAC correto/incorreto,
+  comunicação TCP e instalador **falso**);
+- 10 testes do helper PING-only, inclusive recusa de opcode `WRINST1`,
+  uso único e prova em duas direções;
+- compilação para arm64 iOS12, auditoria de entitlements,
+  auditoria da IPA isolada e ausência de caminhos/símbolos de appinst
+  no binário de diagnóstico.
+
+**Nenhuma instalação real foi executada.** Só é permitido validar
+fisicamente o código temporário no app diagnóstico e o helper
+não instalador. O WebReader Build56 segue intocado.
 
 ### Depois de CI verde: teste manual com controle explícito
 
