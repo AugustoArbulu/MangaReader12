@@ -1,4 +1,4 @@
-name: WebReader Chimera Loopback PING QA Kit
+name: WebReader Chimera One-Shot Pairing QA Kit
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
       - name: Test native Swift IPC error stages against FAKE appinst
         run: python3 ci/test_native_webreader_appinst_socket.py
 
-      - name: Test PING-only mobile bridge with no installer code
+      - name: Test PING-only, one-use pairing, and rejection of installer opcodes
         run: python3 ci/test_chimera_ping_only_bridge.py
 
       - name: Compile ARM64 iOS12 PING-only bridge with minimal Chimera entitlement
@@ -74,7 +74,7 @@ jobs:
 
       - name: Package one IPC diagnostic IPA and checksum
         run: |
-          WEBREADER_IPC_PROBE_BUILD=58 bash ci/package_ipc_probe_ipa.sh \
+          WEBREADER_IPC_PROBE_BUILD=59 bash ci/package_ipc_probe_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
             WebReader-IPC-Probe-iOS12-unsigned.ipa
 
@@ -84,7 +84,7 @@ jobs:
       - name: Upload one ZIP for read-only Chimera loopback PING test
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Chimera-Loopback-PING-iOS12
+          name: WebReader-Chimera-Pairing-Lab-iOS12
           if-no-files-found: error
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
