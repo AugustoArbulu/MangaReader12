@@ -4,10 +4,13 @@
 Host exercises the exact C one-shot socket protocol without any appinst call.
 The built iPhone QA binary uses the same WEBREADER_PING_ONLY mode.
 """
+import hmac
+import hashlib
 import os
 import select
 from pathlib import Path
 import socket
+import re
 import subprocess
 import sys
 import tempfile
@@ -143,6 +146,74 @@ class PingOnlyTests(unittest.TestCase):
         self.assertNotEqual(process.wait(timeout=3), 0)
         _, stderr = process.communicate(timeout=2)
         self.assertIn(b"WRDIAG: request header not PING", stderr)
+
+    def start_pair(self):
+        process = subprocess.Popen(
+            [str(self.binary), "serve-pair-once"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.addCleanup(self.stop, process)
+        readable, _, _ = select.select([process.stdout], [], [], 2)
+        self.assertTrue(readable, "Pair helper did not start")
+        self.assertIn(b"WRPAIR_READY", process.stdout.readline())
+        line = process.stdout.readline()
+        self.assertTrue(re.fullmatch(rb"WRPAIR_CODE: [0-9A-F]{16}\\n", line))
+        return process, line.split(b": ", 1)[1].strip()
+
+    def pair_request(self, code, use_wrong_key=False):
+        with socket.create_connection(("127.0.0.1", 38972), timeout=2) as client:
+            client.settimeout(3)
+            client.sendall(b"WRPAIR1\\n")
+            challenge = self.recv_exact(client, 24)
+            self.assertEqual(challenge[:8], b"WRCHAL1\\n")
+            nonce = challenge[8:]
+            key = b"AAAAAAAAAAAAAAAA" if use_wrong_key else code
+            proof = hmac.new(key, b"WR-PAIR-CLIENT-V1" + nonce,
+                             hashlib.sha256).digest()
+            client.sendall(b"WRAUTH1\\n" + proof)
+            response = self.recv_exact(client, 8)
+            if response == b"WROKAY1\\n":
+                signed = self.recv_exact(client, 32)
+                expected = hmac.new(key, b"WR-PAIR-SERVER-V1" + nonce,
+                                    hashlib.sha256).digest()
+                self.assertEqual(signed, expected)
+            return response
+
+    @staticmethod
+    def recv_exact(sock, length):
+        buf = b""
+        while len(buf) < length:
+            more = sock.recv(length - len(buf))
+            if not more:
+                raise AssertionError("Unexpected server shutdown")
+            buf += more
+        return buf
+
+    def test_pair_code_proof_and_server_proof_one_time(self):
+        process, code = self.start_pair()
+        self.assertEqual(self.pair_request(code), b"WROKAY1\\n")
+        self.assertEqual(process.wait(timeout=3), 0)
+        self.assertFalse(b"/usr/bin/appinst" in self.binary.read_bytes())
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"PAIR_PROOF_ACCEPTED", stderr)
+        with self.assertRaises(OSError):
+            socket.create_connection(("127.0.0.1", 38972), timeout=1)
+
+    def test_wrong_pair_code_denied_and_consumed(self):
+        process, code = self.start_pair()
+        self.assertEqual(self.pair_request(code, use_wrong_key=True),
+                         b"WRDENY1\\n")
+        self.assertNotEqual(process.wait(timeout=3), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"PAIR_DENIED", stderr)
+
+    def test_install_opcode_rejected_on_pairing_port(self):
+        process, _ = self.start_pair()
+        with socket.create_connection(("127.0.0.1", 38972), timeout=2) as client:
+            client.sendall(b"WRINST1\\n")
+        self.assertNotEqual(process.wait(timeout=3), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"PAIR_REJECTED_BAD_REQUEST", stderr)
 
     def test_cli_cannot_install_even_with_install_confirmed_flag(self):
         process = subprocess.run(
