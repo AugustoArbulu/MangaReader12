@@ -14,6 +14,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var helperReport = "Ainda não testado"
     private var testingAppinstBridge = false
     private var appinstBridgeReport = "Ponte appinst não testada"
+    private var pairingInProgress = false
+    private var pairingReport = "Pareamento temporário ainda não testado"
     private var stager: WebReaderIPAStager?
     private var stagingIPA = false
     private var stagedIPAURL: URL?
@@ -38,6 +40,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
 
     private func sectionType(_ displayedSection: Int) -> Int {
         return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection
+    }
+
+    private var pairingDiagnosticAvailable: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" &&
+            installedBuild >= 59
     }
 
     private var installedBuild: Int {
@@ -100,7 +107,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
-        if source == 5 { return 4 }
+        if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }
         return 1
     }
 
@@ -342,6 +349,17 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 cell.selectionStyle = .default
             }
 
+        case (5, 4):
+            if pairingDiagnosticAvailable {
+                cell.textLabel?.text = pairingInProgress ?
+                    "Validando código temporário…" : "Testar código temporário (sem instalar)"
+                cell.detailTextLabel?.text = pairingReport
+                if !pairingInProgress {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            }
+
         default:
             break
         }
@@ -400,6 +418,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             if indexPath.row == 1 { copyHelperDirectory() }
             if indexPath.row == 2 { copyHelperReport() }
             if indexPath.row == 3 { testAppinstBridgeConnection() }
+            if indexPath.row == 4 && pairingDiagnosticAvailable {
+                promptOneTimePairingCode()
+            }
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -703,6 +724,42 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         }
     }
 
+    private func promptOneTimePairingCode() {
+        guard pairingDiagnosticAvailable && !pairingInProgress else { return }
+        let dialog = UIAlertController(
+            title: "Código temporário do NewTerm",
+            message: "Digite os 16 caracteres exibidos por serve-pair-once. " +
+                "Não compartilhe esse código no chat. " +
+                "O teste verifica apenas a posse do código e NÃO instala IPAs.",
+            preferredStyle: .alert
+        )
+        dialog.addTextField { field in
+            field.placeholder = "16 caracteres (0–9, A–F)"
+            field.keyboardType = .asciiCapable
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .allCharacters
+        }
+        dialog.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        dialog.addAction(UIAlertAction(
+            title: "Validar código", style: .default,
+            handler: { [weak self, weak dialog] _ in
+                guard let self = self, self.pairingDiagnosticAvailable else { return }
+                let code = dialog?.textFields?.first?.text ?? ""
+                self.pairingInProgress = true
+                self.pairingReport = "Validando posse do código por TCP 127.0.0.1:38972"
+                self.tableView.reloadData()
+                WebReaderAppinstSocket.checkPairedLoopback(code: code) {
+                    [weak self] result in
+                    guard let self = self else { return }
+                    self.pairingInProgress = false
+                    self.pairingReport = result.text
+                    self.tableView.reloadData()
+                }
+            }
+        ))
+        present(dialog, animated: true)
+    }
+
     private func copyHelperReport() {
         let version = ProcessInfo.processInfo.operatingSystemVersion
         let ios = String(version.majorVersion) + "." +
@@ -719,6 +776,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
             helperReport,
             "Ponte appinst (PING): " + appinstBridgeReport,
+            "Pareamento sem instalação: " +
+                (pairingDiagnosticAvailable ? pairingReport : "indisponível"),
             "Nenhum comando appinst executado neste diagnóstico"
         ]
         UIPasteboard.general.string = lines.joined(separator: "\n")
