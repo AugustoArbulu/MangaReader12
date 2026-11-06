@@ -97,6 +97,9 @@ def main():
     assert 'UIPasteboard.general.string = "appinst "' not in screen
     assert "WebReaderIPAStager(verifiedUpdate: update)" in screen
     assert "UIActivityViewController(activityItems: [url]" in screen
+    assert "WebReaderNativeIPAAuditor.inspect(" in screen
+    assert "showFilzaInstructions()" in screen
+    assert '"Como instalar pelo Filza"' in screen
 
     if platform.system() != "Darwin":
         raise RuntimeError("this native security test requires macOS runner")
