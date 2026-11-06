@@ -1,4 +1,4 @@
-name: WebReader Chimera External Bridge PING Kit
+name: WebReader Chimera Loopback PING QA Kit
 
 on:
   push:
@@ -74,18 +74,20 @@ jobs:
 
       - name: Package one IPC diagnostic IPA and checksum
         run: |
-          WEBREADER_IPC_PROBE_BUILD=57 bash ci/package_ipc_probe_ipa.sh \
+          WEBREADER_IPC_PROBE_BUILD=58 bash ci/package_ipc_probe_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
             WebReader-IPC-Probe-iOS12-unsigned.ipa
 
       - name: Audit IPA and check that PING bridge cannot install apps
         run: python3 ci/test_chimera_mobile_ping_kit.py
 
-      - name: Upload one ZIP for external Chimera socket test
+      - name: Upload one ZIP for read-only Chimera loopback PING test
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-IPC-Client-DIAG-iOS12
+          name: WebReader-Chimera-Loopback-PING-iOS12
           if-no-files-found: error
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
             WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
+            WebReader-Chimera-Ping-DIAG-iOS12
+            WebReader-Chimera-Ping-DIAG-iOS12.sha256
