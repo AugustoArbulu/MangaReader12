@@ -66,9 +66,17 @@ def main():
         ["xcrun", "nm", "-u", str(GATE)],
         check=True, capture_output=True, text=True
     ).stdout
-    for forbidden_socket in ("_bind", "_listen", "_accept", "_connect"):
-        assert forbidden_socket not in symbols, forbidden_socket
-    assert "_posix_spawn" in symbols, "this is the separate CLI install gate"
+    # Match whole symbol names, not substrings: dyld_stub_binder contains
+    # "_bind" but is part of the system dynamic linker, not TCP bind().
+    undefined_symbols = {
+        line.strip().split()[-1]
+        for line in symbols.splitlines()
+        if line.strip()
+    }
+    for forbidden_socket in ("_socket", "_bind", "_listen", "_accept",
+                             "_connect", "_recv", "_send"):
+        assert forbidden_socket not in undefined_symbols, forbidden_socket
+    assert "_posix_spawn" in undefined_symbols, "CLI-only disposable install"
     helper = HELPER.read_bytes()
     assert helper[:4] == b"\xcf\xfa\xed\xfe"
     assert struct.unpack_from("<I", helper, 4)[0] == 0x0100000C
