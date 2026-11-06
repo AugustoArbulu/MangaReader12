@@ -7,6 +7,13 @@ on:
       - 'ci/build66_ipa_preflight.py'
       - 'ci/test_build66_ipa_preflight.py'
       - '.github/workflows/chimera-build66-preflight.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build66_ipa_preflight.py'
+      - 'ci/test_build66_ipa_preflight.py'
+      - '.github/workflows/chimera-build66-preflight.yml'
   workflow_dispatch:
 
 permissions:
