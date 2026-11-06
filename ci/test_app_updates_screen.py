@@ -69,7 +69,7 @@ assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
 assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
-assert 'if source == 5 { return 4 }' in screen
+assert 'if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }' in screen
 assert '"Instalar atualização (Chimera)"' in screen
 assert 'confirmAppinstInstallation()' in screen
 assert 'WebReaderAppinstSocket.install(' in screen
