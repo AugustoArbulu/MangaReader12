@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 
 IPA = Path("WebReader-IPC-Probe-iOS12-unsigned.ipa")
-HELPER = Path("WebReader-Chimera-Mobile-Ping-Entitled-iOS12")
+HELPER = Path("WebReader-Chimera-Ping-DIAG-iOS12")
 PLIST = "Payload/MangaReader12.app/Info.plist"
 MACHO = "Payload/MangaReader12.app/MangaReader12"
 
