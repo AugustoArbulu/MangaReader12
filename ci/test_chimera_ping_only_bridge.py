@@ -222,7 +222,7 @@ class PingOnlyTests(unittest.TestCase):
             capture_output=True, text=True, timeout=3
         )
         self.assertNotEqual(process.returncode, 0)
-        self.assertIn("PING only", process.stderr)
+        self.assertIn("no installation", process.stderr)
 
     def test_selftest_without_appinst_lookup(self):
         process = subprocess.run(
