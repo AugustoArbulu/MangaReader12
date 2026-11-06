@@ -31,6 +31,12 @@ assert info.get("CFBundleIdentifier") == "com.example.MangaReader12"
 assert info.get("CFBundleExecutable") == "MangaReader12"
 assert info.get("CFBundleVersion") == "56"
 assert info.get("MinimumOSVersion") == "12.0"
+# Only dedicated Chimera read-only IPC QA uses build 57, so iOS replaces
+# the previous independent test app. Build56/main stays untouched.
+import os
+probe_build = os.environ.get("WEBREADER_IPC_PROBE_BUILD", "56")
+assert probe_build in ("56", "57")
+info["CFBundleVersion"] = probe_build
 info["CFBundleIdentifier"] = "com.example.MangaReader12.ipcprobe"
 info["CFBundleDisplayName"] = "WebReader IPC Test"
 info["CFBundleName"] = "WebReaderIPC"
