@@ -21,8 +21,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando validação do canal"
     private var stagedSHA256: String?
-    private var installationRunning = false
-    private var installationReport = "Ponte mobile ainda não conectada"
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
 
@@ -253,46 +251,24 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
 
         case (2, 3):
-            if let file = stagedIPAURL,
-                FileManager.default.fileExists(atPath: file.path) {
-                cell.textLabel?.text = "Copiar comando appinst (manual)"
-                cell.detailTextLabel?.text =
-                    "Somente para teste • a instalação não será iniciada pelo app"
-                cell.accessoryType = .disclosureIndicator
-                cell.selectionStyle = .default
-            } else {
-                cell.textLabel?.text = "appinst: aguarda IPA verificada"
-                cell.detailTextLabel?.text =
-                    "Instalação automática ainda não ativada"
-            }
+            cell.textLabel?.text = "Instalação manual indisponível"
+            cell.detailTextLabel?.text =
+                "É possível exportar a IPA, mas não emitir comando appinst"
 
         case (2, 4):
-            if let file = stagedIPAURL, let sha = stagedSHA256,
-                let update = availableUpdate, sha == update.sha256,
-                FileManager.default.fileExists(atPath: file.path) {
-                cell.textLabel?.text = installationRunning ?
-                    "Aguardando resultado do appinst…" :
-                    "Instalar atualização (Chimera)"
-                cell.detailTextLabel?.text = installationRunning ?
-                    "A instalação pode fechar o WebReader" :
-                    installationReport
-                if !installationRunning {
-                    cell.accessoryType = .disclosureIndicator
-                    cell.selectionStyle = .default
-                }
-            } else {
-                cell.textLabel?.text = "Instalação indisponível"
-                cell.detailTextLabel?.text =
-                    "Baixe e valide uma IPA para habilitar a solicitação"
-            }
+            cell.textLabel?.text = "Instalação pelo Chimera bloqueada"
+            cell.detailTextLabel?.text =
+                "Aguardando identidade do solicitante e assinatura editorial"
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
 
         case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
                 "Download de release oficial via HTTPS, SHA-256 e inspeção IPA. " +
                 "Não há assinatura independente do editor neste modo. " +
-                "O appinst requer um processo mobile separado em execução " +
-                "e sua confirmação explícita. Sem instalação silenciosa."
+                "A instalação via appinst está bloqueada nesta Build. " +
+                "PING e pareamento não autorizam instalação."
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -457,17 +433,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
-        if selectedSection == 2, indexPath.row == 3 {
-            if let file = stagedIPAURL,
-               FileManager.default.fileExists(atPath: file.path) {
-                copyManualAppinstCommand(file)
-            }
-            return
-        }
-        if selectedSection == 2, indexPath.row == 4 {
-            confirmAppinstInstallation()
-            return
-        }
+        // Rows 3/4 deliberately never request appinst, even after a
+        // valid public GitHub Release / successful download / PING.
+        if selectedSection == 2, indexPath.row == 3 ||
+           selectedSection == 2, indexPath.row == 4 { return }
         guard selectedSection == 2, indexPath.row == 0,
               !isIPCDiagnostic, !checking
         else { return }
@@ -545,58 +514,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         }
     }
 
-    private func confirmAppinstInstallation() {
-        guard !isIPCDiagnostic, !installationRunning, !stagingIPA,
-              let update = availableUpdate,
-              update.provenance == .publicGitHubRelease,
-              let file = stagedIPAURL, stagedSHA256 == update.sha256,
-              FileManager.default.fileExists(atPath: file.path)
-        else { return }
-        let summary = "Build " + String(update.build) +
-            " • atualização do WebReader pelo appinst. " +
-            "O processo mobile deve estar iniciado no Chimera. " +
-            "Confirme que fez backup da Biblioteca e dos capítulos offline. " +
-            "A instalação poderá fechar o aplicativo."
-        let alert = UIAlertController(
-            title: "Instalar atualização pelo Chimera?",
-            message: summary, preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
-        alert.addAction(UIAlertAction(
-            title: "Confirmar instalação", style: .destructive
-        ) { [weak self] _ in
-            self?.requestAppinstInstallation(file: file, sha256: update.sha256)
-        })
-        present(alert, animated: true)
-    }
-
-    private func requestAppinstInstallation(file: URL, sha256: String) {
-        guard !isIPCDiagnostic, !installationRunning, !stagingIPA,
-              let update = availableUpdate,
-              update.provenance == .publicGitHubRelease,
-              stagedIPAURL == file, stagedSHA256 == sha256,
-              update.sha256 == sha256,
-              FileManager.default.fileExists(atPath: file.path)
-        else { return }
-        installationRunning = true
-        installationReport = "Conectando ao instalador mobile do Chimera…"
-        tableView.reloadData()
-        WebReaderAppinstSocket.install(
-            ipaURL: file, expectedSHA256: sha256
-        ) { [weak self] result in
-            guard let self = self else { return }
-            self.installationRunning = false
-            self.installationReport = result.text
-            self.tableView.reloadData()
-            let alert = UIAlertController(
-                title: "Resultado do appinst", message: result.text,
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            self.present(alert, animated: true)
-        }
-    }
-
     private func stageFailureMessage(_ failure: WebReaderIPAStageFailure) -> String {
         switch failure {
         case .disabled: return "Canal de lançamentos assinado não configurado"
@@ -624,27 +541,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 at: IndexPath(row: 2, section: 2))
         }
         present(activity, animated: true)
-    }
-
-    private func copyManualAppinstCommand(_ file: URL) {
-        guard !isIPCDiagnostic, let update = availableUpdate,
-              update.provenance == .publicGitHubRelease,
-              stagedIPAURL == file,
-              FileManager.default.fileExists(atPath: file.path)
-        else { return }
-        // Escape a POSIX single-quoted path. We only copy; never execute it.
-        let quotedPath = "'" +
-            file.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        UIPasteboard.general.string = "appinst " + quotedPath
-        let alert = UIAlertController(
-            title: "Comando copiado",
-            message: "A IPA já foi baixada e verificada. O comando não foi " +
-                "executado. Antes de atualizar o WebReader principal, " +
-                "teste o appinst em um aplicativo descartável e faça backup.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
     }
 
     private func runOneAppTest() {
