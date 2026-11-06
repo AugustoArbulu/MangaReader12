@@ -59,12 +59,12 @@ class DisposableGateTests(unittest.TestCase):
     def setUp(self):
         self.log.unlink(missing_ok=True)
 
-    def run_gate(self, *args, fail=False):
+    def run_gate(self, *args, fail=False, input_text=None):
         env = dict(os.environ, WRD_TEST_LOG=str(self.log),
                    WRD_FAKE_EXIT=("13" if fail else "0"))
         return subprocess.run(
             [str(self.bin), *args], capture_output=True, text=True,
-            timeout=15, env=env
+            timeout=15, env=env, input=input_text
         )
 
     def test_selftest_cannot_launch_appinst(self):
@@ -85,7 +85,7 @@ class DisposableGateTests(unittest.TestCase):
             ("install-v1",), ("install-v2",), ("install-v1", "yes"),
             ("install-v2", "I-CONFIRM-INSTALL"),
             ("install-webreader", CONSENT), ("install-v3", CONSENT),
-            ("inspect-v1", CONSENT),
+            ("inspect-v1", CONSENT), ("run-disposable-qa",),
         ]:
             with self.subTest(args=args):
                 r = self.run_gate(*args)
@@ -103,7 +103,27 @@ class DisposableGateTests(unittest.TestCase):
         self.assertEqual(self.log.read_text().splitlines(),
                          [str(self.v1), str(self.v2)])
 
-    def test_modified_ipa_denied(self):
+    def test_single_session_v1_to_v2_with_explicit_next(self):
+        r = self.run_gate(
+            "run-disposable-qa", CONSENT, input_text="NEXT\\n"
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("BOTH_VERIFIED", r.stdout)
+        self.assertIn("V1_APPINST_SUCCESS", r.stdout)
+        self.assertIn("V2_APPINST_SUCCESS", r.stdout)
+        self.assertEqual(
+            self.log.read_text().splitlines(), [str(self.v1), str(self.v2)]
+        )
+
+    def test_single_session_refuses_implicit_transition(self):
+        r = self.run_gate(
+            "run-disposable-qa", CONSENT, input_text="CANCEL\\n"
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("STOPPED", r.stderr)
+        self.assertEqual(self.log.read_text().splitlines(), [str(self.v1)])
+
+        def test_modified_ipa_denied(self):
         original = self.v2.read_bytes()
         try:
             self.v2.write_bytes(original + b"MUTATED")
