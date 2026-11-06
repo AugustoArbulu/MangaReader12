@@ -33,3 +33,10 @@ Preservar `main`, Build 56 e helper PING da Build 61; PR #90 continua experiment
 1. MVP manual: teste iOS 12 de download, validação da IPA e exportação para Filza; preservação de biblioteca após atualização somente com backup.
 2. Helper eventual: testes de rejeição explícita de pedidos inválidos, teste em app descartável e consentimento, sem abrir caminho de instalação arbitrária.
 3. Somente após QA e backup, experimento opcional no WebReader real.
+
+## Decisão do usuário — distribuição das IPAs (06/11/2026)
+
+- **Temporariamente, durante o desenvolvimento:** entregar as IPAs de QA do WebReader por e-mail para `gutoarbulu@icloud.com`, quando uma build instalável estiver disponível e o usuário pedir o envio. A instalação continuará manual no Filza. Para anexos além do limite do provedor, enviar link direto do artefato/release do GitHub, sem afirmar que o arquivo foi anexado.
+- **Objetivo final obrigatório:** o próprio WebReader deverá consultar o GitHub, detectar a nova versão, obter a IPA do Release, verificar integridade e identidade do pacote, solicitar confirmação explícita e instalar a atualização no dispositivo com o helper compatível com Chimera/`appinst`, sem e-mail, computador nem Filza.
+- **Após validação do atualizador integrado:** parar de usar o e-mail como mecanismo rotineiro de distribuição; e-mail somente como alternativa excepcional se o usuário solicitar ou houver falha de atualização. Não interpretar a preferência como autorização para envios automáticos em background.
+- **Preservação:** atualizar o mesmo app sem desinstalar, com backup e validação de manutenção da biblioteca, configurações e downloads. Nenhuma instalação silenciosa ou disparada por outros processos locais.
