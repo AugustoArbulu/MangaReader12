@@ -58,3 +58,19 @@ Usuário tentou instalar v1 com o gate Build60 aprovado e obteve `MIInstallerErr
 Correção na branch experimental: gerar **duas IPAs ad-hoc assinadas**, cada uma com entitlement `application-identifier` igual a `WRQA000001.com.example.WebReaderAppinstDisposableTest`, via `codesign` no pacote `.app` depois do Info.plist. O prefixo é um identificador sintético exclusivo do laboratório, **não** Team ID de assinatura Apple e **não** autentica autor no iOS sem jailbreak. Ambas as versões compartilham o mesmo App ID, necessário para testar atualização. CI agora audita assinatura de ambos os `.app`, suas entitlements exatas, `CodeResources` e igualdade dos bytes do segmento Mach-O __TEXT,__text. Gate e nomes de IPAs foram atualizados para sufixo `-adhoc.ipa` e hashes recompilados, para que o pacote antigo `-unsigned.ipa` não seja aceito por engano.
 
 **Não reutilizar o ZIP anterior** `WebReader-Chimera-Build60-OneBatch-iOS12`; aguardar CI verde do novo `WebReader-Chimera-Build60-SignedQA-iOS12`. Ainda não há prova física de instalação da versão ad-hoc.
+
+## QA física concluída — 06/11/2026, iOS 12.5.8, Chimera + AppSync Unified
+
+**Resultado informado pelo usuário: APROVADO para o app descartável com o kit assinado.**
+
+- GitHub Actions `42175862528`, status SUCCESS, artifact `WebReader-Chimera-Build60-SignedQA-iOS12` (ID `13483595607`); HEAD de código `968869fe96b3cb76274b14471b9562729ce46c08`.
+- As duas IPAs ad-hoc do kit foram aceitas pelo helper com SHA-256 pinado, e `appinst` instalou a **v1** do app separado `com.example.WebReaderAppinstDisposableTest`.
+- Ao escrever `next` em minúsculas, o programa encerrou corretamente com `WRDISPOSABLE_STOPPED: v2 not installed`. Isso é o comportamento esperado: o modo `run-disposable-qa` só aceita `NEXT` exato.
+- Na mesma sessão de QA, o usuário executou o comando separado `install-v2 I-CONFIRM-DISPOSABLE-ONLY` e confirmou: **versão 2 instalada**.
+- Após abrir a v2, o usuário confirmou que **os dados da v1 foram preservados**.
+- O relatório anterior `MIInstallerErrorDomain Code=3` dizia respeito ao kit inicial **sem assinatura** e foi resolvido no kit assinado, no alcance do ensaio real.
+- **Não** foi feita instalação/atualização do WebReader principal nem confirmada autorização de cliente em rede.
+
+**Concluído:** chamada real ao `appinst` pelo CLI externo não-root e persistência de `NSUserDefaults` durante upgrade do app descartável. **Não comprovado:** atualização diretamente pelo WebReader sem Filza/NewTerm, preservação de SQLite/downloads da Biblioteca, autenticação de solicitante, verificação independente de editor ou mitigação de TOCTOU no instalador.
+
+Próximo foco: projetar integração segura com autorização específica do WebReader e aprovação explícita de cada instalação; **não conectar o socket HMAC da Build59 diretamente ao `appinst`**. Manter PR #90 Draft e `main`/Build56 intocadas.
