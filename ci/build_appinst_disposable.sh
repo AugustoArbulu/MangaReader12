@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build two unsigned, isolated iOS12 IPAs for appinst persistence QA only.
+# Build two ad-hoc signed, isolated iOS12 IPAs for appinst persistence QA only.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -17,7 +17,7 @@ xcrun --sdk iphoneos clang \
   ci/appinst_disposable/main.m \
   -o "$TEMP/WRDisposable"
 for VERSION in 1 2; do
-  OUT="WebReader-Appinst-Disposable-v$VERSION-iOS12-unsigned.ipa"
+  OUT="WebReader-Appinst-Disposable-v$VERSION-iOS12-adhoc.ipa"
   if [[ -e "$OUT" || -e "$OUT.sha256" ]]; then
     echo "Refusing to overwrite $OUT" >&2
     exit 2
@@ -47,6 +47,29 @@ info = {
     "UIRequiredDeviceCapabilities": ["arm64"],
 }
 path.write_bytes(plistlib.dumps(info, sort_keys=True))
+PY
+  # Build60 field QA: unsigned fixture reached MIInstallerErrorDomain Code=3.
+  # Sign the WHOLE .app bundle after versioned Info.plist was written.
+  # Both versions must have identical app identity entitlement; this is an
+  # ad-hoc signature for the user's Chimera + AppSync sandbox, NOT an
+  # Apple-trusted profile or a production signing identity.
+  APP="$TEMP/Payload/WRDisposable.app"
+  codesign --force --sign - --timestamp=none \
+    --entitlements ci/chimera_disposable_app.entitlements "$APP"
+  codesign --verify --verbose "$APP"
+  codesign -d --entitlements :- "$APP" > "$TEMP/signed-$VERSION.plist" 2>/dev/null
+  python3 - "$TEMP/signed-$VERSION.plist" "$APP/Info.plist" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+entitlements = plistlib.loads(Path(sys.argv[1]).read_bytes())
+info = plistlib.loads(Path(sys.argv[2]).read_bytes())
+bundle = "com.example.WebReaderAppinstDisposableTest"
+expected = "WRQA000001." + bundle
+assert info["CFBundleIdentifier"] == bundle
+assert entitlements == {"application-identifier": expected}, entitlements
+print("PASS: disposable v" + info["CFBundleVersion"] +
+      " has version-matched signed App ID; no extra entitlements")
 PY
   (
     cd "$TEMP"
