@@ -1,0 +1,94 @@
+name: WebReader Build64 Personal Updater Manual QA
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/Core/WebReaderNativeIPAAuditor.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
+      - 'ci/package_webreader_build64_qa_ipa.sh'
+      - 'ci/test_webreader_build64_qa_ipa.py'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/test_chimera_build62_install_admission.py'
+      - '.github/workflows/chimera-build64-manual-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build64-manual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verified-export-only:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.4 for iOS12 ARM64 build
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: App updates screen and blocked live installer tests
+        run: |
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_chimera_build62_install_admission.py
+
+      - name: Offline native IPA validation and download tests
+        run: |
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 -m unittest ci/test_validate_webreader_ipa.py
+
+      - name: Prepare icons and pinned WebP library
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+
+      - name: Compile WebReader for arm64 iOS12 without signing
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Build64" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+          test -f "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
+
+      - name: Package isolated Build64 IPA (same Bundle ID, no install)
+        run: |
+          bash ci/package_webreader_build64_qa_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Build64-QA-iOS12-unsigned.ipa
+
+      - name: Verify SHA256, bundle identity and iOS12 compatibility
+        run: |
+          python3 ci/test_webreader_build64_qa_ipa.py \
+            WebReader-Build64-QA-iOS12-unsigned.ipa \
+            --sha256-file WebReader-Build64-QA-iOS12-unsigned.ipa.sha256 \
+            > WebReader-Build64-QA-audit.json
+          cat WebReader-Build64-QA-audit.json
+
+      - name: Publish only manual QA artifact to Actions, never GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build64-PersonalUpdater-ManualQA-iOS12
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            WebReader-Build64-QA-iOS12-unsigned.ipa
+            WebReader-Build64-QA-iOS12-unsigned.ipa.sha256
+            WebReader-Build64-QA-audit.json
