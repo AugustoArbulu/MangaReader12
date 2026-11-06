@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 
 IPA = Path("WebReader-IPC-Probe-iOS12-unsigned.ipa")
-HELPER = Path("WebReader-Chimera-Mobile-Ping-iOS12")
+HELPER = Path("WebReader-Chimera-Mobile-Ping-Entitled-iOS12")
 PLIST = "Payload/MangaReader12.app/Info.plist"
 MACHO = "Payload/MangaReader12.app/MangaReader12"
 
@@ -53,6 +53,30 @@ def main():
     )
     assert "posix_spawn" not in nm.stdout
     assert "installApplication" not in nm.stdout
+    # The previous physical probe was SIGKILLed after bare ldid -S.
+    # Explicitly confirm that the signed product carries the one minimal
+    # legacy Chimera entitlement; no platform/root entitlement is allowed.
+    entitlement = subprocess.run(
+        ["codesign", "-d", "--entitlements", ":-", str(HELPER)],
+        check=True, capture_output=True
+    )
+    signed = plistlib.loads(entitlement.stdout)
+    expected = {"com.apple.private.security.no-container": True}
+    assert signed == expected, signed
+    source_entitlements = plistlib.loads(
+        Path("ci/chimera_mobile_ping.entitlements").read_bytes()
+    )
+    assert source_entitlements == expected
+    # No modern dyld chained fixups in this legacy iOS12 deployment.
+    load_commands = subprocess.run(
+        ["xcrun", "otool", "-l", str(HELPER)],
+        check=True, capture_output=True, text=True
+    ).stdout
+    assert "LC_DYLD_CHAINED_FIXUPS" not in load_commands
+    assert "LC_BUILD_VERSION" in load_commands or "LC_VERSION_MIN_IPHONEOS" in load_commands
+    assert "minos 12.0" in load_commands or "version 12.0" in load_commands
+    print("PASS: Chimera mobile PING helper has no-container entitlement only")
+    print("PASS: deployment minimum iOS12 and no chained fixups")
     print("PASS: isolated iOS12 IPC IPA + external PING-only helper")
     print("PASS: helper has no appinst path or process launcher")
     print("PASS: matches locally generated checksums; no install performed")
