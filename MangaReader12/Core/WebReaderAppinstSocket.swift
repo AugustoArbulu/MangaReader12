@@ -202,6 +202,91 @@ enum WebReaderAppinstSocket {
         return reject("resposta não corresponde a PONG")
     }
 
+    // PING-only alternative for Chimera's iOS12 AF_UNIX sandbox denial.
+    // Intentionally no IPA path, no appinst operation and no authorization.
+    // The TCP port MUST NOT be reused for installation without a completely
+    // separate authentication and protocol/security review.
+    static func checkLoopbackConnection(
+        completion: @escaping (Result) -> Void
+    ) {
+        DispatchQueue.global(qos: .utility).async {
+            let result = pingLoopback()
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    private static func pingLoopback() -> Result {
+        func rejected(_ stage: String, _ errorCode: Int32 = 0) -> Result {
+            return .diagnosticFailure("TCP local " + stage +
+                " (errno=" + String(errorCode) + ")")
+        }
+
+        // Keep the service bound to 127.0.0.1, not an external HTTP endpoint.
+        // There is no file-system or sandbox-container access in this path.
+        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return rejected("socket(AF_INET)", errno) }
+        defer { _ = Darwin.close(fd) }
+
+        var noSigPipe: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0
+        else { return rejected("NOSIGPIPE", errno) }
+
+        var timeout = timeval(tv_sec: 3, tv_usec: 0)
+        guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return rejected("RCVTIMEO", errno) }
+        guard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return rejected("SNDTIMEO", errno) }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = UInt16(38971).bigEndian
+        address.sin_addr = in_addr(s_addr: UInt32(0x7f000001).bigEndian)
+        let connected = withUnsafePointer(to: &address) { pointer -> Int32 in
+            return pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0,
+                    socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0 else { return rejected("connect", errno) }
+
+        let request = Array("WRPING1\\n".utf8)
+        var sent = 0
+        while sent < request.count {
+            let amount = request.withUnsafeBytes { bytes -> Int in
+                guard let base = bytes.baseAddress else { return -1 }
+                return Darwin.send(fd, base.advanced(by: sent),
+                                   request.count - sent, 0)
+            }
+            guard amount > 0 else { return rejected("send PING", errno) }
+            sent += amount
+        }
+
+        var response = [UInt8](repeating: 0, count: 8)
+        var received = 0
+        while received < response.count {
+            let amount = response.withUnsafeMutableBytes { bytes -> Int in
+                guard let base = bytes.baseAddress else { return -1 }
+                return Darwin.recv(fd, base.advanced(by: received),
+                                   response.count - received, 0)
+            }
+            guard amount > 0
+            else { return rejected("recv PONG", amount == 0 ? 0 : errno) }
+            received += amount
+        }
+        guard response == Array("WRPONG1\\n".utf8)
+        else { return rejected("resposta diferente de PONG") }
+        return .diagnosticReady
+    }
+
+    /// Host-only injection for the loopback PING integration test.
+    static func hostLoopbackProbe() -> Result {
+        return pingLoopback()
+    }
+
     /// Test-only injection for native macOS harnesses; never a production UI path.
     static func hostProbe(directory: URL) -> Result {
         return exchange(request: inspectHeader, expectingInstall: false,
