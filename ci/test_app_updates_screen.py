@@ -74,7 +74,9 @@ assert '"Instalar atualização (Chimera)"' in screen
 assert 'build60DisposableAvailable' in screen
 assert '"Teste completo Build 60"' in screen
 assert 'copyBuild60DisposableProcedure()' in screen
-assert '"I-CONFIRM-DISPOSABLE-ONLY"' in screen
+# The consent literal appears inside the complete terminal command, not
+# as a separate quoted Swift expression.
+assert 'run-disposable-qa I-CONFIRM-DISPOSABLE-ONLY' in screen
 assert 'WebReader-Chimera-Disposable-Gate-iOS12' in screen
 assert 'confirmAppinstInstallation()' in screen
 assert 'WebReaderAppinstSocket.install(' in screen
