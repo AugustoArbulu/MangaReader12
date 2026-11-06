@@ -78,6 +78,29 @@ class TestBuild66Preflight(unittest.TestCase):
         with self.assertRaises(AdmissionDenied):
             inspect_ipa(self.path, hashlib.sha256(data).hexdigest(), len(data), 65)
 
+    def test_invalid_digest_format(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(), sha="A" * 64)
+
+    def test_ambiguous_multiple_apps(self):
+        info = plistlib.dumps({"CFBundleIdentifier": "com.example.MangaReader12",
+                               "CFBundleVersion": "66", "MinimumOSVersion": "12.0"})
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(entries=[
+                ("Payload/A.app/Info.plist", info),
+                ("Payload/B.app/Info.plist", info)]))
+
+    def test_invalid_plist(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(entries=[
+                ("Payload/WebReader.app/Info.plist", b"not plist")]))
+
+    def test_absolute_zip_path(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(entries=[
+                ("/Payload/escape", b"x"),
+                ("Payload/WebReader.app/Info.plist", b"not plist")]))
+
     def test_not_zip(self):
         with self.assertRaises(AdmissionDenied):
             self.check(b"not a ZIP")
