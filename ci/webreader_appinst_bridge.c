@@ -68,7 +68,17 @@ extern char **environ;
 #define SOCKET_SUCCESS "WRDONE1\n"
 #define SOCKET_FAILURE "WRFAIL1\n"
 #define MAX_REQUEST_PATH 1024
+#ifndef SOCKET_WAIT_MS
 #define SOCKET_WAIT_MS 60000
+#endif
+/* PING-only physical QA diagnostics are printed only by the
+ * non-installer build. Production bridge does not emit diagnostic logs. */
+#ifdef WEBREADER_PING_ONLY
+#define WR_DIAG(...) do { fprintf(stderr, "WRDIAG: "); \
+    fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#else
+#define WR_DIAG(...) ((void)0)
+#endif
 
 #ifndef WEBREADER_PING_ONLY
 /* Exclude all installer parsing, verification and process launch code
@@ -323,13 +333,20 @@ static int socket_request(int connection, const char *directory) {
     char consent[sizeof(CONFIRMATION)];
     unsigned int length;
 #endif
-    if (!recv_all(connection, header, 8)) return 1;
+    if (!recv_all(connection, header, 8)) {
+        WR_DIAG("connected, but request header read failed (errno=%d)", errno);
+        return 1;
+    }
     if (memcmp(header, SOCKET_PING, 8) == 0) {
-        return send_all(connection, SOCKET_PONG, 8) ? 0 : 1;
+        int ok = send_all(connection, SOCKET_PONG, 8);
+        WR_DIAG("PING matched; PONG send %s (errno=%d)",
+                ok ? "OK" : "FAILED", ok ? 0 : errno);
+        return ok ? 0 : 1;
     }
 #ifdef WEBREADER_PING_ONLY
     /* Device QA binary cannot execute installer even if a client sends
        a formally valid INSTALL request. PING is the only allowed opcode. */
+    WR_DIAG("request header not PING; refusing with WRFAIL1");
     (void)send_all(connection, SOCKET_FAILURE, 8);
     return 1;
 #else
@@ -394,10 +411,23 @@ static int serve_once(const char *directory) {
     waiting.fd = listener;
     waiting.events = POLLIN;
     waiting.revents = 0;
-    if (poll(&waiting, 1, SOCKET_WAIT_MS) != 1 ||
-        !(waiting.revents & POLLIN)) goto finish;
+    int polled = poll(&waiting, 1, SOCKET_WAIT_MS);
+    if (polled != 1 || !(waiting.revents & POLLIN)) {
+        WR_DIAG("NO_CONNECTION: poll=%d revents=%d errno=%d",
+                polled, waiting.revents, polled < 0 ? errno : 0);
+        goto finish;
+    }
     connection = accept(listener, NULL, NULL);
-    if (connection < 0 || !same_mobile_peer(connection)) goto finish;
+    if (connection < 0) {
+        WR_DIAG("ACCEPT_FAILED: errno=%d", errno);
+        goto finish;
+    }
+    WR_DIAG("ACCEPTED_CONNECTION");
+    if (!same_mobile_peer(connection)) {
+        WR_DIAG("PEER_REJECTED: getpeereid/UID mismatch errno=%d", errno);
+        goto finish;
+    }
+    WR_DIAG("PEER_ACCEPTED: same UID");
 #if defined(SO_NOSIGPIPE)
     int enabled = 1;
     (void)setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE,
@@ -408,6 +438,7 @@ static int serve_once(const char *directory) {
     (void)setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO,
                      &timeout, sizeof(timeout));
     result = socket_request(connection, directory);
+    WR_DIAG("REQUEST_FINISHED: result=%d", result);
 finish:
     if (connection >= 0) close(connection);
     if (listener >= 0) close(listener);
