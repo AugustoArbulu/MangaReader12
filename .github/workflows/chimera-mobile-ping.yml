@@ -83,6 +83,3 @@ jobs:
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
             WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
-            WebReader-Chimera-Ping-DIAG-iOS12
-            WebReader-Chimera-Ping-DIAG-iOS12.sha256
-            docs/WEBREADER_PONTE_CHIMERA_PING_2026-11-06.md
