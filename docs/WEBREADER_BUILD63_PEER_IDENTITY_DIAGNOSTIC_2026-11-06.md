@@ -45,3 +45,34 @@ Este programa é uma medição do kernel no processo CLI, **não uma prova de qu
 Investigar um transporte com credencial/audit token vinculado ao descritor IPC, autorização explícita resistente a clientes locais forjados e chave P-256 de editor independente do GitHub, além de revalidar IPA com descritor retido. `SecCodeCreateWithPID` não deve ser usado como autenticador de produção por causa de race/reutilização PID.
 
 Aprovação da Build63 significa exclusivamente capacidade diagnóstica. **Proibido conectar a Build61 PING-only ou a Build63 diretamente ao appinst.** O PR permanece Draft até os demais gates e QA física.
+
+## CI concluído e auditoria de pacote — 06/11/2026
+
+GitHub Actions run [#42186712949](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42186712949) **SUCCESS**, commit testado `96203ec11012018847b61fbc3f5dbc4d0fef6a53`.
+
+- macOS: quatro rodadas com `TCP_LOOPBACK PEER_PID=MATCH` e `UNIX_LOCAL PEER_PID=MATCH`, sempre `AUTHORIZATION=DENIED`.
+- Assinatura ad-hoc do binário ARM64/iOS12 verificada; alvo iOS mínimo 12.0 e sem fixups incompatíveis.
+- `data.tar.gz` inclui explicitamente `./usr/`, `./usr/local/`, `./usr/local/bin/` e um único binário. `control.tar.gz` contém somente `control`: **nenhum postinst, launchd, daemon, executor de appinst ou IPA**.
+- Artifact `WebReader-Chimera-Build63-PeerProbe-QA-iOS12`, ID `13488525539`.
+- Arquivo `WebReader-Chimera-PeerProbe63-iOS12.deb`, 4.674 bytes; SHA-256 `d38a398af4d663eec167f8ec6911e4fcf3311fc45558d498603e127eda0e732c`.
+- Auditoria separada no Linux: `dpkg-deb --info` versão 0.1.0 e arquitetura iphoneos-arm, `dpkg-deb --contents` validou estrutura e `dpkg-deb --extract` em diretório vazio gerou executável correto.
+
+**Importante:** essas verificações não demonstram disponibilidade de `TCP_PEER_PID` no iOS 12, nem compatibilidade do `fork()` na execução móvel. Ainda não há aprovação física no iPad.
+
+### Instrução para QA física opcional
+
+Se o usuário desejar testar: salvar o pacote em `/var/mobile/Documents/WebReader-Chimera-PeerProbe63-iOS12.deb`. Instalar somente o diagnóstico, por NewTerm2, como root:
+
+```sh
+dpkg -i /var/mobile/Documents/WebReader-Chimera-PeerProbe63-iOS12.deb
+```
+
+Depois sair do root (`exit`) e executar como **mobile**:
+
+```sh
+/usr/local/bin/webreader-peerprobe63 selftest
+```
+
+Guardar a saída das linhas `PROBE TCP_LOOPBACK` e `PROBE UNIX_LOCAL`. A saída deve terminar com `FINAL_INSTALL_AUTHORIZATION=DENIED`. Se `fork`, socket ou permissão falhar, tratar como falha **de diagnóstico**, sem elevar privilégios ou alterar o helper Build61. Remoção: `dpkg -r com.example.webreader.peerprobe63` com privilégios do gerenciador, quando solicitado.
+
+Este pacote tem objetivo exclusivamente de leitura e não atende ao requisito de instalação de IPA diretamente pelo app.
