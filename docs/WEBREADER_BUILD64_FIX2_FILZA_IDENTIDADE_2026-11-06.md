@@ -47,3 +47,14 @@
 - A PR #90 permanece aberta, **Draft**, sem merge na `main`. Nenhuma mudança no app instalado, na assinatura ou no workflow foi feita nesta rechecagem.
 - A página pública do GitHub Status registra interrupções recentes de Actions em 04–05/11, já resolvidas. Não há prova de que esses incidentes expliquem esta fila específica; a classificação permanece **runner pendente, causa não confirmada**.
 - **Não disparar outro retry enquanto este job estiver queued; não enviar a FIX1; não inventar hash para FIX2.** Reavaliar jobs e artifacts quando o GitHub atualizar; apenas após SUCCESS e auditoria independente planejar entrega e instruções separadas para NewTerm2.
+
+## Resultado final CI e entrega — 06/11/2026, 14h05 BRT
+
+- **Execução definitiva:** [GitHub Actions #42255878642](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42255878642) no commit `bf110f8b515535f55c68f964e3b172bc244f2409`: job `verified-export-only` **SUCCESS**. Build iOS12 arm64, empacotamento assinado ad hoc, auditoria de identidade e upload passaram.
+- **Artifact:** `WebReader-Build64-FIX2-ManualQA-iOS12` (ID `13523806218`), [download no GitHub](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42255878642/artifacts/13523806218), ZIP 17.682.268 bytes, SHA-256 `c0dc9ae80e741822948829a4520b504ef07d0451b33048c50db28ba96e3a49a7`.
+- **IPA extraída:** `WebReader-Build64-FIX2-iOS12-adhoc.ipa`, 17.758.061 bytes, SHA-256 `fd4ea5ed60bee89fa12436202b5ca70cfd1108fb9ed85ad45c210465b247a0a9`. Auditoria independente: ZIP íntegro, manifesto e hash coincidentes, `Info.plist` com Bundle ID `com.example.MangaReader12`, Build `64`, iOS mínimo `12.0`, executável arm64. A assinatura ad hoc e entitlement passaram em `codesign --verify` no runner do GitHub.
+- **Gate:** `upgradeIdentityMatch=true`, `application-identifier=AR5SFJC432.com.example.MangaReader12.AR5SFJC432` coincidente com a informação do Filza sobre a Build56. Isso **não garante** aceitação pelo iOS 12 em teste físico.
+- **Entrega:** dois e-mails para `gutoarbulu@icloud.com`, partes `WebReader64FIX2.part00.bin` a `part07.bin` em grupos de 4, com comandos separados, anexos confirmados na pasta de mensagens enviadas do Outlook. SHA da IPA informado nas instruções. Existe também IPA integral no pacote para download direto.
+- **Automação:** acompanhamento horário da Build64 FIX2 desativado após conclusão e confirmação do envio, para não duplicar entregas.
+- **Próximo teste físico:** backup da biblioteca e capítulos offline; nunca desinstalar Build56; juntar as 8 partes se usar e-mail; validar SHA-256 com `sha256sum`; tentar upgrade somente manual via Filza. Se rejeitar, anotar o erro e parar, sem limpar dados ou usar FIX1.
+- **Escopo:** somente branch experimental, PR #90 continua Draft. Nenhuma instalação remota, appinst automático, publicação de release ou merge em main foi executado.
