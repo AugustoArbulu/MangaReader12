@@ -34,7 +34,7 @@ def main():
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader appinst Test"
         assert info["MinimumOSVersion"] == "12.0"
-        assert info["CFBundleVersion"] == "1"
+        assert info["CFBundleVersion"] == "2"
         assert info["CFBundleExecutable"] == "WRAppinstDirect"
         assert "UIBackgroundModes" not in info
         assert "UIFileSharingEnabled" not in info
