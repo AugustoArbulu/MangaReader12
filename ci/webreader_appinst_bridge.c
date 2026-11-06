@@ -20,6 +20,9 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include <CommonCrypto/CommonDigest.h>
+#ifdef WEBREADER_PING_ONLY
+#include <CommonCrypto/CommonHMAC.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -68,6 +71,8 @@ extern char **environ;
 #define SOCKET_NAME "wri.sock"
 /* PING-only diagnostic TCP on IPv4 loopback. NOT an installation transport. */
 #define PING_LOOPBACK_PORT 38971
+/* Separate non-installing, one-use pairing laboratory (NOT an updater). */
+#define PAIR_LOOPBACK_PORT 38972
 #define INSTALL_HEADER "WRINST1\n"
 #define SOCKET_PING "WRPING1\n"
 #define SOCKET_PONG "WRPONG1\n"
@@ -532,6 +537,163 @@ finish:
 }
 #endif
 
+#ifdef WEBREADER_PING_ONLY
+/*
+ * Ephemeral proof-of-possession experiment for iOS12 loopback IPC.
+ *
+ * Security boundary: This merely proves the remote process knew a
+ * terminal-displayed one-shot random code. It does not authenticate an app
+ * signature or process identity, so it MUST NEVER install an IPA, execute
+ * appinst, accept file paths or be promoted to a privileged listener.
+ *
+ * Fixed framing (all tokens exactly 8 bytes):
+ * client: WRPAIR1\n
+ * server: WRCHAL1\n + random 16-byte challenge
+ * client: WRAUTH1\n + HMAC-SHA256(code, "WR-PAIR-CLIENT-V1" || challenge)
+ * server: WROKAY1\n + HMAC-SHA256(code, "WR-PAIR-SERVER-V1" || challenge)
+ *     OR: WRDENY1\n
+ *
+ * One connection / one attempted authentication, then exit. Separate port
+ * 38972. Code is 16 random uppercase hexadecimal chars (64 random bits),
+ * printed only on the local NewTerm screen, never in CI or device reports.
+ */
+static void pair_zero(void *pointer, size_t size) {
+    volatile unsigned char *p = (volatile unsigned char *)pointer;
+    while (size--) *p++ = 0;
+}
+static int pair_equal(const unsigned char *a, const unsigned char *b,
+                      size_t count) {
+    unsigned char diff = 0;
+    size_t i;
+    for (i = 0; i < count; ++i) diff |= (unsigned char)(a[i] ^ b[i]);
+    return diff == 0;
+}
+static void pair_mac(const char code[17], const char *domain,
+                     const unsigned char nonce[16],
+                     unsigned char output[CC_SHA256_DIGEST_LENGTH]) {
+    unsigned char data[64];
+    const size_t length = strlen(domain);
+    memcpy(data, domain, length);
+    memcpy(data + length, nonce, 16);
+    CCHmac(kCCHmacAlgSHA256, code, 16, data, length + 16, output);
+    pair_zero(data, sizeof(data));
+}
+
+static int serve_pair_once(void) {
+    int listener = -1, client = -1, result = 1;
+    int polled;
+    struct sockaddr_in local, remote;
+    socklen_t remote_length = (socklen_t)sizeof(remote);
+    struct pollfd waiting;
+    struct timeval timeout = {3, 0};
+    char code[17] = {0};
+    unsigned char secret[8] = {0};
+    unsigned char nonce[16] = {0};
+    unsigned char received_mac[CC_SHA256_DIGEST_LENGTH] = {0};
+    unsigned char expected_mac[CC_SHA256_DIGEST_LENGTH] = {0};
+    unsigned char server_mac[CC_SHA256_DIGEST_LENGTH] = {0};
+    char header[8] = {0};
+    char challenge[24] = {0};
+    char response[40] = {0};
+    size_t i;
+    int no_sigpipe = 1;
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0) {
+        WR_DIAG("PAIR_SOCKET_FAILED errno=%d", errno);
+        goto finish;
+    }
+    memset(&local, 0, sizeof(local));
+#if defined(__APPLE__)
+    local.sin_len = (uint8_t)sizeof(local);
+#endif
+    local.sin_family = AF_INET;
+    local.sin_port = htons(PAIR_LOOPBACK_PORT);
+    local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    /* Deliberately no SO_REUSEPORT or SO_REUSEADDR; do not share port. */
+    if (bind(listener, (const struct sockaddr *)&local,
+             (socklen_t)sizeof(local)) != 0 || listen(listener, 1) != 0) {
+        WR_DIAG("PAIR_BIND_FAILED errno=%d", errno);
+        goto finish;
+    }
+
+    arc4random_buf(secret, sizeof(secret));
+    arc4random_buf(nonce, sizeof(nonce));
+    for (i = 0; i < sizeof(secret); ++i)
+        (void)snprintf(code + (2 * i), 3, "%02X", secret[i]);
+    puts("WRPAIR_READY (127.0.0.1:38972, ONE-USE, 60s)");
+    /* Only displayed on the user's terminal, never logged to artifacts. */
+    printf("WRPAIR_CODE: %s\n", code);
+    fflush(stdout);
+    waiting.fd = listener;
+    waiting.events = POLLIN;
+    waiting.revents = 0;
+    polled = poll(&waiting, 1, SOCKET_WAIT_MS);
+    if (polled != 1 || !(waiting.revents & POLLIN)) {
+        WR_DIAG("PAIR_TIMEOUT: no connection; code expired");
+        goto finish;
+    }
+    memset(&remote, 0, sizeof(remote));
+    client = accept(listener, (struct sockaddr *)&remote, &remote_length);
+    if (client < 0 ||
+        remote.sin_family != AF_INET ||
+        ntohl(remote.sin_addr.s_addr) != INADDR_LOOPBACK) {
+        WR_DIAG("PAIR_REJECTED_NONLOCAL_OR_ACCEPT_FAILED");
+        goto finish;
+    }
+#if defined(SO_NOSIGPIPE)
+    (void)setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE,
+                     &no_sigpipe, sizeof(no_sigpipe));
+#else
+    (void)no_sigpipe;
+#endif
+    (void)setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                     &timeout, sizeof(timeout));
+    (void)setsockopt(client, SOL_SOCKET, SO_SNDTIMEO,
+                     &timeout, sizeof(timeout));
+
+    if (!recv_all(client, header, sizeof(header)) ||
+        memcmp(header, "WRPAIR1\n", 8) != 0) {
+        WR_DIAG("PAIR_REJECTED_BAD_REQUEST");
+        goto finish;
+    }
+    memcpy(challenge, "WRCHAL1\n", 8);
+    memcpy(challenge + 8, nonce, sizeof(nonce));
+    if (!send_all(client, challenge, sizeof(challenge)) ||
+        !recv_all(client, header, sizeof(header)) ||
+        memcmp(header, "WRAUTH1\n", 8) != 0 ||
+        !recv_all(client, (char *)received_mac, sizeof(received_mac))) {
+        WR_DIAG("PAIR_REJECTED_BAD_PROOF_FRAME");
+        goto finish;
+    }
+    pair_mac(code, "WR-PAIR-CLIENT-V1", nonce, expected_mac);
+    if (!pair_equal(received_mac, expected_mac, sizeof(received_mac))) {
+        (void)send_all(client, "WRDENY1\n", 8);
+        WR_DIAG("PAIR_DENIED: invalid proof; session consumed");
+        goto finish;
+    }
+    pair_mac(code, "WR-PAIR-SERVER-V1", nonce, server_mac);
+    memcpy(response, "WROKAY1\n", 8);
+    memcpy(response + 8, server_mac, sizeof(server_mac));
+    if (!send_all(client, response, sizeof(response))) {
+        WR_DIAG("PAIR_FAILED_TO_SEND_ACK");
+        goto finish;
+    }
+    WR_DIAG("PAIR_PROOF_ACCEPTED: possession only, NOT app identity");
+    result = 0;
+finish:
+    if (client >= 0) close(client);
+    if (listener >= 0) close(listener);
+    pair_zero(code, sizeof(code));
+    pair_zero(secret, sizeof(secret));
+    pair_zero(nonce, sizeof(nonce));
+    pair_zero(received_mac, sizeof(received_mac));
+    pair_zero(expected_mac, sizeof(expected_mac));
+    pair_zero(server_mac, sizeof(server_mac));
+    return result;
+}
+#endif
+
 int main(int argc, char **argv) {
     if (geteuid() == 0) {
         fputs("Refusing root: this mobile-user bridge is nonprivileged\n", stderr);
@@ -559,6 +721,9 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "serve-loopback-once") == 0) {
         return serve_loopback_once();
     }
+    if (argc == 2 && strcmp(argv[1], "serve-pair-once") == 0) {
+        return serve_pair_once();
+    }
 #endif
 #ifndef WEBREADER_PING_ONLY
     if (argc >= 2 && strcmp(argv[1], "inspect") == 0 && argc == 4) {
@@ -581,7 +746,7 @@ int main(int argc, char **argv) {
     }
 #endif
 #ifdef WEBREADER_PING_ONLY
-    fputs("Usage: selftest | serve-once <app-container/WR> | serve-loopback-once (PING only)\n", stderr);
+    fputs("Usage: selftest | serve-once <app-container/WR> | serve-loopback-once | serve-pair-once (no installation)\n", stderr);
 #else
     fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256> | "
           "install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n", stderr);
