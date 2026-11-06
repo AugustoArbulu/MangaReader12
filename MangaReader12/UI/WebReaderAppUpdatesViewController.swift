@@ -47,6 +47,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             installedBuild >= 59
     }
 
+    private var build60DisposableAvailable: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" &&
+            installedBuild >= 60
+    }
+
     private var installedBuild: Int {
         let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         return Int(raw ?? "") ?? 0
@@ -107,7 +112,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
-        if source == 5 { return pairingDiagnosticAvailable ? 5 : 4 }
+        if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }
         return 1
     }
 
@@ -360,6 +365,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 }
             }
 
+        case (5, 5):
+            if build60DisposableAvailable {
+                cell.textLabel?.text = "Teste completo Build 60"
+                cell.detailTextLabel?.text =
+                    "Copiar roteiro único • app descartável v1 → v2 • sem tocar no WebReader"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
         default:
             break
         }
@@ -420,6 +434,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             if indexPath.row == 3 { testAppinstBridgeConnection() }
             if indexPath.row == 4 && pairingDiagnosticAvailable {
                 promptOneTimePairingCode()
+            }
+            if indexPath.row == 5 && build60DisposableAvailable {
+                copyBuild60DisposableProcedure()
             }
             return
         }
@@ -758,6 +775,43 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
         ))
         present(dialog, animated: true)
+    }
+
+    /// A single consolidated manual field session, using only hard-pinned
+    /// throwaway app IPAs. No installation is performed from this UI.
+    private func copyBuild60DisposableProcedure() {
+        guard build60DisposableAvailable else { return }
+        let executable =
+            "/var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12"
+        let instructions = [
+            "Build60 • atualização APENAS do app descartável",
+            "Transferir do ZIP Build60 para /var/mobile/Documents:",
+            "WebReader-Chimera-Disposable-Gate-iOS12",
+            "WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa",
+            "WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa",
+            "No NewTerm 2 como mobile (id -u = 501):",
+            executable + " selftest",
+            executable + " inspect-v1",
+            executable + " inspect-v2",
+            "Depois de confirmar o alvo app descartável:",
+            executable + " install-v1 I-CONFIRM-DISPOSABLE-ONLY",
+            "Abrir WR Appinst Test v1 para criar dados locais.",
+            executable + " install-v2 I-CONFIRM-DISPOSABLE-ONLY",
+            "Abrir WR Appinst Test v2 e conferir persistência: SIM.",
+            "NÃO usar essa ferramenta com IPA WebReader.",
+            "O helper aceita apenas os dois hashes fixos; não abre TCP.",
+            "main e WebReader Build56 permanecem preservados."
+        ].joined(separator: "\n")
+        UIPasteboard.general.string = instructions
+        let alert = UIAlertController(
+            title: "Roteiro Build 60 copiado",
+            message: "O roteiro completo foi copiado. O teste instala " +
+                "somente o app descartável, mediante comandos explícitos no NewTerm. " +
+                "Nenhuma instalação foi iniciada pelo WebReader.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     private func copyHelperReport() {
