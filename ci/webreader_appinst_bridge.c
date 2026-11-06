@@ -73,6 +73,7 @@ extern char **environ;
 #define PING_LOOPBACK_PORT 38971
 /* Separate non-installing, one-use pairing laboratory (NOT an updater). */
 #define PAIR_LOOPBACK_PORT 38972
+#define PAIR_WAIT_MS 120000
 #define INSTALL_HEADER "WRINST1\n"
 #define SOCKET_PING "WRPING1\n"
 #define SOCKET_PONG "WRPONG1\n"
@@ -621,14 +622,14 @@ static int serve_pair_once(void) {
     arc4random_buf(nonce, sizeof(nonce));
     for (i = 0; i < sizeof(secret); ++i)
         (void)snprintf(code + (2 * i), 3, "%02X", secret[i]);
-    puts("WRPAIR_READY (127.0.0.1:38972, ONE-USE, 60s)");
+    puts("WRPAIR_READY (127.0.0.1:38972, ONE-USE, 120s)");
     /* Only displayed on the user's terminal, never logged to artifacts. */
     printf("WRPAIR_CODE: %s\n", code);
     fflush(stdout);
     waiting.fd = listener;
     waiting.events = POLLIN;
     waiting.revents = 0;
-    polled = poll(&waiting, 1, SOCKET_WAIT_MS);
+    polled = poll(&waiting, 1, PAIR_WAIT_MS);
     if (polled != 1 || !(waiting.revents & POLLIN)) {
         WR_DIAG("PAIR_TIMEOUT: no connection; code expired");
         goto finish;
