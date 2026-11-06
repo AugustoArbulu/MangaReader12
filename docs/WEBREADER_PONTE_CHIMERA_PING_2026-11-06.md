@@ -1,5 +1,52 @@
 # Ponte Chimera — primeiro teste real, sem instalar IPAs
 
+## Diagnóstico PING após `WRAPPINST_READY` — 06/11/2026
+
+O usuário criou a pasta `WR` com permissão 0700 (antes ela não existia).
+O helper assinado com `no-container` executou `selftest` corretamente.
+Em seguida, no NewTerm 2 (`UID 501`), mostrou `WRAPPINST_READY`.
+O usuário **tocou no botão Testar ponte appinst (PING) dentro dos 60 s**.
+O WebReader IPC Test exibiu **Conexão ou resposta do instalador rejeitada**,
+e o terminal retornou ao prompt normal sem informar a causa.
+
+A mensagem do aplicativo corresponde ao resultado genérico `.rejected`;
+não prova que a conexão chegou ao servidor (pode falhar na análise local
+do diretório/socket, no cheque do peer, no `send`/`recv` ou no cabeçalho).
+
+### Próximo arquivo de diagnóstico — somente um componente
+
+Artifact **WebReader-Chimera-Mobile-PING-DIAG-iOS12** no novo run
+`.github/workflows/chimera-mobile-ping.yml`.
+
+- Helper diferente: `WebReader-Chimera-Ping-DIAG-iOS12`.
+- Segue compilado como `WEBREADER_PING_ONLY` e assinado com um único
+  entitlement `com.apple.private.security.no-container`.
+- Depois de `WRAPPINST_READY`, agora mostra um dos códigos:
+  - `WRDIAG: NO_CONNECTION`: ninguém chegou a ser aceito no socket
+    durante a janela de 60 segundos.
+  - `WRDIAG: ACCEPTED_CONNECTION`: a conexão chegou ao servidor.
+  - `WRDIAG: PEER_REJECTED`: UID/peer não autorizado.
+  - `WRDIAG: PING matched; PONG send OK`: protocolo foi respondido.
+  - `WRDIAG: request header not PING`: cabeçalho incorreto.
+  - `WRDIAG: REQUEST_FINISHED: result=0`: servidor finalizou sem erro.
+
+**Instrução física mínima:** o WebReader IPC Test já está instalado e a
+pasta `WR` já existe; não reinstalar IPA ou fazer `mkdir`.
+Copiar só `WebReader-Chimera-Ping-DIAG-iOS12` pelo WebDAV para
+`/var/mobile/Documents/` (não usar `ldid -S`). Em NewTerm 2 mobile:
+
+```sh
+/var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-once '/var/mobile/Containers/Data/Application/F6C7F694-9BEB-432B-936B-FC8B3AA95A50/WR'
+```
+
+Quando aparecer `WRAPPINST_READY`, tocar uma vez em
+**Testar ponte appinst (PING)** dentro de 60s; fotografar a tela do
+NewTerm com as linhas `WRDIAG` após o processo encerrar.
+Ainda não instala IPAs, não chama `appinst`, não altera a Build56.
+
+---
+
+
 ## Atualização do teste após o diagnóstico físico `zsh: killed`
 
 Em 06/11/2026, o usuário testou o helper anterior em NewTerm 2 no iPad
