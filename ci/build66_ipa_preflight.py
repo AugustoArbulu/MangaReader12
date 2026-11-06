@@ -72,7 +72,7 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build):
                 if mode == stat.S_IFLNK:
                     raise AdmissionDenied("ZIP symlink")
             infos = [e for e in entries if re.fullmatch(
-                r"Payload/[^/]+\\.app/Info\\.plist", e.filename
+                r"Payload/[^/]+\.app/Info\.plist", e.filename
             )]
             if len(infos) != 1 or infos[0].file_size > 1024 * 1024:
                 raise AdmissionDenied("missing or ambiguous Info.plist")
@@ -86,7 +86,7 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build):
             if build <= min_build:
                 raise AdmissionDenied("downgrade")
             minimum = metadata.get("MinimumOSVersion")
-            if not isinstance(minimum, str) or not re.fullmatch(r"[0-9]{1,2}\\.[0-9]{1,2}(\\.[0-9]{1,2})?", minimum):
+            if not isinstance(minimum, str) or not re.fullmatch(r"[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?", minimum):
                 raise AdmissionDenied("invalid iOS minimum")
             parts = tuple(int(x) for x in minimum.split("."))
             if (parts + (0,) * (3 - len(parts))) > (12, 5, 8):
