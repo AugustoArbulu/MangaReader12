@@ -7,6 +7,7 @@ service, real /usr/bin/appinst or an actual application installation.
 """
 import hashlib
 import os
+import select
 from pathlib import Path
 import subprocess
 import sys
@@ -30,6 +31,8 @@ import Foundation
         let result: WebReaderAppinstSocket.Result
         if args[1] == "ping" && args.count == 3 {
             result = WebReaderAppinstSocket.hostProbe(directory: directory)
+        } else if args[1] == "loopback" && args.count == 3 {
+            result = WebReaderAppinstSocket.hostLoopbackProbe()
         } else if args[1] == "install" && args.count == 5 {
             result = WebReaderAppinstSocket.hostInstall(
                 directory: directory,
@@ -63,6 +66,7 @@ class NativeSocketIntegration(unittest.TestCase):
         cls.working = tempfile.TemporaryDirectory(prefix="wr-install-ipc-", dir="/tmp")
         cls.root = Path(cls.working.name).resolve()
         cls.server = cls.root / "appinst-bridge-fake"
+        cls.loopback_helper = cls.root / "loopback-ping-only"
         cls.client = cls.root / "swift-client"
         cls.fake = cls.root / "fake-appinst.sh"
         cls.fake.write_text(
@@ -79,6 +83,10 @@ class NativeSocketIntegration(unittest.TestCase):
              '-DWEBREADER_TEST_ROOT="' + str(cls.root) + '"',
              '-DWEBREADER_TEST_APPINST="' + str(cls.fake) + '"',
              str(BRIDGE_C), "-o", str(cls.server)],
+            ["xcrun", "clang", "-std=c11", "-Wall", "-Wextra", "-Werror",
+             "-Wno-deprecated-declarations", "-DWEBREADER_PING_ONLY",
+             "-DSOCKET_WAIT_MS=3000", str(BRIDGE_C),
+             "-o", str(cls.loopback_helper)],
             ["xcrun", "swiftc", "-parse-as-library",
              str(CORE / "WebReaderHelperPingProbe.swift"),
              str(CORE / "WebReaderAppinstSocket.swift"),
@@ -187,6 +195,21 @@ class NativeSocketIntegration(unittest.TestCase):
         result = self.run_client("ping")
         self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
         self.assertIn("não está em execução", result.stdout)
+        self.assertFalse(self.marker.exists())
+
+    def test_swift_localhost_ping_never_uses_appinst(self):
+        helper = subprocess.Popen(
+            [str(self.loopback_helper), "serve-loopback-once"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        self.addCleanup(self._stop_server, helper)
+        ready, _, _ = select.select([helper.stdout], [], [], 2)
+        self.assertTrue(ready, "loopback helper did not start")
+        self.assertIn(b"WRLOOPBACK_READY", helper.stdout.readline())
+        result = self.run_client("loopback")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PONG", result.stdout)
+        self.assertEqual(helper.wait(timeout=4), 0)
         self.assertFalse(self.marker.exists())
 
     def test_bad_sha_fails_and_installer_not_called(self):
