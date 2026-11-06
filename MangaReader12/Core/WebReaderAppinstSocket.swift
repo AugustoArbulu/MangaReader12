@@ -21,6 +21,7 @@ enum WebReaderAppinstSocket {
         case completed
         case failed
         case diagnosticReady
+        case diagnosticFailure(String)
 
         var text: String {
             switch self {
@@ -34,6 +35,8 @@ enum WebReaderAppinstSocket {
                 return "Ponte appinst relatou falha; a instalação não foi confirmada"
             case .diagnosticReady:
                 return "Ponte mobile respondeu PONG; instalação não executada"
+            case .diagnosticFailure(let detail):
+                return "Diagnóstico IPC: " + detail + " • nenhuma instalação executada"
             }
         }
     }
@@ -83,38 +86,51 @@ enum WebReaderAppinstSocket {
         request: Data, expectingInstall: Bool,
         directory: URL = WebReaderHelperPingProbe.diagnosticDirectory
     ) -> Result {
+        // Only reveal detailed failure stages in a read-only PING probe.
+        // Real installer requests must stay fail-closed and return .rejected.
+        func reject(_ stage: String, error code: Int32 = 0) -> Result {
+            return expectingInstall ? .rejected :
+                .diagnosticFailure(stage + " (errno=" + String(code) + ")")
+        }
         let fm = FileManager.default
         do {
             try fm.createDirectory(
                 at: directory, withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700]
             )
-        } catch { return .rejected }
+        } catch {
+            return reject("criar pasta WR: " + String((error as NSError).code))
+        }
 
         var directoryEntry = stat()
-        guard directory.path.withCString({
-            lstat($0, &directoryEntry)
-        }) == 0,
-            (directoryEntry.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
-            directoryEntry.st_uid == geteuid(),
-            (directoryEntry.st_mode & 0o077) == 0
-        else { return .rejected }
+        let directoryStatus = directory.path.withCString { lstat($0, &directoryEntry) }
+        if directoryStatus != 0 { return reject("lstat pasta WR", error: errno) }
+        guard (directoryEntry.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR)
+        else { return reject("pasta WR não é diretório") }
+        guard directoryEntry.st_uid == geteuid()
+        else { return reject("proprietário WR diferente de mobile") }
+        guard (directoryEntry.st_mode & 0o077) == 0
+        else { return reject("permissões WR não são privadas") }
 
         let socketPath = directory.appendingPathComponent(socketName).path
         var entry = stat()
         if socketPath.withCString({ lstat($0, &entry) }) != 0 {
-            return errno == ENOENT ? .unavailable : .rejected
+            let errorCode = errno
+            return errorCode == ENOENT ? .unavailable :
+                reject("lstat socket", error: errorCode)
         }
-        guard (entry.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK),
-              entry.st_uid == geteuid(),
-              (entry.st_mode & 0o077) == 0
-        else { return .rejected }
+        guard (entry.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK)
+        else { return reject("wri.sock não é socket") }
+        guard entry.st_uid == geteuid()
+        else { return reject("UID do socket diferente de mobile") }
+        guard (entry.st_mode & 0o077) == 0
+        else { return reject("permissões do socket não são privadas") }
 
         var address = sockaddr_un()
         let count = MemoryLayout<sockaddr_un>.size
         let pathBytes = Array(socketPath.utf8) + [0]
         guard pathBytes.count < MemoryLayout.size(ofValue: address.sun_path)
-        else { return .rejected }
+        else { return reject("caminho do socket excede limite do iOS12") }
         address.sun_family = sa_family_t(AF_UNIX)
         address.sun_len = UInt8(count)
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
@@ -122,32 +138,36 @@ enum WebReaderAppinstSocket {
         }
 
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return .rejected }
+        guard fd >= 0 else { return reject("socket(AF_UNIX)", error: errno) }
         defer { _ = Darwin.close(fd) }
         var noSigPipe: Int32 = 1
         guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe,
                          socklen_t(MemoryLayout<Int32>.size)) == 0
-        else { return .rejected }
+        else { return reject("setsockopt NOSIGPIPE", error: errno) }
 
         var timeout = timeval(tv_sec: expectingInstall ? 190 : 3, tv_usec: 0)
         guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                         socklen_t(MemoryLayout<timeval>.size)) == 0,
-              setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
                          socklen_t(MemoryLayout<timeval>.size)) == 0
-        else { return .rejected }
+        else { return reject("setsockopt RCVTIMEO", error: errno) }
+        guard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return reject("setsockopt SNDTIMEO", error: errno) }
 
         let connected = withUnsafePointer(to: &address) { pointer -> Int32 in
             return pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 Darwin.connect(fd, $0, socklen_t(count))
             }
         }
-        guard connected == 0 else { return .unavailable }
+        guard connected == 0 else {
+            return expectingInstall ? .unavailable : reject("connect", error: errno)
+        }
 
         var peerUID = uid_t.max
         var peerGID = gid_t.max
-        guard getpeereid(fd, &peerUID, &peerGID) == 0,
-              peerUID == geteuid()
-        else { return .rejected }
+        guard getpeereid(fd, &peerUID, &peerGID) == 0
+        else { return reject("getpeereid", error: errno) }
+        guard peerUID == geteuid()
+        else { return reject("UID do peer não corresponde ao app") }
 
         var sent = 0
         let written = request.withUnsafeBytes { buffer -> Bool in
@@ -160,7 +180,7 @@ enum WebReaderAppinstSocket {
             }
             return true
         }
-        guard written else { return .rejected }
+        guard written else { return reject("send PING", error: errno) }
         var response = [UInt8](repeating: 0, count: 8)
         var received = 0
         while received < response.count {
@@ -170,7 +190,7 @@ enum WebReaderAppinstSocket {
                 return Darwin.recv(fd, base.advanced(by: received),
                                    remaining, 0)
             }
-            if n <= 0 { return .rejected }
+            if n <= 0 { return reject("recv PONG", error: n == 0 ? 0 : errno) }
             received += n
         }
         if expectingInstall {
@@ -179,7 +199,7 @@ enum WebReaderAppinstSocket {
         } else if response == Array("WRPONG1\n".utf8) {
             return .diagnosticReady
         }
-        return .rejected
+        return reject("resposta não corresponde a PONG")
     }
 
     /// Test-only injection for native macOS harnesses; never a production UI path.
