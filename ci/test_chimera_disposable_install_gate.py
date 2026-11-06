@@ -9,8 +9,8 @@ import tempfile
 import unittest
 
 SOURCE = Path(__file__).with_name("webreader_chimera_disposable_gate.c")
-V1 = "WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa"
-V2 = "WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa"
+V1 = "WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa"
+V2 = "WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa"
 CONSENT = "I-CONFIRM-DISPOSABLE-ONLY"
 
 
