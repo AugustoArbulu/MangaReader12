@@ -253,7 +253,7 @@ enum WebReaderAppinstSocket {
         }
         guard connected == 0 else { return rejected("connect", errno) }
 
-        let request = Array("WRPING1\\n".utf8)
+        let request = Array("WRPING1\n".utf8)
         var sent = 0
         while sent < request.count {
             let amount = request.withUnsafeBytes { bytes -> Int in
@@ -268,16 +268,17 @@ enum WebReaderAppinstSocket {
         var response = [UInt8](repeating: 0, count: 8)
         var received = 0
         while received < response.count {
+            let remaining = response.count - received
             let amount = response.withUnsafeMutableBytes { bytes -> Int in
                 guard let base = bytes.baseAddress else { return -1 }
                 return Darwin.recv(fd, base.advanced(by: received),
-                                   response.count - received, 0)
+                                   remaining, 0)
             }
             guard amount > 0
             else { return rejected("recv PONG", amount == 0 ? 0 : errno) }
             received += amount
         }
-        guard response == Array("WRPONG1\\n".utf8)
+        guard response == Array("WRPONG1\n".utf8)
         else { return rejected("resposta diferente de PONG") }
         return .diagnosticReady
     }
