@@ -65,3 +65,17 @@ A IPA de QA **não** implementa atualização por appinst. Não conectar a Build
 ## Entrega
 
 O arquivo IPA excede o limite de anexo direto de 3 MB do Outlook conectado. Entregar link de download e checksum por e-mail (ou por chat), sem afirmar que IPA de 17 MB foi anexada. Após conclusão e avaliação do QA, continuar protótipo de helper de instalação controlado. Não publicar Release automática ou substituir o usuário.
+
+## Build 64 FIX1 — correção de assinatura após erro real no Filza (06/11/2026)
+
+**Relato físico:** a IPA inicial `WebReader-Build64-QA-iOS12-unsigned.ipa` foi rejeitada pelo Filza com `Application is missing the application-identifier entitlement`. O usuário comprovou o SHA-256 completo e reconstrução correta das oito partes. Logo, a falha foi no empacotamento/assinatura, não nos anexos.
+
+**Correção:** após modificar `Info.plist` do bundle de QA para versão 64, o empacotador agora assina **todo o bundle** com `codesign --force --sign -` usando `ci/chimera_webreader_qa.entitlements`. O identificador assinado é `WRQA000001.com.example.MangaReader12`, com Bundle ID `com.example.MangaReader12`. Trata-se de assinatura ad hoc com prefixo sintético de laboratório, não de assinatura da Apple e sem alegação de compatibilidade comprovada com o app Build 56 já instalado.
+
+**CI:** [GitHub Actions Run #42196075056](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42196075056) **SUCCESS**, incluindo compilação arm64/iOS12, teste de bloqueio de instalação direta, testes nativos de IPA, `codesign --verify` e leitura exata do `application-identifier` na IPA extraída. `main` e helper PING da Build 61 não foram alterados.
+
+**Artefato substituto:** `WebReader-Build64-QA-iOS12-adhoc.ipa`, 17.758.093 bytes, SHA-256 `ecde7c7b6a412cc94e568efd32b2d9daf8c8264cbc6c10898e5a7fed755d1014`. Este arquivo **substitui** o unsigned rejeitado; não misturar partes antigas.
+
+**Entrega ao usuário:** dois e-mails para `gutoarbulu@icloud.com`, com quatro anexos cada, nomes `WebReader64FIX1.part00.bin` até `WebReader64FIX1.part07.bin`; ambas as mensagens e todos os oito anexos foram confirmados no Outlook enviado. Enviados os comandos para unir as partes e verificar o SHA com `sha256sum -c`. O recebimento no iCloud e a instalação ainda dependem de confirmação no iPad.
+
+**QA físico pendente:** depois de fazer backup da biblioteca, configurações e capítulos offline, reconstruir IPA, verificar checksum **completo** (`OK`) e só então instalar pelo Filza sem desinstalar Build 56. Confirmar abertura, preservação da biblioteca/downloads e a tela de atualizações. Se o Filza rejeitar instalação, não forçar. Esta correção trata especificamente do entitlement ausente, sem garantir sucesso da substituição no dispositivo. A instalação direta com `appinst` continua bloqueada.
