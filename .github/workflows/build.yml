@@ -105,6 +105,9 @@ jobs:
       - name: Test Build56 source attribution and persistent update feed (Swift offline)
         run: python3 ci/test_build56_library_updates.py
 
+      - name: Test Build65 relocatable downloads after iOS app upgrade (Swift offline)
+        run: python3 ci/test_build65_offline_relocation.py
+
       - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
         run: python3 ci/test_webreader_update_manifest.py
 

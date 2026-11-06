@@ -2159,6 +2159,40 @@ final class DownloadRepository {
         }
     }
 
+    // Only completed records are rebound, and only after real local page
+    // files were observed. Keep existing update timestamps and read progress.
+    func rebindCompletedPath(
+        sourceID: String,
+        sourceMangaID: String,
+        sourceChapterID: String,
+        currentPath: String
+    ) throws {
+        try database.openAndMigrate()
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                UPDATE downloads SET local_path = ?
+                WHERE state = 'completed'
+                  AND chapter_id IN (
+                    SELECT c.internal_id FROM chapters c
+                    JOIN manga m ON m.internal_id = c.manga_id
+                    WHERE m.source_id = ? AND m.source_manga_id = ?
+                      AND c.source_chapter_id = ?
+                  );
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+            try bindText(currentPath, index: 1, statement: statement)
+            try bindText(sourceID, index: 2, statement: statement)
+            try bindText(sourceMangaID, index: 3, statement: statement)
+            try bindText(sourceChapterID, index: 4, statement: statement)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
     func listDownloads() throws -> [DownloadListRecord] {
         try database.openAndMigrate()
 
@@ -2239,14 +2273,34 @@ final class DownloadRepository {
 
     func removeMissingFiles(fileManager: FileManager = .default) throws -> Int {
         let records = try listDownloads()
+        guard let support = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first else { return 0 }
         var removed = 0
-
         for record in records {
-            guard let path = record.localPath,
-                  !fileManager.fileExists(atPath: path) else {
+            let expected = OfflineDownloadPath.chapterDirectory(
+                applicationSupport: support,
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            )
+            if record.state == "completed",
+               let contents = try? fileManager.contentsOfDirectory(atPath: expected.path),
+               contents.contains(where: { $0.hasPrefix("page-") && $0.hasSuffix(".bin") }) {
+                if record.localPath != expected.path {
+                    try rebindCompletedPath(
+                        sourceID: record.sourceID,
+                        sourceMangaID: record.sourceMangaID,
+                        sourceChapterID: record.sourceChapterID,
+                        currentPath: expected.path
+                    )
+                }
                 continue
             }
-
+            // An old container UUID is not proof that files are gone.
+            // Preserve ambiguous legacy rows instead of deleting downloads.
+            guard record.localPath == expected.path else { continue }
+            guard !fileManager.fileExists(atPath: expected.path) else { continue }
             try remove(
                 sourceID: record.sourceID,
                 sourceMangaID: record.sourceMangaID,
@@ -2254,7 +2308,6 @@ final class DownloadRepository {
             )
             removed += 1
         }
-
         return removed
     }
 
