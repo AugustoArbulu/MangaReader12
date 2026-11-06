@@ -1,5 +1,76 @@
 # Ponte Chimera — primeiro teste real, sem instalar IPAs
 
+## Fase 59 — prova de posse temporária, SEM instalação (06/11/2026)
+
+**Motivação:** Build58 validou PING/PONG no dispositivo por TCP
+`127.0.0.1:38971`, mas loopback não fornece identidade de processo.
+A Build59 testa um **código aleatório de uso único**, em porta separada,
+sem reutilizar o endpoint PING e **sem executar o appinst**.
+
+### Modelo de laboratório, não autorização de instalação
+
+- `serve-pair-once` é compilado **somente** sob
+  `WEBREADER_PING_ONLY`. A imagem assinada continua sem
+  `posix_spawn`, código de instalação ou acesso a IPA.
+- Nova porta fixa `127.0.0.1:38972` (sem aceitar interfaces externas).
+  Listener sem SO_REUSEPORT e sem SO_REUSEADDR. Uma conexão e uma
+  tentativa; após aceitar ou negar, ele encerra. Prazo de **120 s**
+  para inserir o código.
+- Ao iniciar, helper usa `arc4random_buf` para gerar **64 bits**
+  e exibe apenas no NewTerm o código **hexadecimal maiúsculo de
+  16 caracteres**. Não salvar em GitHub, relatórios ou chat.
+- Protocolo com frames de 8 bytes, desafi​o aleatório por sessão,
+  HMAC-SHA256 do código com rótulos diferentes por direção:
+  `WRPAIR1\n` → `WRCHAL1\n` + 16 bytes nonce →
+  `WRAUTH1\n` + HMAC(cliente) →
+  `WROKAY1\n` + HMAC(servidor) / `WRDENY1\n`.
+- O cliente não transmite o código em claro no TCP; a prova é
+  autenticada criptograficamente e o retorno do servidor é
+  verificado em tempo aproximadamente constante.
+- Resposta afirmativa indica APENAS que ambas as partes tinham o
+  código desta sessão; **não atesta Bundle ID, assinatura,
+  credenciais de iOS, nem que não houve interceptação/relay
+  por outro processo local**.
+- Um atacante local pode ocupar a porta, esgotar uma tentativa,
+  explorar o terminal/clipboard de um iPad com jailbreak ou atuar
+  como relay. A autenticação de *aplicativo* para eventual instalação
+  requer desenho separado; este teste não habilita nada.
+- Em `WebReader IPC Test Build59` (bundle
+  `com.example.MangaReader12.ipcprobe`), acrescentar opção
+  **Testar código temporário (sem instalar)**. Usa diálogo manual,
+  não armazena PIN e só mostra sucesso/erro. O PING legado permanece.
+- CI `.github/workflows/chimera-mobile-ping.yml` empacota
+  `WebReader-Chimera-Pairing-Lab-iOS12` (IPA diagnóstico Build59,
+  helper externo assinada, hashes SHA-256), após testes:
+  HMAC válido, inválido, rejeição de opcode de instalação,
+  uso único, cliente Swift e helper C nativos, ausência de
+  símbolos de instalação no helper de diagnóstico.
+- `main`, WebReader Build56 e instalação permanecem intocados.
+
+### Depois de CI verde: teste manual com controle explícito
+
+1. Transferir `WebReader-Chimera-Ping-DIAG-iOS12` para
+   `/var/mobile/Documents/` substituindo apenas o helper de teste.
+2. Instalar somente a IPA **WebReader IPC Test Build59**;
+   não tocar no WebReader principal.
+3. No NewTerm 2 executar:
+   ```sh
+   /var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-pair-once
+   ```
+4. Anotar `WRPAIR_CODE` **apenas no iPad**, não compartilhá-lo.
+   Em até 120 s abrir WebReader IPC Test → **Testar código
+   temporário (sem instalar)**, digitar código e validar.
+5. Copiar relatório do aplicativo **sem código** e verificar
+   `WRDIAG: PAIR_PROOF_ACCEPTED` no NewTerm.
+6. Teste com código incorreto somente se necessário, com
+   novo processo e novo código; cada execução permite uma tentativa.
+
+**Status:** implementação experimental; resultado físico e
+liberação de artefato dependem de CI. Este modo não está autorizado
+para qualquer operação de instalação.
+
+---
+
 ## Validação física APROVADA — Build58 TCP loopback (06/11/2026)
 
 O usuário testou no iPad real (iOS **12.5.8**, jailbreak **Chimera**)
