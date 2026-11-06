@@ -47,6 +47,8 @@ def main():
     assert struct.unpack_from("<I", helper, 4)[0] == 0x0100000C
     assert b"/usr/bin/appinst" not in helper
     assert b"WEBREADER_PING_ONLY" in helper
+    assert b"WRLOOPBACK_READY" in helper
+    assert b"LOOPBACK_ACCEPTED_127_0_0_1" in helper
     nm = subprocess.run(
         ["xcrun", "nm", "-u", str(HELPER)], check=True,
         capture_output=True, text=True
