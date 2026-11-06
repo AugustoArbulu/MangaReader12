@@ -1,5 +1,68 @@
 # Ponte Chimera — primeiro teste real, sem instalar IPAs
 
+## Validação física APROVADA — Build58 TCP loopback (06/11/2026)
+
+O usuário testou no iPad real (iOS **12.5.8**, jailbreak **Chimera**)
+depois de instalar o **WebReader IPC Test Build58**
+(`com.example.MangaReader12.ipcprobe`) e copiar o
+`WebReader-Chimera-Ping-DIAG-iOS12` assinado para
+`/var/mobile/Documents/`.
+
+Comando do helper:
+```sh
+/var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-loopback-once
+```
+
+**Relatório literal fornecido pelo dispositivo:**
+```text
+WebReader • Diagnóstico IPC não privilegiado
+App: Build 58
+iOS: 12.5.8
+Bundle: com.example.MangaReader12.ipcprobe
+Transporte atual: TCP 127.0.0.1:38971 • PING/PONG somente
+Pasta (comprimento UTF-8): 79
+Ainda não testado
+Ponte appinst (PING): Ponte mobile respondeu PONG; instalação não executada
+Nenhum comando appinst executado neste diagnóstico
+```
+
+**Interpretação rigorosa:** no dispositivo físico, o aplicativo
+sandboxed conseguiu iniciar a conexão TCP com o helper externo através
+de `127.0.0.1:38971`, enviar `WRPING1\n` e receber
+`WRPONG1\n`. Esta validação confirma apenas a comunicação
+PING/PONG; **nenhuma IPA foi instalada**, nenhuma API privilegiada
+foi exercitada, e a identidade/código do cliente ainda **não está
+autenticada**. O campo `Ainda não testado` refere-se ao teste
+separado do helper local, não ao PING TCP aprovado.
+
+A Build57 havia falhado em `lstat socket (errno=1 / EPERM)`,
+antes da conexão AF_UNIX, com `NO_CONNECTION` no helper. A
+Build58 contorna apenas esse impasse com um protocolo
+**PING-only**; não significa que AF_UNIX ou appinst tenham
+passado a funcionar diretamente no sandbox.
+
+### Próxima fase, ainda SEM autorização para instalar
+
+1. Manter testes físicos e CI com **transporte separado e nenhum
+   comando de instalação disponível** no binário PING.
+2. Projetar autenticação **efetiva** entre app e serviço, incluindo
+   resistência a outros processos locais conectarem na porta.
+   `127.0.0.1` não autentica cliente; `PONG` tampouco.
+3. Definir autorização explícita pelo usuário, escopo de **uma**
+   atualização, versão, pacote/Bundle ID esperado, manifesto
+   assinado e SHA-256, limites de tamanho e proteção contra replay.
+4. Validar instalação somente com **IPA descartável** e backup
+   separado, após decisão expressa do usuário. Não instalar
+   por esta ponte PING-only ou modificar o WebReader Build56.
+5. Somente depois do teste descartável, avaliar
+   inicialização automática e atualização integrada ao leitor.
+
+**Regra de preservação:** `main` intocada, Build56 estável
+intacta, PR #90 ainda Draft. Não publicar release nem
+habilitar instalação automática nesta etapa.
+
+---
+
 ## Resultado conclusivo IPC UNIX iOS12 e alternativa TCP local — 06/11/2026
 
 ### Evidência física
