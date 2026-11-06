@@ -171,6 +171,56 @@ static int install_disposable(const char *path) {
     return 10;
 }
 
+/* One interactive field session. The two IPA hashes are fixed at build time.
+ * The user must open v1 to create its NSUserDefaults marker before v2.
+ * No WebReader installation is possible in either stage. */
+static int run_disposable_batch(void) {
+    char first[PATH_MAX] = {0}, second[PATH_MAX] = {0};
+    char acknowledgement[16] = {0};
+    int rc;
+#ifndef WRD_TEST_ROOT
+    if (!isatty(STDIN_FILENO)) {
+        fputs("WRDISPOSABLE_DENIED: interactive NewTerm required\n", stderr);
+        return 2;
+    }
+#endif
+    if (!verify_disposable(1, first) || !verify_disposable(2, second)) {
+        fputs("WRDISPOSABLE_DENIED: batch SHA/ownership/IPA preflight failed\n",
+              stderr);
+        return 3;
+    }
+    puts("WRDISPOSABLE_BOTH_VERIFIED: only throwaway app; no WebReader");
+    fflush(stdout);
+    if (!verify_disposable(1, first)) return 4;
+    rc = install_disposable(first);
+    if (rc != 0) {
+        fprintf(stderr, "WRDISPOSABLE_INSTALL_FAILED: v1 code=%d\n", rc);
+        return rc;
+    }
+    puts("WRDISPOSABLE_V1_APPINST_SUCCESS");
+    puts("Abra WR Appinst Test v1 UMA VEZ para criar o registro local.");
+    puts("Retorne ao NewTerm, digite NEXT e Enter para atualizar somente esse app.");
+    fflush(stdout);
+    if (!fgets(acknowledgement, sizeof(acknowledgement), stdin) ||
+        (strcmp(acknowledgement, "NEXT\n") != 0 &&
+         strcmp(acknowledgement, "NEXT\r\n") != 0)) {
+        fputs("WRDISPOSABLE_STOPPED: v2 not installed\n", stderr);
+        return 5;
+    }
+    if (!verify_disposable(2, second)) {
+        fputs("WRDISPOSABLE_DENIED: v2 SHA changed\n", stderr);
+        return 3;
+    }
+    rc = install_disposable(second);
+    if (rc != 0) {
+        fprintf(stderr, "WRDISPOSABLE_INSTALL_FAILED: v2 code=%d\n", rc);
+        return rc;
+    }
+    puts("WRDISPOSABLE_V2_APPINST_SUCCESS");
+    puts("Agora abra WR Appinst Test v2 e confira Persistencia dos dados: SIM.");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     int version = 0, perform = 0, result;
     char path[PATH_MAX] = {0};
@@ -183,6 +233,10 @@ int main(int argc, char **argv) {
         puts("NO_IPA_INSTALLED");
         return 0;
     }
+    if (argc == 3 && strcmp(argv[1], "run-disposable-qa") == 0 &&
+        strcmp(argv[2], WRD_CONSENT) == 0) {
+        return run_disposable_batch();
+    }
     if (argc == 2 && strcmp(argv[1], "inspect-v1") == 0) version = 1;
     if (argc == 2 && strcmp(argv[1], "inspect-v2") == 0) version = 2;
     if (argc == 3 && strcmp(argv[2], WRD_CONSENT) == 0) {
@@ -191,7 +245,7 @@ int main(int argc, char **argv) {
         if (version) perform = 1;
     }
     if (version == 0) {
-        fputs("Usage: selftest | inspect-v1 | inspect-v2 | install-v1/install-v2 I-CONFIRM-DISPOSABLE-ONLY\n", stderr);
+        fputs("Usage: selftest | inspect-v1 | inspect-v2 | run-disposable-qa I-CONFIRM-DISPOSABLE-ONLY | install-v1/install-v2 I-CONFIRM-DISPOSABLE-ONLY\n", stderr);
         return 2;
     }
     if (!verify_disposable(version, path)) {
