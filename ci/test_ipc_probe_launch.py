@@ -31,6 +31,9 @@ assert 'WebReaderHelperPingProbe.run' in ui
 assert '"Testar ponte appinst (PING)"' in ui
 assert 'WebReaderAppinstSocket.checkConnection' in ui
 assert 'WebReaderAppinstSocket.checkLoopbackConnection' in ui
+assert 'WebReaderAppinstSocket.checkPairedLoopback' in ui
+assert '"Testar código temporário (sem instalar)"' in ui
+assert 'pairingDiagnosticAvailable' in ui
 assert '"Testar ponte localhost (PING)"' in ui
 assert '"Copiar relatório do helper"' in ui
 assert '"Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido")' in ui
