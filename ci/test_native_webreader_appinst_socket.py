@@ -92,6 +92,7 @@ class NativeSocketIntegration(unittest.TestCase):
              "-DSOCKET_WAIT_MS=3000", str(BRIDGE_C),
              "-o", str(cls.loopback_helper)],
             ["xcrun", "swiftc", "-parse-as-library",
+             "-D", "WEBREADER_HOST_TEST",
              str(CORE / "WebReaderHelperPingProbe.swift"),
              str(CORE / "WebReaderAppinstSocket.swift"),
              str(harness), "-o", str(cls.client)]
