@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 import plistlib
 import struct
+import subprocess
+import tempfile
 import zipfile
 
 from validate_webreader_ipa import validate_ipa, IPARejected
@@ -39,6 +41,27 @@ def audit(ipa: Path, checksum: Path):
             raise ValueError("not a thin arm64 Mach-O application")
         if struct.unpack_from("<I", executable, 4)[0] != 0x0100000C:
             raise ValueError("unexpected Mach-O CPU type")
+
+    # Extract only for read-only codesign inspection, not installation.
+    # A ZIP/IPA that passes the hash test can still lack an App ID.
+    with tempfile.TemporaryDirectory(prefix="wr64-adhoc-qa-") as directory:
+        subprocess.run(
+            ["/usr/bin/ditto", "-x", "-k", str(ipa.resolve()), directory],
+            check=True, capture_output=True, text=True
+        )
+        app = Path(directory) / "Payload" / "MangaReader12.app"
+        subprocess.run(
+            ["codesign", "--verify", "--verbose=2", str(app)],
+            check=True, capture_output=True, text=True
+        )
+        signature = subprocess.run(
+            ["codesign", "-d", "--entitlements", ":-", str(app)],
+            check=True, capture_output=True
+        )
+        entitlements = plistlib.loads(signature.stdout)
+        expected = "WRQA000001.com.example.MangaReader12"
+        if entitlements != {"application-identifier": expected}:
+            raise ValueError("missing or mismatched application-identifier")
     assert report["installation_performed"] is False
     assert report["signature_or_origin_verified"] is False
     return {"status": "PASS", "build": 64,
@@ -46,6 +69,8 @@ def audit(ipa: Path, checksum: Path):
             "minimumIOS": report["minimumIOS"],
             "sha256": sha256,
             "bytes": report["bytes"],
+            "adHocSignatureVerified": True,
+            "applicationIdentifier": "WRQA000001.com.example.MangaReader12",
             "installationPerformed": False}
 
 

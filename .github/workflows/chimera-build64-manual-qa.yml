@@ -11,6 +11,7 @@ on:
       - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
       - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
       - 'ci/package_webreader_build64_qa_ipa.sh'
+      - 'ci/chimera_webreader_qa.entitlements'
       - 'ci/test_webreader_build64_qa_ipa.py'
       - 'ci/test_app_updates_screen.py'
       - 'ci/test_chimera_build62_install_admission.py'
@@ -68,17 +69,17 @@ jobs:
             clean build
           test -f "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
 
-      - name: Package isolated Build64 IPA (same Bundle ID, no install)
+      - name: Sign and package isolated Build64 IPA (same Bundle ID, no install)
         run: |
           bash ci/package_webreader_build64_qa_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Build64/Build/Products/Release-iphoneos/MangaReader12.app" \
-            WebReader-Build64-QA-iOS12-unsigned.ipa
+            WebReader-Build64-QA-iOS12-adhoc.ipa
 
-      - name: Verify SHA256, bundle identity and iOS12 compatibility
+      - name: Verify SHA256, app signature, application ID, and iOS12 compatibility
         run: |
           python3 ci/test_webreader_build64_qa_ipa.py \
-            WebReader-Build64-QA-iOS12-unsigned.ipa \
-            --sha256-file WebReader-Build64-QA-iOS12-unsigned.ipa.sha256 \
+            WebReader-Build64-QA-iOS12-adhoc.ipa \
+            --sha256-file WebReader-Build64-QA-iOS12-adhoc.ipa.sha256 \
             > WebReader-Build64-QA-audit.json
           cat WebReader-Build64-QA-audit.json
 
@@ -89,6 +90,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            WebReader-Build64-QA-iOS12-unsigned.ipa
-            WebReader-Build64-QA-iOS12-unsigned.ipa.sha256
+            WebReader-Build64-QA-iOS12-adhoc.ipa
+            WebReader-Build64-QA-iOS12-adhoc.ipa.sha256
             WebReader-Build64-QA-audit.json
