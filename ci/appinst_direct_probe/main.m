@@ -40,21 +40,26 @@ static NSString *WRRunHelpProbe(void) {
         [report appendString:@"RESULTADO: execução como root recusada.\n"];
         return report;
     }
+    // Read-only metadata probes are advisory: iOS sandbox may deny lstat
+    // even when posix_spawn is a distinct operation. Do NOT return early
+    // on EPERM. Only direct spawn can determine launch permission.
     struct stat st;
     if (lstat(binary, &st) != 0) {
-        [report appendFormat:@"RESULTADO: arquivo não acessível pelo app: %@\n",
+        [report appendFormat:@"Diagnóstico lstat: %@ (não conclusivo)\n",
          WRDescribeError(errno)];
+    } else if (!S_ISREG(st.st_mode)) {
+        [report appendString:@"RESULTADO: destino visível, mas não é arquivo regular.\n"];
         return report;
-    }
-    if (!S_ISREG(st.st_mode)) {
-        [report appendString:@"RESULTADO: caminho não é arquivo regular.\n"];
-        return report;
+    } else {
+        [report appendString:@"Diagnóstico lstat: arquivo regular\n"];
     }
     if (access(binary, X_OK) != 0) {
-        [report appendFormat:@"RESULTADO: access(X_OK) negado: %@\n",
+        [report appendFormat:@"Diagnóstico access(X_OK): %@ (não conclusivo)\n",
          WRDescribeError(errno)];
-        // Still attempt the actual spawn: access() alone is not definitive.
+    } else {
+        [report appendString:@"Diagnóstico access(X_OK): permitido\n"];
     }
+    [report appendString:@"Tentando posix_spawn diretamente (--help somente)...\n"];
     char * const arguments[] = {
         (char *)"/usr/bin/appinst", (char *)"--help", NULL
     };
