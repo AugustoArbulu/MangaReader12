@@ -57,14 +57,23 @@ enum WebReaderAppinstSocket {
         }
     }
 
+    // Build62 security gate: a localhost PONG, GitHub account digest or
+    // HMAC pairing code DOES NOT authenticate the requesting iOS app.
+    // Until a separately reviewed installer-side publisher and peer policy
+    // exists, a running application must NEVER transmit WRINST1 or a path
+    // to an installation-capable helper. Keep the explicit FAKE-appinst
+    // host harness below for protocol regression tests only.
+    static let liveInstallationEnabled = false
+
     static func install(
         ipaURL: URL, expectedSHA256: String,
         completion: @escaping (Result) -> Void
     ) {
-        DispatchQueue.global(qos: .utility).async {
-            let result = performInstall(ipaURL: ipaURL, sha: expectedSHA256)
-            DispatchQueue.main.async { completion(result) }
-        }
+        // Security invariant independent of UI button visibility.
+        // This call performs no network I/O and never creates install IPC.
+        _ = ipaURL
+        _ = expectedSHA256
+        DispatchQueue.main.async { completion(.rejected) }
     }
 
     private static func performInstall(
