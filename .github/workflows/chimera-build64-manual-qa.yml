@@ -25,7 +25,8 @@ permissions:
 
 concurrency:
   group: wr-build64-manual-qa-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel queued FIX2 QA just because another test commit is pushed.
+  cancel-in-progress: false
 
 jobs:
   verified-export-only:
