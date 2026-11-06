@@ -127,8 +127,8 @@ class PingOnlyTests(unittest.TestCase):
         process = self.start_loopback()
         with socket.create_connection(("127.0.0.1", 38971), timeout=2) as client:
             self.assertEqual(client.getpeername()[0], "127.0.0.1")
-            client.sendall(b"WRPING1\\n")
-            self.assertEqual(client.recv(8), b"WRPONG1\\n")
+            client.sendall(b"WRPING1\n")
+            self.assertEqual(client.recv(8), b"WRPONG1\n")
         self.assertEqual(process.wait(timeout=3), 0)
         _, stderr = process.communicate(timeout=2)
         self.assertIn(b"WRDIAG: LOOPBACK_ACCEPTED_127_0_0_1", stderr)
@@ -138,8 +138,8 @@ class PingOnlyTests(unittest.TestCase):
     def test_loopback_refuses_install_header(self):
         process = self.start_loopback()
         with socket.create_connection(("127.0.0.1", 38971), timeout=2) as client:
-            client.sendall(b"WRINST1\\n")
-            self.assertEqual(client.recv(8), b"WRFAIL1\\n")
+            client.sendall(b"WRINST1\n")
+            self.assertEqual(client.recv(8), b"WRFAIL1\n")
         self.assertNotEqual(process.wait(timeout=3), 0)
         _, stderr = process.communicate(timeout=2)
         self.assertIn(b"WRDIAG: request header not PING", stderr)
