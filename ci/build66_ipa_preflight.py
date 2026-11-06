@@ -6,6 +6,7 @@ This module performs only bounded archive and Info.plist checks; it never instal
 """
 import hashlib
 import io
+import os
 import plistlib
 import re
 import stat
@@ -30,28 +31,40 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build):
         raise AdmissionDenied("invalid size")
     if type(min_build) is not int or min_build < 0:
         raise AdmissionDenied("invalid baseline")
-    # A path is not a security boundary: reject symlinks and nonregular files.
-    if path.is_symlink() or not path.is_file():
-        raise AdmissionDenied("not a regular IPA")
-    before = path.stat()
-    if not stat.S_ISREG(before.st_mode) or before.st_size != expected_size:
-        raise AdmissionDenied("size mismatch")
+    # Open once with O_NOFOLLOW and inspect the actual descriptor. The bytes
+    # validated here are an in-memory snapshot, never a mutable path to install.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise AdmissionDenied("platform cannot reject symlinks atomically")
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise AdmissionDenied("cannot securely open IPA") from exc
     digest = hashlib.sha256()
     payload = io.BytesIO()
-    with path.open("rb") as source:
-        while True:
-            block = source.read(1024 * 1024)
-            if not block:
-                break
-            digest.update(block)
-            payload.write(block)
-            if payload.tell() > MAX_IPA_BYTES:
-                raise AdmissionDenied("oversized IPA")
-    after = path.stat()
-    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-        after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
-    ):
-        raise AdmissionDenied("IPA changed during preflight")
+    try:
+        with os.fdopen(fd, "rb") as source:
+            before = os.fstat(source.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size != expected_size:
+                raise AdmissionDenied("size mismatch or nonregular file")
+            while True:
+                block = source.read(1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+                payload.write(block)
+                if payload.tell() > MAX_IPA_BYTES:
+                    raise AdmissionDenied("oversized IPA")
+            after = os.fstat(source.fileno())
+            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
+                    before.st_ctime_ns) != (
+                    after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                    after.st_ctime_ns):
+                raise AdmissionDenied("IPA changed during preflight")
+            if payload.tell() != expected_size:
+                raise AdmissionDenied("size changed during read")
+    except OSError as exc:
+        raise AdmissionDenied("IPA read failed") from exc
     if digest.hexdigest() != expected_sha256:
         raise AdmissionDenied("SHA-256 mismatch")
     try:
