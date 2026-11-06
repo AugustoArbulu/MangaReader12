@@ -15,8 +15,8 @@ IPA = Path("WebReader-IPC-Probe-iOS12-unsigned.ipa")
 HELPER = Path("WebReader-Chimera-Ping-DIAG-iOS12")
 GATE = Path("WebReader-Chimera-Disposable-Gate-iOS12")
 DISPOSABLE = [
-    Path("WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa"),
-    Path("WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa"),
+    Path("WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa"),
+    Path("WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa"),
 ]
 PLIST = "Payload/MangaReader12.app/Info.plist"
 MACHO = "Payload/MangaReader12.app/MangaReader12"
