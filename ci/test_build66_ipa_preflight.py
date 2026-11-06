@@ -101,6 +101,26 @@ class TestBuild66Preflight(unittest.TestCase):
                 ("/Payload/escape", b"x"),
                 ("Payload/WebReader.app/Info.plist", b"not plist")]))
 
+    def test_directory_rejected(self):
+        directory = Path(self.temp.name)
+        with self.assertRaises(AdmissionDenied):
+            inspect_ipa(directory, "0" * 64, 1, 65)
+
+    def test_equal_build_rejected(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(build="66"), baseline=66)
+
+    def test_older_build_rejected(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(build="64"))
+
+    def test_minimum_ios_exact_supported(self):
+        self.assertEqual(self.check(make_ipa(minimum="12.5.8"))["build"], 66)
+
+    def test_minimum_ios_patch_above_device(self):
+        with self.assertRaises(AdmissionDenied):
+            self.check(make_ipa(minimum="12.5.9"))
+
     def test_not_zip(self):
         with self.assertRaises(AdmissionDenied):
             self.check(b"not a ZIP")
