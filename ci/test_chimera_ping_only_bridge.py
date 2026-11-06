@@ -32,6 +32,7 @@ class PingOnlyTests(unittest.TestCase):
         compile_result = subprocess.run(
             ["xcrun", "clang", "-std=c11", "-Wall", "-Wextra", "-Werror",
              "-Wno-deprecated-declarations", "-DWEBREADER_PING_ONLY",
+             "-DSOCKET_WAIT_MS=1500",
              str(SOURCE), "-o", str(cls.binary)],
             capture_output=True, text=True, timeout=35
         )
@@ -85,12 +86,27 @@ class PingOnlyTests(unittest.TestCase):
         process = self.start()
         self.assertEqual(self.send(b"WRPING1\n"), b"WRPONG1\n")
         self.assertEqual(process.wait(timeout=3), 0)
+        stdout, stderr = process.communicate(timeout=2)
+        self.assertIn(b"WRAPPINST_READY", stdout)
+        self.assertIn(b"WRDIAG: ACCEPTED_CONNECTION", stderr)
+        self.assertIn(b"WRDIAG: PEER_ACCEPTED: same UID", stderr)
+        self.assertIn(b"WRDIAG: PING matched; PONG send OK", stderr)
+        self.assertIn(b"WRDIAG: REQUEST_FINISHED: result=0", stderr)
         self.assertFalse(self.sock.exists())
 
     def test_install_request_rejected_without_executing_anything(self):
         process = self.start()
         self.assertEqual(self.send(b"WRINST1\n"), b"WRFAIL1\n")
         self.assertNotEqual(process.wait(timeout=3), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"WRDIAG: request header not PING", stderr)
+        self.assertFalse(self.sock.exists())
+
+    def test_no_connection_times_out_with_unambiguous_log(self):
+        process = self.start()
+        self.assertNotEqual(process.wait(timeout=4), 0)
+        _, stderr = process.communicate(timeout=2)
+        self.assertIn(b"WRDIAG: NO_CONNECTION", stderr)
         self.assertFalse(self.sock.exists())
 
     def test_cli_cannot_install_even_with_install_confirmed_flag(self):
