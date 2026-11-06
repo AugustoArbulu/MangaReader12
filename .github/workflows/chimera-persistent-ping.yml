@@ -1,4 +1,4 @@
-name: WebReader Chimera Build61 Persistent PING QA
+name: WebReader Chimera Build61 FIX1 Persistent PING QA
 
 on:
   push:
@@ -68,9 +68,9 @@ jobs:
       - name: Upload ONE Build61 opt-in persistent PING laboratory ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Chimera-Build61-PersistentPing-QA-iOS12
+          name: WebReader-Chimera-Build61-PersistentPing-FIX1-iOS12
           if-no-files-found: error
           path: |
-            WebReader-Chimera-Persistent-PingLab-iOS12.deb
-            WebReader-Chimera-Persistent-PingLab-iOS12.deb.sha256
+            WebReader-Chimera-Persistent-PingLab-iOS12-FIX1.deb
+            WebReader-Chimera-Persistent-PingLab-iOS12-FIX1.deb.sha256
             WebReader-Chimera-Persistent-Ping-iOS12.sha256
