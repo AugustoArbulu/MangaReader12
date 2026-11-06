@@ -39,3 +39,23 @@ Remoção: pelo gerenciador de pacotes do jailbreak, desinstalar com.example.web
 PING em localhost não atesta assinatura, identidade do aplicativo ou consentimento do proprietário. O helper deste laboratório **jamais pode receber comandos de instalação**. Para o atualizador definitivo, faltam: política independente do publisher e de confiança do release, autorização e consentimento resistentes a clientes locais não confiáveis, verificação de IPA/versão/Bundle ID pelo instalador, mitigação TOCTOU, e QA física end-to-end do WebReader verdadeiro com backup.
 
 PR #90 permanece Draft na branch feat/chimera-updater-phase1-protocol-audit. Main e WebReader Build56 intocados.
+
+## Build61 FIX1 — QA física do pacote anterior e correção (06/11/2026)
+
+O usuário executou dpkg -i como root na versão 0.1.0 e recebeu:
+- não conseguiu criar /usr/local/libexec/webreader-pinglab.dpkg-new: No such file or directory.
+- O IPC Test Build59 respondeu TCP local connect(errno=61), consistente com serviço não iniciado.
+
+Causa identificada no código de empacotamento: o data.tar.gz anterior tinha somente os dois arquivos, sem declarar os diretórios pais. O dpkg do Chimera não tinha /usr/local/libexec.
+
+FIX1 (versão 0.1.1) acrescenta, antes dos dois arquivos, entradas de diretório root/wheel 0755 para /usr, /usr/local, /usr/local/libexec, /Library, /Library/LaunchDaemons; teste de CI simula extração em filesystem vazio. Binário de PING e plist permanecem inalterados.
+
+CI aprovado: https://github.com/AugustoArbulu/MangaReader12/actions/runs/42182040383 , commit 8bd69c0e9e297e74732ec1a3c10ce2fadd1f4379; artifact WebReader-Chimera-Build61-PersistentPing-FIX1-iOS12, ID 13485403309. Novo pacote: WebReader-Chimera-Persistent-PingLab-iOS12-FIX1.deb, SHA-256 dca3a571f433c4acbbae6377d7238705404be471932ce1d48d606dbbd0f8378a.
+
+Auditoria independente: dpkg-deb --info mostra version 0.1.1; dpkg-deb --contents mostra cinco diretórios e dois arquivos; dpkg-deb --extract em pasta completamente vazia concluiu com binário e plist nos caminhos corretos.
+
+Próximo teste no iPad: transferir somente o pacote FIX1 para /var/mobile/Documents; como root via NewTerm, executar:
+    dpkg -i /var/mobile/Documents/WebReader-Chimera-Persistent-PingLab-iOS12-FIX1.deb
+    dpkg -s com.example.webreader.pinglab
+
+Somente se o status for install ok installed, testar PING no IPC Test Build59. Se a fase postinst/launchctl falhar, interromper e analisar; não mexer no WebReader principal. A correção estrutural da falha de diretório está validada, mas o FIX1 e o launchd ainda não foram testados fisicamente.
