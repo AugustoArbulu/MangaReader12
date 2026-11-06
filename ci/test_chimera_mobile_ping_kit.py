@@ -60,6 +60,15 @@ def main():
     assert b"I-CONFIRM-DISPOSABLE-ONLY" in gate
     assert b"/usr/bin/appinst" in gate
     assert b"com.example.MangaReader12" not in gate
+    # The installer gate is a manually executed CLI only. No TCP listener,
+    # client socket or implicit IPC can reach the appinst call.
+    symbols = subprocess.run(
+        ["xcrun", "nm", "-u", str(GATE)],
+        check=True, capture_output=True, text=True
+    ).stdout
+    for forbidden_socket in ("_bind", "_listen", "_accept", "_connect"):
+        assert forbidden_socket not in symbols, forbidden_socket
+    assert "_posix_spawn" in symbols, "this is the separate CLI install gate"
     helper = HELPER.read_bytes()
     assert helper[:4] == b"\xcf\xfa\xed\xfe"
     assert struct.unpack_from("<I", helper, 4)[0] == 0x0100000C
