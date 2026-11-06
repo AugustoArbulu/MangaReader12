@@ -50,15 +50,19 @@ static int respond_to_client(int fd) {
     const char pong[] = "WRPONG1\n";
     struct timeval timeout = {2, 0};
     ssize_t received;
-    size_t sent = 0;
+    size_t total = 0, sent = 0;
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
                      &timeout, (socklen_t)sizeof(timeout));
     (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
                      &timeout, (socklen_t)sizeof(timeout));
     /* Read at most one bounded request. A zero-byte request is denied. */
-    received = recv(fd, request, sizeof(request), 0);
-    if (received != 8 || memcmp(request, "WRPING1\n", 8) != 0)
-        return 0;
+    while (total < 8) {
+        received = recv(fd, request + total, sizeof(request) - total, 0);
+        if (received <= 0) return 0;
+        total += (size_t)received;
+        if (total > 8) return 0;
+    }
+    if (memcmp(request, "WRPING1\n", 8) != 0) return 0;
     while (sent < sizeof(pong) - 1) {
         ssize_t n = send(fd, pong + sent, sizeof(pong) - 1 - sent, 0);
         if (n <= 0) return 0;
