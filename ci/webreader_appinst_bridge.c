@@ -26,6 +26,10 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#ifdef WEBREADER_PING_ONLY
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
 #include <signal.h>
 #include <spawn.h>
 #include <stdint.h>
@@ -62,6 +66,8 @@ extern char **environ;
 #define LEAF_PREFIX "WebReader-build"
 #define CONFIRMATION "I-CONFIRM-INSTALL"
 #define SOCKET_NAME "wri.sock"
+/* PING-only diagnostic TCP on IPv4 loopback. NOT an installation transport. */
+#define PING_LOOPBACK_PORT 38971
 #define INSTALL_HEADER "WRINST1\n"
 #define SOCKET_PING "WRPING1\n"
 #define SOCKET_PONG "WRPONG1\n"
@@ -449,6 +455,83 @@ finish:
     return result;
 }
 
+#ifdef WEBREADER_PING_ONLY
+/*
+ * iOS12 can reject lstat of a UNIX socket created by a non-container process
+ * even when its parent folder belongs to the sandboxed application.
+ * This separate, deliberately unprivileged, PING-only test listens on
+ * 127.0.0.1:38971, never a device LAN address, for one request.
+ *
+ * Any local process can reach loopback: this is NOT authentication. The
+ * protocol does not contain any install operation, path or file access.
+ */
+static int serve_loopback_once(void) {
+    int listener = -1, client = -1, result = 1, polled, reuse = 1;
+    struct sockaddr_in address, remote;
+    socklen_t remote_length = (socklen_t)sizeof(remote);
+    struct pollfd waiting;
+    struct timeval timeout = {3, 0};
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0) {
+        WR_DIAG("LOOPBACK_SOCKET_FAILED errno=%d", errno);
+        return 2;
+    }
+    (void)setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+                     &reuse, sizeof(reuse));
+    memset(&address, 0, sizeof(address));
+#if defined(__APPLE__)
+    address.sin_len = (uint8_t)sizeof(address);
+#endif
+    address.sin_family = AF_INET;
+    address.sin_port = htons(PING_LOOPBACK_PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(listener, (const struct sockaddr *)&address,
+             (socklen_t)sizeof(address)) != 0 ||
+        listen(listener, 1) != 0) {
+        WR_DIAG("LOOPBACK_BIND_OR_LISTEN_FAILED errno=%d", errno);
+        goto finish;
+    }
+    puts("WRLOOPBACK_READY (127.0.0.1:38971, PING ONLY, 60s timeout)");
+    fflush(stdout);
+    waiting.fd = listener;
+    waiting.events = POLLIN;
+    waiting.revents = 0;
+    polled = poll(&waiting, 1, SOCKET_WAIT_MS);
+    if (polled != 1 || !(waiting.revents & POLLIN)) {
+        WR_DIAG("LOOPBACK_NO_CONNECTION poll=%d revents=%d errno=%d",
+                polled, waiting.revents, polled < 0 ? errno : 0);
+        goto finish;
+    }
+    memset(&remote, 0, sizeof(remote));
+    client = accept(listener, (struct sockaddr *)&remote, &remote_length);
+    if (client < 0) {
+        WR_DIAG("LOOPBACK_ACCEPT_FAILED errno=%d", errno);
+        goto finish;
+    }
+    if (remote.sin_family != AF_INET ||
+        ntohl(remote.sin_addr.s_addr) != INADDR_LOOPBACK) {
+        WR_DIAG("LOOPBACK_REJECTED_NONLOCAL_PEER");
+        goto finish;
+    }
+    WR_DIAG("LOOPBACK_ACCEPTED_127_0_0_1");
+#if defined(SO_NOSIGPIPE)
+    int no_sigpipe = 1;
+    (void)setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE,
+                     &no_sigpipe, sizeof(no_sigpipe));
+#endif
+    (void)setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                     &timeout, sizeof(timeout));
+    (void)setsockopt(client, SOL_SOCKET, SO_SNDTIMEO,
+                     &timeout, sizeof(timeout));
+    result = socket_request(client, NULL);
+    WR_DIAG("LOOPBACK_REQUEST_FINISHED result=%d", result);
+finish:
+    if (client >= 0) close(client);
+    if (listener >= 0) close(listener);
+    return result;
+}
+#endif
+
 int main(int argc, char **argv) {
     if (geteuid() == 0) {
         fputs("Refusing root: this mobile-user bridge is nonprivileged\n", stderr);
@@ -472,6 +555,11 @@ int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "serve-once") == 0) {
         return serve_once(argv[2]);
     }
+#ifdef WEBREADER_PING_ONLY
+    if (argc == 2 && strcmp(argv[1], "serve-loopback-once") == 0) {
+        return serve_loopback_once();
+    }
+#endif
 #ifndef WEBREADER_PING_ONLY
     if (argc >= 2 && strcmp(argv[1], "inspect") == 0 && argc == 4) {
         if (!verified_file(argv[2], argv[3])) {
@@ -493,7 +581,7 @@ int main(int argc, char **argv) {
     }
 #endif
 #ifdef WEBREADER_PING_ONLY
-    fputs("Usage: selftest | serve-once <app-container/WR> (PING only)\n", stderr);
+    fputs("Usage: selftest | serve-once <app-container/WR> | serve-loopback-once (PING only)\n", stderr);
 #else
     fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256> | "
           "install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n", stderr);
