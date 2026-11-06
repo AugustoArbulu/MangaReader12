@@ -659,3 +659,38 @@ docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md.
 
 **Estado:** aguarda CI no HEAD exato depois de mudanças de código
 e documentação. PR #90 Draft, main e Build56 intactas.
+
+
+### Resultado físico decisivo: appinst direto bloqueado em iOS12 (06/11/2026)
+
+Testado pelo usuário na IPA WebReader appinst Test Build 2 no iOS 12.5.8,
+jailbreak Chimera, com AppSync Unified e appinst já instalados:
+
+- UID = 501 e EUID = 501;
+- `lstat("/usr/bin/appinst")` -> 1 (EPERM);
+- `access("/usr/bin/appinst", X_OK)` -> 1 (EPERM);
+- `posix_spawn("/usr/bin/appinst", ["--help"])` -> 1 (EPERM);
+- Nenhuma IPA foi passada/instalada, nenhuma alteração na Build56.
+
+A Build 1 era inconclusiva, pois abortava em lstat. A Build 2 tentou
+posix_spawn de fato. Portanto, **não seguir pelo método de executar appinst
+diretamente dentro do sandbox**. Voltar à ponte externa de usuário
+mobile (sem root) como autorizado pelo usuário.
+
+Foi criado `WEBREADER_PING_ONLY` em
+`ci/webreader_appinst_bridge.c`: a compilação de diagnóstico exclui
+rotinas de instalação e aceita só PING. Teste host
+`ci/test_chimera_ping_only_bridge.py` prova PING, rejeição de opcode
+de instalação, ausência de símbolo posix_spawn e de caminho appinst.
+Workflow focado `.github/workflows/chimera-mobile-ping.yml` em macOS15
++ Xcode16.4 compila uma IPA isolada IPC Test e o executável externo de
+PING, auditoria `ci/test_chimera_mobile_ping_kit.py`, um ZIP de Actions
+`WebReader-Chimera-Mobile-PING-Kit-iOS12`.
+
+Próximo teste físico: transferir/rodar o helper externo uma vez como UID501,
+obter PONG no IPC Test. Não testar instalação até esse PING ser validado;
+depois testar appinst só com aplicativo descartável, nunca Build56.
+Guia: `docs/WEBREADER_PONTE_CHIMERA_PING_2026-11-06.md`.
+Requer terminal somente durante validação inicial; não alegar que já
+existe serviço persistente ou atualização 1-toque pronta.
+Mantidas `main`, Build56 e PR #90 Draft.
