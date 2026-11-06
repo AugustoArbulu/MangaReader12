@@ -30,6 +30,8 @@ assert 'let selectedSection = sectionType(indexPath.section)' in ui
 assert 'WebReaderHelperPingProbe.run' in ui
 assert '"Testar ponte appinst (PING)"' in ui
 assert 'WebReaderAppinstSocket.checkConnection' in ui
+assert 'WebReaderAppinstSocket.checkLoopbackConnection' in ui
+assert '"Testar ponte localhost (PING)"' in ui
 assert '"Copiar relatório do helper"' in ui
 assert '"Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido")' in ui
 assert '"HELPER LOCAL (DIAGNÓSTICO)"' in ui
