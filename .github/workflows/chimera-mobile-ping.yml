@@ -1,4 +1,4 @@
-name: WebReader Chimera Build60 Consolidated QA Kit
+name: WebReader Chimera Build60 Adhoc Signed QA Kit
 
 on:
   push:
@@ -70,8 +70,8 @@ jobs:
 
       - name: Compile iOS12 SHA-pinned disposable-only gate (NOT a network listener)
         run: |
-          HASH_V1="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa.sha256)"
-          HASH_V2="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa.sha256)"
+          HASH_V1="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa.sha256)"
+          HASH_V2="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa.sha256)"
           xcrun --sdk iphoneos clang \
             -std=c11 -Os -Wall -Wextra -Werror -Wno-deprecated-declarations \
             -arch arm64 -miphoneos-version-min=12.0 \
@@ -109,7 +109,7 @@ jobs:
       - name: Upload ONE Build60 ZIP for pairing and disposable-app validation
         uses: actions/upload-artifact@v4
         with:
-          name: WebReader-Chimera-Build60-OneBatch-iOS12
+          name: WebReader-Chimera-Build60-SignedQA-iOS12
           if-no-files-found: error
           path: |
             WebReader-IPC-Probe-iOS12-unsigned.ipa
@@ -118,7 +118,7 @@ jobs:
             WebReader-Chimera-Ping-DIAG-iOS12.sha256
             WebReader-Chimera-Disposable-Gate-iOS12
             WebReader-Chimera-Disposable-Gate-iOS12.sha256
-            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa
-            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa.sha256
-            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa
-            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa.sha256
+            WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa
+            WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa.sha256
+            WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa
+            WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa.sha256
