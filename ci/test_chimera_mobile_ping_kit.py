@@ -13,6 +13,11 @@ import zipfile
 
 IPA = Path("WebReader-IPC-Probe-iOS12-unsigned.ipa")
 HELPER = Path("WebReader-Chimera-Ping-DIAG-iOS12")
+GATE = Path("WebReader-Chimera-Disposable-Gate-iOS12")
+DISPOSABLE = [
+    Path("WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa"),
+    Path("WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa"),
+]
 PLIST = "Payload/MangaReader12.app/Info.plist"
 MACHO = "Payload/MangaReader12.app/MangaReader12"
 
@@ -28,6 +33,9 @@ def validate_hash(path):
 def main():
     validate_hash(IPA)
     validate_hash(HELPER)
+    validate_hash(GATE)
+    for path in DISPOSABLE:
+        validate_hash(path)
     with zipfile.ZipFile(IPA) as archive:
         paths = archive.namelist()
         assert len(paths) == len(set(paths)), "duplicate entries"
@@ -37,11 +45,21 @@ def main():
         assert info["CFBundleIdentifier"] == "com.example.MangaReader12.ipcprobe"
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader IPC Test"
-        assert info["CFBundleVersion"] == "59"
+        assert info["CFBundleVersion"] == "60"
         assert info["MinimumOSVersion"] == "12.0"
         assert "UIBackgroundModes" not in info
         assert executable[:4] == b"\xcf\xfa\xed\xfe"
         assert struct.unpack_from("<I", executable, 4)[0] == 0x0100000C
+    gate = GATE.read_bytes()
+    assert gate[:4] == b"\xcf\xfa\xed\xfe"
+    assert struct.unpack_from("<I", gate, 4)[0] == 0x0100000C
+    for v, path in enumerate(DISPOSABLE, start=1):
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert sha.encode() in gate, "disposable hash must be embedded"
+        assert path.name.encode() in gate
+    assert b"I-CONFIRM-DISPOSABLE-ONLY" in gate
+    assert b"/usr/bin/appinst" in gate
+    assert b"com.example.MangaReader12" not in gate
     helper = HELPER.read_bytes()
     assert helper[:4] == b"\xcf\xfa\xed\xfe"
     assert struct.unpack_from("<I", helper, 4)[0] == 0x0100000C
@@ -68,6 +86,11 @@ def main():
     signed = plistlib.loads(entitlement.stdout)
     expected = {"com.apple.private.security.no-container": True}
     assert signed == expected, signed
+    gate_entitlements = subprocess.run(
+        ["codesign", "-d", "--entitlements", ":-", str(GATE)],
+        check=True, capture_output=True
+    )
+    assert plistlib.loads(gate_entitlements.stdout) == expected
     source_entitlements = plistlib.loads(
         Path("ci/chimera_mobile_ping.entitlements").read_bytes()
     )
@@ -84,7 +107,9 @@ def main():
     print("PASS: deployment minimum iOS12 and no chained fixups")
     print("PASS: isolated iOS12 IPC IPA + external PING-only helper")
     print("PASS: helper has no appinst path or process launcher")
-    print("PASS: matches locally generated checksums; no install performed")
+    print("PASS: Build60 package has both disposable IPAs and SHA-pinned gate")
+    print("PASS: disposable gate has minimal entitlement and no WebReader target")
+    print("PASS: matches locally generated checksums; CI never installed an app")
 
 
 if __name__ == "__main__":
