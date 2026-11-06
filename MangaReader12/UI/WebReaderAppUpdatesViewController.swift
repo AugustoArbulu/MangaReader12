@@ -443,7 +443,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         checking = true
         stagedIPAURL = nil
         stagedSHA256 = nil
-        installationReport = "Ponte mobile ainda não conectada"
         tableView.reloadData()
 
         let current = WebReaderUpdateChecker(
