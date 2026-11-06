@@ -1,0 +1,76 @@
+name: WebReader Chimera Build61 Persistent PING QA
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_chimera_persistent_ping.c'
+      - 'ci/test_chimera_persistent_ping.py'
+      - 'ci/com.example.webreader.pinglab.plist'
+      - 'ci/package_chimera_persistent_ping_deb.py'
+      - 'ci/test_chimera_persistent_ping_deb.py'
+      - 'ci/chimera_mobile_ping.entitlements'
+      - '.github/workflows/chimera-persistent-ping.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-ping61-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  persistent-readonly:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Xcode 16.4 with iOS 12 deployment support
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Reconnection, fragmented PING, malformed request and restart tests
+        run: python3 ci/test_chimera_persistent_ping.py
+
+      - name: Build and sign non-root PING-only binary for ARM64 iOS12
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_chimera_persistent_ping.c \
+            -o WebReader-Chimera-Persistent-Ping-iOS12
+          codesign --force --sign - --timestamp=none \
+            --entitlements ci/chimera_mobile_ping.entitlements \
+            WebReader-Chimera-Persistent-Ping-iOS12
+          codesign --verify --verbose WebReader-Chimera-Persistent-Ping-iOS12
+          shasum -a 256 WebReader-Chimera-Persistent-Ping-iOS12 > WebReader-Chimera-Persistent-Ping-iOS12.sha256
+
+      - name: Package explicitly installed .deb (NO installer function in binary)
+        run: |
+          python3 ci/package_chimera_persistent_ping_deb.py
+          python3 ci/test_chimera_persistent_ping_deb.py
+
+      - name: Audit ARM64/iOS12 and absence of code signing bypass
+        run: |
+          xcrun lipo -info WebReader-Chimera-Persistent-Ping-iOS12 | grep 'arm64'
+          xcrun otool -l WebReader-Chimera-Persistent-Ping-iOS12 > ping-otool.txt
+          grep -Eq 'minos 12.0|version 12.0' ping-otool.txt
+          if grep -q 'LC_DYLD_CHAINED_FIXUPS' ping-otool.txt; then exit 1; fi
+          codesign -d --entitlements :- WebReader-Chimera-Persistent-Ping-iOS12 > ping-entitlements.plist 2>/dev/null
+          python3 -c "import plistlib; assert plistlib.load(open('ping-entitlements.plist','rb')) == {'com.apple.private.security.no-container':True}"
+
+      - name: Upload ONE Build61 opt-in persistent PING laboratory ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Chimera-Build61-PersistentPing-QA-iOS12
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-Persistent-PingLab-iOS12.deb
+            WebReader-Chimera-Persistent-PingLab-iOS12.deb.sha256
+            WebReader-Chimera-Persistent-Ping-iOS12.sha256
