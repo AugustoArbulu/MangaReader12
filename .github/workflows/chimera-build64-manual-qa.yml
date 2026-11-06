@@ -46,7 +46,7 @@ jobs:
       - name: Offline native IPA validation and download tests
         run: |
           python3 ci/test_native_webreader_ipa_stager.py
-          python3 -m unittest ci/test_validate_webreader_ipa.py
+          python3 ci/test_validate_webreader_ipa.py
 
       - name: Prepare icons and pinned WebP library
         run: |
