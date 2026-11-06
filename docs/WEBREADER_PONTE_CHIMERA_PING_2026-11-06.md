@@ -1,5 +1,82 @@
 # Ponte Chimera — primeiro teste real, sem instalar IPAs
 
+## Resultado conclusivo IPC UNIX iOS12 e alternativa TCP local — 06/11/2026
+
+### Evidência física
+
+- iPad Chimera iOS12.5.8, app **WebReader IPC Test Build57**,
+  bundle `com.example.MangaReader12.ipcprobe`.
+- Helper externo **WebReader-Chimera-Ping-DIAG-iOS12** assinado com
+  `com.apple.private.security.no-container`, UID501, iniciou e
+  imprimiu `WRAPPINST_READY` ao receber a pasta `WR` criada (0700)
+  no contêiner atual do app.
+- Novo diagnóstico do cliente Swift mostrou:
+  **`Diagnóstico IPC: lstat socket (errno=1)`**.
+  `errno=1` é `EPERM`: a operação `lstat` de `wri.sock` foi
+  negada **antes de `connect()`**.
+- Servidor registrou `WRDIAG: NO_CONNECTION: poll=0 revents=0 errno=0`,
+  coerente com ausência de uma chamada `connect` do app.
+- Conclusão: **socket UNIX não é viável neste formato no dispositivo
+  sem alterar o modelo de permissão**, apesar do mesmo UID e da pasta
+  privada. Não usar `chmod 777`, não mudar owner nem contornar assinatura.
+  Não há evidência de problema com o binário `appinst` neste teste.
+
+### Fase seguinte — experiência somente PING por 127.0.0.1
+
+Implementações no branch experimental e PR Draft #90:
+
+- Helper externo `ci/webreader_appinst_bridge.c` no modo **`WEBREADER_PING_ONLY`**
+  expõe comando **`serve-loopback-once`**: faz bind explícito
+  `127.0.0.1:38971`, sem bind na rede Wi-Fi, espera até 60 s,
+  permite uma única conexão local, aceita **somente** `WRPING1\n`
+  e responde `WRPONG1\n`. `WRINST1\n` é rejeitado.
+- O helper PING-only **não contém** `/usr/bin/appinst`, instalação,
+  `posix_spawn`, manipulação de IPA ou servidor persistente.
+- O cliente `WebReaderAppinstSocket.swift` acrescenta `pingLoopback()`
+  exclusivamente para diagnóstico. O WebReader principal conserva
+  sua rotina UNIX; não alteramos instalação real nem manifestos.
+- A interface do **WebReader IPC Test Build58** passa a mostrar
+  **Testar ponte localhost (PING)** no lugar do botão de socket
+  apenas para o bundle de diagnóstico, junto com relatório de errno.
+- Workflow `.github/workflows/chimera-mobile-ping.yml` gera artifact
+  `WebReader-Chimera-Loopback-PING-iOS12` com 4 arquivos:
+  `WebReader-IPC-Probe-iOS12-unsigned.ipa` (Build58),
+  SHA256; `WebReader-Chimera-Ping-DIAG-iOS12` assinado,
+  SHA256.
+- Testes macOS para C: PING/PONG, rejeição do opcode de instalação,
+  sem appinst; Swift + C nativo: cliente localhost e preservação do
+  instalador falso nos testes antigos. Auditoria de entitlements e IPA.
+
+### Procedimento físico após CI verde
+
+1. Baixar artifact de Build58 no run verde do workflow acima.
+2. Via Filza WebDAV, transferir apenas o novo executável assinado
+   `WebReader-Chimera-Ping-DIAG-iOS12` para
+   `/var/mobile/Documents/` substituindo **somente** o executável
+   anterior de diagnóstico.
+3. Atualizar `WebReader IPC Test` instalando a IPA de diagnóstico
+   Build58; **não tocar no WebReader Build56**.
+4. Em NewTerm2 usuário `mobile` executar **sem argumentos adicionais**:
+
+   ```sh
+   /var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-loopback-once
+   ```
+
+5. Ao ver `WRLOOPBACK_READY`, no WebReader IPC Test
+   tocar **Testar ponte localhost (PING)** em até 60 s;
+   copiar relatório. Verificar `PONG` no app e
+   `WRDIAG: LOOPBACK_ACCEPTED_127_0_0_1` no terminal.
+
+**Importante:** teste de alcance de TCP local **não autentica clientes**.
+Esta porta/protocolo PING-only não está aprovada para instalação de IPAs.
+Antes de qualquer ponte de instalação real, será necessário projeto
+separado de identidade, autorização explícita, vinculação de artefato
+e segurança contra outros processos locais. Uma resposta PONG não
+é uma aprovação para instalação.
+
+---
+
+
 ## Diagnóstico PING após `WRAPPINST_READY` — 06/11/2026
 
 O usuário criou a pasta `WR` com permissão 0700 (antes ela não existia).
