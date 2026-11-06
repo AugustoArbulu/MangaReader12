@@ -33,6 +33,8 @@ import Foundation
             result = WebReaderAppinstSocket.hostProbe(directory: directory)
         } else if args[1] == "loopback" && args.count == 3 {
             result = WebReaderAppinstSocket.hostLoopbackProbe()
+        } else if args[1] == "pair" && args.count == 3 {
+            result = WebReaderAppinstSocket.hostPairProbe(code: args[2])
         } else if args[1] == "install" && args.count == 5 {
             result = WebReaderAppinstSocket.hostInstall(
                 directory: directory,
@@ -45,6 +47,8 @@ import Foundation
         print(result.text)
         switch result {
         case .diagnosticReady: exit(0)
+        case .pairingAccepted: exit(0)
+        case .pairingDenied: exit(6)
         case .completed: exit(0)
         case .unavailable: exit(3)
         case .rejected: exit(4)
@@ -210,6 +214,54 @@ class NativeSocketIntegration(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PONG", result.stdout)
         self.assertEqual(helper.wait(timeout=4), 0)
+        self.assertFalse(self.marker.exists())
+
+    def _start_pair_helper(self):
+        helper = subprocess.Popen(
+            [str(self.loopback_helper), "serve-pair-once"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        self.addCleanup(self._stop_server, helper)
+        ready, _, _ = select.select([helper.stdout], [], [], 2)
+        self.assertTrue(ready, "pair helper did not start")
+        self.assertIn(b"WRPAIR_READY", helper.stdout.readline())
+        line = helper.stdout.readline().decode().strip()
+        self.assertTrue(line.startswith("WRPAIR_CODE: "))
+        code = line.split(": ", 1)[1]
+        self.assertEqual(len(code), 16)
+        self.assertTrue(all(c in "0123456789ABCDEF" for c in code))
+        return helper, code
+
+    def test_swift_pair_correct_code_and_mutual_proof(self):
+        helper, code = self._start_pair_helper()
+        result = subprocess.run(
+            [str(self.client), "pair", code],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("temporário validado", result.stdout)
+        self.assertEqual(helper.wait(timeout=4), 0)
+        self.assertFalse(self.marker.exists())
+
+    def test_swift_pair_incorrect_code_consumes_one_shot(self):
+        helper, code = self._start_pair_helper()
+        incorrect = "0" * 16 if code != "0" * 16 else "F" * 16
+        result = subprocess.run(
+            [str(self.client), "pair", incorrect],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(result.returncode, 6, result.stdout + result.stderr)
+        self.assertIn("incorreto", result.stdout)
+        self.assertNotEqual(helper.wait(timeout=4), 0)
+        self.assertFalse(self.marker.exists())
+
+    def test_pair_rejects_malformed_code_without_connection(self):
+        result = subprocess.run(
+            [str(self.client), "pair", "NOT-A-VALID-CODE"],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertIn("16 caracteres", result.stdout)
         self.assertFalse(self.marker.exists())
 
     def test_bad_sha_fails_and_installer_not_called(self):
