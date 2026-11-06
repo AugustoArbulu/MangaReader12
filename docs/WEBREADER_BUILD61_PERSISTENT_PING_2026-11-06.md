@@ -59,3 +59,9 @@ Próximo teste no iPad: transferir somente o pacote FIX1 para /var/mobile/Docume
     dpkg -s com.example.webreader.pinglab
 
 Somente se o status for install ok installed, testar PING no IPC Test Build59. Se a fase postinst/launchctl falhar, interromper e analisar; não mexer no WebReader principal. A correção estrutural da falha de diretório está validada, mas o FIX1 e o launchd ainda não foram testados fisicamente.
+
+## Resultado físico parcial do FIX1 (06/11/2026)
+
+Após transferir e instalar o pacote FIX1 0.1.1 pelo NewTerm (`dpkg -i`), o usuário confirmou que o **IPC Test Build 59 recebeu PONG** do serviço TCP local na porta 38971. Assim, o pacote e a inicialização do serviço passaram pela primeira verificação física, superando o `errno=61` anterior. Não foi compartilhada saída de `dpkg -s`, mas a comunicação PONG confirma que havia um listener ativo compatível naquele momento.
+
+**Ainda pendente:** confirmar que o PING continua funcionando depois de encerrar totalmente NewTerm e IPC Test (independência do terminal) e, posteriormente, após reiniciar/reativar o jailbreak (persistência de inicialização automática). Nenhuma instalação de IPA foi executada por esse PING, e o serviço permanece exclusivamente de diagnóstico.
