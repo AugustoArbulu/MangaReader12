@@ -329,8 +329,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             cell.selectionStyle = .default
 
         case (5, 3):
-            cell.textLabel?.text = testingAppinstBridge ?
-                "Testando socket appinst…" : "Testar ponte appinst (PING)"
+            if isIPCDiagnostic {
+                cell.textLabel?.text = testingAppinstBridge ?
+                    "Testando TCP localhost…" : "Testar ponte localhost (PING)"
+            } else {
+                cell.textLabel?.text = testingAppinstBridge ?
+                    "Testando socket appinst…" : "Testar ponte appinst (PING)"
+            }
             cell.detailTextLabel?.text = appinstBridgeReport
             if !testingAppinstBridge {
                 cell.accessoryType = .disclosureIndicator
@@ -679,13 +684,22 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private func testAppinstBridgeConnection() {
         guard !testingAppinstBridge else { return }
         testingAppinstBridge = true
-        appinstBridgeReport = "PING em socket wri.sock • sem executar appinst"
+        appinstBridgeReport = isIPCDiagnostic ?
+            "PING por TCP 127.0.0.1:38971 • sem instalar IPAs" :
+            "PING em socket wri.sock • sem executar appinst"
         tableView.reloadData()
-        WebReaderAppinstSocket.checkConnection { [weak self] result in
+        let finished: (WebReaderAppinstSocket.Result) -> Void = { [weak self] result in
             guard let self = self else { return }
             self.testingAppinstBridge = false
             self.appinstBridgeReport = result.text
             self.tableView.reloadData()
+        }
+        // The disposable IPC Test IPA probes the local TCP route only.
+        // The production WebReader keeps its original UNIX socket behavior.
+        if isIPCDiagnostic {
+            WebReaderAppinstSocket.checkLoopbackConnection(completion: finished)
+        } else {
+            WebReaderAppinstSocket.checkConnection(completion: finished)
         }
     }
 
@@ -698,7 +712,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             "App: " + installedBuildLabel,
             "iOS: " + ios,
             "Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido"),
-            "Socket: UNIX local • PING/PONG somente",
+            isIPCDiagnostic ?
+                "Transporte atual: TCP 127.0.0.1:38971 • PING/PONG somente" :
+                "Socket: UNIX local • PING/PONG somente",
             "Pasta (comprimento UTF-8): " +
                 String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
             helperReport,
