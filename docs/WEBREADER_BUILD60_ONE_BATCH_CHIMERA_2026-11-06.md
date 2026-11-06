@@ -16,7 +16,7 @@ Artifact: WebReader-Chimera-Build60-OneBatch-iOS12
 - WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa e v2 — mesmo Bundle ID descartável, diferentes versões.
 - Hashes SHA-256 de cada artefato.
 
-O gate incorpora por compilação os dois hashes SHA-256 calculados após a construção das IPAs auditadas. Não aceita caminho, hash ou Bundle ID recebidos por TCP, Swift ou linha de comando. Os únicos comandos permitidos são selftest, inspect-v1, inspect-v2, install-v1 e install-v2. Instalação requer a frase literal I-CONFIRM-DISPOSABLE-ONLY.
+O gate incorpora por compilação os dois hashes SHA-256 calculados após a construção das IPAs auditadas. Não aceita caminho, hash ou Bundle ID recebidos por TCP, Swift ou linha de comando. Os únicos comandos permitidos são selftest, inspect-v1, inspect-v2, install-v1, install-v2 e run-disposable-qa (orquestra v1→v2 em um comando, exigindo NEXT no meio). Instalação requer a frase literal I-CONFIRM-DISPOSABLE-ONLY.
 
 A validação recusa arquivo symlink, hardlink, proprietário diferente do usuário mobile, permissão de escrita para grupo/outros, caminho diferente de /var/mobile/Documents, arquivo muito grande, magic bytes errados ou SHA-256 errado. É feita nova validação antes de chamar /usr/bin/appinst. Existe risco residual de alteração entre validação e leitura pelo instalador, por isso o gate NÃO deve ser reaproveitado para atualização do WebReader principal.
 
@@ -31,21 +31,13 @@ Nenhum appinst verdadeiro é invocado pela CI. O helper HMAC continua separado e
 ## Única sessão de QA no iPad, após CI verde
 
 1. Baixar o ZIP único. Pelo Filza, transferir somente o gate e as duas IPAs descartáveis para /var/mobile/Documents. Se desejar testar o botão de roteiro, instalar a IPA de diagnóstico Build60 sobre o IPC Test; ela não substitui o WebReader Build56.
-2. No NewTerm 2 como mobile UID501, executar nesta ordem:
+2. No NewTerm 2 como mobile UID501, executar **um único comando**:
 
-    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 selftest
-    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 inspect-v1
-    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 inspect-v2
+    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 run-disposable-qa I-CONFIRM-DISPOSABLE-ONLY
 
-3. Somente se todos os arquivos forem aceitos, e após consentimento para instalar apenas o app descartável:
-
-    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 install-v1 I-CONFIRM-DISPOSABLE-ONLY
-
-4. Abrir WR Appinst Test v1 para criar a preferência local. Depois executar:
-
-    /var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12 install-v2 I-CONFIRM-DISPOSABLE-ONLY
-
-5. Abrir WR Appinst Test v2 e confirmar Persistência dos dados: SIM. Copiar os resultados do NewTerm, sem compartilhar senhas ou tokens.
+3. Esse comando primeiro inspeciona e verifica SHA de AMBAS as IPAs antes de instalar a v1. Após a confirmação de que a v1 foi instalada, abrir WR Appinst Test v1 para criar o registro local.
+4. Voltar ao terminal, digitar NEXT e Enter. O gate revalida o hash da v2 e instala apenas a atualização descartável.
+5. Abrir WR Appinst Test v2 e confirmar Persistência dos dados: SIM. Copiar as linhas de resultado do NewTerm, sem compartilhar segredos. Se digitar qualquer coisa diferente de NEXT, a segunda instalação não é executada.
 
 Se aparecer zsh: killed, assinatura inválida, SHA diferente ou appinst falhar: PARAR. Não fazer ldid -S manual no gate assinado pela CI e não executar como root.
 
