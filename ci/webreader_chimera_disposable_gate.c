@@ -48,8 +48,8 @@
 #define WRD_BASE WRD_TEST_ROOT
 #define WRD_APPINST WRD_TEST_APPINST
 #endif
-#define WRD_V1 "WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa"
-#define WRD_V2 "WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa"
+#define WRD_V1 "WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa"
+#define WRD_V2 "WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa"
 #define WRD_CONSENT "I-CONFIRM-DISPOSABLE-ONLY"
 #define WRD_MAX_SIZE (2U * 1024U * 1024U)
 
