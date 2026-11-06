@@ -105,7 +105,7 @@ class DisposableGateTests(unittest.TestCase):
 
     def test_single_session_v1_to_v2_with_explicit_next(self):
         r = self.run_gate(
-            "run-disposable-qa", CONSENT, input_text="NEXT\\n"
+            "run-disposable-qa", CONSENT, input_text="NEXT\n"
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("BOTH_VERIFIED", r.stdout)
@@ -117,13 +117,13 @@ class DisposableGateTests(unittest.TestCase):
 
     def test_single_session_refuses_implicit_transition(self):
         r = self.run_gate(
-            "run-disposable-qa", CONSENT, input_text="CANCEL\\n"
+            "run-disposable-qa", CONSENT, input_text="CANCEL\n"
         )
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("STOPPED", r.stderr)
         self.assertEqual(self.log.read_text().splitlines(), [str(self.v1)])
 
-        def test_modified_ipa_denied(self):
+    def test_modified_ipa_denied(self):
         original = self.v2.read_bytes()
         try:
             self.v2.write_bytes(original + b"MUTATED")
