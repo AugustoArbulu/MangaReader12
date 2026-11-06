@@ -8,7 +8,11 @@
  * Listener at 127.0.0.1:38971 is NOT client code-signature authentication
  * and MUST NEVER be given installation capabilities.
  */
+#if defined(__APPLE__)
 #define _DARWIN_C_SOURCE 1
+#else
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
