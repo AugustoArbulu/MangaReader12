@@ -65,3 +65,9 @@ Somente se o status for install ok installed, testar PING no IPC Test Build59. S
 Após transferir e instalar o pacote FIX1 0.1.1 pelo NewTerm (`dpkg -i`), o usuário confirmou que o **IPC Test Build 59 recebeu PONG** do serviço TCP local na porta 38971. Assim, o pacote e a inicialização do serviço passaram pela primeira verificação física, superando o `errno=61` anterior. Não foi compartilhada saída de `dpkg -s`, mas a comunicação PONG confirma que havia um listener ativo compatível naquele momento.
 
 **Ainda pendente:** confirmar que o PING continua funcionando depois de encerrar totalmente NewTerm e IPC Test (independência do terminal) e, posteriormente, após reiniciar/reativar o jailbreak (persistência de inicialização automática). Nenhuma instalação de IPA foi executada por esse PING, e o serviço permanece exclusivamente de diagnóstico.
+
+## QA física — independência do NewTerm CONFIRMADA (06/11/2026)
+
+O usuário confirmou que fechou completamente o NewTerm e o IPC Test Build59, abriu novamente o IPC Test e obteve **PONG novamente** do serviço Build61 FIX1. Resultado: **aprovado** para persistência do processo de diagnóstico entre sessões, sem inicialização manual do helper no terminal. O serviço segue restrito a PING/PONG, sem `appinst` ou instalação de IPA.
+
+Limites: a execução após **reboot/reativação do Chimera** ainda não foi testada; o PONG não autentica o solicitante e não habilita atualização real pelo WebReader. Não extrapolar a aprovação ao processo de instalação automática de apps.
