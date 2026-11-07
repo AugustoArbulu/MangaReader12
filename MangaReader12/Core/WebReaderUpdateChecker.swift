@@ -163,12 +163,11 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         }
         guard http.statusCode == 200 else {
             completionHandler(.cancel)
-            if usePublicGitHubReleases && http.statusCode == 404 {
-                // Public repository has no published latest Release yet.
-                finish(.upToDate)
-            } else {
-                finish(.failed(.unexpectedHTTPStatus(http.statusCode)))
-            }
+            // 404 from GitHub releases/latest is ambiguous: it may mean
+            // no Releases, a PRIVATE repository, missing credentials, or an
+            // inaccessible repo. Never claim "up to date" without evidence.
+            // No publisher signing key is configured in production either.
+            finish(.failed(.unexpectedHTTPStatus(http.statusCode)))
             return
         }
         guard let mime = http.mimeType?.lowercased(),
