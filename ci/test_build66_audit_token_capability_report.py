@@ -78,8 +78,9 @@ class PhaseDAuditReportTests(unittest.TestCase):
 
     def test_wrong_authorization_on_symbol(self):
         self.invalid(fixture().replace(
-            b"Security", b"Security"
-        ).replace(b"AUTHORIZATION=DENIED", b"AUTHORIZATION=ALLOWED", 1))
+            b"SECURITY_SecCodeCreateWithAuditToken=PRESENT AUTHORIZATION=DENIED",
+            b"SECURITY_SecCodeCreateWithAuditToken=PRESENT AUTHORIZATION=ALLOWED"
+        ))
 
     def test_authorized_final_marker(self):
         self.invalid(fixture().replace(
