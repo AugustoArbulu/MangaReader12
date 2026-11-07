@@ -34,7 +34,7 @@ O workflow [Phase I #42347031829](https://github.com/AugustoArbulu/MangaReader12
 
 A observação de identidade temporal A → B → A da Fase H era verdadeira para o caso de mensagens serializadas, mas **insuficiente para generalizar** a autorização em condições com buffer.
 
-O classificador Python nunca emite `stream_frames_authenticated=True`, `installation_authorized=True` ou `ios12_verified=True`. A suíte nativa foi reforçada posteriormente para exigir explicitamente as observações de B/B e B/sem segunda amostra; uma alteração de comportamento do kernel deve aparecer como falha, não como um PASS silencioso. Essa revalidação posterior deve ser consultada separadamente.
+O classificador Python nunca emite `stream_frames_authenticated=True`, `installation_authorized=True` ou `ios12_verified=True`. A suíte nativa foi reforçada posteriormente para exigir explicitamente as observações de B/B e B/sem segunda amostra; uma alteração de comportamento do kernel deve aparecer como falha, não como um PASS silencioso. Essa revalidação **passou nos dois jobs** do workflow [Phase I #42347135891](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42347135891): as asserções explícitas de B/B e B/sem segunda amostra foram aprovadas, juntamente com a regressão da Fase H e as travas Swift.
 
 ## Arquivos do lote
 
@@ -54,7 +54,7 @@ Não substituir a autenticação por token obtido via texto do cliente, PID, UID
 
 ## Próximo teste útil: iPad real, sem novas fases de laboratório
 
-O diagnóstico separado da Fase E já compila para **ARM64/iOS12** e não tem instalador, daemon ou `appinst`. Na execução [Fase E #42347031802](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42347031802), ambos os jobs passaram e foi publicado o artifact **`WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12`**, ID **`13563589894`** (disponível no GitHub Actions, prazo de retenção configurado de 14 dias). Dentro dele: `WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb` e checksums. A execução real no iPad ainda **não ocorreu**.
+O diagnóstico separado da Fase E já compila para **ARM64/iOS12** e não tem instalador, daemon ou `appinst`. Na execução [Fase E #42347031802](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42347031802), ambos os jobs passaram e foi publicado o artifact **`WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12`**, ID **`13563589894`** (disponível no GitHub Actions, prazo de retenção configurado de 14 dias). Dentro dele: `WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb` e checksums. O SHA-256 **do DEB**, confirmado no log de empacotamento dessa execução, é `71457b449ee16b602c0141beec309023141802795d57dec71f35a2c0f3775266` (não confundir com o checksum do ZIP do artifact). A execução real no iPad ainda **não ocorreu**.
 
 Para QA físico, **somente após a decisão do proprietário**:
 
