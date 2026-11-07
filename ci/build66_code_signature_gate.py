@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -133,6 +134,12 @@ def audit_code_signature_snapshot(snapshot, expected_sha256, expected_size):
             binary = app / "MangaReader12"
             if not binary.is_file():
                 raise CodeSignatureRejected("missing signed executable")
+            with binary.open("rb") as executable:
+                header = executable.read(8)
+            # Preserve the installed Build65 contract: thin ARM64 Mach-O.
+            if (len(header) != 8 or header[:4] != b"\xcf\xfa\xed\xfe"
+                or struct.unpack_from("<I", header, 4)[0] != 0x0100000C):
+                raise CodeSignatureRejected("candidate is not thin ARM64 Mach-O")
             _codesign(["--verify", "--verbose=2", str(app)])
             signed_entitlements = plistlib.loads(
                 _codesign(["-d", "--entitlements", ":-", str(app)])
@@ -149,6 +156,7 @@ def audit_code_signature_snapshot(snapshot, expected_sha256, expected_size):
 
     return {
         "adHocSignatureIntegrityVerified": True,
+        "thinArm64ExecutableVerified": True,
         "installedApplicationIdentifierMatch": True,
         "applicationIdentifier": INSTALLED_APPLICATION_IDENTIFIER,
         "publisherAuthenticatedByCodeSignature": False,
@@ -176,4 +184,10 @@ def audit_signed_release_with_code_signature(
     identity = audit_code_signature_snapshot(
         snapshot, report["sha256"], report["ipaSize"]
     )
-    return {**report, **identity}
+    return {
+        **report, **identity,
+        # Refers only to cryptographic integrity of an *ad hoc* code seal.
+        # Publisher authentication remains false until a separate trust
+        # policy is provisioned and independently checked.
+        "code_signature_verified": True,
+    }
