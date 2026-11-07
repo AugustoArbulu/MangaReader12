@@ -6,6 +6,7 @@ on:
     paths:
       - 'ci/webreader_chimera_csops_token_probe66.c'
       - 'ci/test_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_signed_cdhash66.py'
       - 'ci/build66_csops_capability_report.py'
       - 'ci/test_build66_csops_capability_report.py'
       - 'ci/package_chimera_csops_token_probe66.py'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'ci/webreader_chimera_csops_token_probe66.c'
       - 'ci/test_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_signed_cdhash66.py'
       - 'ci/build66_csops_capability_report.py'
       - 'ci/test_build66_csops_capability_report.py'
       - 'ci/package_chimera_csops_token_probe66.py'
@@ -54,6 +56,8 @@ jobs:
         run: python3 -m unittest discover -s ci -p 'test_build66_csops_capability_report.py' -v
       - name: Compile and exercise only controlled child-process audit-token binding
         run: python3 ci/test_chimera_csops_token_probe66.py
+      - name: Confirm kernel child CDHash matches independently codesign-verified host executable
+        run: python3 ci/test_chimera_csops_signed_cdhash66.py
       - name: Cross-compile ad-hoc signed iOS12 ARM64 CLI without install ability
         run: |
           xcrun --sdk iphoneos clang -std=c11 -Os -Wall -Wextra -Werror \
@@ -84,6 +88,10 @@ jobs:
           assert 'WR_CS_OPS_CDHASH 5' in src
           assert 'corrupted.val[7] ^= 1u' in src
           assert 'FINAL_INSTALL_AUTHORIZATION=DENIED' in src
+          # The test-only reference interface MUST be absent from the iOS CLI.
+          binary = Path("WebReader-Build66-CSOpsTokenProbe-iOS12").read_bytes()
+          assert b"WR66_HOST_EXPECTED_CDHASH" not in binary
+          assert b"HOST_CDHASH_MATCH" not in binary
           for forbidden in ('appinst(', '/usr/bin/appinst', 'posix_spawn(', 'execve(', 'system(', 'setuid(', 'setgid('):
               assert forbidden not in src, forbidden
           print("PASS: no installation or privilege elevation in Phase E CLI")
