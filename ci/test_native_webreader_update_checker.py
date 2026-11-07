@@ -292,8 +292,8 @@ default: fatalError("legacy asset must remain discoverable")
 
 StubManifestURLProtocol.responseStatus = 404
 switch runPublicGitHubCheck() {
-case .upToDate: break
-default: fatalError("no public GitHub release should be a safe no-update")
+case .failed(.unexpectedHTTPStatus(404)): break
+default: fatalError("404 can mean private/inaccessible repository, NOT up-to-date")
 }
 StubManifestURLProtocol.responseStatus = 403
 switch runPublicGitHubCheck() {
