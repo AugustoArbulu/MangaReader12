@@ -21,7 +21,7 @@ class PeerEvidenceTests(unittest.TestCase):
 
     def assert_denied(self, raw, reason=None):
         actual = evaluate_untrusted_peer_evidence(
-            raw if isinstance(raw, bytes) else encoded(raw)
+            raw if isinstance(raw, bytes) or raw is None else encoded(raw)
         )
         self.assertFalse(actual.requester_authenticated)
         self.assertFalse(actual.os_bound_audit_identity_verified)
