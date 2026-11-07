@@ -1,8 +1,10 @@
 import UIKit
 
-/// In-app home for future signed WebReader application releases.
+/// In-app release discovery and manual IPA export; public GitHub metadata is
+/// NOT an independently signed publisher manifest.
 /// This is deliberately SEPARATE from the existing chapter Updates tab and
-/// background Library updater. This screen may stage an authenticated IPA but never installs or runs appinst.
+/// background Library updater. This screen verifies SHA/ZIP metadata for
+/// manually exported IPAs; it never installs or runs appinst.
 final class WebReaderAppUpdatesViewController: UITableViewController {
     private var checker: WebReaderUpdateChecker?
     private var checking = false
@@ -205,7 +207,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case (1, 0):
             cell.textLabel?.text = "Canal de lançamentos"
             cell.detailTextLabel?.text =
-                "GitHub Releases público • HTTPS • verificação manual"
+                "GitHub Releases • HTTPS • sem autenticação editorial independente"
 
         case (1, 1):
             cell.textLabel?.text = "Abrir GitHub Releases"
@@ -264,14 +266,14 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case (2, 4):
             cell.textLabel?.text = "Instalação pelo Chimera bloqueada"
             cell.detailTextLabel?.text =
-                "Aguardando identidade do solicitante e assinatura editorial"
+                "Aguardando política independente de autorização e chave editorial"
             cell.accessoryType = .none
             cell.selectionStyle = .none
 
         case (3, _):
             cell.textLabel?.text = "Atualizações seguras"
             cell.detailTextLabel?.text =
-                "Download de release oficial via HTTPS, SHA-256 e inspeção IPA. " +
+                "Consulta GitHub via HTTPS, SHA-256 e inspeção IPA. " +
                 "Não há assinatura independente do editor neste modo. " +
                 "A instalação via appinst está bloqueada nesta Build. " +
                 "PING e pareamento não autorizam instalação."
@@ -367,16 +369,19 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case .disabled:
             return "Canal de consulta desabilitado"
         case .upToDate:
-            return "Nenhum release assinado mais recente encontrado"
+            return "Nenhuma Build mais recente encontrada nos metadados consultados"
         case .updateAvailable(let update):
             return "Build " + String(update.build) +
-                " encontrada no GitHub • instalação ainda indisponível"
+                " encontrada • verificar IPA antes da instalação manual"
         case .failed(let error):
             switch error {
             case .busy: return "Uma verificação já está em andamento"
             case .unsupportedManifestURL: return "Endereço do canal não autorizado"
             case .transport: return "Não foi possível acessar o manifesto HTTPS"
             case .unexpectedHTTPStatus(let status):
+                if status == 404 {
+                    return "GitHub Releases indisponível: sem release ou repositório privado"
+                }
                 return "Resposta HTTP " + String(status)
             case .unexpectedContentType:
                 return "Resposta em formato não permitido"
@@ -477,8 +482,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
               update.provenance == .publicGitHubRelease ||
                 WebReaderUpdateChannel.isConfigured else { return }
         let mb = Double(update.ipaSize) / (1024 * 1024)
+        let channelNotice = update.provenance == .publicGitHubRelease ?
+            "Metadados do GitHub não têm assinatura editorial independente. " : ""
         let message = String(format:
             "Build %d • %.1f MB. Baixar e validar agora? " +
+            channelNotice +
             "O aplicativo NÃO será instalado automaticamente.", update.build, mb)
         let alert = UIAlertController(title: "Baixar IPA?", message: message,
             preferredStyle: .alert)
@@ -511,7 +519,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 case .staged(let url):
                     self.stagedIPAURL = url
                     self.stagedSHA256 = update.sha256
-                    self.ipaStatus = "IPA verificada e salva no aparelho"
+                    self.ipaStatus = "SHA-256 e estrutura IPA conferidos • instalação manual"
                 case .failed(let failure):
                     self.stagedIPAURL = nil
                     self.stagedSHA256 = nil
