@@ -9,6 +9,7 @@ import plistlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 from build66_signed_release_preflight import SignedReleaseRejected, verify_signed_release
@@ -108,6 +109,7 @@ class SignedReleasePreflightTests(unittest.TestCase):
         self.assertEqual(result["build"], 66)
         self.assertTrue(result["signed_manifest_verified"])
         self.assertTrue(result["ipa_metadata_matches_manifest"])
+        self.assertTrue(result["single_snapshot_checked"])
         self.assertFalse(result["code_signature_verified"])
         self.assertFalse(result["install_authorized"])
         self.assertFalse(result["installation_performed"])
@@ -180,6 +182,50 @@ class SignedReleasePreflightTests(unittest.TestCase):
         self.manifest = self.fields()
         self.manifest["build"] = 65
         self.manifest["ipaUrl"] = self.manifest["ipaUrl"].replace("build66", "build65")
+        self.denied()
+
+    def test_replaced_path_after_read_cannot_change_snapshot_identity(self):
+        # The hash and archive checks must inspect the same immutable bytes.
+        # A later installer must *not* use this path: this test authorizes nothing.
+        envelope = self.signed()
+        real_zipfile = zipfile.ZipFile
+
+        def replace_path_at_archive_parse(*args, **kwargs):
+            self.ipa.write_bytes(b"REPLACED AFTER DESCRIPTOR READ")
+            return real_zipfile(*args, **kwargs)
+
+        with mock.patch("build66_ipa_preflight.zipfile.ZipFile",
+                        side_effect=replace_path_at_archive_parse):
+            result = verify_signed_release(
+                envelope, self.key, self.ipa, installed_build=65)
+        self.assertTrue(result["single_snapshot_checked"])
+        self.assertEqual(result["sha256"], self.manifest["sha256"])
+        self.assertNotEqual(
+            hashlib.sha256(self.ipa.read_bytes()).hexdigest(),
+            result["sha256"])
+
+    def test_signed_ipa_with_extra_app_rejected(self):
+        base = synthetic_ipa()
+        rewritten = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(base)) as original:
+            with zipfile.ZipFile(rewritten, "w", zipfile.ZIP_DEFLATED) as archive:
+                for entry in original.infolist():
+                    archive.writestr(entry, original.read(entry))
+                archive.writestr("Payload/Another.app/Info.plist", b"extra")
+        self.ipa.write_bytes(rewritten.getvalue())
+        self.manifest = self.fields()
+        self.denied()
+
+    def test_signed_ipa_with_root_extra_file_rejected(self):
+        base = synthetic_ipa()
+        rewritten = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(base)) as original:
+            with zipfile.ZipFile(rewritten, "w", zipfile.ZIP_DEFLATED) as archive:
+                for entry in original.infolist():
+                    archive.writestr(entry, original.read(entry))
+                archive.writestr("unexpected.txt", b"extra")
+        self.ipa.write_bytes(rewritten.getvalue())
+        self.manifest = self.fields()
         self.denied()
 
     def test_ipa_symlink_rejected(self):
