@@ -10,7 +10,7 @@ enum WebReaderGitHubReleaseParser {
     static let apiURL = URL(string:
         "https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest"
     )!
-    private static let fixedAssetName = "WebReader-iOS12-unsigned.ipa"
+    private static let legacyAssetName = "WebReader-iOS12-unsigned.ipa"
     private static let fixedRepo = "/AugustoArbulu/MangaReader12/releases/download/"
     private static let maximumIPA: Int64 = 512 * 1024 * 1024
 
@@ -38,14 +38,24 @@ enum WebReaderGitHubReleaseParser {
             return .failed(.invalidGitHubRelease)
         }
 
+        // The legacy v1 asset and the exact build-named v2 ad-hoc asset
+        // are alternative release conventions. Never silently pick one when
+        // both exist: ambiguous release publication is a hard failure.
+        // GitHub release metadata is NOT a signed publisher manifest, and
+        // neither asset name grants an installer any authorization.
+        let adHocAssetName = "WebReader-Build" + String(build) + "-iOS12-adhoc.ipa"
+        let allowedAssetNames: Set<String> = [legacyAssetName, adHocAssetName]
         let selected = assets.filter {
-            $0["name"] as? String == fixedAssetName
+            guard let name = $0["name"] as? String else { return false }
+            return allowedAssetNames.contains(name)
         }
         guard selected.count == 1 else {
             return .failed(.invalidGitHubRelease)
         }
         let asset = selected[0]
-        guard asset["state"] as? String == "uploaded",
+        guard let selectedAssetName = asset["name"] as? String,
+              allowedAssetNames.contains(selectedAssetName),
+              asset["state"] as? String == "uploaded",
               let number = asset["size"] as? NSNumber,
               CFGetTypeID(number) != CFBooleanGetTypeID(),
               number.int64Value > 0, number.int64Value <= maximumIPA,
@@ -61,7 +71,7 @@ enum WebReaderGitHubReleaseParser {
               components.port == nil, components.query == nil,
               components.fragment == nil,
               components.percentEncodedPath ==
-                fixedRepo + tag + "/" + fixedAssetName
+                fixedRepo + tag + "/" + selectedAssetName
         else { return .failed(.invalidGitHubRelease) }
 
         let digest = String(digestField.dropFirst(7))
