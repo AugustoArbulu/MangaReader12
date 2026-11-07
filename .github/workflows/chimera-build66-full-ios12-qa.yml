@@ -17,11 +17,13 @@ on:
 permissions:
   contents: read
 
-# Compile requests are never cancelled by unrelated commits/workflows.
+# When the QA harness changes, cancel stale executions from this SAME
+# workflow; unrelated PR validations cannot cancel this workflow.
 # Important: no binary/IPAs are uploaded by this workflow.
 concurrency:
   group: wr-build66-private-full-qa-experimental
-  cancel-in-progress: false
+  # Only newer QA workflow revisions supersede old ones; no PR event trigger.
+  cancel-in-progress: true
 
 jobs:
   ios12-debug-release-ad-hoc-rehearsal:
