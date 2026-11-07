@@ -7,8 +7,8 @@
 
 ## Resultado auditável
 
-O workflow [WebReader Build66 Full iOS12 Compile and Private QA Audit — run #42349950938](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42349950938)
-terminou em **SUCCESS** no commit d4143879e7a85a3417ac4c34cdae78a92556004a.
+O workflow [WebReader Build66 Full iOS12 Compile and Private QA Audit — run #42350471291](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42350471291)
+terminou em **SUCCESS** no commit 336e7da687d4e6676e06571081d03ea9fb291f59.
 
 A execução não usou o iPad, não fez instalações e não publicou uma IPA. Testou:
 - Bloqueio de instalação no Swift, chave editorial de produção ausente, validação de metadados GitHub e staging manual.
@@ -24,8 +24,8 @@ A execução não usou o iPad, não fez instalações e não publicou uma IPA. T
 
 - Nome: WebReader-Build66-iOS12-adhoc.ipa
 - Build no pacote: 66
-- Tamanho: **17.760.100 bytes**
-- SHA-256: **3866d4369d860e11fc5732575290ed2a6b48b9cec3cec3d8f7e43570e7357b69**
+- Tamanho: **17.760.332 bytes**
+- SHA-256: **47338644d5cd92571bb62b586a24c164cc1cbf8d6b1750cb76fb4cd517b1b77b**
 - Bundle ID: com.example.MangaReader12
 - Identificador de entitlement: AR5SFJC432.com.example.MangaReader12.AR5SFJC432
 - Arquitetura: thin ARM64
@@ -37,7 +37,7 @@ A execução não usou o iPad, não fez instalações e não publicou uma IPA. T
 
 A branch mantém CURRENT_PROJECT_VERSION=56 no projeto-fonte; somente a cópia temporária do bundle de ensaio recebeu a versão 66. O hash é dos bytes gerados naquele runner específico, não de uma publicação e não é uma garantia de futura reprodução byte a byte.
 
-**Artefato de CI:** WebReader-Build66-Private-Compile-Audit-Only, ID 13564678553. Ele contém **somente o relatório JSON**, não a IPA. O workflow não fez upload de qualquer candidato instalável e não criou GitHub Release.
+**Artefato de CI:** WebReader-Build66-Private-Compile-Audit-Only, ID 13564844088. Ele contém **somente o relatório JSON**, não a IPA. O workflow não fez upload de qualquer candidato instalável e não criou GitHub Release.
 
 Os campos de auditoria productionPublisherAuthenticated, releaseManifestIndependentlySigned, ios12DeviceInstallTested, userConsentVerified, helperPeerAuthenticated, installationAuthorized, installationPerformed e approvedForAutomaticRelease permaneceram todos **false**.
 
@@ -48,6 +48,7 @@ Os campos de auditoria productionPublisherAuthenticated, releaseManifestIndepend
 3. O código HTTP 404 vindo de releases/latest agora é erro de acesso, pois um repositório privado pode responder 404; não significa "versão atualizada".
 4. Os rótulos da interface informam "Baixar e conferir IPA" e "Compartilhar IPA conferida", distinguindo SHA/ZIP da assinatura editorial independente.
 5. O script de ensaio foi construído sem instalador, não aceita root, fixa o nome do pacote e confere os entitlements. Foram corrigidos os argumentos posicionais antes da execução verde.
+6. A seção Ajustes em MainTabBarController.swift mostrava um texto estático "Build 56". Agora lê dinamicamente CFBundleVersion do aplicativo instalado; ci/test_build54_branding.py passou a impedir regressão para versão fixa. A correção foi validada em uma SEGUNDA compilação completa de Debug e Release no run #42350471291. O run anterior [#42349950938](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42349950938) também havia passado, mas seu hash antigo se refere à versão anterior ao reparo da interface, não ao pacote final desta fase.
 
 ## Limites que ainda importam
 
