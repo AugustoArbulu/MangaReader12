@@ -50,6 +50,8 @@ def audit_build65(ipa: Path, checksum_file: Path):
         "nativeCodeSignatureIntegrityVerified": identity["adHocSignatureIntegrityVerified"],
         "thinArm64ExecutableVerified": identity["thinArm64ExecutableVerified"],
         "installedApplicationIdentifierMatch": identity["installedApplicationIdentifierMatch"],
+        "approvedArchiveStaticCodeDirectoryCDHash": identity["approvedArtifactStaticCodeDirectoryCDHash"],
+        "runtimeInstalledWebReaderCDHashCompared": False,
         "publisherAuthenticatedByAdHocSignature": False,
         "deviceInstallTested": False,
         "installationAuthorized": False,
