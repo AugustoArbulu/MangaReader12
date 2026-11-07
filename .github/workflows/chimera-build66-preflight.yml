@@ -10,6 +10,8 @@ on:
       - 'ci/test_build66_signed_release_preflight.py'
       - 'ci/build66_code_signature_gate.py'
       - 'ci/test_build66_code_signature_gate.py'
+      - 'ci/build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_diagnostic.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -28,6 +30,8 @@ on:
       - 'ci/test_build66_signed_release_preflight.py'
       - 'ci/build66_code_signature_gate.py'
       - 'ci/test_build66_code_signature_gate.py'
+      - 'ci/build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_diagnostic.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -59,6 +63,21 @@ jobs:
           python3 ci/test_webreader_update_manifest.py
           python3 ci/test_prepare_signed_webreader_update.py
           python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
+      - name: Check one-shot replay and expiry laboratory (never installs)
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_one_shot_diagnostic.py' -v
+      - name: Assert one-shot diagnostic has no privileged API or network calls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("ci/build66_one_shot_diagnostic.py").read_text()
+          assert "installation_authorized: bool = False" in source
+          assert "installation_performed: bool = False" in source
+          assert "peer_identity_authenticated: bool = False" in source
+          for forbidden in ("subprocess", "socket", "os.system", "posix_spawn", "urllib.request", "appinst("):
+              assert forbidden not in source, forbidden
+          print("PASS: one-shot policy is nonprivileged offline preflight only")
+          PY
       - name: Ensure live installation remains disabled
         run: |
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
