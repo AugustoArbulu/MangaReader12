@@ -62,3 +62,73 @@ Não pedir ao usuário para desinstalar, atualizar ou reinstalar o WebReader pri
 5. Se qualquer requisito não puder ser comprovado, manter o fluxo de IPA baixada/verificada e instalada manualmente pelo Filza.
 
 **Garantias inalteradas:** \`WebReaderAppinstSocket.liveInstallationEnabled = false\`; \`productionPublicKeyX963 = nil\`; PR #90 Draft; \`main\` e Build65 preservadas.
+
+
+## CI FINAL — compilação e pacote aprovados (07/11/2026)
+
+- **WebReader Build66 iOS12 Peer Audit Token Capability (CLI-only)**:
+  run **#13**, ID **42341357737**, **SUCCESS** nos jobs Linux e macOS.
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42341357737
+- O job Linux aprovou **26 testes** de parser, inclusive reports falsificados,
+  duplicações, flags de autorização não permitidas e tentativa de revelar tokens.
+- No macOS, quatro autoensaios não-root devolveram
+  \`UNIX_PEERTOKEN=NONZERO\` e presença dos três símbolos Security examinados.
+  Todos terminaram com \`AUTHORIZATION=DENIED\`.
+- Compile e assinatura ad hoc de binário **ARM64/Mach-O** com deployment target
+  **iOS 12.0** passaram. A auditoria validou estrutura DEB, assinatura,
+  entitlements mínimos e ausência de hooks/serviço instalador.
+- **Artifact:** \`WebReader-Build66-AuditTokenProbe-CLI-only-iOS12\`,
+  ID **13561995053**; contém
+  \`WebReader-Chimera-AuditTokenProbe66-iOS12.deb\` e checksums.
+- **SHA-256 do DEB:**
+  \`e31f978f0f1b9136fb50c01358797a456f244c78c8f1642790745d6b9abe67cf\`.
+
+O artefato é **opcional** e não foi executado no iPad. Uma correspondência de
+símbolos macOS não prova a disponibilidade do iOS12 nem autoriza \`appinst\`.
+
+## Fluxo alternativo — consulta independente do solicitante
+
+Também foram implementados os arquivos:
+\`ci/build66_requester_blind_check_policy.py\` e
+\`ci/test_build66_requester_blind_check_policy.py\`.
+
+- O cliente não pode fornecer **URL, IPA, comando, build, hash, manifesto,
+  chave pública ou caminho**. A única mensagem admitida pelo laboratório
+  é \`WR-CHECK-APPROVED-RELEASE-ONLY-V1\`.
+- O host recebe manifesto v2, chave pública, SPKI pinado e arquivo
+  diretamente de configuração de teste independente do cliente.
+- \`verify_independently_pinned_v2\` valida assinatura e SHA256.
+  O resultado só comunica candidato de release aprovado, com
+  \`installation_authorized=False\`, \`requester_authenticated=False\` e
+  \`user_install_consent_verified=False\`.
+- São **16 testes negativos/positivos**, incluindo injeções de caminho,
+  comando de instalação, chave falsa, build arbitrário, concorrência,
+  downgrade e adulteração de IPA.
+- **WebReader Build66 IPA Preflight Security QA run #105**, ID
+  **42341357735**: **SUCCESS** nos dois jobs, Linux e macOS.
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42341357735
+
+Esse desenho pode reduzir a necessidade de confiar no **solicitante da
+consulta** (a simples solicitação não escolhe bytes, nem executa nada).
+**Ele não resolve o consentimento confiável nem torna seguro que qualquer
+processo dispare uma instalação.** Um cliente falso ainda poderia causar
+negação de serviço ou iniciar verificações repetidas. Uma eventual operação
+de instalação exigirá canal/autorização adicional e revalidação independente
+do arquivo pelo helper.
+
+## Pista para fase E (ainda não testada)
+
+XNU expõe \`csops_audittoken\` e a operação
+\`CS_OPS_CDHASH\` em documentação/código de kernel. Em implementações
+documentadas, o kernel confere PID e versão do processo presentes no token
+antes de consultar metadados de assinatura. Isso **sugere** um ensaio futuro
+de relação \`LOCAL_PEERTOKEN\` -> \`csops_audittoken\` -> CodeDirectory hash
+de **processo filho controlado**, sem divulgar hashes reais de terceiros.
+Fontes de pesquisa:
+- https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_proc.c
+- https://github.com/apple/darwin-xnu/blob/main/bsd/sys/codesign.h
+
+A presença em fontes modernas **não prova** disponibilidade/semântica no
+iOS 12.5.8, e o jailbreak/ad hoc exigem análise separada da confiabilidade
+da assinatura em runtime. Não implementar nem habilitar autenticação real
+sem evidência na versão-alvo e modelo de ameaças validado.
