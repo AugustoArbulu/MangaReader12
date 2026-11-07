@@ -13,6 +13,8 @@ on:
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_prepare_signed_webreader_update.py'
       - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
@@ -29,6 +31,8 @@ on:
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_prepare_signed_webreader_update.py'
       - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
@@ -53,6 +57,7 @@ jobs:
       - name: Verify ECDSA signed manifest binds to exact IPA bytes and identity
         run: |
           python3 ci/test_webreader_update_manifest.py
+          python3 ci/test_prepare_signed_webreader_update.py
           python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
       - name: Ensure live installation remains disabled
         run: |
