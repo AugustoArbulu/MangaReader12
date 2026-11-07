@@ -23,13 +23,14 @@ class AdmissionDenied(ValueError):
     pass
 
 
-def inspect_ipa(path, expected_sha256, expected_size, min_build, *, require_exact_identity=False):
+def inspect_ipa(path, expected_sha256, expected_size, min_build, *,
+                require_exact_identity=False, return_snapshot=False):
     """Inspect one O_NOFOLLOW-opened, hash-verified in-memory IPA snapshot.
 
     require_exact_identity adds fixed WebReader archive-layout and executable
     checks. The caller must not treat this as proof of iOS code signing.
     """
-    if type(require_exact_identity) is not bool:
+    if type(require_exact_identity) is not bool or type(return_snapshot) is not bool:
         raise AdmissionDenied("invalid identity policy")
     path = Path(path)
     if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
@@ -140,8 +141,13 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build, *, require_exac
             parts = tuple(int(x) for x in minimum.split("."))
             if (parts + (0,) * (3 - len(parts))) > (12, 5, 8):
                 raise AdmissionDenied("incompatible iOS")
-            return {"build": build, "bundle": BUNDLE_ID, "minimum_ios": minimum,
-                    "sha256": digest.hexdigest(), "ipa_size": len(payload.getbuffer())}
+            result = {"build": build, "bundle": BUNDLE_ID, "minimum_ios": minimum,
+                      "sha256": digest.hexdigest(), "ipa_size": len(payload.getbuffer())}
+            # Host QA can pass this exact immutable snapshot to codesign without
+            # reopening the original untrusted path. Never return it by default.
+            if return_snapshot:
+                result["ipa_snapshot"] = payload.getvalue()
+            return result
     except (zipfile.BadZipFile, zipfile.LargeZipFile, plistlib.InvalidFileException,
             KeyError, ValueError, TypeError, EOFError, RuntimeError, OSError,
             OverflowError) as exc:
