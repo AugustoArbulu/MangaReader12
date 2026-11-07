@@ -11,6 +11,7 @@ on:
       - 'ci/audit_webreader_build66_rehearsal.py'
       - 'ci/test_build66_rehearsal_readonly_gate.py'
       - 'ci/test_app_updates_screen.py'
+      - 'ci/test_build54_branding.py'
       - '.github/workflows/chimera-build66-full-ios12-qa.yml'
   workflow_dispatch:
 
