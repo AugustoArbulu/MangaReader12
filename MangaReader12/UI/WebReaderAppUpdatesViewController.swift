@@ -22,7 +22,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var stagingIPA = false
     private var verifyingExport = false
     private var stagedIPAURL: URL?
-    private var ipaStatus = "Aguardando validação do canal"
+    private var ipaStatus = "Aguardando consulta aos metadados do GitHub"
     private var stagedSHA256: String?
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
@@ -244,13 +244,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 cell.detailTextLabel?.text = "Verificando novamente SHA-256, ZIP e Bundle ID"
             } else if let file = stagedIPAURL,
                 FileManager.default.fileExists(atPath: file.path) {
-                cell.textLabel?.text = "Compartilhar IPA verificada"
+                cell.textLabel?.text = "Compartilhar IPA conferida"
                 cell.detailTextLabel?.text =
                     "Salvar pelo menu Compartilhar; instalar manualmente no Filza"
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
             } else {
-                cell.textLabel?.text = "Baixar IPA verificada"
+                cell.textLabel?.text = "Baixar e conferir IPA"
                 cell.detailTextLabel?.text = ipaStatus
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
@@ -548,8 +548,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
 
     private func showFilzaInstructions() {
         guard !isIPCDiagnostic else { return }
-        let text = "1. Toque em Baixar IPA verificada.\n" +
-            "2. Selecione Compartilhar IPA verificada e escolha Filza " +
+        let text = "1. Toque em Baixar e conferir IPA.\n" +
+            "2. Selecione Compartilhar IPA conferida e escolha Filza " +
             "ou Salvar em Arquivos, se disponível.\n" +
             "3. Abra a IPA no Filza e toque em Install.\n" +
             "Não remova o WebReader instalado: faça backup da biblioteca " +
