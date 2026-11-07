@@ -44,9 +44,8 @@ class DurableOneShotDiagnostic:
 
     def check_once(self, request_bytes):
         # A nonce returned in public is not an authenticator or a capability.
-        consistency = self._session.check_once(request_bytes)
-        if not consistency.request_consistent:
-            return consistency
+        # Reserve BEFORE inspecting untrusted request bytes. A malformed
+        # attempt therefore stays spent even if the host process crashes.
         try:
             new_reservation = self._ledger.reserve_once(
                 challenge=self.challenge(),
@@ -64,4 +63,4 @@ class DurableOneShotDiagnostic:
                 request_consistent=False,
                 reason="PERSISTENT_REPLAY_REJECTED",
             )
-        return consistency
+        return self._session.check_once(request_bytes)
