@@ -11,6 +11,9 @@ on:
       - 'ci/build66_code_signature_gate.py'
       - 'ci/test_build66_code_signature_gate.py'
       - 'ci/webreader_update_manifest.py'
+      - 'ci/test_webreader_update_manifest.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
   pull_request:
@@ -24,6 +27,9 @@ on:
       - 'ci/build66_code_signature_gate.py'
       - 'ci/test_build66_code_signature_gate.py'
       - 'ci/webreader_update_manifest.py'
+      - 'ci/test_webreader_update_manifest.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
   workflow_dispatch:
@@ -70,6 +76,8 @@ jobs:
     steps:
       - name: Checkout isolated experimental branch
         uses: actions/checkout@v4
+      - name: Compile and run real Swift Security.framework verifier
+        run: python3 ci/test_native_webreader_update_verifier.py
       - name: Verify native macOS code signing with ephemeral fixtures only
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
