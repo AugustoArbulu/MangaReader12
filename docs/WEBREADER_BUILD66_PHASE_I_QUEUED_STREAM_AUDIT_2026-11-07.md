@@ -52,9 +52,9 @@ Alternativa segura para avançar sem esse vínculo: a interface do WebReader pod
 
 Não substituir a autenticação por token obtido via texto do cliente, PID, UID, nome do app, HMAC temporário ou CDHash de executável copiado. Um hash ad hoc compatível não autentica editor/publicador.
 
-## Próximo teste útil: iPad real, sem novas fases de laboratório
+## Diagnóstico físico no iPad — primeiro resultado confirmado
 
-O diagnóstico separado da Fase E já compila para **ARM64/iOS12** e não tem instalador, daemon ou `appinst`. Na execução [Fase E #42347031802](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42347031802), ambos os jobs passaram e foi publicado o artifact **`WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12`**, ID **`13563589894`** (disponível no GitHub Actions, prazo de retenção configurado de 14 dias). Dentro dele: `WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb` e checksums. O SHA-256 **do DEB**, confirmado no log de empacotamento dessa execução, é `71457b449ee16b602c0141beec309023141802795d57dec71f35a2c0f3775266` (não confundir com o checksum do ZIP do artifact). A execução real no iPad ainda **não ocorreu**.
+O diagnóstico separado da Fase E já compila para **ARM64/iOS12** e não tem instalador, daemon ou `appinst`. Na execução [Fase E #42347031802](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42347031802), ambos os jobs passaram e foi publicado o artifact **`WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12`**, ID **`13563589894`** (disponível no GitHub Actions, prazo de retenção configurado de 14 dias). Dentro dele: `WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb` e checksums. O SHA-256 **do DEB**, confirmado no log de empacotamento dessa execução, é `71457b449ee16b602c0141beec309023141802795d57dec71f35a2c0f3775266` (não confundir com o checksum do ZIP do artifact). A execução física no iPad **ocorreu em 2026-11-07**, conforme transcrição observada enviada pelo proprietário; resultados documentados na seção seguinte.
 
 Para QA físico, **somente após a decisão do proprietário**:
 
@@ -63,6 +63,54 @@ Para QA físico, **somente após a decisão do proprietário**:
 3. Executar **como mobile, não root** o binário `webreader-csopsprobe66 selftest` e recolher as **sete linhas de saída**, preservando o status de retorno. O binário recusa root e não imprime dados de processos/segredos.
 4. Interpretar `UNIX_PEERTOKEN`, `CSOPS_TOKEN_BINDING` e presença de símbolos. Mesmo `MUTATION_REJECTED` no iPad significaria **somente capacidade da API em um processo filho controlado**, não autenticação do WebReader nem autorização de instalação.
 
-A disponibilidade de `fork`/socket e `csops_audittoken` no Chimera com assinatura ad hoc continua uma **incógnita de runtime**. Não exigir root para forçar sucesso, não alterar o serviço PING da Build 61 nem substituir o app estável.
+A execução da CLI em `mobile` no Chimera foi confirmada; contudo, **`LOCAL_PEERTOKEN` não forneceu um token utilizável**, impedindo o ensaio `csops_audittoken` nesse dispositivo. A indisponibilidade observada não demonstra que toda API alternativa de identidade de processos seja impossível no iOS 12. Não exigir root para forçar sucesso, não alterar o serviço PING da Build 61 nem substituir o app estável.
+
+### Saída física recebida — iOS 12.5.8 / Chimera, usuário `mobile`
+
+Comando usado: `/usr/local/bin/webreader-csopsprobe66 selftest`.
+O usuário comprovou `whoami = mobile`. O diagnóstico terminou e voltou
+ao prompt normal do NewTerm 2, com estas **sete linhas observadas**:
+
+```text
+WEBREADER_BUILD66_CSOPS_AUDITTOKEN_CAPABILITY: non-root, read-only
+PROBE UNIX_PEERTOKEN=UNAVAILABLE AUTHORIZATION=DENIED
+PROBE CSOPS_TOKEN_BINDING=NOT_TESTED AUTHORIZATION=DENIED
+PROBE SECURITY_SecCodeCreateWithAuditToken=MISSING AUTHORIZATION=DENIED
+PROBE SECURITY_SecCodeCopyGuestWithAttributes=MISSING AUTHORIZATION=DENIED
+PROBE SECURITY_SecCodeCreateWithPID=MISSING AUTHORIZATION=DENIED
+FINAL_INSTALL_AUTHORIZATION=DENIED
+```
+
+**Interpretação do resultado real:**
+
+- `UNIX_PEERTOKEN=UNAVAILABLE`: `getsockopt(SOL_LOCAL, LOCAL_PEERTOKEN)`
+  não retornou uma estrutura `audit_token_t` válida na conexão controlada.
+  Esse estado agrega falha da chamada e tamanho inválido; **não inclui errno**.
+  Não presumir a causa específica (por exemplo, `ENOPROTOOPT`, `EPERM`).
+- `CSOPS_TOKEN_BINDING=NOT_TESTED`: o diagnóstico não tentou `csops_audittoken`
+  porque não havia token utilizável. **Não afirmar** que a syscall foi negada.
+- Três símbolos `Security_...=MISSING`: as três funções procuradas por
+  `dlsym` não foram encontradas no framework carregado nesse ambiente.
+  Isso **não elimina** todos os mecanismos possíveis de autorização no iOS12.
+- `FINAL_INSTALL_AUTHORIZATION=DENIED` é resultado esperado: nenhuma
+  instalação realizada, nenhum `appinst` acionado.
+- `alpine: command not found` e a mensagem inicial do zsh mostradas antes
+  da execução são independentes deste diagnóstico e não alteram os resultados.
+- O resultado físico **contrasta com o macOS**, onde a mesma família
+  de consultas era acessível no laboratório. A CI macOS é útil para
+  investigar semântica, mas não pode determinar disponibilidade no Chimera.
+
+**Decisão de projeto:** não usar `LOCAL_PEERTOKEN` +
+`csops_audittoken` como autenticação obrigatória do helper no iOS12 nas
+condições atuais. Não tentar privilégio root para forçar o diagnóstico.
+Priorizar atualização `CHECK_ONLY`, assinatura editorial de manifesto,
+hash da IPA, consentimento independente, e fluxo manual de instalação
+enquanto não houver método de autorização de origem confiável demonstrado.
+
+**Próximo diagnóstico opcional e limitado:** se necessário, desenvolver
+novo utilitário **não-root, read-only** que classifique o erro real de
+`getsockopt` e diferenças de ambiente iOS12, sem habilitar instalações
+ou consultar processos de terceiros. Não solicitar novos testes nem
+instalar outra IPA automaticamente.
 
 **Estado:** a Build 65 e o backup da biblioteca permanecem intocados; nenhuma IPA Build 66 instalável foi gerada; PR #90 continua Draft; `main` sem merge; instalação automática segue bloqueada.
