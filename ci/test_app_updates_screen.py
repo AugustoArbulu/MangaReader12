@@ -37,7 +37,7 @@ assert "statusDescription" in screen
 assert "update.releaseNotes.joined(" in screen
 assert "Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\")" in screen
 assert "Verificar atualizações" in screen
-assert "GitHub Releases público • HTTPS" in screen
+assert "GitHub Releases • HTTPS • sem autenticação editorial independente" in screen
 assert "instalação pelo Chimera ainda está em desenvolvimento" in screen
 assert "Somente GitHub Releases públicos" in screen
 assert "GitHub Actions não são atualizações disponíveis" in screen
@@ -83,7 +83,7 @@ assert 'confirmAppinstInstallation()' not in screen
 assert 'requestAppinstInstallation(' not in screen
 assert 'WebReaderAppinstSocket.install(' not in screen
 assert 'Instalação pelo Chimera bloqueada' in screen
-assert 'Aguardando identidade do solicitante e assinatura editorial' in screen
+assert 'Aguardando política independente de autorização e chave editorial' in screen
 assert 'if selectedSection == 2, indexPath.row == 3 {' in screen
 assert "showFilzaInstructions()" in screen
 assert 'if selectedSection == 2, indexPath.row == 4 { return }' in screen
@@ -94,9 +94,9 @@ assert 'copyManualAppinstCommand(' not in screen
 assert 'UIPasteboard.general.string = "appinst "' not in screen
 assert '"Como instalar pelo Filza"' in screen
 assert '"Instalação manual no Filza"' in screen
-assert '"Baixar IPA verificada"' in screen
+assert '"Baixar e conferir IPA"' in screen
 assert "update.provenance == .publicGitHubRelease" in screen
-assert '"Compartilhar IPA verificada"' in screen
+assert '"Compartilhar IPA conferida"' in screen
 assert 'UIAlertController(title: "Baixar IPA?"' in screen
 assert 'WebReaderIPAStager(verifiedUpdate: update)' in screen
 assert 'downloader.stage { [weak self, weak downloader] result in' in screen
@@ -104,6 +104,11 @@ assert 'let current = availableUpdate' in screen
 assert 'WebReaderUpdateChannel.isConfigured' in screen
 assert 'stager?.cancel()' in screen
 assert 'UIActivityViewController(activityItems: [url]' in screen
+# Public Release discovery is not independent publisher authentication.
+assert '"GitHub Releases • HTTPS • sem autenticação editorial independente"' in screen
+assert '"GitHub Releases indisponível: sem release ou repositório privado"' in screen
+assert '"Metadados do GitHub não têm assinatura editorial independente. "' in screen
+assert '"SHA-256 e estrutura IPA conferidos • instalação manual"' in screen
 assert "verifyingExport" in screen
 assert "WebReaderNativeIPAAuditor.inspect(" in screen
 assert 'self.ipaStatus = "IPA alterada ou inválida; baixe novamente"' in screen
