@@ -105,6 +105,28 @@ def _codesign(args):
     return result.stdout
 
 
+def _static_code_directory_cdhash(app_path):
+    """Observe 20-byte CodeDirectory hash of this already-verified local app.
+
+    codesign reports this on stderr. It is a *code identity fingerprint*, NOT
+    proof of who authored the ad-hoc signature or what runs on the iPad.
+    """
+    try:
+        result = subprocess.run(
+            ["/usr/bin/codesign", "-d", "--verbose=4", str(app_path)],
+            capture_output=True, timeout=30, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CodeSignatureRejected("static CodeDirectory inspection unavailable") from exc
+    if result.returncode != 0:
+        raise CodeSignatureRejected("static CodeDirectory inspection rejected")
+    raw = result.stderr + b"\\n" + result.stdout
+    values = re.findall(rb"(?:^|\\n)CDHash=([0-9a-f]{40})(?:\\r?\\n|$)", raw)
+    if len(values) != 1:
+        raise CodeSignatureRejected("missing or ambiguous static CodeDirectory cdhash")
+    return values[0].decode("ascii")
+
+
 def audit_code_signature_snapshot(snapshot, expected_sha256, expected_size):
     """Read-only integrity and installed-app entitlement comparison on macOS."""
     if sys.platform != "darwin":
@@ -141,6 +163,7 @@ def audit_code_signature_snapshot(snapshot, expected_sha256, expected_size):
                 or struct.unpack_from("<I", header, 4)[0] != 0x0100000C):
                 raise CodeSignatureRejected("candidate is not thin ARM64 Mach-O")
             _codesign(["--verify", "--verbose=2", str(app)])
+            verified_static_cdhash = _static_code_directory_cdhash(app)
             signed_entitlements = plistlib.loads(
                 _codesign(["-d", "--entitlements", ":-", str(app)])
             )
@@ -159,6 +182,8 @@ def audit_code_signature_snapshot(snapshot, expected_sha256, expected_size):
         "thinArm64ExecutableVerified": True,
         "installedApplicationIdentifierMatch": True,
         "applicationIdentifier": INSTALLED_APPLICATION_IDENTIFIER,
+        "approvedArtifactStaticCodeDirectoryCDHash": verified_static_cdhash,
+        "runtimePeerCodeDirectoryHashVerified": False,
         "publisherAuthenticatedByCodeSignature": False,
         "deviceInstallationCompatibilityProven": False,
         "installationAuthorized": False,
