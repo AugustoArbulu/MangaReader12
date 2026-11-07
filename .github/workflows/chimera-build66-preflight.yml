@@ -23,6 +23,9 @@ on:
       - 'ci/test_build66_peer_evidence_policy.py'
       - 'ci/build66_release_key_rotation_lab.py'
       - 'ci/test_build66_release_key_rotation_lab.py'
+      - 'ci/build66_peer_capability_report.py'
+      - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -54,6 +57,9 @@ on:
       - 'ci/test_build66_peer_evidence_policy.py'
       - 'ci/build66_release_key_rotation_lab.py'
       - 'ci/test_build66_release_key_rotation_lab.py'
+      - 'ci/build66_peer_capability_report.py'
+      - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -126,6 +132,7 @@ jobs:
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_peer_evidence_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build66_release_key_rotation_lab.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_peer_capability_report.py' -v
       - name: Enforce no independent peer authentication or key activation claim
         run: |
           python3 - <<'PY'
