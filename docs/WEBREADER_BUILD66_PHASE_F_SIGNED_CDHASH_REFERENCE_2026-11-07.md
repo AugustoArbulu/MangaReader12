@@ -84,6 +84,40 @@ sem root. Nenhuma saída de token bruta deve ser copiada.
 - Nenhum `appinst`, helper root, instalação, rede Comix ou publicação de release
   foi executada por estes testes.
 
+## Resultado final validado — CI da Fase F
+
+- **Fase F, workflow #19**, run `42342966652`: **SUCCESS**
+  em Linux/macOS. Quatro correspondências consecutivas
+  `HOST_CDHASH_MATCH` entre kernel e `codesign` do mesmo executável
+  controlado; a referência errada foi rejeitada; também foram rejeitadas
+  referências ausentes/malformadas.
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42342966652
+- **Build66 IPA Preflight Security QA, workflow #128**, run `42342966572`:
+  **SUCCESS** em Linux/macOS, inclusive compilação de Swift e rejeição do
+  caminho de instalação.
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42342966572
+- **Build65 Archived IPA Identity Crosscheck, workflow #83**,
+  run `42342966641`: **SUCCESS**. A auditoria da IPA real aprovou
+  o SHA-256 e o CDHash estático pinado.
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42342966641
+- **Artifact opcional de diagnóstico, NÃO IPA:** `WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12`,
+  ID `13561958131`. Arquivo `WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb`.
+  SHA-256 do DEB: `c690a1da86c1c54d136626745e3d2a7e9aa20c6c6a03accb13a2159d142278f6`.
+- O binário iOS foi compilado sem a variável `WR66_HOST_EXPECTED_CDHASH`
+  e sem `HOST_CDHASH_MATCH`. O ensaio com referência de CDHash é
+  **exclusivamente para Mac**; a compilação ARM64 iOS12 não habilita
+  esse recurso.
+- Nenhum comando de instalação, publicação ou atualização do WebReader
+  foi executado. **Nenhuma alteração no iPad.**
+
+**Próxima evidência necessária:** execução opcional, não-root, do
+`/usr/local/bin/webreader-csopsprobe66 selftest` no dispositivo iOS12,
+usando o pacote DEB QA acima. A instalação de um CLI de diagnóstico
+é distinta da substituição/atualização da IPA WebReader principal.
+A execução não requer que o app WebReader seja aberto ou reinstalado.
+Sem este teste de runtime, toda conclusão de identidade permanece
+limitada ao macOS.
+
 ## Próxima etapa útil
 
 Só após os testes macOS e um teste opcional de disponibilidade no iOS12,
