@@ -10,14 +10,14 @@ import platform
 import re
 import subprocess
 import tempfile
-from build66_audit_token_capability_report import parse_audit_token_report
+from build66_csops_capability_report import parse_csops_report
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "ci/webreader_chimera_csops_token_probe66.c"
 HEAD = "WEBREADER_BUILD66_CSOPS_AUDITTOKEN_CAPABILITY: non-root, read-only"
 TAIL = "FINAL_INSTALL_AUTHORIZATION=DENIED"
 TOKEN = re.compile(
-    r"PROBE UNIX_PEERTOKEN=(?:NONZERO|ZERO|UNAVAILABLE) AUTHORIZATION=DENIED\Z"
+    r"PROBE UNIX_PEERTOKEN=(?:NONZERO|ZERO|UNAVAILABLE|TRANSPORT_FAILED) AUTHORIZATION=DENIED\Z"
 )
 BINDING = re.compile(
     r"PROBE CSOPS_TOKEN_BINDING=(?:NOT_TESTED|SYMBOL_MISSING|"
@@ -43,9 +43,9 @@ def check_output(lines):
         assert match.group(1) not in observed, observed
         observed.add(match.group(1))
     assert len(observed) == 3, observed
-    parsed = parse_audit_token_report(("\n".join(lines) + "\n").encode("ascii"))
+    parsed = parse_csops_report(("\n".join(lines) + "\n").encode("ascii"))
     assert parsed.diagnostic_only
-    assert not parsed.ios12_capability_verified
+    assert not parsed.ios12_runtime_verified
     assert not parsed.webreader_peer_authenticated
     assert not parsed.installation_authorized
     return lines[1:6]
@@ -102,7 +102,7 @@ def main():
             print(f"RUN#{iteration+1}: " + " | ".join(statuses))
         print("PASS Build66 Phase E macOS: 4 nonroot csops token-binding capability selftests")
         print("PASS: no PID/token bytes output, no authorization or installation")
-        print("PASS: Security.framework symbols tested for presence ONLY")
+        print("PASS: csops result is observational; no code identity authorization")
 
 
 if __name__ == "__main__":
