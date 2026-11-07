@@ -10,8 +10,8 @@ if [[ $# -ne 2 ]]; then
   echo "usage: package_webreader_build66_rehearsal.sh APP_PATH OUTPUT_IPA" >&2
   exit 2
 fi
-APP_PATH="1"
-OUTPUT="2"
+APP_PATH="$1"
+OUTPUT="$2"
 if [[ ! -d "$APP_PATH" || -e "$OUTPUT" || -e "$OUTPUT.sha256" ]]; then
   echo "Missing app or destination already exists" >&2
   exit 2
