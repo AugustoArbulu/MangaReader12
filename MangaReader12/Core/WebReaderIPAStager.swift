@@ -4,9 +4,11 @@ import CommonCrypto
 /// Phase 4 download *staging only*. This class never calls appinst, unpacks an
 /// archive or replaces an installed application.
 ///
-/// An update must come from the authenticated WebReaderUpdateManifestVerifier.
-/// The production channel remains disabled until a pinned publisher key and
-/// independently reviewed Release policy are provisioned.
+/// The signed-manifest channel requires a trusted publisher key.
+/// The public GitHub Releases channel may also supply metadata, but it does
+/// NOT authenticate a WebReader publisher. SHA-256 and native ZIP structure
+/// checks cannot authorize installation; exporting remains manual.
+/// The production signed publisher key remains absent.
 enum WebReaderIPAStageFailure: Error, Equatable {
     case disabled
     case busy
@@ -62,8 +64,13 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             callback(.failed(.disabled))
             return
         }
-        let expectedPath = "/AugustoArbulu/MangaReader12/releases/download/" +
-            "build" + String(update.build) + "/WebReader-iOS12-unsigned.ipa"
+        let releasePath = "/AugustoArbulu/MangaReader12/releases/download/" +
+            "build" + String(update.build) + "/"
+        let allowedPaths: Set<String> = [
+            releasePath + "WebReader-iOS12-unsigned.ipa",
+            releasePath + "WebReader-Build" + String(update.build) +
+                "-iOS12-adhoc.ipa"
+        ]
         guard let components = URLComponents(
             url: update.ipaURL, resolvingAgainstBaseURL: false
         ),
@@ -72,7 +79,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             components.user == nil, components.password == nil,
             components.port == nil, components.query == nil,
             components.fragment == nil,
-            components.percentEncodedPath == expectedPath,
+            allowedPaths.contains(components.percentEncodedPath),
             update.build > 0,
             update.ipaSize > 0 && update.ipaSize <= 512 * 1024 * 1024,
             update.sha256.range(
