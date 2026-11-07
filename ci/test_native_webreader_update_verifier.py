@@ -58,7 +58,7 @@ func signedEnvelope(_ details: [String: Any]) -> Data {
         message as CFData, &signError
     )! as Data
     return json([
-        "schemaVersion": 1,
+        "schemaVersion": details["schemaVersion"] as? Int ?? 1,
         "algorithm": "ecdsa-p256-sha256",
         "payload": message.base64EncodedString(),
         "signature": signature.base64EncodedString()
@@ -109,6 +109,50 @@ check(verified.build == 57, "signed build")
 check(verified.ipaSize == 17300000, "signed IPA size")
 check(verified.minimumIOS == "12.0", "minimum iOS")
 check(verified.ipaURL.host == "github.com", "release host")
+
+// Version 2 binds the exact ad-hoc release asset and existing installation
+// application-identifier into the cryptographically signed payload.
+var v2 = payload
+v2["schemaVersion"] = 2
+v2["build"] = 66
+v2["applicationIdentifier"] =
+    "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+v2["ipaUrl"] = "https://github.com/AugustoArbulu/MangaReader12/" +
+    "releases/download/build66/WebReader-Build66-iOS12-adhoc.ipa"
+let verifiedV2 = accept(signedEnvelope(v2))
+check(verifiedV2.build == 66, "signed v2 build")
+check(verifiedV2.ipaURL.lastPathComponent ==
+      "WebReader-Build66-iOS12-adhoc.ipa", "signed v2 asset")
+var wrongV2Identity = v2
+wrongV2Identity["applicationIdentifier"] = "ATTACKER"
+reject(signedEnvelope(wrongV2Identity))
+var missingV2Identity = v2
+missingV2Identity.removeValue(forKey: "applicationIdentifier")
+reject(signedEnvelope(missingV2Identity))
+var extraV1Identity = payload
+extraV1Identity["applicationIdentifier"] =
+    "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+reject(signedEnvelope(extraV1Identity))
+var wrongV2Filename = v2
+wrongV2Filename["ipaUrl"] =
+    "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+    "download/build66/WebReader-iOS12-unsigned.ipa"
+reject(signedEnvelope(wrongV2Filename))
+var wrongV1Filename = payload
+wrongV1Filename["ipaUrl"] =
+    "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+    "download/build57/WebReader-Build57-iOS12-adhoc.ipa"
+reject(signedEnvelope(wrongV1Filename))
+var v2WrapperMismatch = try! JSONSerialization.jsonObject(
+    with: signedEnvelope(v2)) as! [String: Any]
+v2WrapperMismatch["schemaVersion"] = 1
+reject(json(v2WrapperMismatch))
+var v2SignedTamper = try! JSONSerialization.jsonObject(
+    with: signedEnvelope(v2)) as! [String: Any]
+var v2Tampered = v2
+v2Tampered["applicationIdentifier"] = "WRONG"
+v2SignedTamper["payload"] = json(v2Tampered).base64EncodedString()
+reject(json(v2SignedTamper))
 
 // A signed payload modified without changing signature must be rejected.
 var tampered = try! JSONSerialization.jsonObject(with: good) as! [String: Any]
