@@ -107,12 +107,12 @@ class PhysicalCapabilityTests(unittest.TestCase):
 
     def test_unknown_symbol(self):
         self.denied(ORIGINAL.replace(
-            b"Security_SecCodeCreateWithPID", b"Security_SecCodeExecute"))
+            b"SECURITY_SecCodeCreateWithPID", b"SECURITY_SecCodeExecute"))
 
     def test_duplicate_symbol(self):
         self.denied(ORIGINAL.replace(
-            b"Security_SecCodeCreateWithPID",
-            b"Security_SecCodeCreateWithAuditToken"))
+            b"SECURITY_SecCodeCreateWithPID",
+            b"SECURITY_SecCodeCreateWithAuditToken"))
 
     def test_claimed_install_authorization(self):
         self.denied(ORIGINAL.replace(b"AUTHORIZATION=DENIED",
