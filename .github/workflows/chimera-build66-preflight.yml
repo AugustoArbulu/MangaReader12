@@ -42,8 +42,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: wr-build66-preflight
-  cancel-in-progress: false
+  group: wr-build66-preflight-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   synthetic-preflight-only:
