@@ -12,6 +12,7 @@ on:
       - 'ci/test_build66_code_signature_gate.py'
       - 'ci/build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_signed_release_chain.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -32,6 +33,7 @@ on:
       - 'ci/test_build66_code_signature_gate.py'
       - 'ci/build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_signed_release_chain.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -66,6 +68,7 @@ jobs:
       - name: Check one-shot replay and expiry laboratory (never installs)
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_one_shot_diagnostic.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_one_shot_signed_release_chain.py' -v
       - name: Assert one-shot diagnostic has no privileged API or network calls
         run: |
           python3 - <<'PY'
