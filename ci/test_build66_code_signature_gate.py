@@ -130,6 +130,8 @@ class CodeSignatureGateTests(unittest.TestCase):
         self.assertTrue(report["adHocSignatureIntegrityVerified"])
         self.assertTrue(report["thinArm64ExecutableVerified"])
         self.assertTrue(report["code_signature_verified"])
+        self.assertRegex(report["approvedArtifactStaticCodeDirectoryCDHash"], r"^[0-9a-f]{40}$")
+        self.assertFalse(report["runtimePeerCodeDirectoryHashVerified"])
         self.assertTrue(report["installedApplicationIdentifierMatch"])
         self.assertTrue(report["signed_manifest_verified"])
         self.assertEqual(report["applicationIdentifier"],
