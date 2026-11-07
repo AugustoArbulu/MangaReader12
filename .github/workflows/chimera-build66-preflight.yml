@@ -8,6 +8,8 @@ on:
       - 'ci/test_build66_ipa_preflight.py'
       - 'ci/build66_signed_release_preflight.py'
       - 'ci/test_build66_signed_release_preflight.py'
+      - 'ci/build66_code_signature_gate.py'
+      - 'ci/test_build66_code_signature_gate.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
@@ -19,6 +21,8 @@ on:
       - 'ci/test_build66_ipa_preflight.py'
       - 'ci/build66_signed_release_preflight.py'
       - 'ci/test_build66_signed_release_preflight.py'
+      - 'ci/build66_code_signature_gate.py'
+      - 'ci/test_build66_code_signature_gate.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/validate_webreader_ipa.py'
       - '.github/workflows/chimera-build66-preflight.yml'
@@ -58,4 +62,31 @@ jobs:
           for forbidden in ('subprocess', 'os.system', 'posix_spawn', 'appinst(', 'requests.', 'urllib.request'):
               assert forbidden not in code, forbidden
           print('PASS: no installation or network invocation in preflight')
+          PY
+
+  codesign-identity-host-tests:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+      - name: Verify native macOS code signing with ephemeral fixtures only
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+      - name: Verify no installer is enabled in production Swift
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+      - name: Assert code signing gate is host-only and never authorizes install
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("ci/build66_code_signature_gate.py").read_text()
+          assert 'if sys.platform != "darwin"' in source
+          assert '"installationAuthorized": False' in source
+          assert '"installationPerformed": False' in source
+          assert '"publisherAuthenticatedByCodeSignature": False' in source
+          for forbidden in ('appinst(', 'posix_spawn', 'os.system', 'urllib.request'):
+              assert forbidden not in source, forbidden
+          print("PASS: codesign fixture gate is read-only")
           PY
