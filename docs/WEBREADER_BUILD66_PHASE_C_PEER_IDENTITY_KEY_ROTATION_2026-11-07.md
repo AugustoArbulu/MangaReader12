@@ -24,7 +24,7 @@ O teste `ci/test_chimera_peer_probe63.py` foi atualizado para passar o texto emi
 
 - GitHub Actions `WebReader Build66 IPA Preflight Security QA`, **#88**, run `42340063625`:
   - Etapa Linux: **SUCCESS**, 238 testes Python (soma das suítes).
-  - Etapa macOS: aguardando resultado na última consulta antes desta documentação.
+  - Etapa macOS: **SUCCESS** no run #88; o verificador Swift Security.framework, a checagem nativa de instalação bloqueada, os testes codesign e quatro rodadas reais do diagnóstico Build63 em macOS passaram. Em cada rodada: TCP e UNIX `PEER_PID=MATCH` com `AUTHORIZATION=DENIED`.
 - Suíte anteriormente aprovada `#73` (run `42339159926`) já confirmou as verificações nativas Swift do instalador bloqueado e do Security.framework.
 - O laboratório é inteiramente offline com chaves efêmeras, arquivos sintéticos e relatórios de diagnóstico. Nenhum comando de instalação é invocado.
 - O projeto em produção permanece com `liveInstallationEnabled = false` e `productionPublicKeyX963 = nil`.
