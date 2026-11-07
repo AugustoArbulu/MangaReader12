@@ -120,8 +120,8 @@ def _static_code_directory_cdhash(app_path):
         raise CodeSignatureRejected("static CodeDirectory inspection unavailable") from exc
     if result.returncode != 0:
         raise CodeSignatureRejected("static CodeDirectory inspection rejected")
-    raw = result.stderr + b"\\n" + result.stdout
-    values = re.findall(rb"(?:^|\\n)CDHash=([0-9a-f]{40})(?:\\r?\\n|$)", raw)
+    raw = result.stderr + b"\n" + result.stdout
+    values = re.findall(rb"(?:^|\n)CDHash=([0-9a-f]{40})(?:\r?\n|$)", raw)
     if len(values) != 1:
         raise CodeSignatureRejected("missing or ambiguous static CodeDirectory cdhash")
     return values[0].decode("ascii")
