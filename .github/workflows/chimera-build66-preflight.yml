@@ -25,6 +25,8 @@ on:
       - 'ci/test_build66_release_key_rotation_lab.py'
       - 'ci/build66_peer_capability_report.py'
       - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/build66_requester_blind_check_policy.py'
+      - 'ci/test_build66_requester_blind_check_policy.py'
       - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
@@ -59,6 +61,8 @@ on:
       - 'ci/test_build66_release_key_rotation_lab.py'
       - 'ci/build66_peer_capability_report.py'
       - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/build66_requester_blind_check_policy.py'
+      - 'ci/test_build66_requester_blind_check_policy.py'
       - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
@@ -148,6 +152,20 @@ jobs:
               for forbidden in ('appinst(', 'posix_spawn(', 'socket.socket(', 'import socket', 'urllib.request'):
                   assert forbidden not in code, forbidden
           print('PASS: peer claims and key-rotation candidates never authorize install')
+          PY
+      - name: Enforce untrusted client can only request a signed release check
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_requester_blind_check_policy.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path("ci/build66_requester_blind_check_policy.py").read_text()
+          assert 'REQUEST = b"WR-CHECK-APPROVED-RELEASE-ONLY-V1\\n"' in code
+          assert "installation_authorized: bool = False" in code
+          assert "user_install_consent_verified: bool = False" in code
+          assert "verify_independently_pinned_v2(" in code
+          for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request"):
+              assert forbidden not in code, forbidden
+          print("PASS: client cannot select arbitrary IPA or request installation")
           PY
       - name: Ensure live installation remains disabled
         run: |
