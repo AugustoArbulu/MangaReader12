@@ -19,6 +19,10 @@ on:
       - 'ci/test_build66_release_key_pinning_gate.py'
       - 'ci/build66_durable_one_shot_lab.py'
       - 'ci/test_build66_durable_signed_release_chain.py'
+      - 'ci/build66_peer_evidence_policy.py'
+      - 'ci/test_build66_peer_evidence_policy.py'
+      - 'ci/build66_release_key_rotation_lab.py'
+      - 'ci/test_build66_release_key_rotation_lab.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -46,6 +50,10 @@ on:
       - 'ci/test_build66_release_key_pinning_gate.py'
       - 'ci/build66_durable_one_shot_lab.py'
       - 'ci/test_build66_durable_signed_release_chain.py'
+      - 'ci/build66_peer_evidence_policy.py'
+      - 'ci/test_build66_peer_evidence_policy.py'
+      - 'ci/build66_release_key_rotation_lab.py'
+      - 'ci/test_build66_release_key_rotation_lab.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -114,6 +122,26 @@ jobs:
                   assert forbidden not in source, forbidden
           print("PASS: phase-B key trust and durable replay are offline-only")
           PY
+      - name: Audit unauthenticated peer evidence and dual-key rotation policy
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_peer_evidence_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_rotation_lab.py' -v
+      - name: Enforce no independent peer authentication or key activation claim
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          peer = Path('ci/build66_peer_evidence_policy.py').read_text()
+          rotation = Path('ci/build66_release_key_rotation_lab.py').read_text()
+          assert 'requester_authenticated: bool = False' in peer
+          assert 'running_code_identity_verified: bool = False' in peer
+          assert 'installation_authorized: bool = False' in peer
+          assert '"production_key_rotated": False' in rotation
+          assert '"installation_authorized": False' in rotation
+          for code in (peer, rotation):
+              for forbidden in ('appinst(', 'posix_spawn(', 'socket.socket(', 'import socket', 'urllib.request'):
+                  assert forbidden not in code, forbidden
+          print('PASS: peer claims and key-rotation candidates never authorize install')
+          PY
       - name: Ensure live installation remains disabled
         run: |
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
@@ -141,6 +169,8 @@ jobs:
       - name: Verify native macOS code signing with ephemeral fixtures only
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+      - name: Recheck isolated Darwin peer PID capability (not identity)
+        run: python3 ci/test_chimera_peer_probe63.py
       - name: Compile and execute blocked installation path in real Swift
         run: |
           python3 ci/test_chimera_build62_install_admission.py
