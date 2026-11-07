@@ -229,6 +229,67 @@ case .updateAvailable(let update):
     check(update.provenance == .publicGitHubRelease, "trust provenance")
 default: fatalError("real URLSession must accept public GitHub release fixture")
 }
+// Build-named v2 ad-hoc assets may appear in a public GitHub Release.
+// This path only discovers metadata; it does NOT authenticate the publisher
+// or permit a privileged installer to run.
+let adHocName = "WebReader-Build57-iOS12-adhoc.ipa"
+let legacyName = "WebReader-iOS12-unsigned.ipa"
+func githubAsset(_ name: String, urlName: String? = nil,
+                 digest: String? = nil, state: String = "uploaded") -> [String: Any] {
+    return [
+        "name": name, "size": 17300000, "state": state,
+        "digest": digest ?? ("sha256:" + String(repeating: "a", count: 64)),
+        "browser_download_url":
+            "https://github.com/AugustoArbulu/MangaReader12/releases/download/build57/" +
+                (urlName ?? name)
+    ]
+}
+func githubRelease(_ assets: [[String: Any]]) -> Data {
+    return asJSON([
+        "tag_name": "build57", "draft": false, "prerelease": false,
+        "published_at": "2026-11-05T03:00:00Z",
+        "body": "Personal QA; discovery only",
+        "assets": assets
+    ])
+}
+func expectPublicInvalid(_ assets: [[String: Any]]) {
+    StubManifestURLProtocol.responseBody = githubRelease(assets)
+    switch runPublicGitHubCheck() {
+    case .failed(.invalidGitHubRelease): break
+    default: fatalError("ambiguous/mismatched release must be rejected")
+    }
+}
+StubManifestURLProtocol.responseBody = githubRelease([githubAsset(adHocName)])
+switch runPublicGitHubCheck() {
+case .updateAvailable(let update):
+    check(update.build == 57, "build-named ad-hoc release version")
+    check(update.ipaURL.lastPathComponent == adHocName, "exact v2 asset")
+    check(update.provenance == .publicGitHubRelease,
+          "public metadata is not signed publisher manifest")
+default: fatalError("build-named v2 asset must be discoverable")
+}
+// If both conventions are present, do not silently choose an asset.
+expectPublicInvalid([githubAsset(legacyName), githubAsset(adHocName)])
+// Two identical filenames are equally ambiguous.
+expectPublicInvalid([githubAsset(adHocName), githubAsset(adHocName)])
+expectPublicInvalid([githubAsset(adHocName, urlName: legacyName)])
+expectPublicInvalid([githubAsset(legacyName, urlName: adHocName)])
+expectPublicInvalid([githubAsset("WebReader-Build58-iOS12-adhoc.ipa")])
+expectPublicInvalid([githubAsset("WebReader-build57-iOS12-adhoc.ipa")])
+expectPublicInvalid([githubAsset(adHocName, digest: "sha256:INVALID")])
+expectPublicInvalid([githubAsset(adHocName, state: "pending")])
+expectPublicInvalid([githubAsset(adHocName), githubAsset(legacyName),
+                     githubAsset(legacyName)])
+// An unrelated asset cannot replace the pinned release name.
+expectPublicInvalid([githubAsset("payload.ipa")])
+StubManifestURLProtocol.responseBody = githubRelease([githubAsset(legacyName)])
+switch runPublicGitHubCheck() {
+case .updateAvailable(let update):
+    check(update.ipaURL.lastPathComponent == legacyName, "legacy path unaffected")
+    check(update.provenance == .publicGitHubRelease, "provenance stays unsigned")
+default: fatalError("legacy asset must remain discoverable")
+}
+
 StubManifestURLProtocol.responseStatus = 404
 switch runPublicGitHubCheck() {
 case .upToDate: break
