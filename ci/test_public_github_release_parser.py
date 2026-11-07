@@ -67,6 +67,51 @@ case .updateAvailable(let update):
     check(update.releaseNotes.count == 2, "notes")
 default: fatalError("valid official release rejected")
 }
+// The exact ad-hoc v2 asset name is recognized, but public GitHub Release
+// metadata still does NOT represent an independent signed publisher.
+func v2Asset(_ build: Int = 57) -> [String: Any] {
+    let name = "WebReader-Build" + String(build) + "-iOS12-adhoc.ipa"
+    return [
+        "name": name, "size": 12345,
+        "digest": "sha256:" + String(repeating: "a", count: 64),
+        "state": "uploaded",
+        "browser_download_url":
+            "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+            "download/build57/" + name
+    ]
+}
+var validV2 = fixture()
+validV2["assets"] = [v2Asset()]
+switch parse(validV2) {
+case .updateAvailable(let update):
+    check(update.ipaURL.lastPathComponent ==
+          "WebReader-Build57-iOS12-adhoc.ipa", "exact build-bound v2 filename")
+    check(update.provenance == .publicGitHubRelease,
+          "v2 GitHub metadata must never masquerade as signed publisher")
+default: fatalError("v2 ad-hoc metadata rejected")
+}
+var bothFormats = fixture()
+bothFormats["assets"] = (fixture()["assets"] as! [[String: Any]]) + [v2Asset()]
+shouldReject(bothFormats, "ambiguous legacy plus ad-hoc IPA")
+var duplicateV2 = fixture()
+duplicateV2["assets"] = [v2Asset(), v2Asset()]
+shouldReject(duplicateV2, "duplicate v2 IPA names")
+var wrongBuildV2 = fixture()
+wrongBuildV2["assets"] = [v2Asset(58)]
+shouldReject(wrongBuildV2, "v2 asset filename build different from tag")
+var injectedV2 = v2Asset()
+injectedV2["browser_download_url"] =
+    "https://github.com/AugustoArbulu/MangaReader12/releases/download/" +
+    "build57/WebReader-Build57-iOS12-adhoc.ipa?install=1"
+var invalidV2 = fixture()
+invalidV2["assets"] = [injectedV2]
+shouldReject(invalidV2, "v2 asset query injection")
+var wrongHostV2 = v2Asset()
+wrongHostV2["browser_download_url"] =
+    "https://example.org/releases/download/build57/WebReader-Build57-iOS12-adhoc.ipa"
+invalidV2["assets"] = [wrongHostV2]
+shouldReject(invalidV2, "v2 different origin")
+
 switch parse(fixture("build56")) {
 case .upToDate: break
 default: fatalError("same version should not stage")
