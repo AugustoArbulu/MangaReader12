@@ -40,6 +40,10 @@ enum WebReaderUpdateManifestVerifier {
     private static let maxPayloadBytes = 32 * 1024
     private static let maxIPABytes: Int64 = 512 * 1024 * 1024
     private static let bundleID = "com.example.MangaReader12"
+    // Mirrors the entitlement recorded on the already installed Build65.
+    // Matching it is NOT proof of signed publisher identity.
+    private static let installedApplicationIdentifier =
+        "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
 
     static func verify(
         envelopeData: Data,
@@ -61,7 +65,8 @@ enum WebReaderUpdateManifestVerifier {
             Set(envelope.keys) == Set([
                 "schemaVersion", "algorithm", "payload", "signature"
             ]),
-            exactInteger(envelope["schemaVersion"]) == 1,
+            let envelopeVersion = exactInteger(envelope["schemaVersion"]),
+            envelopeVersion == 1 || envelopeVersion == 2,
             envelope["algorithm"] as? String == "ecdsa-p256-sha256",
             let payloadText = envelope["payload"] as? String,
             let signatureText = envelope["signature"] as? String,
@@ -106,17 +111,27 @@ enum WebReaderUpdateManifestVerifier {
         // Never use unsigned fields from the wrapper for install policy.
         guard let manifest = try? JSONSerialization.jsonObject(
             with: payload, options: []
-        ) as? [String: Any], Set(manifest.keys) == Set([
+        ) as? [String: Any],
+            let manifestVersion = exactInteger(manifest["schemaVersion"]),
+            manifestVersion == envelopeVersion
+        else {
+            throw WebReaderUpdateValidationError.invalidPayload
+        }
+        var expectedKeys: Set<String> = [
             "schemaVersion", "application", "bundleId", "channel", "build",
             "minimumIOS", "ipaUrl", "ipaSize", "sha256", "releaseNotes",
             "publishedAt"
-        ]) else {
+        ]
+        if manifestVersion == 2 { expectedKeys.insert("applicationIdentifier") }
+        guard Set(manifest.keys) == expectedKeys else {
             throw WebReaderUpdateValidationError.invalidPayload
         }
-        guard exactInteger(manifest["schemaVersion"]) == 1,
-            manifest["application"] as? String == "WebReader",
+        guard manifest["application"] as? String == "WebReader",
             manifest["bundleId"] as? String == bundleID,
-            manifest["channel"] as? String == "development"
+            manifest["channel"] as? String == "development",
+            (manifestVersion == 1 ||
+             manifest["applicationIdentifier"] as? String ==
+                installedApplicationIdentifier)
         else {
             throw WebReaderUpdateValidationError.wrongApplication
         }
@@ -146,6 +161,9 @@ enum WebReaderUpdateManifestVerifier {
         else {
             throw WebReaderUpdateValidationError.invalidPayload
         }
+        let assetName = manifestVersion == 1 ?
+            "WebReader-iOS12-unsigned.ipa" :
+            "WebReader-Build" + String(build) + "-iOS12-adhoc.ipa"
         guard let uri = manifest["ipaUrl"] as? String, uri.count <= 512,
             let components = URLComponents(string: uri),
             components.scheme == "https", components.host == "github.com",
@@ -154,7 +172,7 @@ enum WebReaderUpdateManifestVerifier {
             components.fragment == nil,
             components.percentEncodedPath ==
             "/AugustoArbulu/MangaReader12/releases/download/build" +
-                String(build) + "/WebReader-iOS12-unsigned.ipa",
+                String(build) + "/" + assetName,
             let url = components.url
         else {
             throw WebReaderUpdateValidationError.disallowedURL
