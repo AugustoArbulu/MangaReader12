@@ -83,8 +83,8 @@ class CodeSignatureGateTests(unittest.TestCase):
             binary = app / "MangaReader12"
             binary.write_bytes(binary.read_bytes() + b"TAMPERED")
         with zipfile.ZipFile(self.ipa, "w", zipfile.ZIP_DEFLATED) as archive:
-            for path in sorted(payload.parent.rglob("*")):
-                archive.write(path, path.relative_to(payload.parent.parent).as_posix())
+            for path in sorted(payload.rglob("*")):
+                archive.write(path, path.relative_to(payload.parent).as_posix())
         return self.ipa.read_bytes()
 
     def envelope(self, data, **overrides):
