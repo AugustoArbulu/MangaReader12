@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline reference validator for the proposed WebReader update manifest v1.
+"""Offline reference validator for versioned WebReader update manifests v1/v2.
 
 This is HOST-ONLY protocol research, not an iOS installer or an app feature.
 Production iOS12 code must implement the same signature/policy checks using
@@ -16,6 +16,9 @@ import tempfile
 from urllib.parse import urlsplit
 
 APP_BUNDLE_ID = "com.example.MangaReader12"
+INSTALLED_APPLICATION_IDENTIFIER = (
+    "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+)
 MAX_ENVELOPE_BYTES = 64 * 1024
 MAX_PAYLOAD_BYTES = 32 * 1024
 MAX_IPA_BYTES = 512 * 1024 * 1024
@@ -24,6 +27,7 @@ ALLOWED_FIELDS = {
     "schemaVersion", "application", "bundleId", "channel", "build",
     "minimumIOS", "ipaUrl", "ipaSize", "sha256", "releaseNotes", "publishedAt"
 }
+V2_FIELDS = ALLOWED_FIELDS | {"applicationIdentifier"}
 
 class ManifestRejected(ValueError):
     pass
@@ -65,10 +69,13 @@ def _version(text):
     return parts + (0,) * (3 - len(parts))
 
 def _validate_payload(obj, installed_build, installed_ios):
-    if set(obj) != ALLOWED_FIELDS:
-        raise ManifestRejected("missing or unknown payload field")
-    if type(obj["schemaVersion"]) is not int or obj["schemaVersion"] != 1:
+    version = obj.get("schemaVersion")
+    if type(version) is not int or version not in (1, 2):
         raise ManifestRejected("unsupported payload schema")
+    if set(obj) != (ALLOWED_FIELDS if version == 1 else V2_FIELDS):
+        raise ManifestRejected("missing or unknown payload field")
+    if version == 2 and obj["applicationIdentifier"] != INSTALLED_APPLICATION_IDENTIFIER:
+        raise ManifestRejected("wrong installed application-identifier")
     if obj["application"] != "WebReader" or obj["bundleId"] != APP_BUNDLE_ID:
         raise ManifestRejected("wrong application identity")
     if obj["channel"] != "development":
@@ -102,8 +109,12 @@ def _validate_payload(obj, installed_build, installed_ios):
     parts = urlsplit(link)
     # Initial distribution policy: stable, public GitHub Release assets only.
     # GitHub Actions artifacts are not suitable (authentication + expiry).
+    release_name = (
+        "WebReader-iOS12-unsigned.ipa" if version == 1 else
+        "WebReader-Build" + str(obj["build"]) + "-iOS12-adhoc.ipa"
+    )
     expected = ("/AugustoArbulu/MangaReader12/releases/download/"
-                + "build" + str(obj["build"]) + "/WebReader-iOS12-unsigned.ipa")
+                + "build" + str(obj["build"]) + "/" + release_name)
     if (parts.scheme != "https" or parts.netloc != "github.com" or
         parts.path != expected or parts.query or parts.fragment):
         raise ManifestRejected("not a permitted stable public Release URL")
@@ -114,7 +125,8 @@ def validate(envelope_json, pinned_public_key_pem, installed_build=56, installed
     envelope = _json_object(envelope_json, MAX_ENVELOPE_BYTES)
     if set(envelope) != {"schemaVersion", "algorithm", "payload", "signature"}:
         raise ManifestRejected("invalid envelope fields")
-    if type(envelope["schemaVersion"]) is not int or envelope["schemaVersion"] != 1:
+    envelope_version = envelope["schemaVersion"]
+    if type(envelope_version) is not int or envelope_version not in (1, 2):
         raise ManifestRejected("unsupported envelope")
     if envelope["algorithm"] != ALGORITHM:
         raise ManifestRejected("unsupported signature algorithm")
@@ -140,6 +152,11 @@ def validate(envelope_json, pinned_public_key_pem, installed_build=56, installed
             raise ManifestRejected("signature verifier unavailable") from error
         if result.returncode != 0:
             raise ManifestRejected("manifest signature rejected")
-    return _validate_payload(
+    verified = _validate_payload(
         _json_object(payload, MAX_PAYLOAD_BYTES), installed_build, installed_ios
     )
+    # Version is covered by the signature *and* repeated in the wrapper;
+    # fail closed rather than interpreting a v1 payload as a v2 release.
+    if verified["schemaVersion"] != envelope_version:
+        raise ManifestRejected("envelope/payload version mismatch")
+    return verified
