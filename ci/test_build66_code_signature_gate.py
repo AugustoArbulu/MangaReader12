@@ -19,6 +19,8 @@ from build66_code_signature_gate import (
     CodeSignatureRejected, INSTALLED_APPLICATION_IDENTIFIER,
     audit_code_signature_snapshot, audit_signed_release_with_code_signature,
 )
+from prepare_signed_webreader_update import prepare, ReleasePreparationRejected
+from webreader_update_manifest import validate
 
 
 def encode(value):
@@ -110,7 +112,7 @@ class CodeSignatureGateTests(unittest.TestCase):
              "-out", str(signature), str(message)],
             check=True, capture_output=True)
         return encode({
-            "schemaVersion": 1,
+            "schemaVersion": manifest["schemaVersion"],
             "algorithm": "ecdsa-p256-sha256",
             "payload": base64.b64encode(payload).decode("ascii"),
             "signature": base64.b64encode(signature.read_bytes()).decode("ascii"),
@@ -142,6 +144,57 @@ class CodeSignatureGateTests(unittest.TestCase):
         data = self.create_fixture(arch="x86_64")
         with self.assertRaises(CodeSignatureRejected):
             self.audit(data)
+
+    def v2_asset_path(self):
+        new_path = self.directory / "WebReader-Build66-iOS12-adhoc.ipa"
+        self.ipa.rename(new_path)
+        self.ipa = new_path
+        return new_path
+
+    def prepare_v2(self):
+        notes = self.directory / "notes.json"
+        notes.write_text('["Synthetic signed update test"]', encoding="utf8")
+        output = self.directory / "channel-development-v2.json"
+        prepared = prepare(
+            self.ipa, self.private, self.public, notes,
+            output, "2026-11-07T03:00:00Z", installed_build=65,
+            schema_version=2
+        )
+        return prepared, output
+
+    def test_native_codesign_v2_manifest_release_signing(self):
+        self.create_fixture()
+        self.v2_asset_path()
+        metadata, output = self.prepare_v2()
+        envelope = output.read_bytes()
+        claims = validate(envelope, self.pinned, installed_build=65)
+        self.assertEqual(claims["schemaVersion"], 2)
+        self.assertEqual(claims["applicationIdentifier"],
+                         INSTALLED_APPLICATION_IDENTIFIER)
+        self.assertTrue(claims["ipaUrl"].endswith(
+            "/build66/WebReader-Build66-iOS12-adhoc.ipa"))
+        report = self.audit(self.ipa.read_bytes(), envelope=envelope)
+        self.assertTrue(report["code_signature_verified"])
+        self.assertFalse(report["installationAuthorized"])
+        self.assertFalse(metadata["published"])
+        self.assertFalse(metadata["installation_performed"])
+
+    def test_native_codesign_v2_signer_rejects_unsigned_ipa(self):
+        self.create_fixture(sign=False)
+        self.v2_asset_path()
+        with self.assertRaises(ReleasePreparationRejected):
+            self.prepare_v2()
+
+    def test_native_codesign_v2_signer_rejects_wrong_entitlement(self):
+        self.create_fixture(identifier="WRONG.com.example.MangaReader12")
+        self.v2_asset_path()
+        with self.assertRaises(ReleasePreparationRejected):
+            self.prepare_v2()
+
+    def test_native_codesign_v2_signer_rejects_wrong_asset_filename(self):
+        self.create_fixture()
+        with self.assertRaises(ReleasePreparationRejected):
+            self.prepare_v2()
 
     def test_missing_adhoc_signature_rejected(self):
         data = self.create_fixture(sign=False)
