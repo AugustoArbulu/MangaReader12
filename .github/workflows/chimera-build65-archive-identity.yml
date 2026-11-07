@@ -1,0 +1,43 @@
+name: WebReader Build65 Archived IPA Identity Crosscheck
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/audit_build65_signed_artifact.py'
+      - 'ci/build66_code_signature_gate.py'
+      - 'ci/build66_ipa_preflight.py'
+      - '.github/workflows/chimera-build65-archive-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: wr65-archived-ipa-readonly
+  cancel-in-progress: false
+
+jobs:
+  verify-archived-known-good-ipa:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout experimental auditing code
+        uses: actions/checkout@v4
+      - name: Download Build65 approved QA artifact (no publication)
+        uses: actions/download-artifact@v4
+        with:
+          name: WebReader-Build65-OfflineRepair-ManualQA-iOS12
+          run-id: 42263333598
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/wr65-archived-qa
+      - name: Compare SHA256, native code seal and installed entitlement
+        run: |
+          python3 ci/audit_build65_signed_artifact.py \
+            "$RUNNER_TEMP/wr65-archived-qa/WebReader-Build65-iOS12-adhoc.ipa" \
+            --checksum-file "$RUNNER_TEMP/wr65-archived-qa/WebReader-Build65-iOS12-adhoc.ipa.sha256"
+      - name: Ensure no iOS helper or app installer was activated
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
