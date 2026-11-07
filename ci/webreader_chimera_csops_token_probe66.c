@@ -47,6 +47,12 @@ static void inspect_csops_binding(const audit_token_t *original,
     wr_csops_audittoken_t method =
         (wr_csops_audittoken_t)dlsym(RTLD_DEFAULT, "csops_audittoken");
     uint8_t cdhash[20] = {0};
+    /* Host-only reference comparison never ships in the iOS diagnostic. */
+#if defined(WEBREADER_HOST_CDHASH_REF)
+    uint8_t kernel_hash[20] = {0};
+    const char *expected_hex;
+    size_t index;
+#endif
     audit_token_t corrupted = *original;
     int good, bad;
     if (!method) {
@@ -64,6 +70,9 @@ static void inspect_csops_binding(const audit_token_t *original,
         (void)snprintf(status, status_len, "CALL_DENIED");
         return;
     }
+#if defined(WEBREADER_HOST_CDHASH_REF)
+    memcpy(kernel_hash, cdhash, sizeof(kernel_hash));
+#endif
     corrupted.val[7] ^= 1u; /* mutate pidversion; do not execute mutated token */
     bad = method((pid_t)original->val[5], WR_CS_OPS_CDHASH,
                  cdhash, sizeof(cdhash), &corrupted);
@@ -74,9 +83,36 @@ static void inspect_csops_binding(const audit_token_t *original,
     /* Wrong PID is this controlled parent process, never an unrelated app. */
     bad = method(getpid(), WR_CS_OPS_CDHASH, cdhash, sizeof(cdhash),
                  (audit_token_t *)(void *)original);
-    (void)snprintf(status, status_len, "%s",
-                   bad == 0 ? "CROSS_PID_ACCEPTED_UNSAFE" :
-                              "MUTATION_REJECTED");
+    if (bad == 0) {
+        (void)snprintf(status, status_len, "CROSS_PID_ACCEPTED_UNSAFE");
+        return;
+    }
+#if defined(WEBREADER_HOST_CDHASH_REF)
+    /* Test harness computes the reference from THIS OWN signed executable.
+     * This is not an identity policy. An env var is attacker-controlled.
+     * The iOS build never compiles this block.
+     */
+    expected_hex = getenv("WR66_HOST_EXPECTED_CDHASH");
+    if (!expected_hex || strlen(expected_hex) != 40) {
+        (void)snprintf(status, status_len, "HOST_REFERENCE_ABSENT");
+        return;
+    }
+    for (index = 0; index < 20; ++index) {
+        unsigned int octet = 0;
+        char pair[3] = {expected_hex[index * 2], expected_hex[index * 2 + 1], 0};
+        if (sscanf(pair, "%2x", &octet) != 1) {
+            (void)snprintf(status, status_len, "HOST_REFERENCE_INVALID");
+            return;
+        }
+        if (kernel_hash[index] != (uint8_t)octet) {
+            (void)snprintf(status, status_len, "HOST_CDHASH_MISMATCH");
+            return;
+        }
+    }
+    (void)snprintf(status, status_len, "HOST_CDHASH_MATCH");
+#else
+    (void)snprintf(status, status_len, "MUTATION_REJECTED");
+#endif
 }
 static void set_timeout(int fd) {
     struct timeval duration = {3, 0};
