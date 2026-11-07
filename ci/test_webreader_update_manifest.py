@@ -66,7 +66,8 @@ class ManifestProtocolTests(unittest.TestCase):
             blob = bytearray(blob)
             blob[-1] ^= 1
         return encode({
-            "schemaVersion": 1, "algorithm": "ecdsa-p256-sha256",
+            "schemaVersion": payload["schemaVersion"],
+            "algorithm": "ecdsa-p256-sha256",
             "payload": base64.b64encode(data).decode("ascii"),
             "signature": base64.b64encode(blob).decode("ascii")
         })
@@ -79,6 +80,64 @@ class ManifestProtocolTests(unittest.TestCase):
     def test_valid_newer_signed_manifest(self):
         actual = validate(self.envelope(self.base), self.pinned)
         self.assertEqual(actual["build"], 57)
+
+    def v2(self):
+        newer = dict(self.base)
+        newer["schemaVersion"] = 2
+        newer["build"] = 66
+        newer["applicationIdentifier"] = (
+            "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+        )
+        newer["ipaUrl"] = (
+            "https://github.com/AugustoArbulu/MangaReader12/"
+            "releases/download/build66/WebReader-Build66-iOS12-adhoc.ipa"
+        )
+        return newer
+
+    def test_v2_valid_signed_adhoc_release(self):
+        actual = validate(self.envelope(self.v2()), self.pinned, installed_build=65)
+        self.assertEqual(actual["schemaVersion"], 2)
+        self.assertEqual(actual["build"], 66)
+
+    def test_v2_wrong_installed_application_identifier(self):
+        self.rejected(dict(self.v2(), applicationIdentifier="ATTACKER"))
+
+    def test_v2_missing_installed_application_identifier(self):
+        invalid = self.v2()
+        del invalid["applicationIdentifier"]
+        self.rejected(invalid)
+
+    def test_v2_wrong_release_asset(self):
+        self.rejected(dict(
+            self.v2(),
+            ipaUrl=self.base["ipaUrl"].replace("build57", "build66")
+        ))
+
+    def test_v1_reject_v2_field_and_asset(self):
+        self.rejected(dict(self.base, applicationIdentifier=self.v2()["applicationIdentifier"]))
+        self.rejected(dict(self.base, ipaUrl=(
+            "https://github.com/AugustoArbulu/MangaReader12/"
+            "releases/download/build57/WebReader-Build57-iOS12-adhoc.ipa"
+        )))
+
+    def test_v2_reject_outer_inner_version_mismatch(self):
+        envelope = json.loads(self.envelope(self.v2()))
+        envelope["schemaVersion"] = 1
+        with self.assertRaises(ManifestRejected):
+            validate(encode(envelope), self.pinned, installed_build=65)
+
+    def test_v2_reject_outer_version_three(self):
+        envelope = json.loads(self.envelope(self.v2()))
+        envelope["schemaVersion"] = 3
+        with self.assertRaises(ManifestRejected):
+            validate(encode(envelope), self.pinned, installed_build=65)
+
+    def test_v2_reject_untrusted_release_path(self):
+        self.rejected(dict(
+            self.v2(),
+            ipaUrl=("https://github.com/AugustoArbulu/MangaReader12/"
+                    "releases/download/build66/WebReader-Build66-iOS12-adhoc.ipa?x=1")
+        ))
 
     def test_tampered_signature(self):
         self.rejected(tamper=True)
