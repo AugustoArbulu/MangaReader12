@@ -11,7 +11,6 @@ trust decision and must independently verify the exact immutable bytes it uses.
 from pathlib import Path
 
 from build66_ipa_preflight import AdmissionDenied, inspect_ipa
-from validate_webreader_ipa import IPARejected, validate_ipa
 from webreader_update_manifest import ManifestRejected, validate
 
 
@@ -42,27 +41,21 @@ def verify_signed_release(
         raise SignedReleaseRejected("missing trusted signature inputs")
     try:
         signed = validate(envelope_json, pinned_public_key_pem, installed_build, installed_ios)
-        # The descriptor-based preflight rejects a final-component symlink and
-        # hashes a single consistent snapshot; never pass its path to appinst.
+        # Structural, executable-name and digest checks all inspect ONE
+        # hash-verified snapshot from a single O_NOFOLLOW file descriptor.
+        # Do not reopen an attacker-controlled path after this point.
         inspected = inspect_ipa(
-            Path(ipa_path), signed["sha256"], signed["ipaSize"], installed_build
+            Path(ipa_path), signed["sha256"], signed["ipaSize"], installed_build,
+            require_exact_identity=True
         )
-        # Existing stricter IPA validator additionally enforces exact app name,
-        # executable, display name and safe Payload paths.
-        structural = validate_ipa(
-            Path(ipa_path), signed["sha256"], installed_build, installed_ios
-        )
-    except (ManifestRejected, AdmissionDenied, IPARejected, OSError, TypeError) as exc:
+    except (ManifestRejected, AdmissionDenied, OSError, TypeError) as exc:
         raise SignedReleaseRejected("signed manifest or IPA preflight rejected") from exc
 
     if (signed["build"] != inspected["build"] or
-            signed["build"] != structural["build"] or
-            signed["bundleId"] != structural["bundleId"] or
+            signed["bundleId"] != inspected["bundle"] or
             _ios_tuple(signed["minimumIOS"]) != _ios_tuple(inspected["minimum_ios"]) or
-            _ios_tuple(signed["minimumIOS"]) != _ios_tuple(structural["minimumIOS"]) or
-            signed["ipaSize"] != structural["bytes"] or
-            signed["sha256"] != inspected["sha256"] or
-            signed["sha256"] != structural["sha256"]):
+            signed["ipaSize"] != inspected["ipa_size"] or
+            signed["sha256"] != inspected["sha256"]):
         raise SignedReleaseRejected("signed manifest does not match IPA metadata")
 
     return {
@@ -74,6 +67,7 @@ def verify_signed_release(
         "releaseURL": signed["ipaUrl"],
         "signed_manifest_verified": True,
         "ipa_metadata_matches_manifest": True,
+        "single_snapshot_checked": True,
         "code_signature_verified": False,
         "install_authorized": False,
         "installation_performed": False,
