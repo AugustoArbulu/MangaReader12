@@ -108,7 +108,7 @@ func signedManifest(_ details: [String: Any]) -> WebReaderVerifiedUpdate {
         message as CFData, &signError
     )! as Data
     let envelope = serialize([
-        "schemaVersion": 1, "algorithm": "ecdsa-p256-sha256",
+        "schemaVersion": details["schemaVersion"]!, "algorithm": "ecdsa-p256-sha256",
         "payload": message.base64EncodedString(),
         "signature": signature.base64EncodedString()
     ])
@@ -167,6 +167,56 @@ case .staged(let path):
 default: fatalError("verified IPA must be staged")
 }
 check(IPAStubProtocol.requests == 1, "exactly one GET")
+
+// Version 2 keeps the exact build-named, ad-hoc release filename. This does
+// not test publisher signing: an ad-hoc seal is NOT publisher authentication.
+var v2Details = payload
+v2Details["schemaVersion"] = 2
+v2Details["applicationIdentifier"] =
+    "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+v2Details["ipaUrl"] =
+    "https://github.com/AugustoArbulu/MangaReader12/releases/download/" +
+    "build57/WebReader-Build57-iOS12-adhoc.ipa"
+let v2 = signedManifest(v2Details)
+IPAStubProtocol.body = sample
+let priorRequests = IPAStubProtocol.requests
+switch run(v2) {
+case .staged(let url):
+    check(try! Data(contentsOf: url) == sample,
+          "exact v2 bytes staged for manual review")
+    try! FileManager.default.removeItem(at: url)
+default: fatalError("build-named v2 ad-hoc path should be stageable")
+}
+check(IPAStubProtocol.requests == priorRequests + 1,
+      "exact v2 release generates one stub request")
+
+// A release metadata object with a malicious filename or host must be
+// rejected by the stager independently, even if a caller forged the struct.
+func uncheckedUpdate(_ raw: String) -> WebReaderVerifiedUpdate {
+    return WebReaderVerifiedUpdate(
+        build: 57, minimumIOS: "12.0", ipaURL: URL(string: raw)!,
+        ipaSize: Int64(sample.count), sha256: expectedDigest,
+        publishedAt: "2026-11-07T00:00:00Z", releaseNotes: ["test only"]
+    )
+}
+let forbiddenPaths = [
+    "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+        "download/build57/WebReader-Build58-iOS12-adhoc.ipa",
+    "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+        "download/build57/WebReader-Build57-iOS12-adhoc.ipa?x=1",
+    "https://github.com/AugustoArbulu/MangaReader12/releases/" +
+        "download/build57/WebReader-Build57-iOS12-adhoc.ipa#install",
+    "https://github.com/another-account/MangaReader12/releases/" +
+        "download/build57/WebReader-Build57-iOS12-adhoc.ipa",
+    "https://example.org/releases/download/build57/" +
+        "WebReader-Build57-iOS12-adhoc.ipa"
+]
+for forbidden in forbiddenPaths {
+    let before = IPAStubProtocol.requests
+    fail(uncheckedUpdate(forbidden), .invalidRelease)
+    check(IPAStubProtocol.requests == before, "forbidden URL must not be fetched")
+}
+
 
 var wrongHash = payload
 wrongHash["sha256"] = String(repeating: "0", count: 64)
