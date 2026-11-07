@@ -50,7 +50,8 @@ class CodeSignatureGateTests(unittest.TestCase):
         self.ipa = self.directory / "test.ipa"
 
     def create_fixture(self, identifier=INSTALLED_APPLICATION_IDENTIFIER,
-                       *, sign=True, tamper=False, extra_entitlement=False):
+                       *, sign=True, tamper=False, extra_entitlement=False,
+                       arch="arm64"):
         payload = self.directory / "staging" / "Payload"
         app = payload / "MangaReader12.app"
         app.mkdir(parents=True)
@@ -65,7 +66,7 @@ class CodeSignatureGateTests(unittest.TestCase):
         source = self.directory / "fixture.c"
         source.write_text("int main(void) { return 0; }\n", encoding="utf8")
         subprocess.run(
-            ["clang", "-arch", "arm64", "-mmacosx-version-min=11.0",
+            ["clang", "-arch", arch, "-mmacosx-version-min=11.0",
              str(source), "-o", str(app / "MangaReader12")],
             check=True, capture_output=True)
         entitlements = {"application-identifier": identifier}
@@ -125,6 +126,8 @@ class CodeSignatureGateTests(unittest.TestCase):
         data = self.create_fixture()
         report = self.audit(data)
         self.assertTrue(report["adHocSignatureIntegrityVerified"])
+        self.assertTrue(report["thinArm64ExecutableVerified"])
+        self.assertTrue(report["code_signature_verified"])
         self.assertTrue(report["installedApplicationIdentifierMatch"])
         self.assertTrue(report["signed_manifest_verified"])
         self.assertEqual(report["applicationIdentifier"],
@@ -134,6 +137,11 @@ class CodeSignatureGateTests(unittest.TestCase):
         self.assertFalse(report["installationAuthorized"])
         self.assertFalse(report["installationPerformed"])
         self.assertNotIn("ipa_snapshot", report)
+
+    def test_wrong_cpu_architecture_rejected(self):
+        data = self.create_fixture(arch="x86_64")
+        with self.assertRaises(CodeSignatureRejected):
+            self.audit(data)
 
     def test_missing_adhoc_signature_rejected(self):
         data = self.create_fixture(sign=False)
