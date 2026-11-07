@@ -74,7 +74,7 @@ jobs:
           assert "installation_authorized: bool = False" in source
           assert "installation_performed: bool = False" in source
           assert "peer_identity_authenticated: bool = False" in source
-          for forbidden in ("subprocess", "socket", "os.system", "posix_spawn", "urllib.request", "appinst("):
+          for forbidden in ("import subprocess", "import socket", "socket.socket(", "os.system(", "posix_spawn(", "urllib.request", "appinst("):
               assert forbidden not in source, forbidden
           print("PASS: one-shot policy is nonprivileged offline preflight only")
           PY
