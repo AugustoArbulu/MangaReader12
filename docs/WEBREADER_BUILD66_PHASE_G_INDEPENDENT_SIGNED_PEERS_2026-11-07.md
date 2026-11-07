@@ -40,8 +40,19 @@ O servidor não lê bytes de IPA, não usa portos TCP, não solicita root e não
 
 ## CI e próximos bloqueadores
 
-- A execução inicial do novo workflow está em: https://github.com/AugustoArbulu/MangaReader12/actions/runs/42344581447
-- Acrescentar resultados macOS **somente quando efetivamente concluídos**; o parser Linux inicialmente passou.
+- **GitHub Actions Phase G #3, run 42344656343: SUCCESS** em Linux e macOS:
+  https://github.com/AugustoArbulu/MangaReader12/actions/runs/42344656343
+- **30 testes do parser aprovados**. MacOS confirmou quatro execuções
+  `INDEPENDENT_SIGNED_CLIENT_MATCH`, rejeitou cliente com outro código,
+  referência CDHash adulterada e hash do servidor apresentado como do cliente.
+- A cópia byte a byte do executável assinado **manteve o mesmo CDHash**,
+  como esperado, demonstrando que o hash não prova origem, instalação
+  única, identidade do publicador ou autenticidade do executável original.
+- Cada execução de cliente e servidor foi um **processo independente**
+  com binário assinado ad hoc próprio; a versão anterior com somente
+  `fork()` não demonstrava essa propriedade.
+- Sem `appinst`, instalação, arquivo IPA, artefato iOS nem alteração
+  na Build65 física. O teste continua exclusivamente macOS.
 - O utilitário separado de diagnóstico no iPad da Fase E/F continua **opcional**. Nenhum teste runtime no iOS12 foi relatado pelo usuário.
 - Até validar autenticação do peer independentemente no iOS12 e consentimento seguro no helper, manter `WebReaderAppinstSocket.liveInstallationEnabled = false` e `WebReaderUpdateChannel.productionPublicKeyX963 = nil`.
 - A Build 65 instalada e seus dados não foram tocados.
