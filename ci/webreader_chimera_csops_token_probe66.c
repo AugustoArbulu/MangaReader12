@@ -67,8 +67,15 @@ static void inspect_csops_binding(const audit_token_t *original,
     corrupted.val[7] ^= 1u; /* mutate pidversion; do not execute mutated token */
     bad = method((pid_t)original->val[5], WR_CS_OPS_CDHASH,
                  cdhash, sizeof(cdhash), &corrupted);
+    if (bad == 0) {
+        (void)snprintf(status, status_len, "MUTATION_ACCEPTED_UNSAFE");
+        return;
+    }
+    /* Wrong PID is this controlled parent process, never an unrelated app. */
+    bad = method(getpid(), WR_CS_OPS_CDHASH, cdhash, sizeof(cdhash),
+                 (audit_token_t *)(void *)original);
     (void)snprintf(status, status_len, "%s",
-                   bad == 0 ? "MUTATION_ACCEPTED_UNSAFE" :
+                   bad == 0 ? "CROSS_PID_ACCEPTED_UNSAFE" :
                               "MUTATION_REJECTED");
 }
 static void set_timeout(int fd) {
