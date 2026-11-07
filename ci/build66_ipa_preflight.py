@@ -141,7 +141,7 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build, *, require_exac
             if (parts + (0,) * (3 - len(parts))) > (12, 5, 8):
                 raise AdmissionDenied("incompatible iOS")
             return {"build": build, "bundle": BUNDLE_ID, "minimum_ios": minimum,
-                    "sha256": digest.hexdigest(), "ipa_size": payload.tell()}
+                    "sha256": digest.hexdigest(), "ipa_size": len(payload.getbuffer())}
     except (zipfile.BadZipFile, zipfile.LargeZipFile, plistlib.InvalidFileException,
             KeyError, ValueError, TypeError, EOFError, RuntimeError, OSError,
             OverflowError) as exc:
