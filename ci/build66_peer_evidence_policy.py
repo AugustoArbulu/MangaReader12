@@ -65,7 +65,7 @@ def evaluate_untrusted_peer_evidence(blob):
         return _deny("UNTRUSTED_REPORT_MALFORMED")
     if not isinstance(report, dict) or set(report) != FIELDS:
         return _deny("UNTRUSTED_REPORT_FIELDS")
-    if (report["transport"] not in TRANSPORTS
+    if (type(report["transport"]) is not str or report["transport"] not in TRANSPORTS
             or type(report["pid"]) is not int or report["pid"] < 0
             or type(report["uid"]) is not int or report["uid"] < 0
             or type(report["bundleId"]) is not str
