@@ -57,7 +57,7 @@ Se ambos aparecem no mesmo Release, se há entradas duplicadas ou se nome/URL di
 
 `MangaReader12/Core/WebReaderUpdateChecker.swift` não classifica mais HTTP **404** de `releases/latest` como “atualizado”. Uma resposta 404 pode indicar ausência de release, repositório privado ou falta de autorização — **não prova** que não exista build mais nova. O resultado agora é `unexpectedHTTPStatus(404)`, sem iniciar download.
 
-A tela `MangaReader12/UI/WebReaderAppUpdatesViewController.swift` diferencia integridade de SHA/ZIP de **autenticidade editorial**. Metadados públicos do GitHub por HTTPS não substituem uma assinatura independente do publicador. A instalação pelo Chimera permanece indisponível; a alternativa é compartilhar a IPA conferida e escolher, manualmente, como instalar pelo Filza após backup.
+A tela `MangaReader12/UI/WebReaderAppUpdatesViewController.swift` diferencia integridade de SHA/ZIP de **autenticidade editorial**. Os rótulos dizem agora “Baixar e conferir IPA” e “Compartilhar IPA conferida”, sem insinuar que um digest do GitHub autentica a assinatura do editor. Metadados públicos do GitHub por HTTPS não substituem uma assinatura independente do publicador. A instalação pelo Chimera permanece indisponível; a alternativa é compartilhar a IPA conferida e escolher, manualmente, como instalar pelo Filza após backup.
 
 ### E. Suítes e integração de CI
 
@@ -65,7 +65,32 @@ A tela `MangaReader12/UI/WebReaderAppUpdatesViewController.swift` diferencia int
 - `ci/test_native_webreader_ipa_stager.py` exerce download da IPA v2 com `URLProtocol` sintético, bytes de ZIP válidos, exportação sem appinst e rejeição de URL de outro build, domínio estranho, query e fragmento.
 - `.github/workflows/chimera-build66-preflight.yml` incorpora as duas suítes Python com manifesta/IPA assinadas sintéticas, exige execução nativa Swift em macOS e verifica que as duas travas de produção permanecem desligadas.
 
-**Status de QA neste documento:** o job Linux `synthetic-preflight-only` do workflow `#180`, run `42348738187`, foi **SUCCESS**. A verificação Swift/macOS e os demais workflows continuam aguardando o resultado da fila no momento desta redação; atualizar a seção abaixo quando forem efetivamente concluídos.
+**Status final de QA do código desta fase:** workflow
+[WebReader Build66 IPA Preflight Security QA #189](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42349174443),
+run `42349174443`, **SUCCESS nos dois jobs**:
+
+- **309 testes Python** aprovados no job Linux, incluindo **33** casos de
+  relatório do iPad real e **22** testes do recibo de release v2 assinado
+  para revisão manual.
+- macOS: verificador nativo Swift/Security.framework, Swift URLSession com
+  GitHub Release v1/v2 e HTTP 404, Swift `WebReaderIPAStager` com download
+  simulado de IPA v2 e negativa de URL fora da política, parser nativo
+  independente de GitHub Releases, auditoria de assinatura de código e
+  compilação do caminho `WebReaderAppinstSocket.install` que rejeita sempre.
+- Testes usam chaves P-256 efêmeras e URLs via `URLProtocol` local, sem
+  baixar releases reais, sem publicar IPA, sem usar `appinst`.
+- O workflow [#186](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42348975466)
+  também passou em ambos os jobs após as correções de Swift/stager anteriores.
+- As verificações específicas de Build65 arquivada e as Fases E-I de
+  diagnóstico já haviam passado; **o resultado físico do iPad continuou
+  `UNIX_PEERTOKEN=UNAVAILABLE`** e não é alterado por testes macOS.
+
+**Limite de QA:** os testes Swift acima executam no macOS com fixtures.
+Não houve nova execução do WebReader modificado em um iPad iOS12 nem
+uma nova IPA Build66 aprovada fisicamente. O workflow geral `iOS 12
+Milestone 0` não concluiu uma compilação integral nessa sequência de
+commits (execuções canceladas), portanto não afirmar que a build iOS
+completa já passou.
 
 ## 3. Separação rigorosa de confiança
 
