@@ -120,6 +120,19 @@ def main():
                     finding = classify_queued_reports(result_a, result_b)
                     if finding.installation_authorized or finding.stream_frames_authenticated:
                         raise AssertionError("stream samples never confer authority")
+                    # Explicitly capture the observed macOS-15 failure mode:
+                    # A's already-queued FIRST frame is sampled as B, who
+                    # wrote SECOND. A CI regression must not silently turn
+                    # this into a generic PASS without identifying the change.
+                    observed = (
+                        ("B", "B") if mode == "split"
+                        else ("B", "NO_SECOND_SAMPLE")
+                    )
+                    if finding.observations != observed:
+                        raise AssertionError(
+                            "macOS queued-token behavior changed: "
+                            + repr(finding.observations)
+                        )
                     outcomes.append(finding.category)
                     print(
                         f"RUN#{repeat+1} QUEUED_{mode.upper()} "
@@ -140,6 +153,11 @@ def main():
                     f"{mode[0]}rb", mode
                 )
                 reverse = classify_queued_reports(reverse_a, reverse_b)
+                if reverse.observations != (
+                    ("B", "B") if mode == "split"
+                    else ("B", "NO_SECOND_SAMPLE")
+                ):
+                    raise AssertionError("reversed roles changed queued-token result")
                 print(
                     f"REVERSED QUEUED_{mode.upper()} {reverse.category} "
                     "NO_AUTHENTICATION_NO_INSTALL"
