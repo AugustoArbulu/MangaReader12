@@ -35,6 +35,7 @@ on:
       - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
       - 'MangaReader12/Core/WebReaderIPAStager.swift'
       - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_public_github_release_parser.py'
       - 'ci/test_chimera_build62_install_admission.py'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'ci/test_native_webreader_update_checker.py'
@@ -82,6 +83,7 @@ on:
       - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
       - 'MangaReader12/Core/WebReaderIPAStager.swift'
       - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_public_github_release_parser.py'
       - 'ci/test_chimera_build62_install_admission.py'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'ci/test_native_webreader_update_checker.py'
@@ -244,6 +246,7 @@ jobs:
           python3 ci/test_chimera_build62_install_admission.py
           python3 ci/test_native_webreader_update_checker.py
           python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_public_github_release_parser.py
       - name: Verify no installer is enabled in production Swift
         run: |
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
