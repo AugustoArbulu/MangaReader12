@@ -271,7 +271,8 @@ static int handoff_origin(const char *app_path, const char *receiver_path,
     if (three_messages &&
         (send(app_fd, "WRHELLO1", 8, 0) != 8 ||
          recv(app_fd, &acknowledgement, 1, 0) != 1 ||
-         acknowledgement != 'R')) goto done;
+         acknowledgement != 'R' ||
+         send(ctrl_fd, "D", 1, 0) != 1)) goto done;
     outcome = 0;
 done:
     if (ctrl_fd >= 0) (void)close(ctrl_fd);
@@ -283,7 +284,7 @@ done:
     return outcome;
 }
 
-static int handoff_receiver(const char *ctrl_path) {
+static int handoff_receiver(const char *ctrl_path, int hold_descriptor) {
     struct sockaddr_un addr;
     socklen_t length;
     int listener = -1, control_fd = -1, received_fd = -1, result = 32;
@@ -313,6 +314,12 @@ static int handoff_receiver(const char *ctrl_path) {
         recv(received_fd, &response, 1, 0) != 1 ||
         response != 'R' ||
         send(control_fd, "K", 1, 0) != 1) goto done;
+    /* Hold the transferred descriptor OPEN during A's third message:
+       otherwise token changes could be caused by closing B's descriptor
+       rather than by the process which actually wrote message 3. */
+    if (hold_descriptor &&
+        (recv(control_fd, &response, 1, 0) != 1 || response != 'D'))
+        goto done;
     result = 0;
 done:
     if (received_fd >= 0) (void)close(received_fd);
@@ -398,7 +405,9 @@ int main(int argc, char **argv) {
     if (argc == 4 && strcmp(argv[1], "serve-three") == 0)
         return serve_three(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "receiver-once") == 0)
-        return handoff_receiver(argv[2]);
+        return handoff_receiver(argv[2], 0);
+    if (argc == 3 && strcmp(argv[1], "receiver-hold") == 0)
+        return handoff_receiver(argv[2], 1);
     fputs("Usage: separate peer identity lab (no installation)\n", stderr);
     return 2;
 }
