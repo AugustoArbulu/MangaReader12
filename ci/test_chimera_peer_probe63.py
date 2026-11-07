@@ -5,6 +5,7 @@ from pathlib import Path
 import platform
 import subprocess
 import tempfile
+from build66_peer_capability_report import parse_build63_peer_probe
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "ci/webreader_chimera_peer_probe63.c"
@@ -50,6 +51,11 @@ def main():
                 f"probe#{iteration} exit {outcome.returncode}\n"
                 + outcome.stdout + outcome.stderr
             )
+            parsed = parse_build63_peer_probe(outcome.stdout.encode("ascii"))
+            assert parsed.observed_metadata_only
+            assert not parsed.ios12_capability_confirmed
+            assert not parsed.peer_authentication_confirmed
+            assert not parsed.installation_authorized
             lines = outcome.stdout.splitlines()
             assert len(lines) == 4, lines
             assert lines[0] == "WEBREADER_BUILD63_PEER_CAPABILITY: non-root, no install"
