@@ -27,6 +27,12 @@ on:
       - 'ci/test_build66_peer_capability_report.py'
       - 'ci/build66_requester_blind_check_policy.py'
       - 'ci/test_build66_requester_blind_check_policy.py'
+      - 'ci/build66_ios12_physical_capability_policy.py'
+      - 'ci/test_build66_ios12_physical_capability_policy.py'
+      - 'ci/build66_manual_review_receipt.py'
+      - 'ci/test_build66_manual_review_receipt.py'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'ci/test_native_webreader_update_checker.py'
       - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
@@ -63,6 +69,12 @@ on:
       - 'ci/test_build66_peer_capability_report.py'
       - 'ci/build66_requester_blind_check_policy.py'
       - 'ci/test_build66_requester_blind_check_policy.py'
+      - 'ci/build66_ios12_physical_capability_policy.py'
+      - 'ci/test_build66_ios12_physical_capability_policy.py'
+      - 'ci/build66_manual_review_receipt.py'
+      - 'ci/test_build66_manual_review_receipt.py'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'ci/test_native_webreader_update_checker.py'
       - 'ci/test_chimera_peer_probe63.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
@@ -166,6 +178,27 @@ jobs:
           for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request"):
               assert forbidden not in code, forbidden
           print("PASS: client cannot select arbitrary IPA or request installation")
+          PY
+      - name: Evaluate actual Chimera physical report and signed manual-review fallback
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_ios12_physical_capability_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_manual_review_receipt.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              Path("ci/build66_ios12_physical_capability_policy.py"),
+              Path("ci/build66_manual_review_receipt.py"),
+          ]
+          for file in files:
+              src = file.read_text()
+              assert "installation_authorized: bool = False" in src
+              assert "installation_performed: bool = False" in src
+              for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request", "os.system("):
+                  assert forbidden not in src, (file, forbidden)
+          swift = Path("MangaReader12/Core/WebReaderGitHubReleaseParser.swift").read_text()
+          assert "allowedAssetNames" in swift
+          assert "selected.count == 1" in swift
+          print("PASS: physical iOS12 observation cannot authorize; manual workflow keeps installed data")
           PY
       - name: Ensure live installation remains disabled
         run: |
