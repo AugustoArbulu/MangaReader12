@@ -92,7 +92,7 @@ def main():
     assert "confirmAppinstInstallation()" not in screen
     assert "requestAppinstInstallation(" not in screen
     assert "Instalação pelo Chimera bloqueada" in screen
-    assert "Aguardando identidade do solicitante e assinatura editorial" in screen
+    assert "Aguardando política independente de autorização e chave editorial" in screen
     assert "copyManualAppinstCommand(" not in screen
     assert 'UIPasteboard.general.string = "appinst "' not in screen
     assert "WebReaderIPAStager(verifiedUpdate: update)" in screen
