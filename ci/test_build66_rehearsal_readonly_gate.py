@@ -98,7 +98,7 @@ class Build66RehearsalReadOnlyTests(unittest.TestCase):
         for requirement in (
             'if [[ "$EUID" -eq 0 ]]', 'CFBundleVersion"] = "66"',
             'codesign --force --sign -', 'codesign --verify',
-            '"application-identifier"', '"65"', '"56"',
+            '"application-identifier"', "installed Build65", '"56"',
         ):
             self.assertIn(requirement, source)
         for forbidden in (
