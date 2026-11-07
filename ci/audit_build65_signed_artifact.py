@@ -21,6 +21,11 @@ from build66_code_signature_gate import (
 APPROVED_BUILD65_SHA256 = (
     "798d2bc9472e626eea9dd9c794fb7d6053b4eac01d288e86d0f04a3c092af10a"
 )
+# Independently measured from the exact SHA-256 pinned Build65 QA archive
+# with macOS codesign --display --verbose=4 on 2026-11-07.
+# This is the static CodeDirectory hash of that ARCHIVED executable, not
+# an observation of the app running on the user's iPad.
+APPROVED_BUILD65_STATIC_CDHASH = "026feebdc48cc425eac9e1d30ba1c983b053f6f1"
 
 
 def audit_build65(ipa: Path, checksum_file: Path):
@@ -43,6 +48,8 @@ def audit_build65(ipa: Path, checksum_file: Path):
     )
     if identity["applicationIdentifier"] != INSTALLED_APPLICATION_IDENTIFIER:
         raise ValueError("installed app entitlement mismatch")
+    if identity["approvedArtifactStaticCodeDirectoryCDHash"] != APPROVED_BUILD65_STATIC_CDHASH:
+        raise ValueError("archived app CodeDirectory hash differs from independently pinned QA baseline")
     return {
         "build": 65,
         "bundleId": inspected["bundle"],
