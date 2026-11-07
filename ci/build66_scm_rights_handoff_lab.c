@@ -262,12 +262,15 @@ static int handoff_origin(const char *app_path, const char *receiver_path,
          acknowledgement != 'R')) goto done;
     if (connect(ctrl_fd, (struct sockaddr *)(void *)&ctrladdr, ctrllen) != 0 ||
         !send_connected_fd(ctrl_fd, app_fd)) goto done;
-    /* A never sends to app_fd. B sends the entire WRHELLO1 payload.
-     * Hold A alive until B receives an ACK through the application socket.
+    /* One-message mode: A never writes application data. Three-message
+     * mode: A sent message 1; B alone writes message 2. A remains alive
+     * while B receives its ACK through the same application connection.
      */
     if (recv(ctrl_fd, &acknowledgement, 1, 0) != 1 ||
         acknowledgement != 'K') goto done;
-    /* B sent message 2 and closed its copy. A now sends message 3. */
+    /* B sent message 2. In three-message mode B still holds its copy,
+     * while A sends message 3; descriptor closure cannot explain rebinding.
+     */
     if (three_messages &&
         (send(app_fd, "WRHELLO1", 8, 0) != 8 ||
          recv(app_fd, &acknowledgement, 1, 0) != 1 ||
