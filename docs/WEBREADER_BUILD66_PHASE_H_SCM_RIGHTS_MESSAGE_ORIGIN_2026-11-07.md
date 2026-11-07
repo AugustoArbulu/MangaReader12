@@ -55,9 +55,53 @@ Um programa capaz de apresentar `LOCAL_PEERTOKEN` e um CDHash legítimos em **um
 
 ## Status dos testes
 
-- Workflow **Phase H #2**, run `42345507448`: [abrir CI](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42345507448).
-- Linux: **SUCCESS**, 25 testes da nova classificação e 30 do parser de transcritos (**55 no total**).
-- macOS: **aguardando** na criação deste registro. Não atribuir status de aprovação a nenhuma observação de `SCM_RIGHTS` até a execução nativa concluir.
+- Workflow **Phase H #12**, run `42345912881`: **SUCCESS em Linux e macOS**.
+  [Ver execução](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42345912881).
+- Linux/macOS: **82 testes Python por job**: 25 casos da classificação de transferência,
+  30 casos do parser de transcritos e 27 do parser temporal.
+- Teste macOS A-conecta/B-escreve: **3/3** observações
+  `SENDER_CODE_OBSERVED_AFTER_FD_TRANSFER`, confirmadas também com
+  papéis A/B invertidos.
+- Teste temporal com um único socket, mensagens seriadas e ACKs entre as
+  etapas: **3/3** observações
+  `A_B_A_MESSAGE_SENDER_REBINDING_OBSERVED`, além da ordem invertida.
+  O receptor B permaneceu com o descritor transferido ABERTO enquanto A
+  enviou a terceira mensagem.
+- Cliente diferente com CDHash incorreto foi rejeitado; uma cópia com
+  código idêntico preservou o CDHash, como esperado. Nenhuma verificação
+  elevou `installation_authorized`.
+
+## Teste ampliado A → B → A — observação e alcance
+
+O experimento ampliado introduziu `serve-three`, `origin-three` e
+`receiver-hold` no programa de teste C, mais:
+`ci/build66_temporal_peer_report.py`,
+`ci/test_build66_temporal_peer_report.py` (27 testes),
+`ci/test_build66_temporal_scm_rights_lab.py` e a integração de CI.
+
+A ordem do fluxo é a seguinte: A escreve `WRHELLO1` e recebe ACK de S;
+A transfere seu descritor conectado a B; B escreve o segundo `WRHELLO1`,
+recebe ACK e notifica A; **B continua mantendo seu descritor aberto**; A
+escreve o terceiro `WRHELLO1` e recebe ACK; só então A notifica B para
+fechar o descritor. O servidor consulta o token imediatamente após cada
+`recv` e antes do ACK seguinte. Para cada ensaio, o harness roda novamente
+com a referência do CDHash de A e com a de B, obtidas previamente por
+`codesign --verify` e `codesign -d --verbose=4`.
+
+**Resultado no macOS:** o CDHash identificado acompanhou A/B/A, mesmo com
+o descritor de B ainda aberto. O resultado não foi causado simplesmente
+pelo fechamento do descritor de B após escrever.
+
+**Limites remanescentes críticos:** a sequência usa mensagens com ACKs
+serializados. Não se testou ainda um processo A e um B enfileirando
+mensagens antes de um único `recv`; em `SOCK_STREAM` os limites de
+mensagens não são preservados. Portanto, a consulta de `LOCAL_PEERTOKEN`
+após `recv` **não foi demonstrada como identidade criptograficamente
+vinculada aos bytes lidos**, e a observação não é uma autenticação por
+mensagem em condições concorrentes. A implementação futura do helper,
+se existir, não deve atribuir privilégio ao emissor a partir desse
+resultado isolado. O comportamento no Chimera/iOS 12.5.8 ainda é
+desconhecido.
 
 ## Próximos gates
 
