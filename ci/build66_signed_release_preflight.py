@@ -26,13 +26,15 @@ def _ios_tuple(value):
 
 def verify_signed_release(
     envelope_json, pinned_public_key_pem, ipa_path,
-    installed_build=65, installed_ios="12.5.8"
+    installed_build=65, installed_ios="12.5.8", *, include_snapshot=False
 ):
     """Check signed metadata against the locally staged IPA, entirely offline.
 
     Public key must come from a separately trusted/pinned distribution channel.
     Never accept a public key supplied alongside the untrusted manifest/IPA.
     """
+    if type(include_snapshot) is not bool:
+        raise SignedReleaseRejected("invalid snapshot policy")
     if type(installed_build) is not int or installed_build < 0:
         raise SignedReleaseRejected("invalid installed build")
     if installed_ios != "12.5.8":
@@ -46,7 +48,7 @@ def verify_signed_release(
         # Do not reopen an attacker-controlled path after this point.
         inspected = inspect_ipa(
             Path(ipa_path), signed["sha256"], signed["ipaSize"], installed_build,
-            require_exact_identity=True
+            require_exact_identity=True, return_snapshot=include_snapshot
         )
     except (ManifestRejected, AdmissionDenied, OSError, TypeError) as exc:
         raise SignedReleaseRejected("signed manifest or IPA preflight rejected") from exc
@@ -58,7 +60,7 @@ def verify_signed_release(
             signed["sha256"] != inspected["sha256"]):
         raise SignedReleaseRejected("signed manifest does not match IPA metadata")
 
-    return {
+    result = {
         "build": signed["build"],
         "bundleId": signed["bundleId"],
         "minimumIOS": signed["minimumIOS"],
@@ -72,3 +74,6 @@ def verify_signed_release(
         "install_authorized": False,
         "installation_performed": False,
     }
+    if include_snapshot:
+        result["ipa_snapshot"] = inspected["ipa_snapshot"]
+    return result
