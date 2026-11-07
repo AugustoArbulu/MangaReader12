@@ -10,6 +10,7 @@ import platform
 import re
 import subprocess
 import tempfile
+from build66_audit_token_capability_report import parse_audit_token_report
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "ci/webreader_chimera_audit_token_probe66.c"
@@ -36,6 +37,11 @@ def check_output(lines):
         assert match.group(1) not in observed, observed
         observed.add(match.group(1))
     assert len(observed) == 3, observed
+    parsed = parse_audit_token_report(("\n".join(lines) + "\n").encode("ascii"))
+    assert parsed.diagnostic_only
+    assert not parsed.ios12_capability_verified
+    assert not parsed.webreader_peer_authenticated
+    assert not parsed.installation_authorized
     return lines[1:5]
 
 
