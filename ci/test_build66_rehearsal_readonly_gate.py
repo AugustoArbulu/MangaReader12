@@ -96,7 +96,7 @@ class Build66RehearsalReadOnlyTests(unittest.TestCase):
         source = (Path(__file__).resolve().parent /
                   "package_webreader_build66_rehearsal.sh").read_text()
         for requirement in (
-            'if [[ "$EUID" -eq 0 ]]', 'CFBundleVersion"] = "66"',
+            'if [[ "$EUID" -eq 0 ]]', 'APP_PATH="$1"', 'OUTPUT="$2"', 'CFBundleVersion"] = "66"',
             'codesign --force --sign -', 'codesign --verify',
             '"application-identifier"', "installed Build65", '"56"',
         ):
