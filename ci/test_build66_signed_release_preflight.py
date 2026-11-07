@@ -88,7 +88,7 @@ class SignedReleasePreflightTests(unittest.TestCase):
              "-out", str(signature), str(message)], check=True,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return encode({
-            "schemaVersion": 1,
+            "schemaVersion": (self.manifest if fields is None else fields)["schemaVersion"],
             "algorithm": "ecdsa-p256-sha256",
             "payload": base64.b64encode(payload).decode("ascii"),
             "signature": base64.b64encode(signature.read_bytes()).decode("ascii"),
@@ -113,6 +113,35 @@ class SignedReleasePreflightTests(unittest.TestCase):
         self.assertFalse(result["code_signature_verified"])
         self.assertFalse(result["install_authorized"])
         self.assertFalse(result["installation_performed"])
+
+    def make_v2(self):
+        self.manifest["schemaVersion"] = 2
+        self.manifest["applicationIdentifier"] = (
+            "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+        )
+        self.manifest["ipaUrl"] = (
+            "https://github.com/AugustoArbulu/MangaReader12/"
+            "releases/download/build66/WebReader-Build66-iOS12-adhoc.ipa"
+        )
+
+    def test_v2_signed_manifest_binds_to_archive(self):
+        self.make_v2()
+        result = self.accepted()
+        self.assertEqual(result["build"], 66)
+        self.assertTrue(result["single_snapshot_checked"])
+        self.assertFalse(result["code_signature_verified"])
+
+    def test_v2_reject_mismatched_installed_entitlement(self):
+        self.make_v2()
+        self.manifest["applicationIdentifier"] = "ATTACKER"
+        self.denied()
+
+    def test_v2_reject_unsigned_asset_name(self):
+        self.make_v2()
+        self.manifest["ipaUrl"] = self.manifest["ipaUrl"].replace(
+            "WebReader-Build66-iOS12-adhoc.ipa", "WebReader-iOS12-unsigned.ipa"
+        )
+        self.denied()
 
     def test_invalid_unsigned_envelope(self):
         self.denied(envelope=b"{}")
