@@ -1776,7 +1776,11 @@ final class SettingsViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "WebReader"
-            cell.detailTextLabel?.text = "Build 56 • compatível com iOS 12.0"
+            let buildVersion = Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleVersion"
+            ) as? String ?? "desconhecida"
+            cell.detailTextLabel?.text = "Build " + buildVersion +
+                " • compatível com iOS 12.0"
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .none
