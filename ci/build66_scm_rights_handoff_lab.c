@@ -240,7 +240,8 @@ static int receive_connected_fd(int control_fd) {
     return received;
 }
 
-static int handoff_origin(const char *app_path, const char *receiver_path) {
+static int handoff_origin(const char *app_path, const char *receiver_path,
+                          int three_messages) {
     struct sockaddr_un appaddr, ctrladdr;
     socklen_t applen, ctrllen;
     int app_fd = -1, ctrl_fd = -1, outcome = 22;
@@ -252,19 +253,33 @@ static int handoff_origin(const char *app_path, const char *receiver_path) {
     if (app_fd < 0 || ctrl_fd < 0) goto done;
     timeout_for(app_fd);
     timeout_for(ctrl_fd);
-    if (connect(app_fd, (struct sockaddr *)(void *)&appaddr, applen) != 0 ||
-        connect(ctrl_fd, (struct sockaddr *)(void *)&ctrladdr, ctrllen) != 0 ||
+    if (connect(app_fd, (struct sockaddr *)(void *)&appaddr, applen) != 0)
+        goto done;
+    /* Three-message variant: A sends the first application message. */
+    if (three_messages &&
+        (send(app_fd, "WRHELLO1", 8, 0) != 8 ||
+         recv(app_fd, &acknowledgement, 1, 0) != 1 ||
+         acknowledgement != 'R')) goto done;
+    if (connect(ctrl_fd, (struct sockaddr *)(void *)&ctrladdr, ctrllen) != 0 ||
         !send_connected_fd(ctrl_fd, app_fd)) goto done;
     /* A never sends to app_fd. B sends the entire WRHELLO1 payload.
      * Hold A alive until B receives an ACK through the application socket.
      */
     if (recv(ctrl_fd, &acknowledgement, 1, 0) != 1 ||
         acknowledgement != 'K') goto done;
+    /* B sent message 2 and closed its copy. A now sends message 3. */
+    if (three_messages &&
+        (send(app_fd, "WRHELLO1", 8, 0) != 8 ||
+         recv(app_fd, &acknowledgement, 1, 0) != 1 ||
+         acknowledgement != 'R')) goto done;
     outcome = 0;
 done:
     if (ctrl_fd >= 0) (void)close(ctrl_fd);
     if (app_fd >= 0) (void)close(app_fd);
-    if (outcome == 0) puts("ORIGIN_TRANSFERRED_WITHOUT_MESSAGE NO_INSTALL");
+    if (outcome == 0) {
+        puts(three_messages ? "ORIGIN_SENT_FIRST_LAST_NO_INSTALL" :
+                              "ORIGIN_TRANSFERRED_WITHOUT_MESSAGE NO_INSTALL");
+    }
     return outcome;
 }
 
@@ -308,6 +323,65 @@ done:
     return result;
 }
 
+
+/* A -> B -> A on the SAME stream: sample the peer token immediately after
+ * each WRHELLO1 read, before ACK, to distinguish per-write reassignment from
+ * a one-time reassignment when SCM_RIGHTS transfers the descriptor.
+ *
+ * Every response is diagnostic-only. No identity grants permission.
+ */
+static int serve_three(const char *path, const char *expected_text) {
+    struct sockaddr_un address;
+    socklen_t length;
+    unsigned char expected[20] = {0};
+    int listener = -1, clientfd = -1, result = 8, i;
+    struct pollfd pending;
+    char incoming[8];
+    const char *observations[3] = {
+        "TRANSPORT_FAILED", "TRANSPORT_FAILED", "TRANSPORT_FAILED"
+    };
+    if (!parse_hex(expected_text, expected)) {
+        puts("FINAL_INSTALL_AUTHORIZATION=DENIED");
+        return 5;
+    }
+    if (!address_for(path, &address, &length)) return 6;
+    listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) goto done;
+    timeout_for(listener);
+    if (bind(listener, (struct sockaddr *)(void *)&address, length) != 0 ||
+        chmod(path, 0600) != 0 || listen(listener, 1) != 0) goto done;
+    puts("READY NONROOT THREE_MESSAGES AUTHORIZATION=DENIED");
+    fflush(stdout);
+    pending.fd = listener;
+    pending.events = POLLIN;
+    pending.revents = 0;
+    if (poll(&pending, 1, 3000) != 1 ||
+        !(pending.revents & POLLIN)) goto done;
+    clientfd = accept(listener, NULL, NULL);
+    if (clientfd < 0) goto done;
+    timeout_for(clientfd);
+    for (i = 0; i < 3; ++i) {
+        if (recv(clientfd, incoming, sizeof(incoming), MSG_WAITALL) != 8 ||
+            memcmp(incoming, "WRHELLO1", 8) != 0) {
+            observations[i] = "PROTOCOL_REJECTED";
+            goto done;
+        }
+        observations[i] = classify_peer(clientfd, expected);
+        if (send(clientfd, "R", 1, 0) != 1) goto done;
+    }
+    result = 0;
+done:
+    if (clientfd >= 0) (void)close(clientfd);
+    if (listener >= 0) (void)close(listener);
+    (void)unlink(path);
+    for (i = 0; i < 3; ++i) {
+        printf("RESULT STEP%d=%s AUTHORIZATION=DENIED\n",
+               i + 1, observations[i]);
+    }
+    puts("FINAL_INSTALL_AUTHORIZATION=DENIED");
+    return result;
+}
+
 int main(int argc, char **argv) {
     /* Neither client nor server can run as root. */
     if (geteuid() == 0) return 20;
@@ -318,7 +392,11 @@ int main(int argc, char **argv) {
     if (argc == 4 && strcmp(argv[1], "serve-once") == 0)
         return serve(argv[2], argv[3]);
     if (argc == 4 && strcmp(argv[1], "origin-pass") == 0)
-        return handoff_origin(argv[2], argv[3]);
+        return handoff_origin(argv[2], argv[3], 0);
+    if (argc == 4 && strcmp(argv[1], "origin-three") == 0)
+        return handoff_origin(argv[2], argv[3], 1);
+    if (argc == 4 && strcmp(argv[1], "serve-three") == 0)
+        return serve_three(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "receiver-once") == 0)
         return handoff_receiver(argv[2]);
     fputs("Usage: separate peer identity lab (no installation)\n", stderr);
