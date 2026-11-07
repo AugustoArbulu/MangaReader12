@@ -42,6 +42,9 @@ class PhaseECSOpsTests(unittest.TestCase):
     def test_mutation_accepted_unsafe_still_no_authorization(self):
         self.allowed_observation(fake(binding="MUTATION_ACCEPTED_UNSAFE"))
 
+    def test_cross_pid_accepted_unsafe_still_no_authorization(self):
+        self.allowed_observation(fake(binding="CROSS_PID_ACCEPTED_UNSAFE"))
+
     def test_call_denied_still_no_authorization(self):
         self.allowed_observation(fake(binding="CALL_DENIED"))
 
