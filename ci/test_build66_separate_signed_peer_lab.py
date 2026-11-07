@@ -13,6 +13,7 @@ All keys are ad-hoc and host-only. There is NO installed iOS binary here.
 import os
 from pathlib import Path
 import re
+import shutil
 import select
 import subprocess
 import sys
@@ -157,6 +158,21 @@ def main():
         if changed.result != "MISMATCH_REJECTED":
             raise AssertionError("forged static hash was not rejected")
         print("PASS: forged independent CodeDirectory hash rejected")
+
+        # A copied ad-hoc executable is expected to have the SAME
+        # CodeDirectory. This must NOT be mistaken for publisher or bundle
+        # identity; it is a deliberate negative security finding.
+        copied = root / "client-copied-binary"
+        shutil.copy2(allowed, copied)
+        run("/usr/bin/codesign", "--verify", "--verbose=2", copied)
+        copied_match = one_connection(
+            server, copied, allowed_hash, root, "copy"
+        )
+        if not copied_match.exact_codehash_match_observed:
+            raise AssertionError("copied signed client changed code identity")
+        if copied_match.publisher_authenticated:
+            raise AssertionError("ad-hoc copied code cannot prove publisher")
+        print("KNOWN LIMIT: byte-for-byte copied ad-hoc client has same CDHash")
 
         foreign_ok = one_connection(
             server, foreign, foreign_hash, root, "foreign-own-pin"
