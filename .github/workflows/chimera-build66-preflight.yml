@@ -13,6 +13,12 @@ on:
       - 'ci/build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_signed_release_chain.py'
+      - 'ci/build66_durable_replay_journal.py'
+      - 'ci/test_build66_durable_replay_journal.py'
+      - 'ci/build66_release_key_pinning_gate.py'
+      - 'ci/test_build66_release_key_pinning_gate.py'
+      - 'ci/build66_durable_one_shot_lab.py'
+      - 'ci/test_build66_durable_signed_release_chain.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -34,6 +40,12 @@ on:
       - 'ci/build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_diagnostic.py'
       - 'ci/test_build66_one_shot_signed_release_chain.py'
+      - 'ci/build66_durable_replay_journal.py'
+      - 'ci/test_build66_durable_replay_journal.py'
+      - 'ci/build66_release_key_pinning_gate.py'
+      - 'ci/test_build66_release_key_pinning_gate.py'
+      - 'ci/build66_durable_one_shot_lab.py'
+      - 'ci/test_build66_durable_signed_release_chain.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
@@ -80,6 +92,27 @@ jobs:
           for forbidden in ("import subprocess", "import socket", "socket.socket(", "os.system(", "posix_spawn(", "urllib.request", "appinst("):
               assert forbidden not in source, forbidden
           print("PASS: one-shot policy is nonprivileged offline preflight only")
+          PY
+      - name: Enforce durable replay, independent release key pin and crash tests
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_durable_replay_journal.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_pinning_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_durable_signed_release_chain.py' -v
+      - name: Verify persistent laboratory remains nonprivileged and host-only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a = Path("ci/build66_durable_replay_journal.py").read_text()
+          b = Path("ci/build66_release_key_pinning_gate.py").read_text()
+          c = Path("ci/build66_durable_one_shot_lab.py").read_text()
+          assert "os.O_EXCL" in a and "os.fsync(directory_fd)" in a
+          assert "trusted_spki_sha256" in c and "verify_independently_pinned_v2" in c
+          assert '"installation_authorized": False' in b
+          assert "installation_authorized" not in c or "DiagnosticResult" in c
+          for source in (a, b, c):
+              for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request"):
+                  assert forbidden not in source, forbidden
+          print("PASS: phase-B key trust and durable replay are offline-only")
           PY
       - name: Ensure live installation remains disabled
         run: |
