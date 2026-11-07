@@ -141,6 +141,10 @@ jobs:
       - name: Verify native macOS code signing with ephemeral fixtures only
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+      - name: Compile and execute blocked installation path in real Swift
+        run: |
+          python3 ci/test_chimera_build62_install_admission.py
+          python3 ci/test_native_webreader_update_checker.py
       - name: Verify no installer is enabled in production Swift
         run: |
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
