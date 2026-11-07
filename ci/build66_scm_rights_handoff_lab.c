@@ -392,11 +392,183 @@ done:
     return result;
 }
 
+
+/* Phase I: A sends a complete frame, then passes the connected descriptor to
+ * B. B sends a second complete frame. Neither frame is read until the sender
+ * B has notified A (on a separate control socket) and A has signaled the
+ * server on a third, separate GATE socket. No write to the application stream
+ * occurs after B's frame. This probes the difference between stream bytes
+ * and the time at which LOCAL_PEERTOKEN is sampled. An audit token is NOT a
+ * per-frame cryptographic authentication tag.
+ */
+static int origin_queued(const char *app_path, const char *ctrl_path,
+                         const char *gate_path) {
+    struct sockaddr_un appaddr, ctrladdr, gateaddr;
+    socklen_t alen, clen, glen;
+    int app_fd = -1, ctrl_fd = -1, gate_fd = -1, result = 42;
+    char ack = 0;
+    if (!address_for(app_path, &appaddr, &alen) ||
+        !address_for(ctrl_path, &ctrladdr, &clen) ||
+        !address_for(gate_path, &gateaddr, &glen)) return 41;
+    app_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    ctrl_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    gate_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (app_fd < 0 || ctrl_fd < 0 || gate_fd < 0) goto done;
+    timeout_for(app_fd);
+    timeout_for(ctrl_fd);
+    timeout_for(gate_fd);
+    if (connect(app_fd, (struct sockaddr *)(void *)&appaddr, alen) != 0 ||
+        send(app_fd, "WRHELLO1", 8, 0) != 8 ||
+        connect(ctrl_fd, (struct sockaddr *)(void *)&ctrladdr, clen) != 0 ||
+        !send_connected_fd(ctrl_fd, app_fd)) goto done;
+    /* K means B has finished writing its entire second frame; the gate
+     * ensures S cannot read even the first frame before that point. */
+    if (recv(ctrl_fd, &ack, 1, 0) != 1 || ack != 'K' ||
+        connect(gate_fd, (struct sockaddr *)(void *)&gateaddr, glen) != 0 ||
+        send(gate_fd, "G", 1, 0) != 1 ||
+        recv(gate_fd, &ack, 1, 0) != 1 || ack != 'Z' ||
+        send(ctrl_fd, "D", 1, 0) != 1 ||
+        recv(ctrl_fd, &ack, 1, 0) != 1 || ack != 'E') goto done;
+    result = 0;
+done:
+    if (gate_fd >= 0) (void)close(gate_fd);
+    if (ctrl_fd >= 0) (void)close(ctrl_fd);
+    if (app_fd >= 0) (void)close(app_fd);
+    if (result == 0) puts("ORIGIN_QUEUED_TWO_FRAMES NO_INSTALL");
+    return result;
+}
+
+static int receiver_queued(const char *ctrl_path) {
+    struct sockaddr_un address;
+    socklen_t length;
+    int listener = -1, ctrl_fd = -1, app_fd = -1, result = 52;
+    struct pollfd pending;
+    char ack = 0;
+    if (!address_for(ctrl_path, &address, &length)) return 51;
+    listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) goto done;
+    timeout_for(listener);
+    if (bind(listener, (struct sockaddr *)(void *)&address, length) != 0 ||
+        chmod(ctrl_path, 0600) != 0 || listen(listener, 1) != 0) goto done;
+    puts("QUEUED_RECEIVER_READY NONROOT AUTHORIZATION=DENIED");
+    fflush(stdout);
+    pending.fd = listener;
+    pending.events = POLLIN;
+    pending.revents = 0;
+    if (poll(&pending, 1, 3000) != 1 ||
+        !(pending.revents & POLLIN)) goto done;
+    ctrl_fd = accept(listener, NULL, NULL);
+    if (ctrl_fd < 0) goto done;
+    timeout_for(ctrl_fd);
+    app_fd = receive_connected_fd(ctrl_fd);
+    if (app_fd < 0) goto done;
+    timeout_for(app_fd);
+    if (send(app_fd, "WRHELLO1", 8, 0) != 8 ||
+        send(ctrl_fd, "K", 1, 0) != 1 ||
+        recv(ctrl_fd, &ack, 1, 0) != 1 || ack != 'D' ||
+        send(ctrl_fd, "E", 1, 0) != 1) goto done;
+    result = 0;
+done:
+    if (app_fd >= 0) (void)close(app_fd);
+    if (ctrl_fd >= 0) (void)close(ctrl_fd);
+    if (listener >= 0) (void)close(listener);
+    (void)unlink(ctrl_path);
+    if (result == 0) puts("QUEUED_RECEIVER_COMPLETED NO_INSTALL");
+    return result;
+}
+
+static int serve_queued(const char *app_path, const char *gate_path,
+                        const char *expected_hex, int batch) {
+    struct sockaddr_un appaddr, gateaddr;
+    socklen_t alen, glen;
+    unsigned char expected[20] = {0};
+    int listener = -1, gate_listener = -1, app_fd = -1, gate_fd = -1;
+    int result = 62, count = batch ? 16 : 8;
+    struct pollfd pending;
+    char frame[16] = {0}, gate = 0;
+    const char *first = "TRANSPORT_FAILED", *second = "TRANSPORT_FAILED";
+    if (!parse_hex(expected_hex, expected)) {
+        puts("FINAL_INSTALL_AUTHORIZATION=DENIED");
+        return 61;
+    }
+    if (!address_for(app_path, &appaddr, &alen) ||
+        !address_for(gate_path, &gateaddr, &glen)) return 61;
+    listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    gate_listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0 || gate_listener < 0) goto done;
+    if (bind(listener, (struct sockaddr *)(void *)&appaddr, alen) != 0 ||
+        chmod(app_path, 0600) != 0 || listen(listener, 1) != 0 ||
+        bind(gate_listener, (struct sockaddr *)(void *)&gateaddr, glen) != 0 ||
+        chmod(gate_path, 0600) != 0 || listen(gate_listener, 1) != 0) goto done;
+    puts(batch ? "READY NONROOT QUEUED_BATCH AUTHORIZATION=DENIED" :
+                 "READY NONROOT QUEUED_SPLIT AUTHORIZATION=DENIED");
+    fflush(stdout);
+    pending.fd = listener;
+    pending.events = POLLIN;
+    pending.revents = 0;
+    if (poll(&pending, 1, 3000) != 1 || !(pending.revents & POLLIN)) goto done;
+    app_fd = accept(listener, NULL, NULL);
+    if (app_fd < 0) goto done;
+    timeout_for(app_fd);
+    pending.fd = gate_listener;
+    pending.events = POLLIN;
+    pending.revents = 0;
+    if (poll(&pending, 1, 3000) != 1 || !(pending.revents & POLLIN)) goto done;
+    gate_fd = accept(gate_listener, NULL, NULL);
+    if (gate_fd < 0) goto done;
+    timeout_for(gate_fd);
+    if (recv(gate_fd, &gate, 1, MSG_WAITALL) != 1 || gate != 'G') goto done;
+    /* Both 8-byte messages were already sent before the gate. In stream
+     * mode boundaries are conventions only; a batched recv yields one token
+     * observation for BOTH frames. */
+    if (recv(app_fd, frame, (size_t)count, MSG_WAITALL) != count ||
+        memcmp(frame, "WRHELLO1", 8) != 0) {
+        first = "PROTOCOL_REJECTED";
+        goto done;
+    }
+    if (batch && memcmp(frame + 8, "WRHELLO1", 8) != 0) {
+        first = "PROTOCOL_REJECTED";
+        goto done;
+    }
+    first = classify_peer(app_fd, expected);
+    if (!batch) {
+        if (recv(app_fd, frame + 8, 8, MSG_WAITALL) != 8 ||
+            memcmp(frame + 8, "WRHELLO1", 8) != 0) {
+            second = "PROTOCOL_REJECTED";
+            goto done;
+        }
+        second = classify_peer(app_fd, expected);
+    } else {
+        second = "NO_SECOND_SAMPLE";
+    }
+    if (send(gate_fd, "Z", 1, 0) != 1) goto done;
+    result = 0;
+done:
+    if (gate_fd >= 0) (void)close(gate_fd);
+    if (app_fd >= 0) (void)close(app_fd);
+    if (gate_listener >= 0) (void)close(gate_listener);
+    if (listener >= 0) (void)close(listener);
+    (void)unlink(app_path);
+    (void)unlink(gate_path);
+    printf("RESULT STEP1=%s AUTHORIZATION=DENIED\n", first);
+    printf("RESULT STEP2=%s AUTHORIZATION=DENIED\n", second);
+    puts("FINAL_INSTALL_AUTHORIZATION=DENIED");
+    return result;
+}
+
 int main(int argc, char **argv) {
     /* Neither client nor server can run as root. */
     if (geteuid() == 0) return 20;
     (void)signal(SIGPIPE, SIG_IGN);
     (void)umask(0077);
+    if (argc == 5 && strcmp(argv[1], "origin-queued") == 0)
+        return origin_queued(argv[2], argv[3], argv[4]);
+    if (argc == 3 && strcmp(argv[1], "receiver-queued") == 0)
+        return receiver_queued(argv[2]);
+    if (argc == 5 && strcmp(argv[1], "serve-queued-split") == 0)
+        return serve_queued(argv[2], argv[3], argv[4], 0);
+    if (argc == 5 && strcmp(argv[1], "serve-queued-batch") == 0)
+        return serve_queued(argv[2], argv[3], argv[4], 1);
     if (argc == 3 && strcmp(argv[1], "client-once") == 0)
         return client(argv[2]);
     if (argc == 4 && strcmp(argv[1], "serve-once") == 0)
