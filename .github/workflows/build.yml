@@ -105,6 +105,144 @@ jobs:
       - name: Test Build56 source attribution and persistent update feed (Swift offline)
         run: python3 ci/test_build56_library_updates.py
 
+      - name: Test Build65 relocatable downloads after iOS app upgrade (Swift offline)
+        run: python3 ci/test_build65_offline_relocation.py
+
+      - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
+        run: python3 ci/test_webreader_update_manifest.py
+
+      - name: Test offline signed release manifest preparation with ephemeral key
+        run: python3 ci/test_prepare_signed_webreader_update.py
+
+      - name: Verify Python OpenSSL signed release with native iOS12 Swift Security
+        run: python3 ci/test_cross_language_webreader_release.py
+
+      - name: Test native iOS12 Security.framework update manifest signature policy
+        run: python3 ci/test_native_webreader_update_verifier.py
+
+      - name: Test native read-only UpdateChecker with mocked URLSession (zero real network)
+        run: python3 ci/test_native_webreader_update_checker.py
+
+      - name: Test direct public GitHub Releases parser and SHA-256 policy (Swift offline)
+        run: python3 ci/test_public_github_release_parser.py
+
+      - name: Verify in-app releases screen remains fail-closed (no real requests)
+        run: python3 ci/test_app_updates_screen.py
+
+      - name: Verify isolated IPC diagnostic launch cannot access Library or background updates
+        run: python3 ci/test_ipc_probe_launch.py
+
+      - name: Test native iOS12 HEAD-only GitHub HTTPS probe with mock network
+        run: python3 ci/test_webreader_https_probe.py
+
+      - name: Test signed-metadata IPA staging with streaming SHA256 (no real network)
+        run: python3 ci/test_native_webreader_ipa_stager.py
+
+      - name: Test native iOS12 full IPA archive and identity preflight (malicious fixtures)
+        run: python3 ci/test_native_webreader_ipa_auditor.py
+
+      - name: Audit appinst .deb format with malicious offline fixtures (no installation)
+        run: python3 ci/test_audit_appinst_deb.py
+
+      - name: Test exact pinned mirror index policy (no external requests)
+        run: python3 ci/test_audit_pinned_appinst_mirror.py
+
+      - name: Test device-vs-DEB fingerprint policy with synthetic binaries (offline)
+        run: python3 ci/test_compare_appinst_fingerprint.py
+
+      - name: Test strict helper IPC proposal contract (offline; no privileged operations)
+        run: python3 ci/test_webreader_helper_request_contract.py
+
+      - name: Test one-shot helper review session replay and expiration (offline)
+        run: python3 ci/test_webreader_helper_review_session.py
+
+      - name: Test safe staged-IPA file descriptor preflight (offline; no installer)
+        run: python3 ci/test_webreader_helper_file_preflight.py
+
+      - name: Test private IPA copy and held-descriptor snapshot (offline; no installer)
+        run: python3 ci/test_webreader_private_snapshot.py
+
+      - name: Test portable IPC field-kit verifier with malformed fixtures (offline)
+        run: python3 ci/test_verify_ipc_field_kit.py
+
+      - name: Test actual separate-process unprivileged helper UNIX socket (host)
+        run: python3 ci/test_webreader_helper_probe.py
+
+      - name: Test actual native Darwin Swift client vs C helper (host)
+        run: python3 ci/test_native_webreader_helper_ping.py
+
+      - name: Compile ARM64 iOS12 nonprivileged IPC diagnostic (no installer)
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_helper_probe.c \
+            -o WebReader-Helper-Ping-iOS12
+          file WebReader-Helper-Ping-iOS12
+          codesign --force --sign - --timestamp=none WebReader-Helper-Ping-iOS12
+          codesign --verify --verbose WebReader-Helper-Ping-iOS12
+          shasum -a 256 WebReader-Helper-Ping-iOS12 > WebReader-Helper-Ping-iOS12.sha256
+
+      - name: Upload standalone nonprivileged IPC diagnostic (not a DEB or release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Helper-Ping-iOS12-NONINSTALLER
+          if-no-files-found: error
+          path: |
+            WebReader-Helper-Ping-iOS12
+            WebReader-Helper-Ping-iOS12.sha256
+
+      - name: Test mobile appinst bridge against fake executable (no installation)
+        run: python3 ci/test_webreader_appinst_bridge.py
+
+      - name: Test actual Swift-to-C appinst socket against fake installer (macOS, offline)
+        run: python3 ci/test_native_webreader_appinst_socket.py
+
+      - name: Compile isolated mobile appinst bridge for ARM64 iOS12 (not executed)
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror -Wno-deprecated-declarations \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_appinst_bridge.c \
+            -o WebReader-Appinst-Bridge-iOS12
+          codesign --force --sign - --timestamp=none WebReader-Appinst-Bridge-iOS12
+          codesign --verify --verbose WebReader-Appinst-Bridge-iOS12
+          file WebReader-Appinst-Bridge-iOS12
+          shasum -a 256 WebReader-Appinst-Bridge-iOS12 > WebReader-Appinst-Bridge-iOS12.sha256
+
+      - name: Upload mobile appinst bridge CLI preview for disposable-app QA only
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Appinst-Bridge-iOS12-MOBILE-PREVIEW
+          if-no-files-found: error
+          path: |
+            WebReader-Appinst-Bridge-iOS12
+            WebReader-Appinst-Bridge-iOS12.sha256
+
+      - name: Build two disposable iOS12 apps for safe appinst v1-to-v2 test
+        run: bash ci/build_appinst_disposable.sh
+
+      - name: Validate disposable iOS12 test IPA isolation and build identities
+        run: python3 ci/test_appinst_disposable_artifacts.py
+
+      - name: Upload disposable appinst version-1 and version-2 IPAs (NOT WebReader)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Appinst-Disposable-v1-v2-iOS12-QA
+          if-no-files-found: error
+          path: |
+            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa
+            WebReader-Appinst-Disposable-v1-iOS12-unsigned.ipa.sha256
+            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa
+            WebReader-Appinst-Disposable-v2-iOS12-unsigned.ipa.sha256
+            docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md
+
+      - name: Examine byte-pinned published appinst mirror .deb read-only (never execute)
+        run: python3 ci/audit_pinned_appinst_mirror.py
+
+      - name: Test WebReader IPA integrity structure with offline malicious fixtures
+        run: python3 ci/test_validate_webreader_ipa.py
+
       - name: Build Debug for generic iOS device
         run: |
           xcodebuild \
@@ -141,6 +279,96 @@ jobs:
           ./ci/package_ipa.sh \
             "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
             WebReader-iOS12-unsigned.ipa
+
+      - name: Independently verify packaged IPA structure, version and checksum (host only)
+        run: |
+          python3 ci/validate_webreader_ipa.py \
+            WebReader-iOS12-unsigned.ipa \
+            --sha256-file WebReader-iOS12-unsigned.ipa.sha256 \
+            --installed-build 55 \
+            --installed-ios 12.5.8
+
+      - name: Verify actual CI-built Build56 IPA with native Swift ZIP/Info.plist auditor
+        run: |
+          python3 ci/test_native_webreader_ipa_auditor.py \
+            --real-ipa WebReader-iOS12-unsigned.ipa
+
+      - name: Package isolated iOS12 HTTPS diagnostic IPA (CI only; not a release)
+        run: |
+          ./ci/package_tls_probe_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+
+      - name: Assert diagnostic IPA has distinct bundle ID and preserves original
+        run: |
+          python3 ci/test_tls_probe_ipa.py \
+            WebReader-iOS12-unsigned.ipa \
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+
+      - name: Upload standalone HTTPS diagnostic app (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-TLS-Probe-iOS12-Experimental
+          if-no-files-found: error
+          path: |
+            WebReader-TLS-Probe-iOS12-unsigned.ipa
+            WebReader-TLS-Probe-iOS12-unsigned.ipa.sha256
+
+      - name: Package ONE iOS12 Chimera test IPA with embedded PING helper (no installer)
+        run: |
+          bash ci/package_chimera_oneapp_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Helper-Ping-iOS12
+
+      - name: Verify single-IPA Chimera test has isolated identity and only read-only helper
+        run: python3 ci/test_chimera_oneapp_ipa.py
+
+      - name: Upload ONE ready-to-test Chimera IPA (no extra helper file required)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Chimera-OneApp-iOS12-TEST
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-Test-iOS12-unsigned.ipa
+            WebReader-Chimera-Test-iOS12-unsigned.ipa.sha256
+
+      - name: Package isolated iOS12 IPC diagnostic IPA (CI only; not a release)
+        run: |
+          bash ci/package_ipc_probe_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+
+      - name: Assert IPC diagnostic has distinct identity and unchanged app binary
+        run: |
+          python3 ci/test_ipc_probe_ipa.py \
+            WebReader-iOS12-unsigned.ipa \
+            WebReader-TLS-Probe-iOS12-unsigned.ipa \
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+
+      - name: Independently verify packed IPC kit hashes, bundle identity and ARM64 (host)
+        run: python3 ci/verify_ipc_field_kit.py --directory .
+
+      - name: Upload isolated iOS12 IPC diagnostic IPA (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-IPC-Probe-iOS12-NONINSTALLER
+          if-no-files-found: error
+          path: |
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+            WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
+
+      - name: Upload complete iOS12 IPC field-test kit (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-IPC-iOS12-FieldTest-Kit
+          if-no-files-found: error
+          path: |
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+            WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
+            WebReader-Helper-Ping-iOS12
+            WebReader-Helper-Ping-iOS12.sha256
+            docs/WEBREADER_IPC_DEVICE_TEST_PHASE6B_2026-11-05.md
+            ci/verify_ipc_field_kit.py
 
       - name: Upload app and IPA artifacts
         uses: actions/upload-artifact@v4

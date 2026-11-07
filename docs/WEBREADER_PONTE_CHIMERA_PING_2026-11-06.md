@@ -1,0 +1,409 @@
+# Ponte Chimera — primeiro teste real, sem instalar IPAs
+
+## Fase 59 — prova de posse temporária, SEM instalação (06/11/2026)
+
+**Motivação:** Build58 validou PING/PONG no dispositivo por TCP
+`127.0.0.1:38971`, mas loopback não fornece identidade de processo.
+A Build59 testa um **código aleatório de uso único**, em porta separada,
+sem reutilizar o endpoint PING e **sem executar o appinst**.
+
+### Modelo de laboratório, não autorização de instalação
+
+- `serve-pair-once` é compilado **somente** sob
+  `WEBREADER_PING_ONLY`. A imagem assinada continua sem
+  `posix_spawn`, código de instalação ou acesso a IPA.
+- Nova porta fixa `127.0.0.1:38972` (sem aceitar interfaces externas).
+  Listener sem SO_REUSEPORT. SO_REUSEADDR permite reinício
+  após TCP TIME_WAIT, sem compartilhamento de listener ativo. Uma conexão e uma
+  tentativa; após aceitar ou negar, ele encerra. Prazo de **120 s**
+  para inserir o código.
+- Ao iniciar, helper usa `arc4random_buf` para gerar **64 bits**
+  e exibe apenas no NewTerm o código **hexadecimal maiúsculo de
+  16 caracteres**. Não salvar em GitHub, relatórios ou chat.
+- Protocolo com frames de 8 bytes, desafi​o aleatório por sessão,
+  HMAC-SHA256 do código com rótulos diferentes por direção:
+  `WRPAIR1\n` → `WRCHAL1\n` + 16 bytes nonce →
+  `WRAUTH1\n` + HMAC(cliente) →
+  `WROKAY1\n` + HMAC(servidor) / `WRDENY1\n`.
+- O cliente não transmite o código em claro no TCP; a prova é
+  autenticada criptograficamente e o retorno do servidor é
+  verificado em tempo aproximadamente constante.
+- Resposta afirmativa indica APENAS que ambas as partes tinham o
+  código desta sessão; **não atesta Bundle ID, assinatura,
+  credenciais de iOS, nem que não houve interceptação/relay
+  por outro processo local**.
+- Um atacante local pode ocupar a porta, esgotar uma tentativa,
+  explorar o terminal/clipboard de um iPad com jailbreak ou atuar
+  como relay. A autenticação de *aplicativo* para eventual instalação
+  requer desenho separado; este teste não habilita nada.
+- Em `WebReader IPC Test Build59` (bundle
+  `com.example.MangaReader12.ipcprobe`), acrescentar opção
+  **Testar código temporário (sem instalar)**. Usa diálogo manual,
+  não armazena PIN e só mostra sucesso/erro. O PING legado permanece.
+- CI `.github/workflows/chimera-mobile-ping.yml` empacota
+  `WebReader-Chimera-Pairing-Lab-iOS12` (IPA diagnóstico Build59,
+  helper externo assinada, hashes SHA-256), após testes:
+  HMAC válido, inválido, rejeição de opcode de instalação,
+  uso único, cliente Swift e helper C nativos, ausência de
+  símbolos de instalação no helper de diagnóstico.
+- `main`, WebReader Build56 e instalação permanecem intocados.
+
+### Validação CI da Build59 (ainda não no dispositivo)
+
+**GitHub Actions #53: SUCCESS**
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/42169033923
+
+Artifact `WebReader-Chimera-Pairing-Lab-iOS12`, ID `13479513928`.
+Contém somente os arquivos de teste `WebReader-IPC-Probe-iOS12-unsigned.ipa`
+(Build59) e `WebReader-Chimera-Ping-DIAG-iOS12` assinado, com respectivos
+SHA-256. Foram concluídos:
+- 14 testes nativos Swift/C (inclusive pareamento HMAC correto/incorreto,
+  comunicação TCP e instalador **falso**);
+- 10 testes do helper PING-only, inclusive recusa de opcode `WRINST1`,
+  uso único e prova em duas direções;
+- compilação para arm64 iOS12, auditoria de entitlements,
+  auditoria da IPA isolada e ausência de caminhos/símbolos de appinst
+  no binário de diagnóstico.
+
+**Nenhuma instalação real foi executada.** Só é permitido validar
+fisicamente o código temporário no app diagnóstico e o helper
+não instalador. O WebReader Build56 segue intocado.
+
+### Depois de CI verde: teste manual com controle explícito
+
+1. Transferir `WebReader-Chimera-Ping-DIAG-iOS12` para
+   `/var/mobile/Documents/` substituindo apenas o helper de teste.
+2. Instalar somente a IPA **WebReader IPC Test Build59**;
+   não tocar no WebReader principal.
+3. No NewTerm 2 executar:
+   ```sh
+   /var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-pair-once
+   ```
+4. Anotar `WRPAIR_CODE` **apenas no iPad**, não compartilhá-lo.
+   Em até 120 s abrir WebReader IPC Test → **Testar código
+   temporário (sem instalar)**, digitar código e validar.
+5. Copiar relatório do aplicativo **sem código** e verificar
+   `WRDIAG: PAIR_PROOF_ACCEPTED` no NewTerm.
+6. Teste com código incorreto somente se necessário, com
+   novo processo e novo código; cada execução permite uma tentativa.
+
+**Status:** implementação experimental; resultado físico e
+liberação de artefato dependem de CI. Este modo não está autorizado
+para qualquer operação de instalação.
+
+---
+
+## Validação física APROVADA — Build58 TCP loopback (06/11/2026)
+
+O usuário testou no iPad real (iOS **12.5.8**, jailbreak **Chimera**)
+depois de instalar o **WebReader IPC Test Build58**
+(`com.example.MangaReader12.ipcprobe`) e copiar o
+`WebReader-Chimera-Ping-DIAG-iOS12` assinado para
+`/var/mobile/Documents/`.
+
+Comando do helper:
+```sh
+/var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-loopback-once
+```
+
+**Relatório literal fornecido pelo dispositivo:**
+```text
+WebReader • Diagnóstico IPC não privilegiado
+App: Build 58
+iOS: 12.5.8
+Bundle: com.example.MangaReader12.ipcprobe
+Transporte atual: TCP 127.0.0.1:38971 • PING/PONG somente
+Pasta (comprimento UTF-8): 79
+Ainda não testado
+Ponte appinst (PING): Ponte mobile respondeu PONG; instalação não executada
+Nenhum comando appinst executado neste diagnóstico
+```
+
+**Interpretação rigorosa:** no dispositivo físico, o aplicativo
+sandboxed conseguiu iniciar a conexão TCP com o helper externo através
+de `127.0.0.1:38971`, enviar `WRPING1\n` e receber
+`WRPONG1\n`. Esta validação confirma apenas a comunicação
+PING/PONG; **nenhuma IPA foi instalada**, nenhuma API privilegiada
+foi exercitada, e a identidade/código do cliente ainda **não está
+autenticada**. O campo `Ainda não testado` refere-se ao teste
+separado do helper local, não ao PING TCP aprovado.
+
+A Build57 havia falhado em `lstat socket (errno=1 / EPERM)`,
+antes da conexão AF_UNIX, com `NO_CONNECTION` no helper. A
+Build58 contorna apenas esse impasse com um protocolo
+**PING-only**; não significa que AF_UNIX ou appinst tenham
+passado a funcionar diretamente no sandbox.
+
+### Próxima fase, ainda SEM autorização para instalar
+
+1. Manter testes físicos e CI com **transporte separado e nenhum
+   comando de instalação disponível** no binário PING.
+2. Projetar autenticação **efetiva** entre app e serviço, incluindo
+   resistência a outros processos locais conectarem na porta.
+   `127.0.0.1` não autentica cliente; `PONG` tampouco.
+3. Definir autorização explícita pelo usuário, escopo de **uma**
+   atualização, versão, pacote/Bundle ID esperado, manifesto
+   assinado e SHA-256, limites de tamanho e proteção contra replay.
+4. Validar instalação somente com **IPA descartável** e backup
+   separado, após decisão expressa do usuário. Não instalar
+   por esta ponte PING-only ou modificar o WebReader Build56.
+5. Somente depois do teste descartável, avaliar
+   inicialização automática e atualização integrada ao leitor.
+
+**Regra de preservação:** `main` intocada, Build56 estável
+intacta, PR #90 ainda Draft. Não publicar release nem
+habilitar instalação automática nesta etapa.
+
+---
+
+## Resultado conclusivo IPC UNIX iOS12 e alternativa TCP local — 06/11/2026
+
+### Evidência física
+
+- iPad Chimera iOS12.5.8, app **WebReader IPC Test Build57**,
+  bundle `com.example.MangaReader12.ipcprobe`.
+- Helper externo **WebReader-Chimera-Ping-DIAG-iOS12** assinado com
+  `com.apple.private.security.no-container`, UID501, iniciou e
+  imprimiu `WRAPPINST_READY` ao receber a pasta `WR` criada (0700)
+  no contêiner atual do app.
+- Novo diagnóstico do cliente Swift mostrou:
+  **`Diagnóstico IPC: lstat socket (errno=1)`**.
+  `errno=1` é `EPERM`: a operação `lstat` de `wri.sock` foi
+  negada **antes de `connect()`**.
+- Servidor registrou `WRDIAG: NO_CONNECTION: poll=0 revents=0 errno=0`,
+  coerente com ausência de uma chamada `connect` do app.
+- Conclusão: **socket UNIX não é viável neste formato no dispositivo
+  sem alterar o modelo de permissão**, apesar do mesmo UID e da pasta
+  privada. Não usar `chmod 777`, não mudar owner nem contornar assinatura.
+  Não há evidência de problema com o binário `appinst` neste teste.
+
+### Fase seguinte — experiência somente PING por 127.0.0.1
+
+Implementações no branch experimental e PR Draft #90:
+
+- Helper externo `ci/webreader_appinst_bridge.c` no modo **`WEBREADER_PING_ONLY`**
+  expõe comando **`serve-loopback-once`**: faz bind explícito
+  `127.0.0.1:38971`, sem bind na rede Wi-Fi, espera até 60 s,
+  permite uma única conexão local, aceita **somente** `WRPING1\n`
+  e responde `WRPONG1\n`. `WRINST1\n` é rejeitado.
+- O helper PING-only **não contém** `/usr/bin/appinst`, instalação,
+  `posix_spawn`, manipulação de IPA ou servidor persistente.
+- O cliente `WebReaderAppinstSocket.swift` acrescenta `pingLoopback()`
+  exclusivamente para diagnóstico. O WebReader principal conserva
+  sua rotina UNIX; não alteramos instalação real nem manifestos.
+- A interface do **WebReader IPC Test Build58** passa a mostrar
+  **Testar ponte localhost (PING)** no lugar do botão de socket
+  apenas para o bundle de diagnóstico, junto com relatório de errno.
+- Workflow `.github/workflows/chimera-mobile-ping.yml` gera artifact
+  `WebReader-Chimera-Loopback-PING-iOS12` com 4 arquivos:
+  `WebReader-IPC-Probe-iOS12-unsigned.ipa` (Build58),
+  SHA256; `WebReader-Chimera-Ping-DIAG-iOS12` assinado,
+  SHA256.
+- Testes macOS para C: PING/PONG, rejeição do opcode de instalação,
+  sem appinst; Swift + C nativo: cliente localhost e preservação do
+  instalador falso nos testes antigos. Auditoria de entitlements e IPA.
+
+### Procedimento físico após CI verde
+
+1. Baixar artifact de Build58 no run verde do workflow acima.
+2. Via Filza WebDAV, transferir apenas o novo executável assinado
+   `WebReader-Chimera-Ping-DIAG-iOS12` para
+   `/var/mobile/Documents/` substituindo **somente** o executável
+   anterior de diagnóstico.
+3. Atualizar `WebReader IPC Test` instalando a IPA de diagnóstico
+   Build58; **não tocar no WebReader Build56**.
+4. Em NewTerm2 usuário `mobile` executar **sem argumentos adicionais**:
+
+   ```sh
+   /var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-loopback-once
+   ```
+
+5. Ao ver `WRLOOPBACK_READY`, no WebReader IPC Test
+   tocar **Testar ponte localhost (PING)** em até 60 s;
+   copiar relatório. Verificar `PONG` no app e
+   `WRDIAG: LOOPBACK_ACCEPTED_127_0_0_1` no terminal.
+
+**Importante:** teste de alcance de TCP local **não autentica clientes**.
+Esta porta/protocolo PING-only não está aprovada para instalação de IPAs.
+Antes de qualquer ponte de instalação real, será necessário projeto
+separado de identidade, autorização explícita, vinculação de artefato
+e segurança contra outros processos locais. Uma resposta PONG não
+é uma aprovação para instalação.
+
+---
+
+
+## Diagnóstico PING após `WRAPPINST_READY` — 06/11/2026
+
+O usuário criou a pasta `WR` com permissão 0700 (antes ela não existia).
+O helper assinado com `no-container` executou `selftest` corretamente.
+Em seguida, no NewTerm 2 (`UID 501`), mostrou `WRAPPINST_READY`.
+O usuário **tocou no botão Testar ponte appinst (PING) dentro dos 60 s**.
+O WebReader IPC Test exibiu **Conexão ou resposta do instalador rejeitada**,
+e o terminal retornou ao prompt normal sem informar a causa.
+
+A mensagem do aplicativo corresponde ao resultado genérico `.rejected`;
+não prova que a conexão chegou ao servidor (pode falhar na análise local
+do diretório/socket, no cheque do peer, no `send`/`recv` ou no cabeçalho).
+
+### Próximo arquivo de diagnóstico — somente um componente
+
+Artifact **WebReader-Chimera-Mobile-PING-DIAG-iOS12** no novo run
+`.github/workflows/chimera-mobile-ping.yml`.
+
+- Helper diferente: `WebReader-Chimera-Ping-DIAG-iOS12`.
+- Segue compilado como `WEBREADER_PING_ONLY` e assinado com um único
+  entitlement `com.apple.private.security.no-container`.
+- Depois de `WRAPPINST_READY`, agora mostra um dos códigos:
+  - `WRDIAG: NO_CONNECTION`: ninguém chegou a ser aceito no socket
+    durante a janela de 60 segundos.
+  - `WRDIAG: ACCEPTED_CONNECTION`: a conexão chegou ao servidor.
+  - `WRDIAG: PEER_REJECTED`: UID/peer não autorizado.
+  - `WRDIAG: PING matched; PONG send OK`: protocolo foi respondido.
+  - `WRDIAG: request header not PING`: cabeçalho incorreto.
+  - `WRDIAG: REQUEST_FINISHED: result=0`: servidor finalizou sem erro.
+
+**Instrução física mínima:** o WebReader IPC Test já está instalado e a
+pasta `WR` já existe; não reinstalar IPA ou fazer `mkdir`.
+Copiar só `WebReader-Chimera-Ping-DIAG-iOS12` pelo WebDAV para
+`/var/mobile/Documents/` (não usar `ldid -S`). Em NewTerm 2 mobile:
+
+```sh
+/var/mobile/Documents/WebReader-Chimera-Ping-DIAG-iOS12 serve-once '/var/mobile/Containers/Data/Application/F6C7F694-9BEB-432B-936B-FC8B3AA95A50/WR'
+```
+
+Quando aparecer `WRAPPINST_READY`, tocar uma vez em
+**Testar ponte appinst (PING)** dentro de 60s; fotografar a tela do
+NewTerm com as linhas `WRDIAG` após o processo encerrar.
+Ainda não instala IPAs, não chama `appinst`, não altera a Build56.
+
+---
+
+
+## Atualização do teste após o diagnóstico físico `zsh: killed`
+
+Em 06/11/2026, o usuário testou o helper anterior em NewTerm 2 no iPad
+iOS 12.5.8 / Chimera. O processo foi morto com `zsh: killed`
+antes de imprimir `selftest`, inclusive após `ldid -S` manual.
+O comando `ldid -h` exibiu CDHash válido, mas não comprovou que a
+assinatura contivesse entitlements.
+
+A nova versão usa arquivo **com nome diferente**, para não reutilizar
+o executável previamente testado:
+`WebReader-Chimera-Mobile-Ping-Entitled-iOS12`.
+
+Diferença: assinamos o helper externo de diagnóstico com exatamente
+`com.apple.private.security.no-container = true`, sem concessão de root,
+plataformização ou chamadas ao instalador. Em testes independentes com
+iOS 12/Chimera, esse entitlement foi necessário para iniciar binários
+CLI fora do sandbox. Isto é uma **hipótese**, ainda sem comprovação
+física neste iPad. A CI audita o entitlement EMBUTIDO na assinatura,
+e proíbe `posix_spawn` e `/usr/bin/appinst` no helper PING.
+
+**Se o aplicativo IPC Test já está instalado** (é o caso atual):
+não instale novamente a IPA. Basta copiar **apenas** o arquivo
+`WebReader-Chimera-Mobile-Ping-Entitled-iOS12` do novo ZIP para
+`/var/mobile/Documents/` via WebDAV/Filza e testar no NewTerm como
+UID 501, com o único comando:
+```sh
+/var/mobile/Documents/WebReader-Chimera-Mobile-Ping-Entitled-iOS12 selftest
+```
+Esperado: `WEBREADER_PING_ONLY: no IPA installation supported`.
+Se aparecer `zsh: killed` novamente, **pare**; a assinatura, política
+de execução e toolchain precisam de mais análise. Não refaça
+`ldid -S` no arquivo novo: isso substitui a assinatura que contém
+`no-container` por outra sem entitlements.
+
+O entitlement `no-container` dá ao processo acesso além de um
+container de aplicativo. Por isso ele está limitado ao helper móvel
+independente, que só atende PING/PONG, e não deve ser aplicado ao
+WebReader principal nem a um daemon com privilégios de root.
+
+Fonte de hipótese: relato experimental no Chimera, iOS 12.5.x,
+https://gist.github.com/ebowwa/0c6b5795d9a570046a1feb56f03e05e3
+
+---
+
+
+Data: 06/11/2026. Projeto: WebReader iOS 12.5.8.
+
+## O que o teste anterior comprovou
+
+O aplicativo de teste **WebReader appinst Test Build 2**, executado com
+UID/EUID 501, recebeu **EPERM (1)** em `lstat`, `access(X_OK)` e,
+principalmente, `posix_spawn("/usr/bin/appinst", ["--help"])`.
+
+**Conclusão:** a execução direta de `appinst` a partir do sandbox
+deste app está bloqueada. Isso não significa que o `appinst` instalado
+esteja com defeito ou que não funcione no terminal/Filza.
+
+O próximo caminho é uma ponte externa ao sandbox, inicialmente executada
+como usuário **mobile (UID 501)**. Não utilizar root.
+
+## Um ZIP com os dois componentes necessários ao primeiro teste
+
+GitHub Actions → artefato **WebReader-Chimera-Mobile-PING-Kit-iOS12**.
+
+- `WebReader-IPC-Probe-iOS12-unsigned.ipa`: aplicativo **WebReader IPC Test**,
+  independente da Build 56, com opção de copiar a pasta WR e
+  **Testar ponte appinst (PING)**.
+- `WebReader-Chimera-Mobile-Ping-Entitled-iOS12`: executável **somente PING/PONG**.
+  Sua compilação exclui o código de instalação e não contém chamada a
+  `appinst`; executa fora do sandbox do aplicativo.
+- `.sha256`: integridade de cada arquivo. Os dois arquivos estão no
+  **mesmo ZIP**, sem necessidade de baixar vários artefatos.
+
+**O primeiro teste requer abrir um terminal UMA VEZ para iniciar o
+componente externo.** Ainda não há serviço instalado de forma permanente.
+Não confundir isso com o funcionamento esperado da versão final, que
+deverá dispensar terminal em atualizações normais.
+
+## Procedimento de teste PING sem instalação
+
+1. Com a CI verde no commit atual, baixe o ZIP, extraia-o no PC.
+2. Instale **somente** a IPA `WebReader-IPC-Probe-iOS12-unsigned.ipa`
+   com seu método já funcional no Chimera/AppSync Unified. É um app
+   distinto; **não** substitua a Build 56 principal.
+3. Abra **WebReader IPC Test** e toque em **Copiar pasta do socket (Chimera)**.
+   Essa é a pasta `WR` específica do contêiner do app de teste.
+4. Copie o arquivo `WebReader-Chimera-Mobile-Ping-Entitled-iOS12` para um local
+   executável do iPad usando Filza; NÃO reexecute `ldid -S` neste binário.
+5. No terminal do iPad, usando o usuário **mobile** (nunca root),
+   confira `id -u` (esperado: `501`). Com o caminho real onde copiou
+   o binário, verifique:
+   ```sh
+   /CAMINHO/REAL/WebReader-Chimera-Mobile-Ping-Entitled-iOS12 selftest
+   ```
+   Esperado: `WEBREADER_PING_ONLY: no IPA installation supported`.
+   Se houver `Permission denied` ou `Operation not permitted`, informe
+   o erro; não force permissões de root.
+6. Ainda no terminal do usuário mobile, execute com **os caminhos reais**
+   (o segundo argumento é a pasta WR copiada no passo 3):
+   ```sh
+   /CAMINHO/REAL/WebReader-Chimera-Mobile-Ping-Entitled-iOS12 serve-once '/PASTA/WR/COPIADA'
+   ```
+   Esperado: `WRAPPINST_READY`. Deixe o terminal aberto.
+7. Dentro de 60 segundos, volte ao **WebReader IPC Test**, toque em
+   **Testar ponte appinst (PING)** e copie o relatório para o chat.
+   Esperado: **Ponte mobile respondeu PONG**. A ponte para após um
+   único pedido; para repetir o teste é necessário iniciá-la novamente.
+
+**Se o teste não conseguir acessar um socket, não instale IPAs usando
+essa ponte.** O relatório determinará se o bloqueio é de permissões,
+sandbox, assinatura do executável ou comunicação.
+
+## O que esse PING comprova — e o que não comprova
+
+- Um PONG indica que o aplicativo conseguiu conversar com um processo
+  externo, como usuário mobile, por socket local.
+- O PING **não chama `appinst`**, não modifica outros aplicativos e não
+  executa nenhuma instalação.
+- O próximo passo, se funcionar: preparar a versão instaladora restrita,
+  testando **primeiro um aplicativo descartável**, com confirmação e
+  preservação de dados antes de atualizar a Build 56.
+- Mais tarde, instalar a ponte uma única vez com inicialização
+  automática. Esse processo **ainda não está implementado**.
+
+A IPA e o binário ARM64 são compilados experimentalmente com Xcode 16.4.
+A compatibilidade real com iOS 12.5.8, o sandbox e a execução ad hoc
+só podem ser confirmados no iPhone. A Build56/main continuam intactas.

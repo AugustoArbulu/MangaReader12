@@ -1,0 +1,108 @@
+name: WebReader Build66 Phase E csops AuditToken Read-only QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_chimera_csops_token_probe66.c'
+      - 'ci/test_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_signed_cdhash66.py'
+      - 'ci/build66_csops_capability_report.py'
+      - 'ci/test_build66_csops_capability_report.py'
+      - 'ci/package_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_token_probe66_deb.py'
+      - '.github/workflows/chimera-build66-csops-probe.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/webreader_chimera_csops_token_probe66.c'
+      - 'ci/test_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_signed_cdhash66.py'
+      - 'ci/build66_csops_capability_report.py'
+      - 'ci/test_build66_csops_capability_report.py'
+      - 'ci/package_chimera_csops_token_probe66.py'
+      - 'ci/test_chimera_csops_token_probe66_deb.py'
+      - '.github/workflows/chimera-build66-csops-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr66-csops-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hostile-report-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run strict fail-closed 7-line report tests
+        run: python3 -m unittest discover -s ci -p 'test_build66_csops_capability_report.py' -v
+
+  macos-host-and-ios12-cli-only:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+      - name: Use iOS12-capable SDK
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+      - name: Run strict report parser negative tests
+        run: python3 -m unittest discover -s ci -p 'test_build66_csops_capability_report.py' -v
+      - name: Compile and exercise only controlled child-process audit-token binding
+        run: python3 ci/test_chimera_csops_token_probe66.py
+      - name: Confirm kernel child CDHash matches independently codesign-verified host executable
+        run: python3 ci/test_chimera_csops_signed_cdhash66.py
+      - name: Cross-compile ad-hoc signed iOS12 ARM64 CLI without install ability
+        run: |
+          xcrun --sdk iphoneos clang -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_chimera_csops_token_probe66.c \
+            -o WebReader-Build66-CSOpsTokenProbe-iOS12
+          codesign --force --sign - --timestamp=none \
+            --entitlements ci/chimera_mobile_ping.entitlements \
+            WebReader-Build66-CSOpsTokenProbe-iOS12
+          codesign --verify --verbose=2 WebReader-Build66-CSOpsTokenProbe-iOS12
+          xcrun lipo -info WebReader-Build66-CSOpsTokenProbe-iOS12 | grep arm64
+          xcrun otool -l WebReader-Build66-CSOpsTokenProbe-iOS12 > csops66-otool.txt
+          grep -Eq 'minos 12.0|version 12.0' csops66-otool.txt
+          if grep -q 'LC_DYLD_CHAINED_FIXUPS' csops66-otool.txt; then exit 1; fi
+          shasum -a 256 WebReader-Build66-CSOpsTokenProbe-iOS12 \
+            > WebReader-Build66-CSOpsTokenProbe-iOS12.sha256
+      - name: Package and independently audit CLI-only DEB
+        run: |
+          python3 ci/package_chimera_csops_token_probe66.py
+          python3 ci/test_chimera_csops_token_probe66_deb.py
+      - name: Enforce unconditional install denial and no signer trust root
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("ci/webreader_chimera_csops_token_probe66.c").read_text()
+          assert 'WR_CS_OPS_CDHASH 5' in src
+          assert 'corrupted.val[7] ^= 1u' in src
+          assert 'FINAL_INSTALL_AUTHORIZATION=DENIED' in src
+          # The test-only reference interface MUST be absent from the iOS CLI.
+          binary = Path("WebReader-Build66-CSOpsTokenProbe-iOS12").read_bytes()
+          assert b"WR66_HOST_EXPECTED_CDHASH" not in binary
+          assert b"HOST_CDHASH_MATCH" not in binary
+          for forbidden in ('appinst(', '/usr/bin/appinst', 'posix_spawn(', 'execve(', 'system(', 'setuid(', 'setgid('):
+              assert forbidden not in src, forbidden
+          print("PASS: no installation or privilege elevation in Phase E CLI")
+          PY
+      - name: Upload optional diagnostic (not an iOS app)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build66-CSOpsTokenProbe-CLI-only-iOS12
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb
+            WebReader-Chimera-CSOpsTokenProbe66-iOS12.deb.sha256
+            WebReader-Build66-CSOpsTokenProbe-iOS12.sha256

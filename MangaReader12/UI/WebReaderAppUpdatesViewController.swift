@@ -1,0 +1,840 @@
+import UIKit
+
+/// In-app release discovery and manual IPA export; public GitHub metadata is
+/// NOT an independently signed publisher manifest.
+/// This is deliberately SEPARATE from the existing chapter Updates tab and
+/// background Library updater. This screen verifies SHA/ZIP metadata for
+/// manually exported IPAs; it never installs or runs appinst.
+final class WebReaderAppUpdatesViewController: UITableViewController {
+    private var checker: WebReaderUpdateChecker?
+    private var checking = false
+    private var lastResult: WebReaderUpdateCheckResult = .disabled
+    private var httpsProbe: WebReaderReleaseHTTPSProbe?
+    private var testingHTTPS = false
+    private var httpsResults: [WebReaderHTTPSProbeResult] = []
+    private var testingHelper = false
+    private var helperReport = "Ainda não testado"
+    private var testingAppinstBridge = false
+    private var appinstBridgeReport = "Ponte appinst não testada"
+    private var pairingInProgress = false
+    private var pairingReport = "Pareamento temporário ainda não testado"
+    private var stager: WebReaderIPAStager?
+    private var stagingIPA = false
+    private var verifyingExport = false
+    private var stagedIPAURL: URL?
+    private var ipaStatus = "Aguardando consulta aos metadados do GitHub"
+    private var stagedSHA256: String?
+    private var runningOneAppTest = false
+    private var oneAppReport = "Toque em Testar Chimera para começar."
+
+    // The isolated com.example.MangaReader12.ipcprobe IPA exposes only
+    // version info and the local PING diagnostic; never the release controls.
+    private var isChimeraOneApp: Bool {
+        return Bundle.main.bundleIdentifier ==
+            "com.example.MangaReader12.chimeraoneapp"
+    }
+
+    private var isIPCDiagnostic: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" ||
+            isChimeraOneApp
+    }
+
+    private func sectionType(_ displayedSection: Int) -> Int {
+        return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection
+    }
+
+    private var pairingDiagnosticAvailable: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" &&
+            installedBuild >= 59
+    }
+
+    private var build60DisposableAvailable: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" &&
+            installedBuild >= 60
+    }
+
+    private var installedBuild: Int {
+        let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return Int(raw ?? "") ?? 0
+    }
+
+    private var installedBuildLabel: String {
+        return "Build " + String(installedBuild)
+    }
+
+    private var availableUpdate: WebReaderVerifiedUpdate? {
+        if case .updateAvailable(let update) = lastResult { return update }
+        return nil
+    }
+
+    init() {
+        super.init(style: .grouped)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "Atualizações do WebReader"
+        if isIPCDiagnostic { title = "WebReader IPC Test" }
+        if isChimeraOneApp { title = "WebReader Chimera Test" }
+        tableView.tableFooterView = UIView()
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 72
+        applyTheme()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // Leaving this screen cannot accidentally trigger a later action.
+        checker?.cancel()
+        stager?.cancel()
+        httpsProbe?.cancel()
+        httpsProbe = nil
+        testingHTTPS = false
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        return isIPCDiagnostic ? 2 : 6
+    }
+
+    override func tableView(
+        _ tableView: UITableView,
+        numberOfRowsInSection section: Int
+    ) -> Int {
+        let source = sectionType(section)
+        if isChimeraOneApp {
+            return source == 5 ? 2 : 1
+        }
+        if source == 1 { return 2 }
+        if source == 2 { return availableUpdate != nil ? 5 : 1 }
+        if source == 4 {
+            return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
+        }
+        if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }
+        return 1
+    }
+
+    override func tableView(
+        _ tableView: UITableView, titleForHeaderInSection section: Int
+    ) -> String? {
+        if isChimeraOneApp && sectionType(section) == 5 {
+            return "TESTE AUTOMÁTICO (SEM INSTALAÇÃO)"
+        }
+        switch sectionType(section) {
+        case 0: return "VERSÃO INSTALADA"
+        case 1: return "CANAL DO APLICATIVO"
+        case 2: return "ATUALIZAÇÕES DISPONÍVEIS"
+        case 3: return "SEGURANÇA"
+        case 4: return "DIAGNÓSTICO HTTPS (iOS 12)"
+        default: return "HELPER LOCAL (DIAGNÓSTICO)"
+        }
+    }
+
+    override func tableView(
+        _ tableView: UITableView, titleForFooterInSection section: Int
+    ) -> String? {
+        if isChimeraOneApp && sectionType(section) == 5 {
+            return "Um único teste local. Não baixa IPAs e não executa appinst. " +
+                "A Build 56 principal permanece instalada separadamente."
+        }
+        switch sectionType(section) {
+        case 1:
+            return "Somente GitHub Releases públicos do repositório WebReader " +
+                "são consultados. Commits ou artefatos temporários do " +
+                "GitHub Actions não são atualizações disponíveis."
+        case 2:
+            return "O download exige sua confirmação e validação de SHA-256/IPA. " +
+                "A instalação pelo Chimera ainda está em desenvolvimento."
+        case 5:
+            return "Testes locais PING/PONG, sem instalação. " +
+                "A ponte appinst usa um socket separado e encerra depois " +
+                "de uma conexão. Para instalar, é necessário reiniciá-la."
+        case 4:
+            return "Teste manual de TLS padrão usando apenas HEAD. " +
+                "Uma resposta HTTP, inclusive 403/404, indica conexão HTTPS " +
+                "com aquele servidor, não a existência de uma atualização. " +
+                "A quarta sonda testa um asset público do GitHub CLI com " +
+                "HEAD/redirects restritos, mas não baixa nem valida a IPA WebReader."
+        default:
+            return nil
+        }
+    }
+
+    override func tableView(
+        _ tableView: UITableView, cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "AppUpdatesCell")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "AppUpdatesCell")
+        ThemeManager.shared.style(cell: cell)
+        cell.textLabel?.numberOfLines = 0
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.accessoryView = nil
+        cell.accessibilityHint = nil
+        cell.accessibilityLabel = nil
+        cell.accessoryType = .none
+        cell.selectionStyle = .none
+        cell.isUserInteractionEnabled = true
+        cell.textLabel?.textColor = ThemeManager.shared.palette.primaryText
+        cell.detailTextLabel?.textColor = ThemeManager.shared.palette.secondaryText
+
+        if isChimeraOneApp && sectionType(indexPath.section) == 5 {
+            if indexPath.row == 0 {
+                cell.textLabel?.text = runningOneAppTest ?
+                    "Testando Chimera…" : "Testar Chimera"
+                cell.detailTextLabel?.text = oneAppReport
+                if !runningOneAppTest {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            } else {
+                cell.textLabel?.text = "Copiar resultado"
+                cell.detailTextLabel?.text = "Cole o relatório aqui no chat"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+            return cell
+        }
+
+        switch (sectionType(indexPath.section), indexPath.row) {
+        case (0, _):
+            cell.textLabel?.text = installedBuildLabel
+            cell.detailTextLabel?.text = "WebReader • iOS 12.0 ou posterior"
+            cell.accessibilityLabel = "Versão instalada: " + installedBuildLabel
+
+        case (1, 0):
+            cell.textLabel?.text = "Canal de lançamentos"
+            cell.detailTextLabel?.text =
+                "GitHub Releases • HTTPS • sem autenticação editorial independente"
+
+        case (1, 1):
+            cell.textLabel?.text = "Abrir GitHub Releases"
+            cell.detailTextLabel?.text = "Consultar lançamentos no GitHub"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (2, 0):
+            cell.textLabel?.text = checking ?
+                "Verificando GitHub Releases…" : "Verificar atualizações"
+            cell.detailTextLabel?.text = checking ?
+                "Consultando Release e hash SHA-256" : statusDescription
+            if !checking {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+                cell.accessibilityHint =
+                    "Consulta o GitHub; download só após confirmação"
+            }
+
+        case (2, 1):
+            if let update = availableUpdate {
+                cell.textLabel?.text = "Novidades da Build " + String(update.build)
+                cell.detailTextLabel?.text = update.releaseNotes.joined(
+                    separator: "\n"
+                )
+            }
+
+        case (2, 2):
+            if stagingIPA {
+                cell.textLabel?.text = "Baixando e validando IPA…"
+                cell.detailTextLabel?.text = "Saia da tela para cancelar"
+            } else if verifyingExport {
+                cell.textLabel?.text = "Conferindo IPA antes de compartilhar…"
+                cell.detailTextLabel?.text = "Verificando novamente SHA-256, ZIP e Bundle ID"
+            } else if let file = stagedIPAURL,
+                FileManager.default.fileExists(atPath: file.path) {
+                cell.textLabel?.text = "Compartilhar IPA conferida"
+                cell.detailTextLabel?.text =
+                    "Salvar pelo menu Compartilhar; instalar manualmente no Filza"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            } else {
+                cell.textLabel?.text = "Baixar e conferir IPA"
+                cell.detailTextLabel?.text = ipaStatus
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (2, 3):
+            cell.textLabel?.text = "Como instalar pelo Filza"
+            cell.detailTextLabel?.text =
+                "Instruções para abrir a IPA exportada sem computador"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (2, 4):
+            cell.textLabel?.text = "Instalação pelo Chimera bloqueada"
+            cell.detailTextLabel?.text =
+                "Aguardando política independente de autorização e chave editorial"
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
+
+        case (3, _):
+            cell.textLabel?.text = "Atualizações seguras"
+            cell.detailTextLabel?.text =
+                "Consulta GitHub via HTTPS, SHA-256 e inspeção IPA. " +
+                "Não há assinatura independente do editor neste modo. " +
+                "A instalação via appinst está bloqueada nesta Build. " +
+                "PING e pareamento não autorizam instalação."
+
+        case (4, 0):
+            cell.textLabel?.text = testingHTTPS ?
+                "Testando conexões HTTPS…" : "Testar HTTPS do GitHub"
+            cell.detailTextLabel?.text =
+                "Somente HEAD • TLS padrão • nenhum download"
+            if !testingHTTPS {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (4, let row) where row <= httpsResults.count:
+            let item = httpsResults[row - 1]
+            cell.textLabel?.text = item.label
+            cell.detailTextLabel?.text = item.reportLine
+            cell.accessibilityLabel = item.reportLine
+
+        case (4, _):
+            cell.textLabel?.text = "Copiar relatório HTTPS"
+            cell.detailTextLabel?.text =
+                "Somente hosts, códigos HTTP e erros de conexão"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (5, 0):
+            cell.textLabel?.text = testingHelper ?
+                "Testando comunicação local…" : "Testar helper de diagnóstico"
+            cell.detailTextLabel?.text = helperReport
+            if !testingHelper {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (5, 1):
+            cell.textLabel?.text = "Copiar pasta do socket (Chimera)"
+            cell.detailTextLabel?.text =
+                "Pasta WR do app • usada pelos dois testes locais"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (5, 2):
+            cell.textLabel?.text = "Copiar relatório do helper"
+            cell.detailTextLabel?.text =
+                "Resultado, versão e iOS • sem copiar caminho privado"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (5, 3):
+            if isIPCDiagnostic {
+                cell.textLabel?.text = testingAppinstBridge ?
+                    "Testando TCP localhost…" : "Testar ponte localhost (PING)"
+            } else {
+                cell.textLabel?.text = testingAppinstBridge ?
+                    "Testando socket appinst…" : "Testar ponte appinst (PING)"
+            }
+            cell.detailTextLabel?.text = appinstBridgeReport
+            if !testingAppinstBridge {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (5, 4):
+            if pairingDiagnosticAvailable {
+                cell.textLabel?.text = pairingInProgress ?
+                    "Validando código temporário…" : "Testar código temporário (sem instalar)"
+                cell.detailTextLabel?.text = pairingReport
+                if !pairingInProgress {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            }
+
+        case (5, 5):
+            if build60DisposableAvailable {
+                cell.textLabel?.text = "Teste completo Build 60"
+                cell.detailTextLabel?.text =
+                    "Copiar roteiro único • app descartável v1 → v2 • sem tocar no WebReader"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        default:
+            break
+        }
+        return cell
+    }
+
+    private var statusDescription: String {
+        switch lastResult {
+        case .disabled:
+            return "Canal de consulta desabilitado"
+        case .upToDate:
+            return "Nenhuma Build mais recente encontrada nos metadados consultados"
+        case .updateAvailable(let update):
+            return "Build " + String(update.build) +
+                " encontrada • verificar IPA antes da instalação manual"
+        case .failed(let error):
+            switch error {
+            case .busy: return "Uma verificação já está em andamento"
+            case .unsupportedManifestURL: return "Endereço do canal não autorizado"
+            case .transport: return "Não foi possível acessar o manifesto HTTPS"
+            case .unexpectedHTTPStatus(let status):
+                if status == 404 {
+                    return "GitHub Releases indisponível: sem release ou repositório privado"
+                }
+                return "Resposta HTTP " + String(status)
+            case .unexpectedContentType:
+                return "Resposta em formato não permitido"
+            case .oversizedResponse:
+                return "Manifesto maior que o limite permitido"
+            case .invalidSignedManifest:
+                return "A assinatura ou o conteúdo do manifesto é inválido"
+            case .invalidGitHubRelease:
+                return "GitHub Release sem IPA/hash confiável ou metadados inválidos"
+            }
+        }
+    }
+
+    override func tableView(
+        _ tableView: UITableView, didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let selectedSection = sectionType(indexPath.section)
+        if isChimeraOneApp && selectedSection == 5 {
+            if indexPath.row == 0 { runOneAppTest() }
+            if indexPath.row == 1 { copyOneAppReport() }
+            return
+        }
+        if selectedSection == 4 {
+            if indexPath.row == 0 {
+                startHTTPSProbe()
+            } else if !httpsResults.isEmpty &&
+                indexPath.row == httpsResults.count + 1 {
+                copyHTTPSReport()
+            }
+            return
+        }
+        if selectedSection == 5 {
+            if indexPath.row == 0 { startHelperProbe() }
+            if indexPath.row == 1 { copyHelperDirectory() }
+            if indexPath.row == 2 { copyHelperReport() }
+            if indexPath.row == 3 { testAppinstBridgeConnection() }
+            if indexPath.row == 4 && pairingDiagnosticAvailable {
+                promptOneTimePairingCode()
+            }
+            if indexPath.row == 5 && build60DisposableAvailable {
+                copyBuild60DisposableProcedure()
+            }
+            return
+        }
+        if selectedSection == 1, indexPath.row == 1 {
+            let url = URL(string:
+                "https://github.com/AugustoArbulu/MangaReader12/releases"
+            )!
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            return
+        }
+        if selectedSection == 2, indexPath.row == 2 {
+            guard !stagingIPA, !verifyingExport else { return }
+            if let file = stagedIPAURL,
+               FileManager.default.fileExists(atPath: file.path) {
+                shareStagedIPA(file)
+            } else {
+                confirmIPADownload()
+            }
+            return
+        }
+        // Both rows remain non-installing. Manual Filza instructions are
+        // available; privileged Chimera installation is still disabled.
+        if selectedSection == 2, indexPath.row == 3 {
+            showFilzaInstructions()
+            return
+        }
+        if selectedSection == 2, indexPath.row == 4 { return }
+        guard selectedSection == 2, indexPath.row == 0,
+              !isIPCDiagnostic, !checking
+        else { return }
+        checking = true
+        stagedIPAURL = nil
+        stagedSHA256 = nil
+        tableView.reloadData()
+
+        let current = WebReaderUpdateChecker(
+            installedBuild: installedBuild,
+            installedIOS: ProcessInfo.processInfo.operatingSystemVersion,
+            usePublicGitHubReleases: true
+        )
+        checker = current
+        current.check { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self, self.checker === current else { return }
+                self.checker = nil
+                self.checking = false
+                self.lastResult = result
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func confirmIPADownload() {
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
+              let update = availableUpdate,
+              update.provenance == .publicGitHubRelease ||
+                WebReaderUpdateChannel.isConfigured else { return }
+        let mb = Double(update.ipaSize) / (1024 * 1024)
+        let channelNotice = update.provenance == .publicGitHubRelease ?
+            "Metadados do GitHub não têm assinatura editorial independente. " : ""
+        let message = String(format:
+            "Build %d • %.1f MB. Baixar e validar agora? " +
+            channelNotice +
+            "O aplicativo NÃO será instalado automaticamente.", update.build, mb)
+        let alert = UIAlertController(title: "Baixar IPA?", message: message,
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Baixar", style: .default) {
+            [weak self] _ in self?.startIPADownload(update)
+        })
+        present(alert, animated: true)
+    }
+
+    private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
+              update.provenance == .publicGitHubRelease ||
+                WebReaderUpdateChannel.isConfigured,
+              let current = availableUpdate,
+              current.build == update.build, current.sha256 == update.sha256
+        else { return }
+        stagingIPA = true
+        ipaStatus = "Baixando e verificando hash, versão e conteúdo da IPA"
+        tableView.reloadData()
+        let downloader = WebReaderIPAStager(verifiedUpdate: update)
+        stager = downloader
+        downloader.stage { [weak self, weak downloader] result in
+            DispatchQueue.main.async {
+                guard let self = self, let downloader = downloader,
+                      self.stager === downloader else { return }
+                self.stager = nil
+                self.stagingIPA = false
+                switch result {
+                case .staged(let url):
+                    self.stagedIPAURL = url
+                    self.stagedSHA256 = update.sha256
+                    self.ipaStatus = "SHA-256 e estrutura IPA conferidos • instalação manual"
+                case .failed(let failure):
+                    self.stagedIPAURL = nil
+                    self.stagedSHA256 = nil
+                    self.ipaStatus = self.stageFailureMessage(failure)
+                }
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func stageFailureMessage(_ failure: WebReaderIPAStageFailure) -> String {
+        switch failure {
+        case .disabled: return "Canal de lançamentos assinado não configurado"
+        case .busy: return "Já existe um download em andamento"
+        case .invalidRelease: return "Release fora das regras do WebReader"
+        case .storage: return "Não foi possível salvar a IPA"
+        case .transport: return "Download HTTPS não concluído"
+        case .redirectRejected: return "Redirecionamento de download não permitido"
+        case .unexpectedHTTPStatus(let code): return "Resposta HTTP " + String(code)
+        case .unexpectedContentType: return "Formato HTTP inesperado"
+        case .sizeMismatch: return "Tamanho da IPA não corresponde ao manifesto"
+        case .integrityMismatch: return "SHA-256 da IPA incorreto"
+        case .invalidIPA: return "Estrutura ou identidade da IPA inválida"
+        }
+    }
+
+    private func showFilzaInstructions() {
+        guard !isIPCDiagnostic else { return }
+        let text = "1. Toque em Baixar e conferir IPA.\n" +
+            "2. Selecione Compartilhar IPA conferida e escolha Filza " +
+            "ou Salvar em Arquivos, se disponível.\n" +
+            "3. Abra a IPA no Filza e toque em Install.\n" +
+            "Não remova o WebReader instalado: faça backup da biblioteca " +
+            "e dos capítulos offline antes de atualizar."
+        let alert = UIAlertController(
+            title: "Instalação manual no Filza",
+            message: text, preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Entendi", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func shareStagedIPA(_ url: URL) {
+        guard !isIPCDiagnostic, !verifyingExport,
+              let update = availableUpdate,
+              stagedIPAURL == url, stagedSHA256 == update.sha256,
+              FileManager.default.fileExists(atPath: url.path) else {
+            ipaStatus = "IPA indisponível; baixe novamente"
+            stagedIPAURL = nil
+            stagedSHA256 = nil
+            tableView.reloadData()
+            return
+        }
+        // Files in Application Support can change after initial download.
+        // Re-audit the exact IPA just before presenting the iOS share sheet.
+        verifyingExport = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let valid = (try? WebReaderNativeIPAAuditor.inspect(
+                ipaURL: url, signedUpdate: update,
+                installedBuild: currentBuild, installedIOS: currentIOS
+            )) != nil
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.verifyingExport = false
+                guard self.stagedIPAURL == url else { return }
+                if !valid {
+                    self.stagedIPAURL = nil
+                    self.stagedSHA256 = nil
+                    self.ipaStatus = "IPA alterada ou inválida; baixe novamente"
+                    self.tableView.reloadData()
+                    return
+                }
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                let activity = UIActivityViewController(activityItems: [url],
+                    applicationActivities: nil)
+                if let popover = activity.popoverPresentationController {
+                    popover.sourceView = self.tableView
+                    popover.sourceRect = self.tableView.rectForRow(
+                        at: IndexPath(row: 2, section: 2))
+                }
+                self.present(activity, animated: true)
+            }
+        }
+    }
+
+    private func runOneAppTest() {
+        guard isChimeraOneApp, !runningOneAppTest else { return }
+        runningOneAppTest = true
+        oneAppReport = "Iniciando helper local • sem instalar aplicativos"
+        tableView.reloadData()
+        WebReaderChimeraSelfTest.run { [weak self] report in
+            guard let self = self else { return }
+            self.runningOneAppTest = false
+            self.oneAppReport = report.text
+            self.tableView.reloadData()
+        }
+    }
+
+    private func copyOneAppReport() {
+        guard isChimeraOneApp else { return }
+        UIPasteboard.general.string = oneAppReport
+        let alert = UIAlertController(
+            title: "Resultado copiado",
+            message: "Cole o relatório aqui no chat. Nenhum app foi instalado.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func startHTTPSProbe() {
+        guard !testingHTTPS else { return }
+        testingHTTPS = true
+        httpsResults = []
+        tableView.reloadData()
+
+        let current = WebReaderReleaseHTTPSProbe()
+        httpsProbe = current
+        current.run { [weak self] values in
+            DispatchQueue.main.async {
+                guard let self = self, self.httpsProbe === current else {
+                    return
+                }
+                self.httpsProbe = nil
+                self.testingHTTPS = false
+                self.httpsResults = values
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func startHelperProbe() {
+        guard !testingHelper else { return }
+        testingHelper = true
+        helperReport = "Conexão local; nenhuma operação privilegiada"
+        tableView.reloadData()
+        WebReaderHelperPingProbe.run { [weak self] result in
+            guard let self = self else { return }
+            self.testingHelper = false
+            self.helperReport = result.report
+            self.tableView.reloadData()
+        }
+    }
+
+    private func copyHelperDirectory() {
+        UIPasteboard.general.string =
+            WebReaderHelperPingProbe.diagnosticDirectory.path
+        let alert = UIAlertController(
+            title: "Pasta copiada",
+            message: "Somente para teste manual do helper PING/PONG. " +
+                "Esse caminho não autoriza nenhuma instalação.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func testAppinstBridgeConnection() {
+        guard !testingAppinstBridge else { return }
+        testingAppinstBridge = true
+        appinstBridgeReport = isIPCDiagnostic ?
+            "PING por TCP 127.0.0.1:38971 • sem instalar IPAs" :
+            "PING em socket wri.sock • sem executar appinst"
+        tableView.reloadData()
+        let finished: (WebReaderAppinstSocket.Result) -> Void = { [weak self] result in
+            guard let self = self else { return }
+            self.testingAppinstBridge = false
+            self.appinstBridgeReport = result.text
+            self.tableView.reloadData()
+        }
+        // The disposable IPC Test IPA probes the local TCP route only.
+        // The production WebReader keeps its original UNIX socket behavior.
+        if isIPCDiagnostic {
+            WebReaderAppinstSocket.checkLoopbackConnection(completion: finished)
+        } else {
+            WebReaderAppinstSocket.checkConnection(completion: finished)
+        }
+    }
+
+    private func promptOneTimePairingCode() {
+        guard pairingDiagnosticAvailable && !pairingInProgress else { return }
+        let dialog = UIAlertController(
+            title: "Código temporário do NewTerm",
+            message: "Digite os 16 caracteres exibidos por serve-pair-once. " +
+                "Não compartilhe esse código no chat. " +
+                "O teste verifica apenas a posse do código e NÃO instala IPAs.",
+            preferredStyle: .alert
+        )
+        dialog.addTextField { field in
+            field.placeholder = "16 caracteres (0–9, A–F)"
+            field.keyboardType = .asciiCapable
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .allCharacters
+        }
+        dialog.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        dialog.addAction(UIAlertAction(
+            title: "Validar código", style: .default,
+            handler: { [weak self, weak dialog] _ in
+                guard let self = self, self.pairingDiagnosticAvailable else { return }
+                let code = dialog?.textFields?.first?.text ?? ""
+                self.pairingInProgress = true
+                self.pairingReport = "Validando posse do código por TCP 127.0.0.1:38972"
+                self.tableView.reloadData()
+                WebReaderAppinstSocket.checkPairedLoopback(code: code) {
+                    [weak self] result in
+                    guard let self = self else { return }
+                    self.pairingInProgress = false
+                    self.pairingReport = result.text
+                    self.tableView.reloadData()
+                }
+            }
+        ))
+        present(dialog, animated: true)
+    }
+
+    /// A single consolidated manual field session, using only hard-pinned
+    /// throwaway app IPAs. No installation is performed from this UI.
+    private func copyBuild60DisposableProcedure() {
+        guard build60DisposableAvailable else { return }
+        let executable =
+            "/var/mobile/Documents/WebReader-Chimera-Disposable-Gate-iOS12"
+        let instructions = [
+            "Build60 • atualização APENAS do app descartável",
+            "Transferir do ZIP Build60 para /var/mobile/Documents:",
+            "WebReader-Chimera-Disposable-Gate-iOS12",
+            "WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa",
+            "WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa",
+            "No NewTerm 2 como mobile (id -u = 501), um comando:",
+            executable + " run-disposable-qa I-CONFIRM-DISPOSABLE-ONLY",
+            "Após v1 instalada, abrir WR Appinst Test v1 para criar dados.",
+            "Retornar ao NewTerm: digitar NEXT e Enter.",
+            "Aguardar v2 e abrir WR Appinst Test v2: persistência SIM.",
+            "NÃO usar essa ferramenta com IPA WebReader.",
+            "O helper aceita apenas os dois hashes fixos; não abre TCP.",
+            "main e WebReader Build56 permanecem preservados."
+        ].joined(separator: "\n")
+        UIPasteboard.general.string = instructions
+        let alert = UIAlertController(
+            title: "Roteiro Build 60 copiado",
+            message: "O roteiro completo foi copiado. O teste instala " +
+                "somente o app descartável, mediante comandos explícitos no NewTerm. " +
+                "Nenhuma instalação foi iniciada pelo WebReader.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func copyHelperReport() {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let ios = String(version.majorVersion) + "." +
+            String(version.minorVersion) + "." + String(version.patchVersion)
+        let lines = [
+            "WebReader • Diagnóstico IPC não privilegiado",
+            "App: " + installedBuildLabel,
+            "iOS: " + ios,
+            "Bundle: " + (Bundle.main.bundleIdentifier ?? "desconhecido"),
+            build60DisposableAvailable ?
+                "Transporte PING: TCP 127.0.0.1:38971 • sem instalação" :
+                (isIPCDiagnostic ?
+                    "Transporte PING: TCP 127.0.0.1:38971 • sem instalação" :
+                    "Socket: UNIX local • PING/PONG somente"),
+            build60DisposableAvailable ?
+                "Pareamento: TCP 127.0.0.1:38972 • somente posse de código" :
+                "Pareamento: ver campo de resultado abaixo",
+            "Pasta (comprimento UTF-8): " +
+                String(WebReaderHelperPingProbe.diagnosticDirectory.path.utf8.count),
+            helperReport,
+            "Ponte appinst (PING): " + appinstBridgeReport,
+            "Pareamento sem instalação: " +
+                (pairingDiagnosticAvailable ? pairingReport : "indisponível"),
+            "Nenhum comando appinst executado neste diagnóstico",
+            build60DisposableAvailable ?
+                "Instalação do app descartável: teste SEPARADO no NewTerm" :
+                "Instalação do app descartável: indisponível"
+        ]
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let alert = UIAlertController(
+            title: "Relatório IPC copiado",
+            message: "Pode compartilhar o resultado sem expor o caminho da pasta.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func copyHTTPSReport() {
+        guard !httpsResults.isEmpty else { return }
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let ios = String(version.majorVersion) + "." +
+            String(version.minorVersion) + "." + String(version.patchVersion)
+        let lines = [
+            "WebReader • Diagnóstico HTTPS somente leitura",
+            "App: " + installedBuildLabel,
+            "iOS: " + ios,
+            "HTTPS padrão; somente HEAD; sem login, IPA ou instalação"
+        ] + httpsResults.map { $0.reportLine }
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let alert = UIAlertController(
+            title: "Relatório copiado",
+            message: "Os resultados HTTPS estão prontos para compartilhar.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+extension WebReaderAppUpdatesViewController: ThemeApplicable {
+    func applyTheme() {
+        ThemeManager.shared.style(tableView: tableView)
+        tableView.reloadData()
+    }
+}

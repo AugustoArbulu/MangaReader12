@@ -1,6 +1,36 @@
 import Foundation
 import ImageIO
 
+// BEGIN OFFLINE_PATH_RELOCATION
+// Absolute paths persisted in SQLite can outlive their iOS app container UUID.
+// Derive the only trusted path from the current Application Support directory.
+enum OfflineDownloadPath {
+    static func safeComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(
+            CharacterSet(charactersIn: "._-")
+        )
+        let result = value.unicodeScalars.map { scalar -> String in
+            return allowed.contains(scalar) ? String(scalar) : "_"
+        }.joined()
+        return result.isEmpty || result == "." || result == ".." ? "item" : result
+    }
+
+    static func chapterDirectory(
+        applicationSupport: URL,
+        sourceID: String,
+        mangaID: String,
+        chapterID: String
+    ) -> URL {
+        return applicationSupport
+            .appendingPathComponent("MangaReader12", isDirectory: true)
+            .appendingPathComponent("Downloads", isDirectory: true)
+            .appendingPathComponent(safeComponent(sourceID), isDirectory: true)
+            .appendingPathComponent(safeComponent(mangaID), isDirectory: true)
+            .appendingPathComponent(safeComponent(chapterID), isDirectory: true)
+    }
+}
+// END OFFLINE_PATH_RELOCATION
+
 enum ChapterDownloadError: Error, LocalizedError {
     case applicationSupportUnavailable
     case emptyPages
@@ -596,12 +626,12 @@ final class ChapterDownloadManager {
             sourceID: sourceID,
             sourceMangaID: mangaID,
             sourceChapterID: chapterID
-        ), record.state == "completed",
-          let localPath = record.localPath else {
-            return nil
-        }
+        ), record.state == "completed" else { return nil }
 
-        let directory = URL(fileURLWithPath: localPath, isDirectory: true)
+        // Do not follow the obsolete stored absolute local_path from Build56.
+        let directory = try chapterDirectory(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
+        )
         guard fileManager.fileExists(atPath: directory.path) else { return nil }
 
         let files = try fileManager.contentsOfDirectory(
@@ -615,6 +645,17 @@ final class ChapterDownloadManager {
             throw ChapterDownloadError.missingCompletedFiles
         }
 
+        // Repair only the DB location for real downloaded pages, without
+        // moving/deleting files or starting a network request. Reading must
+        // still succeed when this opportunistic metadata update fails.
+        if record.localPath != directory.path {
+            try? repository.rebindCompletedPath(
+                sourceID: sourceID,
+                sourceMangaID: mangaID,
+                sourceChapterID: chapterID,
+                currentPath: directory.path
+            )
+        }
         return files.enumerated().map { index, url in
             Page(index: index, imageUrl: url.absoluteString, headers: [:])
         }
@@ -632,13 +673,13 @@ final class ChapterDownloadManager {
             }
             let removedJob = jobs.removeValue(forKey: key)
             pending.removeAll { $0 == key }
-            if let record = try repository.record(
-                sourceID: sourceID,
-                sourceMangaID: mangaID,
-                sourceChapterID: chapterID
-            ), let localPath = record.localPath,
-               fileManager.fileExists(atPath: localPath) {
-                try fileManager.removeItem(atPath: localPath)
+            // An explicit user deletion may remove only this app's own
+            // current chapter directory; never an obsolete SQLite path.
+            let current = try chapterDirectory(
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
+            )
+            if fileManager.fileExists(atPath: current.path) {
+                try fileManager.removeItem(at: current)
             }
             try repository.remove(
                 sourceID: sourceID,
@@ -661,29 +702,14 @@ final class ChapterDownloadManager {
         mangaID: String,
         chapterID: String
     ) throws -> URL {
-        guard let base = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
+        guard let support = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
         ).first else {
             throw ChapterDownloadError.applicationSupportUnavailable
         }
-
-        return base
-            .appendingPathComponent("MangaReader12", isDirectory: true)
-            .appendingPathComponent("Downloads", isDirectory: true)
-            .appendingPathComponent(safeComponent(sourceID), isDirectory: true)
-            .appendingPathComponent(safeComponent(mangaID), isDirectory: true)
-            .appendingPathComponent(safeComponent(chapterID), isDirectory: true)
-    }
-
-    private func safeComponent(_ value: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(
-            CharacterSet(charactersIn: "._-")
+        return OfflineDownloadPath.chapterDirectory(
+            applicationSupport: support,
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
         )
-        let scalars = value.unicodeScalars.map { scalar -> String in
-            return allowed.contains(scalar) ? String(scalar) : "_"
-        }
-        let result = scalars.joined()
-        return result.isEmpty ? "item" : result
     }
 }

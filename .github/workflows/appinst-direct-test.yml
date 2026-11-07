@@ -1,0 +1,39 @@
+name: WebReader Direct appinst iOS12 Test
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-appinst-ipa:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.4 on supported macOS runner
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Build ONE isolated iOS12 IPA with only the appinst help probe
+        run: bash ci/build_appinst_direct_probe.sh
+
+      - name: Audit IPA structure, iOS12 deployment and safe direct command
+        run: python3 ci/test_appinst_direct_probe.py
+
+      - name: Upload single experimental direct-appinst test IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Appinst-Direto-iOS12-TEST
+          if-no-files-found: error
+          path: |
+            WebReader-Appinst-Direto-iOS12-unsigned.ipa
+            WebReader-Appinst-Direto-iOS12-unsigned.ipa.sha256

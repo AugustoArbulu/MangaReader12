@@ -1,0 +1,105 @@
+name: WebReader Build66 iOS12 Peer Audit Token Capability (CLI-only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_chimera_audit_token_probe66.c'
+      - 'ci/test_chimera_audit_token_probe66.py'
+      - 'ci/package_chimera_audit_token_probe66.py'
+      - 'ci/test_chimera_audit_token_probe66_deb.py'
+      - 'ci/build66_audit_token_capability_report.py'
+      - 'ci/test_build66_audit_token_capability_report.py'
+      - '.github/workflows/chimera-build66-audittoken-probe.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/webreader_chimera_audit_token_probe66.c'
+      - 'ci/test_chimera_audit_token_probe66.py'
+      - 'ci/package_chimera_audit_token_probe66.py'
+      - 'ci/test_chimera_audit_token_probe66_deb.py'
+      - 'ci/build66_audit_token_capability_report.py'
+      - 'ci/test_build66_audit_token_capability_report.py'
+      - '.github/workflows/chimera-build66-audittoken-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr66-audittoken-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-report-negative-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject forged token capability reports
+        run: python3 -m unittest discover -s ci -p 'test_build66_audit_token_capability_report.py' -v
+
+  macos-native-and-ios12-cli-only:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - name: Checkout experimental PR (no main changes)
+        uses: actions/checkout@v4
+
+      - name: Select validated iOS12-capable SDK
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Run negative token-report policy suite
+        run: python3 -m unittest discover -s ci -p 'test_build66_audit_token_capability_report.py' -v
+
+      - name: Four native unprivileged Darwin audit-token capability observations
+        run: python3 ci/test_chimera_audit_token_probe66.py
+
+      - name: Compile and sign the optional iOS12 ARM64 diagnostic CLI
+        run: |
+          xcrun --sdk iphoneos clang -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_chimera_audit_token_probe66.c \
+            -o WebReader-Build66-AuditTokenProbe-iOS12
+          codesign --force --sign - --timestamp=none \
+            --entitlements ci/chimera_mobile_ping.entitlements \
+            WebReader-Build66-AuditTokenProbe-iOS12
+          codesign --verify --verbose=2 WebReader-Build66-AuditTokenProbe-iOS12
+          shasum -a 256 WebReader-Build66-AuditTokenProbe-iOS12 \
+            > WebReader-Build66-AuditTokenProbe-iOS12.sha256
+          xcrun lipo -info WebReader-Build66-AuditTokenProbe-iOS12 | grep -F arm64
+          xcrun otool -l WebReader-Build66-AuditTokenProbe-iOS12 > wr66-audittoken-otool.txt
+          grep -Eq 'minos 12.0|version 12.0' wr66-audittoken-otool.txt
+          if grep -q 'LC_DYLD_CHAINED_FIXUPS' wr66-audittoken-otool.txt; then exit 1; fi
+
+      - name: Build and independently audit opt-in CLI-only DEB
+        run: |
+          python3 ci/package_chimera_audit_token_probe66.py
+          python3 ci/test_chimera_audit_token_probe66_deb.py
+
+      - name: Confirm production appinst remains blocked
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("ci/webreader_chimera_audit_token_probe66.c").read_text()
+          for forbidden in ("appinst(", "posix_spawn(", "execve(", "system(", "setuid(", "setgid("):
+              assert forbidden not in code, forbidden
+          print("PASS: nonroot observation only, no executable or installer launch")
+          PY
+
+      - name: Upload opt-in CLI diagnostic only (no IPA, no app update)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build66-AuditTokenProbe-CLI-only-iOS12
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            WebReader-Chimera-AuditTokenProbe66-iOS12.deb
+            WebReader-Chimera-AuditTokenProbe66-iOS12.deb.sha256
+            WebReader-Build66-AuditTokenProbe-iOS12.sha256

@@ -1,0 +1,81 @@
+name: WebReader Build62 Update Security CI
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'ci/test_chimera_build62_install_admission.py'
+      - 'ci/test_native_webreader_appinst_socket.py'
+      - 'ci/test_app_updates_screen.py'
+      - '.github/workflows/chimera-build62-install-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build62-admission-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deny-untrusted-install:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated feature branch
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.4 with iOS12 compatible toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Test live install path is fail-closed, production binary excludes WRINST1
+        run: python3 ci/test_chimera_build62_install_admission.py
+
+      - name: Regress the previous host-only FAKE-appinst protocol tests
+        run: python3 ci/test_native_webreader_appinst_socket.py
+
+      - name: Assert UIKit no longer issues install requests or CLI commands
+        run: python3 ci/test_app_updates_screen.py
+
+      - name: Build WebReader iOS12 Release without signing or installing anything
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Build62" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+          test -f "$RUNNER_TEMP/DerivedData-Build62/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
+
+      - name: Report verified capabilities (no privileged updater)
+        run: |
+          printf 'Build62 security review; no production IPA published\n' > BUILD62_SECURITY_REPORT.txt
+          printf 'Live install bridge: DENIED (Swift + UI)\n' >> BUILD62_SECURITY_REPORT.txt
+          printf 'FAKE appinst native harness: tested\n' >> BUILD62_SECURITY_REPORT.txt
+          printf 'Native iOS12 Release compilation: success\n' >> BUILD62_SECURITY_REPORT.txt
+          printf 'GitHub metadata browsing and IPA sharing: unchanged\n' >> BUILD62_SECURITY_REPORT.txt
+          printf 'Publisher key and caller identity: not configured\n' >> BUILD62_SECURITY_REPORT.txt
+          printf 'Build56 main: untouched\n' >> BUILD62_SECURITY_REPORT.txt
+
+      - name: Upload only security test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build62-InstallSecurity-Report
+          if-no-files-found: error
+          path: BUILD62_SECURITY_REPORT.txt

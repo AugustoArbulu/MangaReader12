@@ -1,0 +1,696 @@
+# WebReader — Atualizador nativo via Chimera: auditoria e handoff técnico
+
+**Data:** 2026-11-04. **Branch proposta:** `feat/chimera-updater-phase1-protocol-audit`. **Repositório:** `AugustoArbulu/MangaReader12` (**público**, confirmado via API).
+**Referência estável:** Build 56, usuário confirmou funcionamento físico em iOS **12.5.8**. `main` no início da auditoria: `1283a0614acf3a267e3daddcdafc6c0d0cf335a7`, CI principal concluído com sucesso. **Não atualizar automaticamente a versão do app para 57.**
+
+## 1. Origem da demanda e estado real
+
+O handoff do usuário descreve um objetivo separado do leitor: `WebReader → verificar nova build → baixar IPA → verificar autenticidade/integridade → solicitar instalação com Chimera → reabrir`, sem Safari, Filza, computador ou Sideloadly a cada build.
+
+| Dependência / estágio | Estado confirmado | Não confundir com |
+|---|---|---|
+| iOS 12.5.8, Chimera rootful, Sileo, Filza/WebDAV | Usuário confirma funcionamento | Compatibilidade automática de qualquer helper |
+| AppSync Unified 116.0 (`iphoneos-arm`) | Usuário confirma instalado | Direito de instalar sem jailbreak ativo |
+| `appinst` 2.1.1 (`ai.akemi.appinst`) | Usuário confirma instalado a partir do espelho `Legacy-Me/repo` | Autenticidade do `.deb` ou capacidade do WebReader de invocar o processo |
+| Build 56 WebReader | Usuário confirmou teste físico | Existência de updater integrado |
+| Atualizador in-app | **Ainda não implementado** | Instalador funcional |
+
+Não pedir ao usuário para reinstalar o Chimera, AppSync, Sileo, Filza ou appinst; as instalações já foram reportadas. Mas **não usar o appinst desse espelho até sua proveniência ser verificada** frente à distribuição original de Karen/あけみ. Documentação oficial: `https://github.com/akemin-dayo/AppSync/tree/master/appinst`; o arquivo `appinst/control` identifica pacote, arquitetura e versão. O README oficial recomenda releases sem modificação de `https://cydia.akemi.ai/`. Nenhum hash oficial do `.deb` 2.1.1 foi confirmado nesta auditoria; não alegar equivalência binária.
+
+### Auditoria adicional do código original do appinst
+
+O código-fonte oficial em `akemin-dayo/AppSync/appinst/appinst.m` usa **`LSApplicationWorkspace installApplication:withOptions:error:` no iOS 8+**, a partir de um caminho temporário da própria ferramenta. O pacote define `appinst_INSTALL_PATH = /usr/bin` e aplica um arquivo específico de **entitlements** (`com.apple.private.mobileinstall.allowedSPI` e acesso ao serviço `com.apple.mobile.installd`). Isso reforça que executar instalação a partir de um app UIKit normal **não é equivalente** a rodar a ferramenta instalada no sistema. A integração privilegiada exige teste de permissões, helper restrito e autorização de solicitações.
+
+O código também realiza cópia temporária e tratamento de instalações concorrentes. Não expor ao helper um caminho arbitrário ou confiar apenas no hash conferido pelo processo normal do WebReader; revalidar o artefato no auxiliar imediatamente antes de chamar o instalador.
+
+**Fontes de código:** `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst.m`, `https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst_entitlements.plist` e `https://github.com/akemin-dayo/AppSync/blob/master/appinst/Makefile`. Inspeção estática não comprova que a instalação funciona com a variante específica do pacote presente no aparelho.
+
+### Avanço de Fase 2: auditoria estática de pacote rootful
+
+Localizei o pacote correspondente ao ambiente do aparelho no espelho **`Legacy-Me/repo`**:
+
+- `debs/ai.akemi.appinst_2.1.1_iphoneos-arm~akemi-git-235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a.deb`
+- **Tamanho no espelho:** `59716` bytes;
+- **SHA-256 publicado no índice do próprio espelho:** `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`;
+- o mesmo espelho distribui uma variante `iphoneos-arm64`, que não substitui a variante rootful `iphoneos-arm` usada em iOS12.
+
+**Advertência:** esse SHA-256 **NÃO é um hash oficial autenticado da desenvolvedora**. Conferi o anúncio de arquivo/indexação do espelho, mas ainda **não** confirmei o conteúdo binário do pacote instalado, a identidade com o artefato de `cydia.akemi.ai`, nem a cadeia de assinatura APT. O repositório oficial do projeto AppSync no GitHub publica releases do AppSync Unified, mas a lista consultada **não trouxe um asset separado do `appinst`** para comparar diretamente. É obrigatório manter `official_origin_verified = false`.
+
+Para adiantar a análise sem riscos, acrescentei:
+
+- `ci/audit_appinst_deb.py` — auditor de `.deb` **somente leitura**, executável em host Python3. Inspeciona arquivo `ar`, `debian-binary`, metadados Debian `control`, arquitetura, versão, `data.tar`, localização esperada `usr/bin/appinst`, scripts de manutenção e links/paths perigosos. Imprime hash local e se é igual ao **hash do espelho**, mas **nunca aprova sua autenticidade oficial**.
+- `ci/test_audit_appinst_deb.py` — gera `.deb` artificiais offline, testando versão/arquitetura incorretas, caminhos `../`, links simbólicos absolutos, executáveis `setuid`, membros duplicados, scripts de manutenção e formato inválido.
+- Integração com GitHub Actions, sem `dpkg -i`, sem chamar `appinst`, sem executar scripts, sem buscar binários por rede.
+
+**Uso futuro, sem instalar nada:** `python3 ci/audit_appinst_deb.py "/caminho/para/appinst-2.1.1-iphoneos-arm.deb"`. A saída deve ser interpretada como *relatório estrutural*, **não** como certificado de procedência. Se houver uma cópia do `.deb` realmente instalado no iPhone, seu hash também deve ser confrontado separadamente com o arquivo do espelho e com um identificador confiável da distribuição oficial, caso seja localizado.
+
+### Resultado da auditoria do `.deb` real do espelho (04/11/2026)
+
+O GitHub Actions analisou **os bytes reais** do pacote rootful disponibilizado pelo espelho, sem instalação, no run de push [41937123759](https://github.com/AugustoArbulu/MangaReader12/actions/runs/41937123759), concluído com sucesso. Verificações:
+
+- `59716` bytes, SHA-256 **igual ao digest do próprio índice do espelho**: `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`.
+- Metadados internos: `Package=ai.akemi.appinst`, `Version=2.1.1`, `Architecture=iphoneos-arm`.
+- Arquivo `ar` efetivo: `debian-binary`, `control.tar.gz` e **`data.tar.lzma`**. O auditor foi ampliado com descompressão LZMA-alone limitada em tamanho, incluindo teste de truncamento.
+- O payload contém `usr/bin/appinst`. **Nenhum script Debian de manutenção** foi encontrado. Nenhuma execução ou instalação ocorreu.
+- A referência `235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a` do nome do pacote corresponde a um commit existente do repositório oficial `akemin-dayo/AppSync`, com autoria `Karen/あけみ`. **O nome do arquivo não demonstra que seu binário deriva fielmente desse commit.**
+- A consulta ao índice HTTPS original `cydia.akemi.ai/Packages.bz2`, `Packages.gz` e `Packages` **não obteve resposta**: três timeouts de leitura. Portanto a comparação entre hash do espelho e um hash publicado pelo próprio autor **continua inconclusiva**.
+- O `.deb` que está **instalado no dispositivo** também não foi extraído ou comparado. **`official_origin_verified=false`** e `permission_to_install_granted=false` no relatório.
+
+Código de CI: `ci/audit_pinned_appinst_mirror.py`, `ci/test_audit_pinned_appinst_mirror.py`, `ci/audit_appinst_deb.py` e `ci/test_audit_appinst_deb.py`. Auditoria estrutural bem-sucedida **não equivale** a autenticação do fornecedor ou a permissão para executar o appinst em modo privilegiado.
+
+**Próximo gate físico:** recuperar o `.deb` efetivamente instalado ou um hash confiável do pacote, verificar procedência com a distribuição oficial por um canal autenticado e só então testar instalações de um app descartável, sem tocar na Biblioteca do WebReader.
+
+## 2. Integração verificada no repositório
+
+- **Nome público:** WebReader. **Bundle ID real:** `com.example.MangaReader12`, **executable:** `MangaReader12`, **deployment target** 12.0. **Nunca mudar ID/contêiner** durante atualização. Bundle ID igual é necessário, mas não garante preservação em todo modelo de assinatura/entitlement.
+- **Compilação:** `.github/workflows/build.yml` com Xcode 15.4/macOS14, Debug + Release, verificação de Info.plist e IPA não assinada `WebReader-iOS12-unsigned.ipa`; artefato de CI está chamado `WebReader-iOS12-Build56`.
+- **Distribuição atual:** GitHub Actions artifacts, que **expiram**. O endpoint de download do GitHub responde com redirect temporário, com controle de autenticação, e **não é um endereço direto permanente apropriado a um atualizador iOS12 sem token**. Nunca embutir PAT ou token GitHub no IPA.
+- **GitHub Releases do projeto:** **nenhum Release publicado** na auditoria. Proposta: publicar futuramente um Release público com asset IPA estável **somente mediante autorização explícita e após revisão**; não criar release ou nova build apenas por este trabalho.
+- **Biblioteca:** SQLite e diretórios `Application Support/MangaReader12`, downloads e preferências. Backup `.mr12backup` é parcial: não inclui arquivos de capítulos baixados nem scripts das fontes. Não substituir/desinstalar a build atual para testes do instalador.
+- **Ajustes:** a entrada de futuras Atualizações pode ficar em `Ajustes → Sobre o WebReader → Atualizações`, mas não adicionar botão de instalar até autenticação, helper e QA concluídos.
+
+## 3. Protocolo de atualização v1 (somente experimento offline)
+
+Entregar inicialmente manifesto pequeno HTTPS **autenticado criptograficamente**: envelope JSON `schemaVersion=1`, `algorithm=ecdsa-p256-sha256`, `payload` base64 e `signature` base64 DER. Assina-se o **payload bruto** (bytes UTF-8) com chave ECDSA P-256; a chave pública de produção deverá estar **fixada no app**. O arquivo privado de assinatura nunca pertence ao repositório, IPA ou logs de CI.
+
+Campos do payload assinado: `schemaVersion`, `application`, `bundleId`, `channel`, `build`, `minimumIOS`, `ipaUrl`, `ipaSize`, `sha256`, `releaseNotes`, `publishedAt`. Comparar `build > instalado`; exigir `bundleId=com.example.MangaReader12` e iOS mínimo <= sistema real. O manifesto precisa identificar somente o canal `development` autorizado e URL HTTPS de um **Release público do projeto** com tag `build<build>` e asset `WebReader-iOS12-unsigned.ipa`.
+
+**Limites:** envelope <=64 KiB; payload <=32 KiB; IPA de até 512 MiB (máximo de protocolo, não garantia de RAM/espaço); SHA-256 de 64 caracteres minúsculos, URLs sem query/fragment, campos JSON exatamente conhecidos, rejeição de chaves duplicadas. Metadados assinados não substituem a validação do **SHA-256 real após o download**.
+
+**Código experimental de host:** `ci/webreader_update_manifest.py` verifica assinatura ECDSA com a ferramenta local `openssl` e valida a política, mas **não efetua rede, downloads, unpack do IPA, alterações no app nem execução do appinst**. `ci/test_webreader_update_manifest.py` gera chave efêmera em diretório temporário e testa assinatura válida, adulteração, build anterior, bundle errado, iOS incompatível, URL de Actions e domínios estranhos, campos adicionais, JSON duplicado e limites. As chaves geradas são **somente fixtures**; não há chave de produção nem Release real.
+
+**Implementação futura no iOS 12:** usar Security.framework `SecKeyVerifySignature` e `URLSession` com verificação TLS padrão e política explícita de redirects; esta camada host Python/openssl **não** roda dentro do iPhone. Antes de confiar no fluxo, verificar em hardware a cadeia TLS de manifesto, `github.com` e asset host final (por exemplo `release-assets.githubusercontent.com`), sem desativar validação de certificado.
+
+### Validação estrutural offline da IPA — etapa preparatória adicional
+
+Para não deixar a validação de arquivo como um plano abstrato, adicionei `ci/validate_webreader_ipa.py` e `ci/test_validate_webreader_ipa.py`. O auditor:
+
+- calcula SHA-256 do arquivo e exige igualdade com o hash esperado;
+- lê `Payload/MangaReader12.app/Info.plist` e exige `CFBundleIdentifier=com.example.MangaReader12`, nome público `WebReader`, executável esperado `MangaReader12`, build **mais nova** e `MinimumOSVersion` compatível;
+- rejeita duplicatas de entradas ZIP, caminhos `../`, entrada fora do `Payload`, outro bundle de app, links simbólicos, arquivos ZIP criptografados e tamanhos/expansão excessivos;
+- **não extrai**, não carrega dylibs, não executa arquivos de instalação e não muda o sandbox do WebReader.
+
+O CI testa casos maliciosos **offline** e executa este auditor sobre a **IPA real** produzida no mesmo job, usando o `.sha256` que o empacotador gerou localmente. Isso oferece proteção contra erros de geração da IPA; **não comprova a autenticidade da publicação**. Na implementação futura, o hash de referência deve vir do **payload autenticado do manifesto**, não ser gerado a partir do próprio download.
+
+Usar no host: `python3 ci/validate_webreader_ipa.py WebReader-iOS12-unsigned.ipa --sha256-file WebReader-iOS12-unsigned.ipa.sha256 --installed-build 55 --installed-ios 12.5.8`.
+
+**Limitação:** a validação host Python não substitui o analisador Swift/iOS12 futuro nem a auditoria de `appinst`, assinatura da publicação ou preservação dos dados durante a instalação.
+
+### Preparação da Fase 3 — verificador nativo (ainda não habilitado)
+
+Adicionada à branch a unidade Swift `MangaReader12/Core/WebReaderUpdateManifestVerifier.swift`, compilada no target iOS12. Utiliza `Security.framework` (`SecKeyCreateWithData`, `SecKeyVerifySignature` com `ecdsaSignatureMessageX962SHA256`) para autenticar o **payload bruto** assinado por ECDSA P-256, seguindo o protocolo host v1. Só aceita chaves públicas EC X9.63 descomprimidas de **65 bytes**, identidade `com.example.MangaReader12`, canal development, build mais nova, tamanho/hash, SO compatível e URL HTTPS do release oficial do projeto.
+
+`ci/test_native_webreader_update_verifier.py` compila **o mesmo arquivo Swift real** em macOS com Security.framework, cria uma chave efêmera (apenas em diretório de teste) e confirma aceitação da mensagem válida, rejeição de assinatura adulterada, host/ID/versão errados, campo extra e **ausência de chave pública**.
+
+**Esta unidade NÃO consulta a internet, NÃO baixa IPA, NÃO inicia appinst, NÃO instala pacotes e NÃO está ligada à interface**. Não contém chave de produção, token, segredo ou endereço ativo de manifesto. Não representa uma Build 57 funcional. O projeto iOS mantém `CURRENT_PROJECT_VERSION=56` e a `main` não é alterada. O verificador só poderá ser usado em produção após provisionamento de chave de release autêntica e mecanismo de publicação autorizado. A inspeção de duplicidade de chaves JSON na implementação Swift ainda precisa ser harmonizada com o validador Python antes de ativação (o payload é verificado *antes* de interpretar qualquer campo).
+
+### Preparação da Fase 3 — UpdateChecker nativo, **sem configuração de produção**
+
+Foi adicionada a unidade `MangaReader12/Core/WebReaderUpdateChecker.swift`, compilada no target iOS 12, mas ainda **não utilizada pela UI**. Ela interpreta resultados de atualização de maneira exclusivamente **read-only** e somente após autenticação pelo `WebReaderUpdateManifestVerifier`.
+
+- O endpoint **fixo e permitido** é `https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/updates/channel-development-v1.json` (endereço planejado; **o manifesto ainda não foi publicado**). Sem suporte a URLs fornecidas por usuário, repositórios de terceiros, redirects ou credenciais.
+- A chave `WebReaderUpdateChannel.productionPublicKeyX963` está intencionalmente `nil`. Portanto, no app distribuído, `check()` retorna `.disabled` sem criar sessão ou fazer request. **Nenhum segredo ou chave de release foi criado ou incluído**.
+- Para testes locais exclusivamente, o inicializador permite injetar uma chave de **teste efêmera** e `URLProtocol` simulado no host. Não há requisições reais a GitHub nos testes.
+- `URLSessionConfiguration.ephemeral`, sem cookies/cache/credential storage, timeouts curtos, GET restrito, TLS padrão sem exceções, redirect recusado. Exige HTTP 200 e `application/json` ou `text/json`, respeita `Content-Length`, interrompe resposta após 64 KiB, rejeita respostas malformadas ou assinatura inválida.
+- Resultados tipados: `disabled`, `updateAvailable`, `upToDate` (somente quando há manifesto autenticado mas sem build nova), `failed`. Não salva arquivo nem toca no banco SQLite, dados do usuário, código de fontes, downloads ou execução de processos.
+- `ci/test_native_webreader_update_checker.py` compila os **arquivos Swift de produção** e executa `URLProtocol` de simulação, com rejeições de host indevido, chave ausente/errada, 403, HTML e payload maior que 64 KiB; também testa update válido e versão já instalada.
+- **Não está habilitada atualização automática, download de IPA, appinst, helper de jailbreak, menu de update ou notificação de versão**. O mesmo `CFBundleVersion=56` permanece. As funções só serão conectadas à interface após provisionamento autenticado da chave de release e aprovação de distribuição.
+
+A rejeição de **chaves JSON duplicadas** foi acrescentada ao verificador Swift e testada offline conforme a seção seguinte. Ainda será necessário definir rotação/revogação de chave, testar HTTPS no iOS 12.5.8 e validar a publicação antes de ativar qualquer atualização.
+
+### Fase 3 — endurecimento do parser de manifesto JSON (2026-11-04)
+
+A Fase 3 tinha uma divergência importante: o validador Python rejeita chaves JSON duplicadas (`object_pairs_hook`), mas `Foundation.JSONSerialization` **não** fornece rejeição equivalente. Isso permite interpretações ambíguas do mesmo documento.
+
+Corrigido na branch com `MangaReader12/Core/WebReaderStrictJSON.swift`, validador **nativo e de uso interno**, compilado no iOS 12:
+
+- Faz a leitura dos bytes UTF-8 com parser recursivo limitado a **32 níveis** e **4.096 valores**, sem requests, alocação ilimitada ou execução dinâmica.
+- Rejeita chaves repetidas em **todos os objetos**, incluindo chaves repetidas equivalentes após decodificação de escapes Unicode (ex.: `"name"` e `"\\u006eame"`), dentro de objetos ou arrays; também rejeita strings/escapes/números/trailing data malformados.
+- As verificações de **envelope** ocorrem antes de `JSONSerialization`; a verificação de **payload** acontece nos bytes exatos **após autenticação ECDSA** e **antes** da leitura de campos de versão, URL, bundle e SHA.
+- As chaves de teste são efêmeras. Não há chave pública de produção, chave privada, manifesto publicado, download de IPA nem invocação de `appinst`.
+- As suítes `ci/test_native_webreader_update_verifier.py` e `ci/test_native_webreader_update_checker.py` compilam os arquivos Swift reais no macOS e testam duplicatas em envelopes, payloads **corretamente assinados**, escapes Unicode e profundidade, além das regressões de rede e assinatura.
+
+A alteração reforça o validador, mas **não elimina** os bloqueios para distribuição/instalação: origem do `.deb` instalada ainda não autenticada, sem canal oficial assinado e sem ensaio físico com app descartável. A `main` segue na Build 56.
+
+### Fase 4 — preparação de Release assinado e download verificado (2026-11-04)
+
+Foram implementados **dois componentes novos de pré-produção**, sem ativar qualquer atualização no aparelho:
+
+**1. Preparação offline e auditável do manifesto assinado**
+
+- `ci/prepare_signed_webreader_update.py`: recebe um **IPA existente** e caminhos para chaves privada e pública **provisionadas pelo proprietário fora do repositório**. Lê o `Info.plist`, invoca a auditoria real de identidade/ZIP compatível com iOS 12, calcula SHA-256 e tamanho, inclui notas, versão e URL imutável esperada de `GitHub Releases`.
+- Os bytes exatos do payload JSON são assinados com OpenSSL ECDSA P-256/SHA-256; o resultado é conferido com o `ci/webreader_update_manifest.py` usando a chave pública correspondente antes de gravar um **arquivo local com permissões 0600**.
+- Rejeita **build antiga, bundle incorreto, notas inválidas, divergência entre chaves, caminhos de chaves dentro do repo, saída já existente, arquivo IPA inválido e versão iOS incompatível**.
+- **Não publica Release, não gera nem armazena chaves de produção, não modifica o IPA e não faz requisição à rede.** Publicação do asset e manifesto dependerá de autorização expressa e revisão do canal de entrega. O `ipaUrl` assinado é apenas uma **URL planejada**, não uma prova de que o asset existe.
+- `ci/test_prepare_signed_webreader_update.py` usa **IPA sintética, chaves efêmeras e diretório temporário** para testar a assinatura ponta a ponta, rejeição de adulteração e políticas negativas. Não inserir nem mesmo chaves de teste estáticas no GitHub.
+
+**2. Download e staging nativo sob verificação criptográfica**
+
+- `MangaReader12/Core/WebReaderIPAStager.swift` usa `URLSessionDataDelegate`, `OutputStream` e `CommonCrypto CC_SHA256` incremental para baixar em pedaços, sem alocar um arquivo de IPA inteiro em memória.
+- Exige um `WebReaderVerifiedUpdate` obtido a partir de manifesto autenticado; compara novamente URL de Release do repo, versão, hash e tamanho, exige **HTTPS**, só aceita redirecionamentos limitados para hosts de assets do GitHub e não envia cookies/credenciais. Rejeita HTTP diferente de 200, conteúdo HTML, arquivo maior/menor, SHA incorreto, ZIP sem magic `PK\x03\x04` e falhas de escrita.
+- Trabalha em diretório privado de staging (`Application Support/WebReaderUpdates`); arquivo parcial é descartado após falha, pacote aprovado mantém nome único para inspeção futura. **Não descompacta, não executa, não chama `appinst` e não substitui a versão instalada**.
+- **Importante:** o stager valida o hash e o prefixo ZIP, mas **não** substitui a auditoria de `Info.plist`, caminhos do ZIP e identidade do executável na etapa privilegiada. O pacote precisa de uma **segunda validação independente no auxiliar**, com validação de proveniência e autorização de usuário.
+- `WebReaderUpdateChannel.productionPublicKeyX963` permanece `nil`, e **nenhuma tela chama o stager**; sem chave provisionada, ele retorna `.disabled` antes de abrir conexão ou criar arquivos.
+- `ci/test_native_webreader_ipa_stager.py` utiliza `URLProtocol` simulado, payload SHA-256 assinado com chave de teste efêmera, fragmentação da resposta, arquivo correto, hash errado, arquivo truncado, excesso de bytes, HTTP 403, HTML e ZIP inválido; também verifica limpeza de arquivos parciais e bloqueio sem chave de produção.
+
+**Resultados de hardware ainda não demonstrados:** não foi testada a resposta real do CDN de Releases no TLS do iOS 12.5.8 nem a disponibilidade do staging para futuro helper. Há uma diferença entre **staging autenticado** e **instalação privilegiada funcional**; esta fase só implementa o primeiro.
+
+**Fluxo planejado para releases futuras:** proprietário provisiona chaves fora do repo → CI compila IPA com ID preservado → auditor independente revisa o pacote → script gera manifesto assinado local → proprietário publica **asset público de Release** e manifesto correspondente mediante aprovação → verificador iOS12 autentica → stager salva IPA verificada → somente então helper restrito pode pedir confirmação explícita e instalar. Nenhum desses passos de publicação e instalação foi realizado nesta fase.
+
+### Fase 4B — área de atualizações do aplicativo (05/11/2026)
+
+Foi implementada uma **tela UIKit exclusiva para releases do WebReader** em `MangaReader12/UI/WebReaderAppUpdatesViewController.swift`, acessível por **Ajustes → Atualizações do WebReader**. Ela é separada da aba `Atualizações` de capítulos e do controle de atualização da Biblioteca em background.
+
+- A tela apresenta a **versão efetivamente instalada** consultando `Bundle.main.CFBundleVersion`, status do canal de assinatura, ação de verificação *quando realmente habilitada*, notas do release assinado e estado de segurança do instalador.
+- Quando `WebReaderUpdateChannel.productionPublicKeyX963 == nil` (estado atual), exibe **"Verificação indisponível"**, não faz chamadas HTTP, não mostra um botão fictício de instalação nem atribui "atualizado" sem verificação. O texto explica que o canal de atualização ainda não foi publicado/autenticado.
+- Quando um dia houver uma chave pública legítima provisionada e um manifesto publicado, o usuário poderá fazer uma consulta **manual**. A ação chama `WebReaderUpdateChecker`, que valida ECDSA, versão e URL. A UI apresenta notas apenas após `.updateAvailable`; também apresenta falhas de rede/assinatura e resultado `.upToDate` sem declarar sucesso indevidamente.
+- A interface não chama `WebReaderIPAStager`, `appinst`, `dpkg`, processos privilegiados, download ou IPC. **Não há instalação ou download real habilitados.** Não há checagem automática, notificação push, polling de GitHub nem acesso aos dados da Biblioteca.
+- Separação visual: a preferência anterior “Atualização automática” é rotulada **"Atualização da Biblioteca"** para evitar que o usuário a confunda com atualizações do aplicativo. O app mantém a build nativa 56 na branch.
+- `ci/test_app_updates_screen.py` valida o wiring do Xcode, entrada em Ajustes, versão dinâmica na tela, condição fail-closed, renderização de release notes e ausência de chamadas de instalação. O GitHub Actions continua compilando iOS12 Debug/Release.
+- **Para teste físico** futuramente será necessária IPA nova e deliberada em branch apropriada; esta tela ainda **não está presente na Build 56 instalada no aparelho**. Não promover para `main` nem considerar a interface validada fisicamente só porque compila.
+
+A futura experiência será `Ajustes → Atualizações do WebReader` → consultar **releases oficiais assinados**, e não cada commit do GitHub. O download/instalação dependem de gates de chave real, distribuição HTTPS, origem do `appinst`, helper e testes de preservação de dados.
+
+### Fase 4C — diagnóstico HTTPS manual no iOS 12 (2026-11-05)
+
+Acrescentamos uma ferramenta **somente leitura e acionada pelo usuário** na tela `Ajustes → Atualizações do WebReader`, para investigar conectividade com os domínios de distribuição antes de configurar o canal assinado ou um helper de jailbreak. A mudança não altera as bibliotecas, os dados do usuário ou o versionamento da Build 56.
+
+- `MangaReader12/Core/WebReaderReleaseHTTPSProbe.swift` executa **apenas HTTP HEAD** por `URLSessionConfiguration.ephemeral` com validação padrão de certificados; sem cookies, credenciais, cache, ATS bypass, download, `appinst` ou scripts. Não segue redirecionamentos.
+- Endpoints fixos: `raw.githubusercontent.com` (documento público do repositório), `github.com` (página de releases) e `release-assets.githubusercontent.com` (raiz do host CDN). **Não são URLs fornecidas pelo usuário** e não usam tokens.
+- A seção **DIAGNÓSTICO HTTPS (iOS 12)** exibe `Testar HTTPS do GitHub` e, após a execução, três resultados (host e status HTTP ou domínio/código de erro). Um toque em **Copiar relatório HTTPS** gera texto que não inclui cookies, IP, headers, caminhos privados ou dados de biblioteca.
+- **Interpretação:** qualquer resposta HTTP (inclusive 302, 403 ou 404) demonstra que a requisição chegou à camada HTTP daquela origem, com a verificação TLS padrão vigente; **não significa** que haja um release autorizado, que um CDN entregue uma IPA real ou que o instalador seja compatível. Os erros SSL de URLSession, como `NSURLErrorDomain -1200`, ficam identificados por domínio e código.
+- `ci/test_webreader_https_probe.py` compila a fonte Swift real, simula HTTP 200/302/403 e erro TLS -1200 via `URLProtocol` e confirma métodos HEAD/hosts fixos/continuidade após falha, sem qualquer rede.
+- A chave pública de produção continua `nil`, logo o **UpdateChecker** e o **IPAStager** permanecem inativos. **Esta função diagnóstica pode executar HEAD manualmente mesmo sem chave**, pois não trata metadados como confiáveis nem baixa arquivos.
+- **Não é teste físico:** a compatibilidade efetiva dos três hosts no iOS 12.5.8 só poderá ser medida com uma IPA de teste deliberada e instalada no aparelho. E a raiz do CDN não representa a URL final temporária de um asset específico de Release.
+
+### Fase 4C.1 — IPA física de diagnóstico **isolada** (2026-11-05)
+
+Para medir o HTTPS no **iOS 12.5.8 real** sem atualizar/desinstalar o WebReader aprovado, a CI da branch `feat/chimera-updater-phase1-protocol-audit` agora empacota **uma segunda IPA não assinada** somente em eventos de `push` dessa branch, nunca como GitHub Release:
+
+- `ci/package_tls_probe_ipa.sh` cria uma **cópia** do `.app` compilado, preserva a IPA principal e altera **somente na cópia** `CFBundleIdentifier` para `com.example.MangaReader12.httpsprobe`, `CFBundleDisplayName` para **WebReader TLS Test** e `CFBundleName` para **WebReaderTLS**. Mantém executável e iOS mínimo 12.0, com versão interna 56 (não é uma Build 57).
+- `ci/test_tls_probe_ipa.py` compara `Info.plist` da IPA de teste e da IPA principal, exigindo identificadores distintos, para impedir substituição do aplicativo real.
+- Artefato de CI (quando verde): **`WebReader-TLS-Probe-iOS12-Experimental`**, contendo `WebReader-TLS-Probe-iOS12-unsigned.ipa` e SHA-256. Não é uma atualização oficial; para testar será necessário assinar normalmente a IPA em procedimento voluntário, **sem executar `appinst` no WebReader**.
+- O app de teste é uma cópia do WebReader em **sandbox distinto**. Por segurança não deve ser usado como Biblioteca principal e **não substitui** o app já instalado; apenas navegue para **Ajustes → Atualizações do WebReader → Testar HTTPS do GitHub → Copiar relatório HTTPS**.
+- O relatório mede os três hosts fixos usando a verificação TLS padrão do iOS12. **Não prova** acesso ao ativo específico de Release nem autenticidade do `appinst`, e não envolve instalação automática.
+
+**QA físico pendente:** instalação da IPA isolada, coleta do relatório e comparação com Safari iOS12 onde necessário. Sem confirmação física, não classificar compatibilidade como aprovada.
+
+### Fase 4D — resultado físico e próximo HEAD de asset real (2026-11-05)
+
+**Teste físico aprovado pelo usuário** em `WebReader TLS Test` (identificador diferente, sem tocar no app principal), iOS **12.5.8**, app interno Build 56, HTTPS padrão, somente HEAD, sem login/download:
+
+| Origem testada | Resposta observada | Significado técnico |
+| --- | --- | --- |
+| `raw.githubusercontent.com` — `PROJECT_STATE.md` | **HTTP 200** | Conexão HTTPS e acesso ao documento público usando o URLSession padrão do iOS12 |
+| `github.com` — página `releases` | **HTTP 200** | Conexão HTTPS e acesso à página do GitHub Releases |
+| `release-assets.githubusercontent.com/` — raiz do CDN | **HTTP 404** | **HTTPS/TLS funcionou**, mas a raiz do host não é um asset válido; 404 não é `NSURLError -1200` |
+
+**Conclusão física (primeiro teste):** a pilha TLS padrão do aparelho **consegue negociar HTTPS com esses três hosts**. O primeiro relatório sozinho não testava a URL temporária assinada de um arquivo de Release; esse ponto foi validado separadamente no teste físico Fase 4D abaixo. Isso ainda não verifica integridade de IPA, assinatura do manifesto ou instalação `appinst`. Não declarar o atualizador funcional ainda.
+
+**Segundo teste físico (Fase 4D) — APROVADO em 2026-11-05:** a quarta requisição HEAD para um asset público, pequeno e fixo do projeto oficial **GitHub CLI**:
+`https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_checksums.txt`. Consultamos os metadados publicados via API oficial GitHub: release v2.103.2 publicado em 2026-10-23, asset de **1.971 bytes** e tipo `text/plain; charset=utf-8`. Não é uma IPA, não pertence ao WebReader e não será baixado.
+
+- Somente essa quarta sonda pode seguir **até dois** redirecionamentos para `release-assets.githubusercontent.com` ou `objects.githubusercontent.com`, com **HTTPS obrigatório**, sem portas customizadas nem credenciais. As três sondas anteriores continuam rejeitando todos os redirecionamentos.
+- Todos os requests permanecem **HEAD**, sem cookies, autenticação, download ou consumo de corpo. O relatório indica host final e quantidade de redirects, sem imprimir query de URL temporária do CDN.
+- `ci/test_webreader_https_probe.py` verifica agora quatro endpoints e a lista de destinos aprovados/negados, incluindo hosts arbitrários, HTTP, URL com credenciais, porta e cadeia excessiva.
+**Relatório da segunda execução física, fornecido pelo usuário:** iOS `12.5.8`, app interno Build `56`, HTTPS padrão, método HEAD, sem login, download ou instalação.
+
+| Verificação | Host inicial → host final | Resposta física |
+| --- | --- | --- |
+| Manifesto (GitHub Raw) | `raw.githubusercontent.com` | **HTTP 200** |
+| GitHub Releases | `github.com` | **HTTP 200** |
+| CDN de assets (raiz) | `release-assets.githubusercontent.com` | **HTTP 404** (TLS funcionou; raiz inexistente) |
+| **Asset real GitHub CLI** | `github.com` → `release-assets.githubusercontent.com` | **HTTP 200, redirects: 1** |
+
+**Veredito: APROVADO para o caminho HTTPS de acesso a um asset público real do GitHub Releases no iOS 12.5.8**, inclusive redirecionamento autorizado até o CDN. A consulta foi HEAD e não transferiu/armazenou o asset. O HTTP 404 do host raiz não impede o HTTP 200 do asset verdadeiro. Nenhuma alteração na Build 56 principal foi observada neste teste isolado.
+
+**Permanecem NÃO VALIDADOS:** publicação de Release do WebReader, manifesto de produção assinado e chave pública pinada, download completo com SHA-256 e identidade da IPA no iOS 12, permissões/sandbox para helper, procedência oficial do `appinst` instalado, instalação segura pelo Chimera e preservação real dos dados. Sem autorizar execução privilegiada ou criar release de produção apenas com este diagnóstico.
+
+- Mesmo HTTP 200 no asset alheio **não** prova que o nosso futuro Release WebReader existe ou que a instalação será segura. A compatibilidade da URL real `WebReader-iOS12-unsigned.ipa` continua pendente da publicação controlada de um Release assinado.
+
+### Fase 5A — pré-validação nativa completa de IPA (2026-11-05)
+
+O teste físico HTTPS da Fase 4D foi aprovado em iOS **12.5.8**: GitHub Raw 200, GitHub Releases 200, raiz do CDN 404 (TLS válido), asset real GitHub CLI **200 após um redirecionamento** até `release-assets.githubusercontent.com`. Esse resultado não autentica uma IPA nem instala atualizações.
+
+**Novo código da Fase 5A:** `MangaReader12/Core/WebReaderNativeIPAAuditor.swift` inspeciona uma IPA **somente leitura** usando Foundation, Compression e CommonCrypto disponíveis no iOS12; não extrai ZIP nem invoca o instalador. Recebe metadados de um `WebReaderVerifiedUpdate` e verifica novamente:
+
+1. Tamanho e **SHA-256 integral** do arquivo físico, comparados aos valores assinados.
+2. Estrutura ZIP com índice central, cabeçalhos locais consistentes, offsets, limites de expansão, contagem de entradas, métodos stored/DEFLATE, proibição de ZIP64/criptografia/links e caminhos `../`, absoluto ou fora de `Payload/MangaReader12.app/`. Rejeição de nomes repetidos incluindo case-fold Unicode.
+3. Presença de `Payload/MangaReader12.app/MangaReader12` e `Info.plist`; descompressão **apenas do Info.plist** (até 1 MiB) e conferência de CRC32.
+4. Identidade `CFBundleIdentifier=com.example.MangaReader12`, `CFBundleDisplayName=WebReader`, executável, `CFBundleVersion` maior que a instalada e igual à build do manifesto; `MinimumOSVersion` igual ao valor assinado e compatível com iOS 12.5.8.
+
+`ci/test_native_webreader_ipa_auditor.py` compila a fonte Swift real em macOS e testa ZIP stored/DEFLATE, bundle errado, downgrade, metadados assinados divergentes, mínimo iOS errado, caminhos inseguros, links, duplicatas, cabeçalhos/CRC adulterados, ZIP truncado e compressão não suportada. **O próprio IPA real da Build 56 gerado pelo CI** também será verificado com o mesmo Swift na etapa pós-empacotamento (baseline `installedBuild=55` somente para esse teste; nenhum update ocorre).
+
+**Fase 5B — integração do staging:** após validar a auditoria nativa nas IPAs sintéticas e na IPA real do CI, o `WebReaderIPAStager` passou a executar **`WebReaderNativeIPAAuditor.inspect` antes de promover o arquivo parcial a `.ipa` preparada**. Erros de ZIP ou `Info.plist` causam `.invalidIPA` e remoção do parcial, mesmo que tamanho, SHA-256 e os quatro bytes `PK` coincidam. A suíte `ci/test_native_webreader_ipa_stager.py` foi atualizada para baixar, por `URLProtocol` falso, uma **IPA sintética válida** (não mais apenas um prefixo ZIP falso); também inclui um ZIP malformado com hash assinado correto, que deve ser rejeitado. Tudo permanece offline e sem execução de instalador.
+
+**Limites:** a Fase 5B ainda não habilita o download no aplicativo distribuído, pois a chave de produção é `nil`, não há Release público do WebReader nem tela de instalação ativa. Um futuro helper privilegiado deve **revalidar os mesmos critérios por conta própria**, sem confiar no veredito do app normal. Nada foi publicado no GitHub Releases; não foi criada chave de produção e não foi chamada a ferramenta `appinst`.
+
+## 4. Etapas obrigatórias antes de instalar IPAs
+
+### A — Autenticidade de appinst e experimento isolado
+
+1. Conferir a origem do `.deb` instalado, package metadata, payload e checksum contra distribuição oficial confiável; se não houver um artefato oficial equivalente, **não aprovar sua execução privilegiada**.
+2. Validar o próprio `appinst` 2.1.1 em ambiente rootful e Chimera **fora** do WebReader, usando um app de teste descartável (outro Bundle ID), não a Biblioteca real.
+3. Confirmar paths do executável, dependências, permissões, código de saída, comportamento com AppSync ativo/inativo, respring/reboot e suporte a IPA já instalado; registrar resultados físicos.
+
+### B — Manifesto/distribuição e verificação de download
+
+1. Decidir canal de entrega: somente GitHub Releases públicos com asset imutável (ou HTTPS equivalente devidamente auditado). Não usar URLs de artefatos Actions como versão de produção.
+2. Gerar e guardar a chave **privada de release** fora do repositório; fixar a chave pública correta no app; fornecer processo de rotação/revogação auditável.
+3. Implementar UpdateChecker **somente leitura** no iOS12; início manual e checagem automática opt-in. Sem acionamento automático de download.
+4. Implementar URLSession download em arquivos temporários privados, progresso/cancelamento, restrição de domínios e redirects, limites de espaço, tamanho e SHA-256. Validar ZIP/IPA com entradas de caminho seguras, Info.plist, versão, iOS e bundle ID. Nunca seguir symlinks.
+
+### C — Helper rootful separado, instalado via Sileo
+
+1. Criar auxiliar privilegiado com integração apropriada ao Chimera, somente depois de validar appinst. Não assumir que um app iOS normal pode executar processos do sistema.
+2. IPC **local autenticado** com verificação da identidade do cliente e confirmação explícita. Nenhum serviço privilegiado aberto à rede, comandos de shell livres, URLs arbitrárias ou paths livres fornecidos pelo app.
+3. O helper deve **revalidar** assinatura/manifeste/hashes/Bundle ID antes da instalação; aceitar apenas arquivo aprovado em diretório protegido. Somente operar sobre o WebReader, não agir como instalador geral.
+4. O helper continua após a saída do app, grava resultado e não tenta repetição infinita. Sem rollback automático até existir uma estratégia testada.
+
+### D — Teste de atualização e dados
+
+- Criar `.mr12backup` e **cópia independente dos capítulos offline**, pois o backup portátil não inclui os arquivos de capítulos.
+- Comparar bundle ID e os entitlements realmente instalados antes/depois. Atualizar inicialmente um **app de teste**, depois uma cópia de dados de teste do WebReader; registrar progresso SQLite, pins, biblioteca, filtros, fontes, cache e downloads.
+- Com jailbreak inativo, o WebReader não deve tentar helper nem instalação; consulta pode permanecer disponível onde URLSession permitir.
+- Só promover a funcionalidade após teste real `build N → N+1` por IPA, reinício, preservação de sandbox e recuperação de falha.
+
+## 5. Relação com o roadmap existente
+
+**O roadmap funcional não foi substituído:** Build 57 continua reservada ao aprimoramento de Downloads (fila/lote/cancelamento e feedback); Builds 58/59 seguem para Leitor e Sources, salvo decisão futura do usuário. O atualizador é uma trilha técnica paralela `Updater Fases 1–7`. Evitar chamar o teste do protocolo de “Build 57” ou afirmar instalação pronta. A Build56 é o ponto de referência física.
+
+## 6. Estado deste PR e próxima tarefa
+
+- **Concluído nesta etapa:** auditoria de projeto/distribuição, integração documental, proposta de assinatura, simulador offline de manifestos host, auditoria estática `.deb`, validação offline da IPA real gerada pelo CI e testes adversariais. Nenhum comando privilegiado executado; nenhuma IPA nova publicada; `main` preservada até aprovação do PR.
+- **Pendente:** validação independente do `.deb` 2.1.1 vindo do espelho; experimento isolado com appinst no dispositivo; pinagem de chave pública real; publicação autorizada de Release, HTTPS real no iOS12; downloader; helper/IPC; instalação; QA de preservação de dados.
+- **Regra de segurança:** não baixar IPAs de manifestos não autenticados e não iniciar instalação a partir do WebReader antes de confirmação expressa do usuário e testes do auxiliar.
+
+## 7. Referências
+
+- Handoff do usuário recebido em 2026-11-04, “Sistema de atualização de IPA diretamente pelo aplicativo utilizando jailbreak Chimera”.
+- AppSync e appinst originais: https://github.com/akemin-dayo/AppSync/tree/master/appinst
+- GitHub Actions artifacts REST (URLs temporárias): https://docs.github.com/en/rest/actions/artifacts
+- GitHub Releases REST (distribuição proposta): https://docs.github.com/en/rest/releases/releases
+- Projeto WebReader, estado de referência: https://github.com/AugustoArbulu/MangaReader12/blob/main/docs/BUILD56_SOURCE_ATTRIBUTION_UPDATES_2026-11-04.md
+
+
+### Fase 5C — fingerprint do appinst no pacote vs. iPhone (2026-11-05)
+
+A auditoria anterior inspecionava apenas a estrutura e o SHA-256 do arquivo `.deb` de um **espelho não oficial**. Esse hash **não é o hash do executável `/usr/bin/appinst`** presente no telefone.
+
+**Implementação nesta branch experimental (PR #90, sem merge):**
+
+1. `ci/audit_appinst_deb.py` agora lê exclusivamente a entrada de arquivo regular `usr/bin/appinst` dentro do TAR em memória, calcula SHA-256 e tamanho de seu conteúdo, exige arquivo não vazio e rejeita um diretório disfarçado nesse caminho. Nunca extrai o executável para disco, não roda pacote, `dpkg`, scripts nem `appinst`.
+2. `ci/audit_pinned_appinst_mirror.py` inclui no relatório o SHA-256 do **executável do espelho** em campo próprio, separado do SHA do `.deb`, para evitar comparações erradas.
+3. `ci/compare_appinst_fingerprint.py` compara offline o hash de um binário que o usuário relata ter no iPhone com o hash extraído do `.deb` fornecido localmente. Exemplo host: `python3 ci/compare_appinst_fingerprint.py pacote.deb --installed-sha256 HASH_64_HEX`. Não acessa o aparelho, não baixa pacote e sai com status 2 quando há divergência.
+4. `ci/test_audit_appinst_deb.py` e `ci/test_compare_appinst_fingerprint.py` incluem fixtures sintéticas para diretório/arquivo vazio, digest do binário (não do pacote), hash divergente, texto inválido e política explicitamente sem permissão de instalação. Teste novo ligado ao `build.yml`.
+
+**Coleta física futura, apenas leitura:** se o usuário optar por realizar a conferência, calcular localmente no iPhone SHA-256 de `/usr/bin/appinst` com uma ferramenta de hashing já instalada, sem executar `appinst` e sem transferir o binário. Nunca compartilhar arquivos pessoais, tokens ou saída de terminal contendo outras informações. O valor é apenas uma declaração fornecida pelo dispositivo; não uma atestação independente.
+
+**Interpretação inegociável:** (a) hash igual implica somente identidade provável dos bytes entre o arquivo relatado e o executável do `.deb` escolhido; (b) hash divergente implica não equivalência e proíbe usar aquele pacote como referência; (c) nenhum resultado autentica um espelho, garante inocuidade do executável, prova o estado real do aparelho ou autoriza execução privilegiada. Mesmo com match, `original_publisher_provenance_verified=false` e `privileged_installer_authorized=false`.
+
+**Gate ainda bloqueado:** a distribuição oficial indicada pela autora é `https://cydia.akemi.ai/`. Sem uma cópia oficial autenticada e comparação independente, não considerar confiável o `appinst` de terceiros e não iniciar helper. O aplicativo estável Build 56 não recebeu nenhuma dessas mudanças. Nenhum novo Release/IPA de produção, chave assinada ou ação no iPhone foi executado.
+
+**Validação CI:** conferir execução no HEAD exato do PR #90 após commits desta fase; CI verde não substitui teste físico nem autenticação da origem.
+
+
+### Fase 5D — contrato de IPC proposto para o helper (2026-11-05)
+
+**Fase 5C — CI verde:** no commit `e7d6d0688df3b0753409f7fc323d960cf3c7ebeb`, execução GitHub Actions `41973178913`, job de build concluído com **success**. A Fase 5C identifica o binário `appinst` dentro do DEB, mas a origem oficial ainda **não** foi comprovada.
+
+**Implementação Fase 5D somente host/offline:**
+- `ci/webreader_helper_request_contract.py`: parser estrito de até 2048 bytes para proposta `request-install-review`, bundle fixo `com.example.MangaReader12`, build int32 positivo, SHA256 do manifesto e nonce em 64 hex minúsculos distintos, JSON sem chaves duplicadas; nenhum campo extra, URL, arquivo, comando, `argv`, shell ou autorização.
+- `ci/test_webreader_helper_request_contract.py`: entradas adversariais (operação indevida, alvo forjado, caminhos, shell, JSON duplicado via escape, bytes inválidos, overflow, campos e tipos inválidos). Integrado ao `build.yml`.
+- `docs/WEBREADER_HELPER_IPC_CONTRACT_PHASE5D_2026-11-05.md`: ameaça, fronteira de confiança, requisitos de identidade do peer, revalidação independente da assinatura e do mesmo descritor/bytes IPA, anti-replay, confirmação explícita, backup e testes isolados.
+
+**Importante:** NÃO existe helper instalado nem serviço IPC real nesta fase; apenas um parser de referência que **nunca concede permissão para instalação**. O hash/nonce vindos do cliente não são autoridade. Um futuro processo privilegiado deve obter credenciais do peer pelo sistema, revalidar o manifesto assinado e a IPA diretamente dos bytes que irá usar, manter a validação e a instalação sem janela de troca de arquivo (TOCTOU) e não permitir comandos, caminhos ou URLs fornecidos pelo app.
+
+**Estado:** Fase 5D implementada em branch isolada, aguardando CI no HEAD mais recente. Não criar chave de produção, release, instalação, merge, nem alterar a Build 56. O PR #90 permanece draft.
+
+
+### Fase 5E — anti-replay, expiração e sessão isolada do helper (2026-11-05)
+
+**Fase 5D CI VERDE:** GitHub Actions `41974713773`, testando o contrato
+do helper e os demais testes do PR sem falha. O código ainda é exclusivamente
+host/offline.
+
+Fase 5E acrescentou `ci/webreader_helper_review_session.py` com
+`ReviewSessionLedger`: challenge aleatório de servidor (64 hex; 256 bits),
+uma confirmação apenas, TTL padrão de 30 segundos, limite de oito solicitações
+pendentes, histórico curto limitado de correlações, bloqueio por replay e
+vínculo ao contexto da conexão. Falha de build/hash invalida a confirmação
+em vez de reutilizar o token; cancelamento e desconexão revogam pedidos
+pendentes. `ReviewAssessment.install_authorized` permanece **False**
+por construção, mesmo quando todos os campos simulados coincidem.
+
+A nova suíte `ci/test_webreader_helper_review_session.py` testa reuso de
+challenge e nonce, cliente diferente, expiração, cancelamento, excesso de
+solicitações, tipos e hashes forjados e limites de armazenamento.
+Entrou na CI da branch. A descrição técnica detalhada está em
+[docs/WEBREADER_HELPER_REPLAY_PHASE5E_2026-11-05.md](WEBREADER_HELPER_REPLAY_PHASE5E_2026-11-05.md).
+
+**Limites fundamentais:** contexto de peer e digest independentemente verificado
+são **simulações**, não credenciais reais de IPC; hash fornecido pelo cliente
+não é assinatura; challenge não autentica a IPA nem autoriza instalação.
+Não há daemon, `appinst`, chaves de produção, helper, Release ou IPA nova.
+Build 56/`main` preservadas, PR #90 Draft, sem merge.
+**CI da Fase 5E deve ser confirmada no HEAD exato antes de aprová-la.**
+
+
+### Fase 5F — pré-inspeção da IPA preparada por descritor (2026-11-05)
+
+Criado ci/webreader_helper_file_preflight.py como protótipo Python
+host-only: a partir de pasta de origem confiável e nome restrito
+WebReader-build<build>-<UUID>.ipa, abre diretório/arquivo com O_NOFOLLOW,
+O_DIRECTORY, O_NONBLOCK e dir_fd (sem seguir o symlink final),
+confere tipo regular, nlink == 1, dono/permissões, tamanho, SHA-256,
+prefixo PK, identidade do inode e timestamps antes/depois e identidade
+da entrada ao final. Rejeita caminhos/versões arbitrárias, links,
+FIFO, arquivo substituído ou modificado durante a leitura.
+
+ci/test_webreader_helper_file_preflight.py: 13 testes adversariais
+APROVADOS LOCALMENTE EM LINUX, ainda sujeitos à CI macOS da branch.
+A nova suíte foi integrada a .github/workflows/build.yml.
+Documentação: docs/WEBREADER_HELPER_FILE_PREFLIGHT_PHASE5F_2026-11-05.md.
+
+**Aviso de segurança:** o descritor é fechado após o teste, logo
+não elimina TOCTOU entre inspeção e eventual instalação. Os valores
+esperados aqui são injetados nos testes, não autenticados pelo helper
+real. O prefixo PK não atesta ZIP seguro, a função não autentica
+o manifesto nem confere Info.plist. Um helper real precisará autenticar
+o peer, chaves/assinaturas, usar pasta própria de origem confiável,
+revalidar a IPA completa e manter os mesmos bytes protegidos até
+que o instalador os consuma. Nunca usar o resultado deste protótipo
+como autorização de instalação; install_authorized == False.
+
+**Gates:** CI da fase 5E (#1058) e da fase 5F no HEAD atual
+devem ser conferidas; appinst de origem oficial segue inconclusivo;
+sem helper, sem IPA ou Release de produção, sem chaves, sem execução
+rootful. PR #90 Draft separado da main; Build 56 intacta.
+
+
+### Fase 5G — cópia privada com descritor retido e auditoria de origem appinst (2026-11-05)
+
+**Fase 5E CI verde:** commit db348c39..., execução 41975720367.
+**Fase 5F CI verde:** commit e52d2ecf..., execução 41976689318.
+Essas aprovações valem para os commits exatos, não atestam dispositivo.
+
+**Fase 5G implementada na branch e testada localmente:** em
+ci/webreader_private_snapshot.py, um protótipo host-only faz streaming
+do arquivo preparado para uma pasta privada presumida confiável,
+utilizando descritores, O_NOFOLLOW/O_EXCL, bytes SHA-256, no-clobber,
+fsync, cópia chmod 0400 e segunda verificação do hash sobre descritor
+somente leitura que continua aberto. Rejeita troca/mutação durante a
+cópia, symlink/hardlink, arquivo especial, path fora do padrão,
+metadados divergentes e permissões inseguras. A rotina de cleanup
+verifica dev/inode, não apaga arquivos existentes após colisão e
+fecha descritores ao sair de um context manager.
+
+A nova suíte ci/test_webreader_private_snapshot.py foi incluída no
+workflow e passou **20 testes offline em Linux**. **Aguardando CI macOS
+no HEAD exato desta fase.** Nenhum desses testes é uma operação
+privilegiada. A pasta privada nos testes é do mesmo UID do processo;
+não comprova separação real de privilégios no iPhone.
+
+**Descoberta na fonte OFICIAL appinst 2.1.1:**
+https://github.com/akemin-dayo/AppSync/blob/master/appinst/appinst.m
+A implementação usa NSTemporaryDirectory()/appinst, pede modo
+de diretório 0777, cria uma segunda cópia de IPA com copyItemAtPath e
+passa o caminho dessa cópia ao LSApplicationWorkspace (iOS >=8).
+Portanto, a manutenção da identidade dos bytes dentro de nossa
+cópia privada não assegura identidade fim-a-fim se um instalador
+posteriormente recopia esses bytes em outra área. A exploração depende
+do ambiente e permissões dos diretórios pais: **é risco pendente de
+validação**, não comprometimento comprovado. O appinst de terceiro
+instalado no aparelho ainda não foi autenticado contra um original
+publicado pela autora.
+
+**Gate de instalação bloqueado:** até que o diretório temporário do
+appinst seja comprovadamente inacessível a terceiros ou a operação
+seja substituída por um mecanismo auditado, nenhum helper/instalação
+automaticamente privilegiada será publicado.
+
+Documentação ampliada:
+docs/WEBREADER_HELPER_SNAPSHOT_PHASE5G_2026-11-05.md
+
+Gates posteriores: verificar CI exata da Fase 5G; obter origem oficial
+autenticada de appinst; diagnóstico local de permissões e instalação
+somente de app descartável após consentimento; manifesto P-256 pinado
+no helper, autenticidade do peer IPC, auditoria completa IPA, backups
+separados de MR12Backup e de capítulos offline; somente então
+considerar um instalador controlado. PR #90 permanece Draft, main e
+Build 56 intocadas. Sem Build 57, release, chave ou helper real.
+
+
+### Fase 6A — primeiro IPC nativo funcional no código (2026-11-05)
+
+Após a revisão de rumo com o usuário (menos simulações abstratas, mais
+componentes verificáveis), a branch adicionou um **programa C separado
+e uma sonda Swift iOS12** que implementam uma troca real de
+PING/PONG por UNIX-domain socket, em modo de diagnóstico sem privilégios.
+
+- ci/webreader_helper_probe.c: compilável em macOS/Linux/iOS12 ARM64.
+  EUID 0 é proibido; aceita apenas comandos de CLI locais serve/probe
+  e protocolo fixo REQUEST=WRPING1+\n / RESPONSE=WRPONG1+\n,
+  exatamente 8 bytes cada; uma conexão e termina. O servidor
+  obriga diretório próprio 0700, socket 0600 e mesmo UID via
+  getpeereid (Darwin) ou SO_PEERCRED (Linux). Nome curto wrp.sock
+  para respeitar sockaddr_un.sun_path no iOS12. Sem appinst, shell,
+  process spawn, IPA, download ou API privada.
+- MangaReader12/Core/WebReaderHelperPingProbe.swift: compilado no
+  target iOS12 experimental, cria WR no próprio NSHomeDirectory()
+  no toque manual e consulta o socket. Mesmo-UID e PONG NÃO SÃO
+  autenticação de assinatura de código, muito menos autorização
+  para instalar.
+- WebReaderAppUpdatesViewController: seção separada "HELPER LOCAL
+  (DIAGNÓSTICO)" com teste PING e cópia do caminho do diretório.
+  Não inicia o servidor nem baixa/instala IPA.
+- ci/test_webreader_helper_probe.py: compila no host e verifica PING
+  real em processos separados, rejeição de operações estranhas,
+  diretórios e sockets suspeitos, inexistência de root, input ruim
+  e preservação de arquivo preexistente.
+- ci/test_native_webreader_helper_ping.py: compila a MESMA sonda
+  Swift (Darwin) e a conecta ao servidor C em outro processo macOS.
+  Verifica PONG real, helper ausente e arquivo que não é socket.
+- .github/workflows/build.yml: executa os dois testes no macOS-14,
+  compila C para ARM64 iOS12 e gera artefato
+  WebReader-Helper-Ping-iOS12-NONINSTALLER somente na branch.
+- ci/test_app_updates_screen.py e MangaReader12.xcodeproj/project.pbxproj
+  atualizados para incluir a sonda, manter versão 56 e testar que
+  nenhuma instalação foi adicionada.
+
+Detalhes e protocolo: [Fase 6A](WEBREADER_NATIVE_HELPER_PING_PHASE6A_2026-11-05.md).
+
+**Estado de validação:** código/testes adicionados no PR #90 Draft,
+AGUARDANDO CI para o HEAD exato. O binário iOS12 ainda NÃO foi
+executado no aparelho, a conectividade com o sandbox do Chimera
+ainda NÃO foi fisicamente comprovada. A futura implementação
+privilegiada exige peer autenticado, manifesto real assinado,
+ZIP/IPA íntegro no mesmo FD, backup testado e resolução da segunda
+cópia da IPA no appinst com permissões de trabalho 0777.
+Nenhum download, instalação, helper rootful, token/chave de produção,
+IPA Build57, release ou merge foi realizado. A main e a Build56
+instalada seguem intactas.
+
+
+### Fase 6B — kit físico diagnóstico IPC separado, SEM instalador (2026-11-05)
+
+A Fase 6A teve **CI verde**: GitHub Actions **#1144**, commit `54ad1e0a6180081ff5ce22bf0b6d3a809807ff1c`; foram aprovados o PING/PONG C/C, o PING/PONG Swift/C, compilação do binário C para ARM64 iOS12, builds Debug/Release iOS12 e auditoria da IPA. Esse resultado é específico daquele commit, não é teste físico no iPhone.
+
+A Fase 6B deixa preparado um pacote exclusivo de QA física:
+
+- `ci/package_ipc_probe_ipa.sh`: empacota, somente a partir do build Release verificado, uma **IPA separada** `WebReader-IPC-Probe-iOS12-unsigned.ipa`. Identificador `com.example.MangaReader12.ipcprobe`, nome visível `WebReader IPC Test`; não sobrescreve a IPA principal nem injeta o helper C.
+- `ci/test_ipc_probe_ipa.py`: compara as IPAs de produção Build56, TLS e IPC, garantindo três identificadores únicos, executável idêntico por SHA-256, versão/min iOS iguais, rótulos próprios e árvore de arquivos não alterada.
+- `AppDelegate.swift`: reconhece o identificador IPC e inicia apenas `WebReaderAppUpdatesViewController`, sem instanciar `MainTabBarController` ou agendar/realizar atualizações da Biblioteca. `resetRootViewController` respeita o modo diagnóstico.
+- `WebReaderAppUpdatesViewController.swift`: no modo IPC exibe apenas versão e seção de diagnóstico local (2 seções), removendo controles de leitura/release e sonda HTTPS. Modo normal preserva todas as 6 seções.
+- `ci/test_ipc_probe_launch.py`: protege as condições de boot e isolamento da UI.
+- `ci/webreader_helper_probe.c`: agora também tem `selftest` não privilegiado, que não cria socket, para separar erros de execução de erros de IPC. Janela do servidor de 60 s e aviso `WRPING_READY`.
+- `.github/workflows/build.yml`: empacota/testa as duas IPAs de diagnóstico no CI, compila e aplica assinatura ad hoc de teste ao binário ARM64/iOS12, e faz uploads separados da IPA IPC e do helper sem privilegiamento. Upload habilitado para PR e push, **não é GitHub Release**.
+
+O roteiro detalhado de teste iOS12/Chimera está em
+`docs/WEBREADER_IPC_DEVICE_TEST_PHASE6B_2026-11-05.md`.
+
+**Limites:** a assinatura ad hoc não garante execução por padrão em Chimera, o terminal deve executar o programa como usuário mobile, não root, e o sandbox pode proibir processo externo de alcançar o diretório WR do app. PING/PONG não autentica assinatura nem habilita instalação. Nenhum artefato físico foi instalado no iPhone e nenhuma atualização de Build56 foi publicada. Chave de produção `nil`, sem helper privilegiado nem execução `appinst`. PR #90 permanece Draft, `main` intocada.
+
+**Gate imediato:** CI macOS do HEAD exato 6B deve ficar verde e publicar artefatos antes de solicitar teste no dispositivo; corrigir qualquer erro de empacotamento, teste de identidade, compilação ou assinatura.
+
+
+### Fase 6B2 — kit IPC verificável fora do CI (2026-11-05)
+
+A CI da Fase 6B mais recente estava em fila (#1190 e seguintes).
+Foi adicionado controle de concorrência em `.github/workflows/build.yml`
+para não desperdiçar os runners macOS verificando commits antigos
+da mesma branch: eventos push/PR compartilham a lane e a versão
+atual substitui execuções anteriores (exceto `main`).
+
+Novo `ci/verify_ipc_field_kit.py`: ferramenta portável Python 3,
+read-only, executada no PC após extrair o artefato
+`WebReader-IPC-iOS12-FieldTest-Kit`, que compara o hash de
+`WebReader-IPC-Probe-iOS12-unsigned.ipa` e
+`WebReader-Helper-Ping-iOS12` com os `.sha256` incluídos,
+verifica que a IPA tem Bundle ID `com.example.MangaReader12.ipcprobe`,
+build 56, mínimo iOS 12.0, nome WebReader IPC Test, sem
+`UIBackgroundModes`, e verifica header Mach-O arm64 do executável.
+Não executa o binário, não valida assinatura nem confia em IPAs
+de terceiros. O protótipo não concede instalação (campo false).
+Deve ser executado com `python ci/verify_ipc_field_kit.py --directory .`
+a partir da pasta extraída, após CI verde. Em caso de falha,
+não transferir arquivos ao telefone.
+
+Nova suíte `ci/test_verify_ipc_field_kit.py` exercita pacotes
+fictícios com hashes corrompidos, identidades diferentes, modo
+de background, arquitetura errada, links e entradas ZIP
+duplicadas; adicionada à CI. O verificador é incluído no
+artefato único e executado pelo workflow sobre o pacote
+real após empacotamento.
+
+**Gate:** CI do HEAD exato dessa versão ainda não foi confirmada;
+não executar testes no iPhone antes do verde. Build 56/`main`
+intactas, PR #90 Draft e sem execução do instalador.
+
+
+### MVP2 — primeira ponte CLI real para appinst (05/11/2026, tarde)
+
+Nova implementação concreta no PR #90:
+- ci/webreader_appinst_bridge.c: ferramenta separada, C para
+  ARM64/iOS12, recusa EUID root. Modo selftest não executa nada;
+  modo inspect valida localmente uma IPA preparada pela UI
+  (caminho estrito do container, WebReader-build<N>-UUID.ipa,
+  dono mobile, sem symlinks/hardlinks, tamanho e SHA-256).
+- Comando install-confirmed exige confirmação textual literal
+  I-CONFIRM-INSTALL, valida SHA e chama o caminho fixo
+  /usr/bin/appinst via posix_spawn, nunca via shell. Tem timeout
+  e mensagens distintas para sucesso/erro. Este comando é real,
+  por isso **NÃO USAR NA BUILD56** antes de teste descartável.
+- ci/test_webreader_appinst_bridge.py: CI compila com binário
+  fake_appinst.sh e raiz de staging sintética embutida somente
+  em testes; nunca chama appinst de verdade. Testes negativos
+  de consentimento/argumentos, hash, caminho e links.
+- .github/workflows/build.yml: testa a ponte com appinst falso,
+  compila C para ARM64/iOS12 com codesign ad hoc, e publica
+  WebReader-Appinst-Bridge-iOS12-MOBILE-PREVIEW apenas como
+  artefato Actions experimental (não instala, não faz Release).
+- A tela WebReaderAppUpdatesViewController recebeu o fallback
+  **Copiar comando appinst (manual)**, disponível somente depois
+  de download/inspeção IPA bem-sucedidos. Copia o comando citado
+  com escape POSIX e avisa sobre teste com app descartável;
+  o app não o executa, não abre terminal nem solicita root.
+- O fluxo de verificação/baixa no GitHub segue separado do
+  modo de publicação P-256 anterior e exige release real
+  (o repositório ainda não tem GitHub Release publicado).
+
+Limites que NÃO devem ser omitidos: o CLI não comprova por
+conta própria a assinatura de editor ou conteúdo ZIP completo;
+o descritor é fechado antes de appinst abrir o arquivo. appinst
+recopia IPA no seu temporário, podendo criar janela TOCTOU.
+Não chamar a ponte automaticamente pelo aplicativo antes do
+teste físico do IPC no Chimera e dos dados em app descartável.
+Não há integração com botão Instalar nesta fase.
+
+Matriz: ci/test_webreader_appinst_bridge.py na CI e compilação
+Debug/Release do WebReader precisam estar verdes no HEAD exato.
+Sem merge na main, sem mudança da Build56 e sem instalação real.
+
+### MVP3 — botão de instalação conectado à ponte appinst por socket (05/11/2026)
+
+A prioridade aprovada pelo usuário continua sendo GitHub Releases -> baixar
+IPA -> verificar SHA/Info.plist -> confirmar -> appinst. Nenhum merge/main.
+
+Implementado na branch feat/chimera-updater-phase1-protocol-audit:
+- MangaReader12/Core/WebReaderAppinstSocket.swift: protocolo C/Swift de
+  uma única conexão em wri.sock (pasta WR do sandbox), com credencial de
+  peer mesmo UID, PING e pedido de instalar (path, SHA, confirmação).
+- ci/webreader_appinst_bridge.c: novo modo serve-once, aguarda uma conexão
+  mobile em até 60s, rejeita path de container diferente e hash inválido,
+  executa /usr/bin/appinst por posix_spawn somente para pedido válido.
+  Resposta WRDONE1/WRFAIL1. EUID root é recusado. Não executa shell.
+- WebReaderAppUpdatesViewController.swift: após download e staging
+  verificado de release público, habilita botão Instalar atualização
+  (Chimera), mostra alerta com build e backup, exige confirmação,
+  envia pedido ao socket e exibe o resultado. O app NÃO inicia o CLI.
+- A IPA WebReader IPC Test (identidade separada) inclui teste
+  Testar ponte appinst (PING), que nunca chama instalador.
+- ci/test_native_webreader_appinst_socket.py: teste nativo Swift <-> C
+  com appinst falso e IPA sintética (7 cenários), sem instalação.
+- Xcode projeto e GitHub Actions atualizados para compilar cliente
+  Swift e ensaiar servidor C, incluindo arm64/iOS12.
+
+**Validação:** o teste de integração com appinst falso já passou em
+um workflow intermediário. Precisamos de CI verde do HEAD EXATO
+após as últimas alterações na UI e docs. Não alegar que o Chimera
+físico foi testado, nem que o sistema atualiza sem terminal.
+
+**Próxima ação real:** após CI do HEAD verde, baixar WebReader IPC
+Test e o bridge iOS12 preview, e validar SOMENTE serve-once + PING
+como mobile. Esse passo não instala IPA; verificar sandbox/permissões.
+Roteiro: docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md.
+Depois testar instalação de um aplicativo descartável (consentimento
+do usuário) e, caso funcione, preparar serviço mobile persistente
+para dispensar terminal. Não tocar a Build56 real até backup e QA.
+
+**Limites:** protocolo mesmo UID não autentica assinatura do processo;
+o SHA é informado pelo app; appinst recopia IPA; a ponte não resolve
+por si só procedência da IPA nem TOCTOU pós-leitura. Sem root daemon,
+sem publicação Release, sem merge, sem atualização automática ativa
+no aparelho, main e Build56 preservadas.
+
+### MVP4 — aplicativo descartável para testar appinst sem tocar na Build56 (05/11/2026)
+
+Agora há um pacote CI com duas versões do mesmo app iOS12 pequeno,
+em separado de todos os identificadores do WebReader:
+- ci/appinst_disposable/main.m: interface UIKit que persiste um marcador
+  NSUserDefaults em v1 e sinaliza se o marcador sobrevive em v2.
+- ci/build_appinst_disposable.sh: clang arm64 iOS12 + duas IPAs com
+  Bundle ID fixo com.example.WebReaderAppinstDisposableTest,
+  CFBundleVersion 1 e 2, e SHA-256 para cada arquivo.
+- ci/test_appinst_disposable_artifacts.py: audita Bundle ID, iOS12,
+  Info.plist, Mach-O arm64 e isolamento da IPA principal.
+- .github/workflows/build.yml publica o artefato
+  WebReader-Appinst-Disposable-v1-v2-iOS12-QA, sem Release oficial.
+
+Objetivo: instalar v1 com appinst, abrir e gravar o marcador;
+instalar v2 SOBRE o mesmo aplicativo, reabrir e observar
+Persistência dos dados: SIM. Nunca excluir v1 antes de atualizar.
+
+O teste é manual com a ferramenta appinst já existente e NÃO
+depende do GitHub Releases do WebReader, que ainda está sem releases.
+Este é um aplicativo de teste; nenhuma versão de WebReader é
+instalada/modificada. Ver instruções em
+docs/WEBREADER_APPINST_SOCKET_MVP_2026-11-05.md.
+
+**Estado:** aguarda CI no HEAD exato depois de mudanças de código
+e documentação. PR #90 Draft, main e Build56 intactas.
+
+
+### Resultado físico decisivo: appinst direto bloqueado em iOS12 (06/11/2026)
+
+Testado pelo usuário na IPA WebReader appinst Test Build 2 no iOS 12.5.8,
+jailbreak Chimera, com AppSync Unified e appinst já instalados:
+
+- UID = 501 e EUID = 501;
+- `lstat("/usr/bin/appinst")` -> 1 (EPERM);
+- `access("/usr/bin/appinst", X_OK)` -> 1 (EPERM);
+- `posix_spawn("/usr/bin/appinst", ["--help"])` -> 1 (EPERM);
+- Nenhuma IPA foi passada/instalada, nenhuma alteração na Build56.
+
+A Build 1 era inconclusiva, pois abortava em lstat. A Build 2 tentou
+posix_spawn de fato. Portanto, **não seguir pelo método de executar appinst
+diretamente dentro do sandbox**. Voltar à ponte externa de usuário
+mobile (sem root) como autorizado pelo usuário.
+
+Foi criado `WEBREADER_PING_ONLY` em
+`ci/webreader_appinst_bridge.c`: a compilação de diagnóstico exclui
+rotinas de instalação e aceita só PING. Teste host
+`ci/test_chimera_ping_only_bridge.py` prova PING, rejeição de opcode
+de instalação, ausência de símbolo posix_spawn e de caminho appinst.
+Workflow focado `.github/workflows/chimera-mobile-ping.yml` em macOS15
++ Xcode16.4 compila uma IPA isolada IPC Test e o executável externo de
+PING, auditoria `ci/test_chimera_mobile_ping_kit.py`, um ZIP de Actions
+`WebReader-Chimera-Mobile-PING-Kit-iOS12`.
+
+Próximo teste físico: transferir/rodar o helper externo uma vez como UID501,
+obter PONG no IPC Test. Não testar instalação até esse PING ser validado;
+depois testar appinst só com aplicativo descartável, nunca Build56.
+Guia: `docs/WEBREADER_PONTE_CHIMERA_PING_2026-11-06.md`.
+Requer terminal somente durante validação inicial; não alegar que já
+existe serviço persistente ou atualização 1-toque pronta.
+Mantidas `main`, Build56 e PR #90 Draft.
