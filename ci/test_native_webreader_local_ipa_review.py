@@ -50,7 +50,26 @@ let corrupt = URL(fileURLWithPath: args[5])
 let root = URL(fileURLWithPath: args[6], isDirectory: true)
 let folder = root.appendingPathComponent("QA-import", isDirectory: true)
 let ios = OperatingSystemVersion(majorVersion: 12, minorVersion: 5, patchVersion: 8)
-let hash = args[0] // This is executable path; replaced below with fixture hash.
+// Disk headroom is required BEFORE any multi-megabyte QA copy.
+let small: Int64 = 20 * 1024 * 1024
+let minimumFree = WebReaderLocalIPAReviewer.requiredFreeBytes(ipaBytes: small)
+require(minimumFree >= small + 16 * 1024 * 1024, "16 MiB headroom")
+require(!WebReaderLocalIPAReviewer.hasEnoughSpace(
+    freeBytes: small, ipaBytes: small
+), "fail closed when free bytes only cover file size")
+require(WebReaderLocalIPAReviewer.hasEnoughSpace(
+    freeBytes: minimumFree, ipaBytes: small
+), "exact required free bytes accepted")
+require(!WebReaderLocalIPAReviewer.hasEnoughSpace(
+    freeBytes: 1_000_000, ipaBytes: 0
+), "zero-byte candidates cannot be copied")
+require(!WebReaderLocalIPAReviewer.hasEnoughSpace(
+    freeBytes: Int64.max,
+    ipaBytes: WebReaderLocalIPAReviewer.maximumSize + 1
+), "over-limit file cannot bypass free-space check")
+require(WebReaderLocalIPAReviewer.requiredFreeBytes(
+    ipaBytes: WebReaderLocalIPAReviewer.maximumSize
+) == 576 * 1024 * 1024, "at most 64 MiB extra headroom")
 let expected = ProcessInfo.processInfo.environment["QA_FIXTURE_SHA"]!
 require(expected.count == 64, "fixture digest must be a full SHA256")
 func imported(
@@ -99,6 +118,29 @@ fd.truncateFile(atOffset: UInt64(WebReaderLocalIPAReviewer.maximumSize + 1))
 fd.closeFile()
 denied("512MiB limit") { try imported(oversize) }
 
+// A preexisting symlink at the staging directory must NEVER cause the
+// reviewer to write inside another application folder or user Library.
+let mockLibrary = root.appendingPathComponent("mock-library", isDirectory: true)
+try! FileManager.default.createDirectory(at: mockLibrary,
+                                        withIntermediateDirectories: false)
+let linkedFolder = root.appendingPathComponent("redirected-QA-directory")
+try! FileManager.default.createSymbolicLink(
+    at: linkedFolder, withDestinationURL: mockLibrary
+)
+do {
+    let item = try WebReaderLocalIPAReviewer.importForReview(
+        sourceURL: valid, expectedBuild: 67, expectedSHA256: expected,
+        installedBuild: 66, installedIOS: ios, directory: linkedFolder
+    )
+    WebReaderLocalIPAReviewer.discard(item, directory: linkedFolder)
+    fatalError("staging directory symlink unexpectedly accepted")
+} catch WebReaderLocalIPAReviewError.failedToCopy {
+    // Expected: no copy must be written into the symlink target.
+}
+require((try! FileManager.default.contentsOfDirectory(
+    atPath: mockLibrary.path
+)).isEmpty, "symlink target is not modified")
+
 let allAfterRejections = (try? FileManager.default.contentsOfDirectory(
     atPath: folder.path
 )) ?? []
@@ -106,6 +148,12 @@ require(allAfterRejections.isEmpty, "failed imports must delete temporary copies
 
 let review = try! imported(valid)
 require(review.build == 67, "read-only archive build")
+let copiedInfo = try! FileManager.default.attributesOfItem(
+    atPath: review.copiedIPAURL.path
+)
+let copiedPermissions = copiedInfo[.posixPermissions] as! NSNumber
+require((copiedPermissions.intValue & 0o777) == 0o600,
+        "imported QA copy is private, not inherited world-readable")
 require(review.expectedSHA256 == expected, "exact manually supplied SHA")
 require(review.ipaBytes > 0 && review.zipEntries >= 2, "ZIP index audited")
 require(review.manualSourceOnly, "local files not signed manifest")
@@ -136,7 +184,7 @@ require(try! Data(contentsOf: valid) == original,
         "discard never touches user-selected original IPA")
 require(!FileManager.default.fileExists(atPath: missing.path),
         "discard must not generate fake files")
-print("PASS local iOS12 IPA review: 16 negative cases, isolated copy, SHA/ZIP/identity, recheck, safe discard, no install")
+print("PASS local iOS12 IPA review: 17 negative cases, isolated copy, SHA/ZIP/identity, recheck, safe discard, no install")
 '''
 with tempfile.TemporaryDirectory(prefix="wr67-local-ipa-") as directory:
     folder = Path(directory)
