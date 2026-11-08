@@ -14,6 +14,7 @@ enum WebReaderIPAStageFailure: Error, Equatable {
     case disabled
     case busy
     case invalidRelease
+    case notNewerThanInstalled
     case storage
     case insufficientSpace
     case cancelled
@@ -36,6 +37,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private let destinationDirectory: URL
     private let testProtocolClasses: [AnyClass]?
     private let testAvailableSpace: Int64?
+    private let testInstalledBuild: Int?
     private let onProgress: ((Int) -> Void)?
     private let stateLock = NSLock()
     private var session: URLSession?
@@ -55,6 +57,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         )[0].appendingPathComponent("WebReaderUpdates", isDirectory: true),
         testProtocolClasses: [AnyClass]? = nil,
         testAvailableSpace: Int64? = nil,
+        testInstalledBuild: Int? = nil,
         onProgress: ((Int) -> Void)? = nil
     ) {
         self.update = verifiedUpdate
@@ -62,6 +65,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         self.testProtocolClasses = testProtocolClasses
         // Test-only override is ignored without an injected transport.
         self.testAvailableSpace = testProtocolClasses == nil ? nil : testAvailableSpace
+        self.testInstalledBuild = testProtocolClasses == nil ? nil : testInstalledBuild
         self.onProgress = onProgress
         super.init()
     }
@@ -98,6 +102,17 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             ) != nil
         else {
             callback(.failed(.invalidRelease))
+            return
+        }
+        // Recheck installed version immediately before staging; metadata
+        // validated in a prior UI/session cannot downgrade the active app.
+        // An injected version is permitted only with an injected test URLProtocol.
+        let bundleBuild = Int(Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleVersion"
+        ) as? String ?? "") ?? 0
+        let currentBuild = testInstalledBuild ?? bundleBuild
+        guard currentBuild >= 0, update.build > currentBuild else {
+            callback(.failed(.notNewerThanInstalled))
             return
         }
         stateLock.lock()
