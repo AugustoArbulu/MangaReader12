@@ -621,12 +621,33 @@ enum WebReaderLocalIPAReviewer {
     static func discard(_ review: WebReaderLocalIPAReview,
                         directory: URL = defaultDirectory) {
         let file = review.copiedIPAURL.standardizedFileURL
+        let fileName = file.lastPathComponent
+        let expectedPrefix = "WebReader-Build" + String(review.build) +
+            "-local-"
         guard file.deletingLastPathComponent().standardizedFileURL ==
                 directory.standardizedFileURL,
-              file.lastPathComponent.hasPrefix(
-                "WebReader-Build" + String(review.build) + "-local-"
-              ),
-              file.pathExtension.lowercased() == "ipa" else { return }
-        try? FileManager.default.removeItem(at: file)
+              fileName.hasPrefix(expectedPrefix),
+              fileName.hasSuffix(".ipa"),
+              UUID(uuidString: String(
+                fileName.dropFirst(expectedPrefix.count).dropLast(4)
+              )) != nil else { return }
+        // A previous path-based removeItem could be redirected if another
+        // process swapped the staging directory for a symlink. Anchor the
+        // unlink to a non-symlinked directory FD and accept only regular IPA
+        // copies with a matching UUID-derived filename.
+        let directoryFD = Darwin.open(
+            directory.path,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        )
+        guard directoryFD >= 0 else { return }
+        defer { _ = Darwin.close(directoryFD) }
+        var recorded = stat()
+        guard Darwin.fstatat(
+            directoryFD, fileName, &recorded, AT_SYMLINK_NOFOLLOW
+        ) == 0,
+              (recorded.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
+            return
+        }
+        _ = Darwin.unlinkat(directoryFD, fileName, 0)
     }
 }
