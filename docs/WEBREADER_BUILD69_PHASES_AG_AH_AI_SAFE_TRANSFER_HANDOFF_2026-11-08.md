@@ -141,8 +141,17 @@ confirma que o orçamento original não encolhe no último fragmento.
   do callback de progresso e orçamento dinâmico.
 - `ci/test_build68_phase_aa_ab_manual_controls.py` — regressão do
   resultado `.cancelled`/limpeza adaptada ao novo controle atômico.
-- [GitHub Actions — Build69 AC–AI](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42456605915)
+- [GitHub Actions — Build69 AC–AI](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42456803468)
   (workflow `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml`).
+
+A primeira execução foi interrompida no teste nativo porque seu
+contador de requisições não incluía o GET *deliberadamente abortado*
+por falta de espaço. Após corrigir a contagem, o teste principal de
+concorrência, cancelamento e retry passou. Uma segunda tentativa
+detectou uma expressão aritmética excessivamente sobrecarregada
+no fixture Swift de orçamento; a constante foi tipada de forma
+explícita, sem alterar a fórmula de produção. A versão mais recente
+da CI reúne essas duas correções de teste.
 
 **Status nesta edição:** testes e compilação ainda em execução;
 registrar SUCCESS somente após checar ambos os jobs e a identidade
