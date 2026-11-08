@@ -125,11 +125,13 @@ let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
 )
 defer { try? FileManager.default.removeItem(at: scratch) }
 func run(
-    _ metadata: WebReaderVerifiedUpdate, useTransport: Bool = true
+    _ metadata: WebReaderVerifiedUpdate, useTransport: Bool = true,
+    testFreeBytes: Int64? = nil, progress: ((Int) -> Void)? = nil
 ) -> WebReaderIPAStageResult {
     let stager = WebReaderIPAStager(
         verifiedUpdate: metadata, destinationDirectory: scratch,
-        testProtocolClasses: useTransport ? [IPAStubProtocol.self] : nil
+        testProtocolClasses: useTransport ? [IPAStubProtocol.self] : nil,
+        testAvailableSpace: testFreeBytes, onProgress: progress
     )
     let semaphore = DispatchSemaphore(value: 0)
     var result: WebReaderIPAStageResult?
@@ -159,7 +161,27 @@ check(IPAStubProtocol.requests == 0, "disabled -> zero requests")
 
 IPAStubProtocol.body = sample
 IPAStubProtocol.sentPartially = true
-switch run(good) {
+// Fail before any request or partial-file creation if free space would
+// jeopardize manga downloads. No FileManager cleanup of existing chapters.
+let beforeLowSpace = IPAStubProtocol.requests
+switch run(good, testFreeBytes: 0) {
+case .failed(.insufficientSpace): break
+default: fatalError("low-space download was not refused")
+}
+check(IPAStubProtocol.requests == beforeLowSpace,
+      "low-space admission must not request network bytes")
+let entriesBeforeDownload = try! FileManager.default.contentsOfDirectory(
+    atPath: scratch.path
+)
+check(entriesBeforeDownload.isEmpty,
+      "insufficient space must not leave partial files")
+var progressValues: [Int] = []
+let progressLock = NSLock()
+switch run(good, progress: { value in
+    progressLock.lock()
+    progressValues.append(value)
+    progressLock.unlock()
+}) {
 case .staged(let path):
     check(path.lastPathComponent.hasSuffix(".ipa"), "staged IPA extension")
     let contents = try! Data(contentsOf: path)
@@ -168,6 +190,10 @@ case .staged(let path):
 default: fatalError("verified IPA must be staged")
 }
 check(IPAStubProtocol.requests == 1, "exactly one GET")
+check(!progressValues.isEmpty, "download emits coarse progress")
+check(progressValues.allSatisfy { $0 >= 5 && $0 <= 95 && $0 % 5 == 0 },
+      "transfer progress bounded at 95 until integrity finalized")
+check(progressValues == progressValues.sorted(), "download progress monotonic")
 
 // Version 2 keeps the exact build-named, ad-hoc release filename. This does
 // not test publisher signing: an ad-hoc seal is NOT publisher authentication.
