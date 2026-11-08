@@ -41,7 +41,7 @@ func denied(_ label: String, _ action: () throws -> WebReaderLocalIPAReview) {
     }
 }
 let args = CommandLine.arguments
-require(args.count == 7, "expected five synthetic inputs and scratch root")
+require(args.count == 8, "expected six synthetic inputs and scratch root")
 let valid = URL(fileURLWithPath: args[1])
 let old = URL(fileURLWithPath: args[2])
 let wrongBundle = URL(fileURLWithPath: args[3])
@@ -49,6 +49,7 @@ let wrongIOS = URL(fileURLWithPath: args[4])
 let corrupt = URL(fileURLWithPath: args[5])
 let root = URL(fileURLWithPath: args[6], isDirectory: true)
 let folder = root.appendingPathComponent("QA-import", isDirectory: true)
+let fifo = URL(fileURLWithPath: args[7])
 let ios = OperatingSystemVersion(majorVersion: 12, minorVersion: 5, patchVersion: 8)
 // Disk headroom is required BEFORE any multi-megabyte QA copy.
 let small: Int64 = 20 * 1024 * 1024
@@ -110,6 +111,7 @@ try! FileManager.default.createSymbolicLink(at: link, withDestinationURL: valid)
 denied("source symlink") { try imported(link) }
 let missing = root.appendingPathComponent("missing.ipa")
 denied("missing candidate") { try imported(missing) }
+denied("source FIFO without writer") { try imported(fifo) }
 let oversize = root.appendingPathComponent("large.ipa")
 let file = FileManager.default.createFile(atPath: oversize.path, contents: Data())
 require(file, "create oversized sparse IPA")
@@ -185,7 +187,44 @@ require(try! Data(contentsOf: valid) == original,
         "discard never touches user-selected original IPA")
 require(!FileManager.default.fileExists(atPath: missing.path),
         "discard must not generate fake files")
-print("PASS local iOS12 IPA review: 17 negative cases, isolated copy, SHA/ZIP/identity, recheck, safe discard, no install")
+
+// A hostile replacement of an approved QA copy with a symlink must not
+// cause discard to follow the link or unlink any original owner IPA.
+let symlinkReview = try! imported(valid)
+try! FileManager.default.removeItem(at: symlinkReview.copiedIPAURL)
+try! FileManager.default.createSymbolicLink(
+    at: symlinkReview.copiedIPAURL, withDestinationURL: valid
+)
+WebReaderLocalIPAReviewer.discard(symlinkReview, directory: folder)
+let stillSymlink = try! FileManager.default.destinationOfSymbolicLink(
+    atPath: symlinkReview.copiedIPAURL.path
+)
+require(!stillSymlink.isEmpty, "discard refused symlinked QA candidate")
+require(try! Data(contentsOf: valid) == original, "owner IPA unaffected by symlink")
+try! FileManager.default.removeItem(at: symlinkReview.copiedIPAURL)
+
+// If the whole staging directory changes into a symlink after review,
+// refuse cleanup, even if the same file name is planted in the destination.
+let redirectReview = try! imported(valid)
+let savedFile = redirectReview.copiedIPAURL.lastPathComponent
+let moved = root.appendingPathComponent("actual-QA-folder", isDirectory: true)
+try! FileManager.default.moveItem(at: folder, to: moved)
+let simulatedVictim = mockLibrary.appendingPathComponent(savedFile)
+try! Data("do not remove another file".utf8).write(to: simulatedVictim)
+try! FileManager.default.createSymbolicLink(
+    at: folder, withDestinationURL: mockLibrary
+)
+WebReaderLocalIPAReviewer.discard(redirectReview, directory: folder)
+require(try! Data(contentsOf: simulatedVictim) ==
+        Data("do not remove another file".utf8),
+        "replaced directory did not delete mock Library data")
+try! FileManager.default.removeItem(at: folder)
+try! FileManager.default.moveItem(at: moved, to: folder)
+WebReaderLocalIPAReviewer.discard(redirectReview, directory: folder)
+require(!FileManager.default.fileExists(
+    atPath: redirectReview.copiedIPAURL.path
+), "restored directory allows unlink of exact private copy")
+print("PASS local iOS12 IPA review: 18 negative cases, inode-anchored copy, private staging, protected discard, no install")
 '''
 with tempfile.TemporaryDirectory(prefix="wr67-local-ipa-") as directory:
     folder = Path(directory)
@@ -203,6 +242,9 @@ with tempfile.TemporaryDirectory(prefix="wr67-local-ipa-") as directory:
     shutil.copy2(valid, wrong_ios)
     corrupt = folder / "corrupt.ipa"
     corrupt.write_bytes(b"not a ZIP at all")
+    fifo = folder / "sourcepipe.ipa"
+    import os
+    os.mkfifo(fifo)
     import hashlib
     bad_hash = hashlib.sha256(corrupt.read_bytes()).hexdigest()
     main = folder / "main.swift"
@@ -217,6 +259,6 @@ with tempfile.TemporaryDirectory(prefix="wr67-local-ipa-") as directory:
     env = dict(os.environ, QA_FIXTURE_SHA=digest, QA_BAD_SHA=bad_hash)
     subprocess.run(
         [str(out), str(original), str(old), str(wrong_bundle),
-         str(wrong_ios), str(corrupt), str(folder)],
+         str(wrong_ios), str(corrupt), str(folder), str(fifo)],
         check=True, timeout=90, env=env
     )
