@@ -124,7 +124,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if source == 1 { return 2 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
-        if source == 3 { return 5 }
+        if source == 3 { return 6 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -323,6 +323,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             cell.textLabel?.text = "Copiar diagnóstico de segurança"
             cell.detailTextLabel?.text =
                 "Resumo sem caminhos, chaves privadas ou dados da biblioteca"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (3, 5):
+            cell.textLabel?.text = "Copiar roteiro de testes físicos"
+            cell.detailTextLabel?.text =
+                "Biblioteca, Wi-Fi desligado, leitor, IPA e segurança • tudo não testado"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -587,6 +594,21 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             copyUpdaterSecurityReport()
             return
         }
+        if selectedSection == 3, indexPath.row == 5, !isIPCDiagnostic {
+            UIPasteboard.general.string = WebReaderPhysicalQAChecklist.report(
+                installedBuild: installedBuild,
+                ios: ProcessInfo.processInfo.operatingSystemVersion
+            )
+            let alert = UIAlertController(
+                title: "Roteiro copiado",
+                message: "O roteiro contém campos NÃO TESTADO. Preencha somente " +
+                    "após realizar cada teste; não envia nem lê a biblioteca.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
         if selectedSection == 1, indexPath.row == 1 {
             let url = URL(string:
                 "https://github.com/AugustoArbulu/MangaReader12/releases"
@@ -622,7 +644,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         guard selectedSection == 2, indexPath.row == 0,
-              !isIPCDiagnostic, !checking
+              !isIPCDiagnostic, !checking, !stagingIPA, !verifyingExport
         else { return }
         checking = true
         stagedIPAURL = nil
