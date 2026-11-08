@@ -203,6 +203,44 @@ require(!stillSymlink.isEmpty, "discard refused symlinked QA candidate")
 require(try! Data(contentsOf: valid) == original, "owner IPA unaffected by symlink")
 try! FileManager.default.removeItem(at: symlinkReview.copiedIPAURL)
 
+// A copied-bytes-identical replacement has the same SHA256, but different
+// inode. Share and discard must not treat it as the original audited copy.
+let swappedReview = try! imported(valid)
+let originalCopyLocation = root.appendingPathComponent(
+    "saved-original-candidate.ipa"
+)
+try! FileManager.default.moveItem(
+    at: swappedReview.copiedIPAURL, to: originalCopyLocation
+)
+try! FileManager.default.copyItem(
+    at: valid, to: swappedReview.copiedIPAURL
+)
+do {
+    try WebReaderLocalIPAReviewer.recheck(
+        swappedReview, installedBuild: 66, installedIOS: ios
+    )
+    fatalError("byte-identical replacement accepted as original QA inode")
+} catch WebReaderLocalIPAReviewError.invalidIPA {
+    // Even with equal digests, the receipt must identify the original file.
+}
+WebReaderLocalIPAReviewer.discard(swappedReview, directory: folder)
+require(FileManager.default.fileExists(
+    atPath: swappedReview.copiedIPAURL.path
+), "cannot delete byte-identical foreign inode")
+require(try! Data(contentsOf: swappedReview.copiedIPAURL) == original,
+        "replacement remains untouched after refused cleanup")
+try! FileManager.default.removeItem(at: swappedReview.copiedIPAURL)
+try! FileManager.default.moveItem(
+    at: originalCopyLocation, to: swappedReview.copiedIPAURL
+)
+try! WebReaderLocalIPAReviewer.recheck(
+    swappedReview, installedBuild: 66, installedIOS: ios
+)
+WebReaderLocalIPAReviewer.discard(swappedReview, directory: folder)
+require(!FileManager.default.fileExists(
+    atPath: swappedReview.copiedIPAURL.path
+), "restoring the verified inode allows cleanup")
+
 // If the whole staging directory changes into a symlink after review,
 // refuse cleanup, even if the same file name is planted in the destination.
 let redirectReview = try! imported(valid)
@@ -224,7 +262,7 @@ WebReaderLocalIPAReviewer.discard(redirectReview, directory: folder)
 require(!FileManager.default.fileExists(
     atPath: redirectReview.copiedIPAURL.path
 ), "restored directory allows unlink of exact private copy")
-print("PASS local iOS12 IPA review: 18 negative cases, inode-anchored copy, private staging, protected discard, no install")
+print("PASS local iOS12 IPA review: 19 negative cases, inode-anchored copy, private staging, protected discard, no install")
 '''
 with tempfile.TemporaryDirectory(prefix="wr67-local-ipa-") as directory:
     folder = Path(directory)
