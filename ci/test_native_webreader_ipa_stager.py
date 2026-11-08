@@ -467,6 +467,36 @@ fail(signedManifest(brokenMetadata), .invalidIPA)
 
 let remaining = try! FileManager.default.contentsOfDirectory(atPath: scratch.path)
 check(remaining.isEmpty, "failed downloads leave no IPA or partial files")
+
+// Simulate a killed process leaving a correctly named .partial in private
+// storage. A later owner-triggered download MUST start from zero using a
+// distinct name: never append, resume using Range, trust or delete old bytes.
+let orphanedName = ".webreader-11111111-2222-4333-8444-555555555555.partial"
+let orphaned = scratch.appendingPathComponent(orphanedName)
+let originalPartialBytes = Data("CRASHED TRANSFER: UNVERIFIED".utf8)
+try! originalPartialBytes.write(to: orphaned)
+IPAStubProtocol.body = sample
+let requestsBeforeRestart = IPAStubProtocol.requests
+switch run(good) {
+case .staged(let newFile):
+    check(newFile.lastPathComponent != orphanedName,
+          "owner retry never reuses crashed .partial path")
+    check(try! Data(contentsOf: newFile) == sample,
+          "owner retry validates fresh complete ZIP bytes from zero")
+    check(try! Data(contentsOf: orphaned) == originalPartialBytes,
+          "old abandoned partial preserved until explicit owner cleanup")
+    try! FileManager.default.removeItem(at: newFile)
+default: fatalError("fresh retry after app kill should succeed")
+}
+check(IPAStubProtocol.requests == requestsBeforeRestart + 1,
+      "fresh recovery performs one full GET rather than Range resume")
+check(try! Data(contentsOf: orphaned) == originalPartialBytes,
+      "fresh download never deletes abandoned bytes automatically")
+// Test fixture disposal is not an app action; the recovery API performs
+// no cleanup without owner confirmation.
+try! FileManager.default.removeItem(at: orphaned)
+check(try! FileManager.default.contentsOfDirectory(atPath: scratch.path).isEmpty,
+      "fixture recovery leaves no files outside synthetic test scope")
 print("PASS native IPA stager: signed SHA256 plus complete ZIP/Info.plist identity checks, zero real network")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-stage-integration-") as dir:
