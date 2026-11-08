@@ -106,7 +106,8 @@ class Build69SecurityRegression(unittest.TestCase):
 
     def test_refresh_cannot_discard_active_download_reference(self):
         self.assertIn(
-            "!isIPCDiagnostic, !checking, !stagingIPA, !verifyingExport", UI
+            "!isIPCDiagnostic, !checking, !signedChannelBusy,",
+            "!stagingIPA, !verifyingExport", UI
         )
 
     def test_qa_checklist_is_compiled_and_only_manual(self):
