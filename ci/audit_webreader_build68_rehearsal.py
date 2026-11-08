@@ -52,7 +52,7 @@ def audit(ipa_path, sha_file):
             ipa, sha, size, 66, require_exact_identity=True,
             return_snapshot=True
         )
-        if result["build"] != 67 or result["minimum_ios"] != "12.0":
+        if result["build"] != 68 or result["minimum_ios"] != "12.0":
             raise RehearsalRejected("Build68 metadata or iOS12 minimum mismatch")
         snapshot = result.pop("ipa_snapshot")
         codesign = audit_code_signature_snapshot(snapshot, sha, size)
@@ -63,7 +63,7 @@ def audit(ipa_path, sha_file):
         structure = validate_ipa(
             ipa, sha, installed_build=66, installed_ios="12.5.8"
         )
-        if structure["build"] != 67 or structure["minimumIOS"] != "12.0":
+        if structure["build"] != 68 or structure["minimumIOS"] != "12.0":
             raise RehearsalRejected("read-only IPA validator disagreement")
     except (AdmissionDenied, CodeSignatureRejected, IPARejected, OSError,
             TypeError, KeyError) as exc:
@@ -72,7 +72,7 @@ def audit(ipa_path, sha_file):
     return {
         "status": "PASS",
         "qaArtifact": EXPECTED_FILENAME,
-        "build": 67,
+        "build": 68,
         "upgradesFromObservedBuild": 66,
         "minimumIOS": "12.0",
         "ipaSHA256": sha,
