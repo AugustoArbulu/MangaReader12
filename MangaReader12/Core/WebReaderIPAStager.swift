@@ -16,6 +16,7 @@ enum WebReaderIPAStageFailure: Error, Equatable {
     case invalidRelease
     case storage
     case insufficientSpace
+    case cancelled
     case transport
     case redirectRejected
     case unexpectedHTTPStatus(Int)
@@ -186,7 +187,12 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         stateLock.lock()
         let task = currentTask
         stateLock.unlock()
-        task?.cancel()
+        guard let active = task else { return }
+        active.cancel()
+        // Completing locally avoids leaving a partial IPA behind when the
+        // network transport never calls its completion callback after cancel.
+        // finish is lock-protected and delivers a single result.
+        finish(.failed(.cancelled))
     }
 
     // Real GitHub Releases may redirect once to the release-asset CDN.
