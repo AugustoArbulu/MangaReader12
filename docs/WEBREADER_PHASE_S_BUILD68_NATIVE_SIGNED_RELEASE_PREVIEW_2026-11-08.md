@@ -89,7 +89,7 @@ seguida de compilação Release do aplicativo completo para ARM64/iOS12, mas
 **não publica uma IPA**.
 
 **Workflow:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42450721996
-**Estado:** aguardar conclusão dos dois jobs antes de marcar aprovada.
+**Estado final: SUCCESS** no commit de código `bc52bc8dec4d66ca8295b6703f38119bf88d2b59`. Dois jobs aprovados: política Linux; teste nativo Security.framework/CommonCrypto, auditoria de IPA e compilação integral **Release ARM64/iOS12** no macOS. Nenhuma IPA foi publicada ou instalada. Não constitui teste físico em iPad.
 
 ## Próximos passos após validar Fase S
 
