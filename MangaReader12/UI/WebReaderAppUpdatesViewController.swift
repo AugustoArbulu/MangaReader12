@@ -814,11 +814,43 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
     private func copyLocalIPAHash() {
         guard !isIPCDiagnostic, !manualImportInProgress,
-              !manualReviewInProgress,
-              let receipt = manualIPAReview else { return }
-        UIPasteboard.general.string = receipt.expectedSHA256
-        manualImportStatus = "SHA-256 copiado • compare com o GitHub Actions"
+              !manualReviewInProgress, let receipt = manualIPAReview else { return }
+        // A cached SHA-256 is NOT evidence that the current file still has
+        // those bytes. Recheck the same inode, size, ZIP and digest before
+        // copying the hash, exactly as when sharing an imported IPA.
+        manualReviewInProgress = true
+        manualImportStatus = "Revalidando a IPA antes de copiar SHA-256…"
         tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let verified = (try? WebReaderLocalIPAReviewer.recheck(
+                receipt, installedBuild: currentBuild, installedIOS: currentIOS
+            )) != nil
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.manualReviewInProgress = false
+                guard self.manualIPAReview?.copiedIPAURL ==
+                    receipt.copiedIPAURL else { return }
+                guard verified else {
+                    WebReaderLocalIPAReviewer.discard(receipt)
+                    self.manualIPAReview = nil
+                    self.manualImportStatus =
+                        "IPA local mudou • SHA-256 não copiado; importe novamente"
+                    self.tableView.reloadData()
+                    return
+                }
+                // No clipboard write is possible on a failed recheck.
+                guard self.view.window != nil else {
+                    self.tableView.reloadData()
+                    return
+                }
+                UIPasteboard.general.string = receipt.expectedSHA256
+                self.manualImportStatus =
+                    "SHA-256 da IPA revalidada copiado • comparar com Actions"
+                self.tableView.reloadData()
+            }
+        }
     }
 
     private func discardLocalIPA() {
