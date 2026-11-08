@@ -268,7 +268,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (1, 3):
             cell.textLabel?.text = "Abrir Builds privadas no GitHub Actions"
             cell.detailTextLabel?.text =
-                "Abrir no navegador com sua conta GitHub • IPA manual via Filza"
+                "GitHub pode falhar no iOS 12 • use Android/PC e transfira ao Filza"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
