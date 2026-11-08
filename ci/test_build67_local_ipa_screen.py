@@ -69,6 +69,29 @@ class LocalIPAScreenContractTests(unittest.TestCase):
         self.assertIn("attributes[.type] as? FileAttributeType == .typeRegular", STAGING)
         self.assertIn("copied[.type] as? FileAttributeType == .typeRegular", STAGING)
 
+    def test_storage_budget_and_safe_copy_permissions(self):
+        for text in (
+            "requiredFreeBytes(ipaBytes:",
+            "hasEnoughSpace(freeBytes:",
+            "free.int64Value",
+            "case insufficientSpace",
+            "Darwin.lstat(directory.path, &directoryInfo)",
+            "mode_t(S_IFDIR)",
+            "fm.copyItem(at: sourceURL, to: saved)",
+            "[.posixPermissions: 0o600]",
+            "if !keep { try? fm.removeItem(at: saved) }",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(text, STAGING)
+
+    def test_distinct_low_storage_user_feedback(self):
+        self.assertIn("catch WebReaderLocalIPAReviewError.insufficientSpace", UI)
+        self.assertIn("Espaço insuficiente para copiar a IPA", UI)
+        self.assertIn("IPA excede o limite de 512 MB", UI)
+        self.assertIn("Não foi possível criar a cópia local de QA", UI)
+        self.assertIn("self.manualImportStatus = failureReason", UI)
+        self.assertIn("let old = self.manualIPAReview", UI)
+
     def test_no_privileged_install_or_external_network(self):
         for forbidden in (
             "appinst(", "/usr/bin/appinst", "posix_spawn(", "Process(",
