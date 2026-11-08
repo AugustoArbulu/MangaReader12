@@ -153,9 +153,7 @@ no fixture Swift de orçamento; a constante foi tipada de forma
 explícita, sem alterar a fórmula de produção. A versão mais recente
 da CI reúne essas duas correções de teste.
 
-**Status nesta edição:** testes e compilação ainda em execução;
-registrar SUCCESS somente após checar ambos os jobs e a identidade
-do binário ARM64/iOS12. O workflow não produz IPA.
+**Status final: SUCCESS (2/2 jobs)**, [GitHub Actions #42456803468](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42456803468), commit de código testado `e57be14ae7fc0a2aec7740ad67348c78c4e66e22`. O job Linux aprovou contratos de cancelamento, integridade, orçamento e regressões offline. O job macOS executou os testes Swift reais (inclusive as barreiras de concorrência), compilou o aplicativo completo **Debug e Release ARM64/iOS12** e conferiu identidade do binário e bloqueio do instalador. O workflow **não produziu IPA**; isso não substitui validação física da futura Build69.
 
 ## Próxima versão física
 
