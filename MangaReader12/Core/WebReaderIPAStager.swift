@@ -15,6 +15,7 @@ enum WebReaderIPAStageFailure: Error, Equatable {
     case busy
     case invalidRelease
     case storage
+    case insufficientSpace
     case transport
     case redirectRejected
     case unexpectedHTTPStatus(Int)
@@ -33,6 +34,8 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private let update: WebReaderVerifiedUpdate
     private let destinationDirectory: URL
     private let testProtocolClasses: [AnyClass]?
+    private let testAvailableSpace: Int64?
+    private let onProgress: ((Int) -> Void)?
     private let stateLock = NSLock()
     private var session: URLSession?
     private var currentTask: URLSessionDataTask?
@@ -40,6 +43,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private var stream: OutputStream?
     private var partialURL: URL?
     private var count: Int64 = 0
+    private var lastProgressBucket = 0
     private var digest = CC_SHA256_CTX()
     private var redirects = 0
 
@@ -48,11 +52,16 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         destinationDirectory: URL = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         )[0].appendingPathComponent("WebReaderUpdates", isDirectory: true),
-        testProtocolClasses: [AnyClass]? = nil
+        testProtocolClasses: [AnyClass]? = nil,
+        testAvailableSpace: Int64? = nil,
+        onProgress: ((Int) -> Void)? = nil
     ) {
         self.update = verifiedUpdate
         self.destinationDirectory = destinationDirectory
         self.testProtocolClasses = testProtocolClasses
+        // Test-only override is ignored without an injected transport.
+        self.testAvailableSpace = testProtocolClasses == nil ? nil : testAvailableSpace
+        self.onProgress = onProgress
         super.init()
     }
 
@@ -106,6 +115,23 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             callback(.failed(.storage))
             return
         }
+        // Do not start a transfer that could exhaust the user's manga,
+        // backup or offline reading storage. Unknown filesystem capacity
+        // fails closed. This is a preflight, not a disk-space reservation.
+        guard let free = testAvailableSpace ??
+            WebReaderIPADownloadBudget.availableFreeBytes(in: destinationDirectory)
+        else {
+            stateLock.unlock()
+            callback(.failed(.storage))
+            return
+        }
+        guard WebReaderIPADownloadBudget.enoughSpace(
+            freeBytes: free, ipaBytes: update.ipaSize
+        ) else {
+            stateLock.unlock()
+            callback(.failed(.insufficientSpace))
+            return
+        }
         let staging = destinationDirectory.appendingPathComponent(
             ".webreader-" + UUID().uuidString + ".partial"
         )
@@ -149,6 +175,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         self.stream = fileStream
         self.partialURL = staging
         self.count = 0
+        self.lastProgressBucket = 0
         self.redirects = 0
         CC_SHA256_Init(&digest)
         stateLock.unlock()
@@ -263,14 +290,27 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             }
             return true
         }
+        var progressPercent: Int?
         if success {
             data.withUnsafeBytes { raw in
                 _ = CC_SHA256_Update(&digest, raw.baseAddress, CC_LONG(data.count))
             }
             count += Int64(data.count)
+            let percent = Int((count * 100) / update.ipaSize)
+            let bucket = min(19, percent / 5)
+            if bucket > lastProgressBucket {
+                lastProgressBucket = bucket
+                progressPercent = min(95, bucket * 5)
+            }
         }
         stateLock.unlock()
-        if !success { finish(.failed(.storage)) }
+        if !success {
+            finish(.failed(.storage))
+        } else if let percent = progressPercent {
+            // Emitted at most every five percent and never claims the
+            // final hash/ZIP check is complete while bytes are arriving.
+            onProgress?(percent)
+        }
     }
 
     func urlSession(
