@@ -149,7 +149,7 @@ enum WebReaderNativeIPAAuditor {
         // fstat binds the descriptor to a regular file and a fixed size.
         guard ipaURL.isFileURL else { throw WebReaderIPAAuditError.unreadable }
         let descriptor = Darwin.open(
-            ipaURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+            ipaURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
         )
         guard descriptor >= 0 else { throw WebReaderIPAAuditError.unreadable }
         var opened = stat()
