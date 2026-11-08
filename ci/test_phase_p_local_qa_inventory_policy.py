@@ -67,7 +67,7 @@ class QAStorageControls(unittest.TestCase):
         self.assertIn("protected: active", SCREEN)
 
     def test_cleanup_stays_within_descriptor_directory(self):
-        deletion = STAGING.split("static func discardConfirmed(", 1)[1]
+        deletion = STAGING.split("static func discardConfirmed(", 1)[1].split("enum WebReaderReleaseCacheStorage", 1)[0]
         for token in (
             "guard isQAName(candidate.fileName)",
             "openDirectory(directory)",
