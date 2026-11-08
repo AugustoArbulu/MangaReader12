@@ -30,7 +30,7 @@ assert 'cell.textLabel?.text = testingHTTPS ?' in screen
 assert '"Testar HTTPS do GitHub"' in screen
 assert 'UIPasteboard.general.string = lines.joined(separator: "\\n")' in screen
 assert "return isIPCDiagnostic ? 2 : 7" in screen
-assert 'if source == 6 { return 6 }' in screen
+assert 'if source == 6 { return 8 }' in screen
 assert '"IPA LOCAL (ARQUIVOS OU FILZA)"' in screen
 assert "if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }" in screen
 
