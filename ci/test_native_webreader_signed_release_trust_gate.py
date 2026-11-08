@@ -34,9 +34,10 @@ let v2 = try! Data(contentsOf: URL(fileURLWithPath: args[3]))
 let v1 = try! Data(contentsOf: URL(fileURLWithPath: args[4]))
 let corruptedSignature = try! Data(contentsOf: URL(fileURLWithPath: args[5]))
 var point = Data()
-for index in stride(from: pointHex.startIndex, to: pointHex.endIndex, by: 2) {
-    let end = pointHex.index(index, offsetBy: 2)
-    point.append(UInt8(pointHex[index..<end], radix: 16)!)
+let hexBytes = Array(pointHex.utf8)
+for index in stride(from: 0, to: hexBytes.count, by: 2) {
+    let text = String(bytes: hexBytes[index..<(index + 2)], encoding: .utf8)!
+    point.append(UInt8(text, radix: 16)!)
 }
 let ios = OperatingSystemVersion(majorVersion: 12, minorVersion: 5, patchVersion: 8)
 
@@ -53,7 +54,7 @@ func inspect(
 }
 func reject(
     _ envelope: Data, _ suppliedKey: Data, _ trustedPin: String?,
-    installedBuild: Int = 66, _ name: String
+    _ name: String, installedBuild: Int = 66
 ) {
     do {
         _ = try inspect(envelope, suppliedKey, trustedPin,
@@ -93,7 +94,7 @@ changedPoint[1] ^= 0x01
 reject(v2, changedPoint, pin, "mutated key")
 reject(v1, point, pin, "v1 not allowed even when correctly signed")
 reject(corruptedSignature, point, pin, "invalid ECDSA signature")
-reject(v2, point, pin, installedBuild: 69, "not newer than installed")
+reject(v2, point, pin, "not newer than installed", installedBuild: 69)
 reject(Data(), point, pin, "empty envelope")
 
 let fakeEnvelope = Data(
