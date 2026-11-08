@@ -256,6 +256,50 @@ check((try! FileManager.default.contentsOfDirectory(
     "cancel immediately removes incomplete IPA from private staging")
 IPAStubProtocol.keepOpenForCancel = false
 
+// Race regression: cancel WHILE the verified ZIP has already passed the
+// same-FD native audit but BEFORE the private .partial can be renamed .ipa.
+// A late cancel must never produce a phantom success or an orphan final IPA.
+// These gates are injectable ONLY alongside the synthetic URLProtocol.
+IPAStubProtocol.body = sample
+let arrivedAtPromotion = DispatchSemaphore(value: 0)
+let allowPromotionCheck = DispatchSemaphore(value: 0)
+let promotionFinished = DispatchSemaphore(value: 0)
+let raceDone = DispatchSemaphore(value: 0)
+var raceResult: WebReaderIPAStageResult?
+let racing = WebReaderIPAStager(
+    verifiedUpdate: good, destinationDirectory: scratch,
+    testProtocolClasses: [IPAStubProtocol.self],
+    beforeFinalCommit: {
+        arrivedAtPromotion.signal()
+        check(allowPromotionCheck.wait(timeout: .now() + 10) == .success,
+              "race release signal")
+    },
+    afterFinalCommit: { promotionFinished.signal() }
+)
+racing.stage { result in
+    raceResult = result
+    raceDone.signal()
+}
+check(arrivedAtPromotion.wait(timeout: .now() + 10) == .success,
+      "verified full ZIP reached final promotion decision")
+racing.cancel()
+check(raceDone.wait(timeout: .now() + 10) == .success,
+      "cancel during verify produces immediate completion")
+switch raceResult! {
+case .failed(.cancelled): break
+default: fatalError("racing cancel was silently promoted to staged IPA")
+}
+allowPromotionCheck.signal()
+check(promotionFinished.wait(timeout: .now() + 10) == .success,
+      "validation task resumes after cancel")
+let raceFiles = try! FileManager.default.contentsOfDirectory(
+    atPath: scratch.path
+)
+check(raceFiles.isEmpty,
+      "cancellation between full ZIP audit and rename must not orphan .ipa")
+racing.cancel()
+check(raceFiles.isEmpty, "repeat cancellation does not change storage")
+
 // Version 2 keeps the exact build-named, ad-hoc release filename. This does
 // not test publisher signing: an ad-hoc seal is NOT publisher authentication.
 var v2Details = payload
