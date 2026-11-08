@@ -49,7 +49,7 @@ ensure(policy.enoughSpace(freeBytes: needed, ipaBytes: Int64(large)),
 ensure(!policy.enoughSpace(freeBytes: needed - 1, ipaBytes: Int64(large)),
        "one byte below threshold denied")
 // The reserve must NEVER shrink when most of a large IPA has arrived.
-let fixedReserve = Int64(64 * 1024 * 1024 + 8 * 1024 * 1024)
+let fixedReserve: Int64 = 72 * 1024 * 1024
 ensure(policy.enoughSpaceDuringTransfer(
     freeBytes: fixedReserve, remainingBytes: 0, totalIPABytes: Int64(large)
 ), "exact original budget remains after last chunk")
