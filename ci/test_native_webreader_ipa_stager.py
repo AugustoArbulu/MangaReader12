@@ -207,6 +207,43 @@ let entriesBeforeDownload = try! FileManager.default.contentsOfDirectory(
 )
 check(entriesBeforeDownload.isEmpty,
       "insufficient space must not leave partial files")
+
+// A device can lose available space AFTER preflight but BEFORE data arrives.
+// The transfer must stop on the next budget sample, without removing any
+// unrelated data and without publishing the incomplete file as a .ipa.
+let samplesLock = NSLock()
+var freeSpaceSamples = 0
+let midTransfer = WebReaderIPAStager(
+    verifiedUpdate: good, destinationDirectory: scratch,
+    testProtocolClasses: [IPAStubProtocol.self],
+    testFreeBytesSampler: {
+        samplesLock.lock()
+        freeSpaceSamples += 1
+        let attempt = freeSpaceSamples
+        samplesLock.unlock()
+        return attempt == 1 ? Int64(700 * 1024 * 1024) : 0
+    }
+)
+let lowDuringTransfer = DispatchSemaphore(value: 0)
+var lowDuringTransferResult: WebReaderIPAStageResult?
+let requestsBeforeDynamic = IPAStubProtocol.requests
+midTransfer.stage { result in
+    lowDuringTransferResult = result
+    lowDuringTransfer.signal()
+}
+check(lowDuringTransfer.wait(timeout: .now() + 10) == .success,
+      "dynamic low-space rejection completed")
+switch lowDuringTransferResult! {
+case .failed(.insufficientSpace): break
+default: fatalError("download ignored mid-transfer loss of safety reserve")
+}
+check(freeSpaceSamples >= 2, "sampled before GET and during first chunk")
+check(IPAStubProtocol.requests == requestsBeforeDynamic + 1,
+      "mid-transfer space failure made exactly one synthetic GET")
+check((try! FileManager.default.contentsOfDirectory(
+    atPath: scratch.path
+)).isEmpty, "mid-transfer low-space failure removes only private .partial")
+
 var progressValues: [Int] = []
 let progressLock = NSLock()
 switch run(good, progress: { value in
