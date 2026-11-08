@@ -151,9 +151,12 @@ executa contrato Linux de não privilégio, teste de concorrência em
 Swift nativo, regressão da verificação de manifesto/IPA e compilação
 ARM64/iOS12 Release completa.
 
-**Resultado final:** preencher somente após as duas execuções
-terminarem com sucesso. Falhas exigem correção antes de declarar
-a Build68 validada nestas fases.
+**Resultado final: SUCCESS em ambas as execuções.**
+
+- **W/X:** [run #42452070164](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42452070164), commit de código `cc2e35dc004fe34e23c37bea1e9a4adabd10ee6e`, **2/2 jobs SUCCESS**. Linux aprovou chave editorial desativada, rotação/revogação e regressões T/U/V. macOS executou Swift real, suites ECDSA/IPA e compilou **Release ARM64/iOS12**, com identidade de binário e instalador desativado.
+- **Y:** [run #42452134488](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42452134488), commit de código `82e4d9a687798cf8e52c79c522e829d3dc636b2c`, **2/2 jobs SUCCESS**. Linux validou política de revisão volátil; macOS executou 40 tentativas concorrentes no Swift nativo, testes de assinatura/IPA e compilou **Release ARM64/iOS12**, com verificações de binário e instalador bloqueado.
+
+Esses resultados são de CI Linux/macOS: não são aprovação física de uma IPA Build68 no iPad. Nenhuma chave de produção foi configurada, nenhuma IPA foi distribuída e nenhuma instalação foi tentada.
 
 ## Bloqueios fundamentais que permanecem
 
