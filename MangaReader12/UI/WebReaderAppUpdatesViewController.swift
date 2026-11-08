@@ -117,7 +117,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return source == 5 ? 2 : 1
         }
         if source == 1 { return 2 }
-        if source == 6 { return 3 }
+        if source == 6 { return 4 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
@@ -401,6 +401,17 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             }
 
         case (6, 2):
+            cell.textLabel?.text = "Copiar SHA-256 conferido"
+            cell.detailTextLabel?.text = manualIPAReview == nil ?
+                "Disponível depois de conferir o arquivo" :
+                "64 caracteres • comparar com o checksum do GitHub Actions"
+            if manualIPAReview != nil && !manualImportInProgress &&
+                !manualReviewInProgress {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (6, 3):
             cell.textLabel?.text = "Descartar cópia local de QA"
             cell.detailTextLabel?.text = manualIPAReview == nil ?
                 "Nenhum arquivo para descartar" :
@@ -486,6 +497,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             if indexPath.row == 1 && !manualImportInProgress &&
                 !manualReviewInProgress { shareLocalIPA() }
             if indexPath.row == 2 && !manualImportInProgress &&
+                !manualReviewInProgress { copyLocalIPAHash() }
+            if indexPath.row == 3 && !manualImportInProgress &&
                 !manualReviewInProgress { discardLocalIPA() }
             return
         }
@@ -689,6 +702,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 self.present(share, animated: true)
             }
         }
+    }
+
+    private func copyLocalIPAHash() {
+        guard !isIPCDiagnostic, !manualImportInProgress,
+              !manualReviewInProgress,
+              let receipt = manualIPAReview else { return }
+        UIPasteboard.general.string = receipt.expectedSHA256
+        manualImportStatus = "SHA-256 copiado • compare com o GitHub Actions"
+        tableView.reloadData()
     }
 
     private func discardLocalIPA() {
