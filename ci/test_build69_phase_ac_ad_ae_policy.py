@@ -75,6 +75,8 @@ class Build69SecurityRegression(unittest.TestCase):
             "response.expectedContentLength <= update.ipaSize",
         ):
             self.assertIn(marker, segment)
+        self.assertIn("response.allHeaderFields", STAGER)
+        self.assertNotIn("http.value(forHTTPHeaderField:", STAGER)
         for marker in (
             'IPAStubProtocol.contentEncoding = "gzip"',
             'IPAStubProtocol.contentRange = "bytes 0-10/100"',
