@@ -10,12 +10,12 @@
 
 A auditoria de release assinada no host já exige uma chave EC P-256
 e um fingerprint SHA-256 **independente** do DER SubjectPublicKeyInfo (SPKI).
-O verificador nativo iOS12 \`SecKeyCreateWithData\`, em contraste, recebe
+O verificador nativo iOS12 `SecKeyCreateWithData`, em contraste, recebe
 a representação pública ANSI X9.63 **não compactada**, 65 bytes com
-primeiro byte \`0x04\`.
+primeiro byte `0x04`.
 
 Copiar bytes arbitrários do repositório, do manifesto recebido ou de
-um link de Release para o campo \`productionPublicKeyX963\` seria uma falha
+um link de Release para o campo `productionPublicKeyX963` seria uma falha
 de confiança. A Fase R não configura esse campo: acrescenta uma prova
 **offline, auditável e sem instalação** de que uma chave pública
 previamente autenticada pelo proprietário produz as duas representações
@@ -23,11 +23,11 @@ compatíveis.
 
 ## Código
 
-\`ci/build68_release_public_key_handoff.py\`
+`ci/build68_release_public_key_handoff.py`
 
-A função \`prepare_public_key_handoff(public_pem, independent_spki_sha256)\`:
+A função `prepare_public_key_handoff(public_pem, independent_spki_sha256)`:
 
-1. Exige \`independent_spki_sha256\` com exatamente 64 caracteres hex minúsculos.
+1. Exige `independent_spki_sha256` com exatamente 64 caracteres hex minúsculos.
    Esse dado deve vir de um canal confiável **separado do release**.
 2. Só aceita **um bloco PEM público**, sem chave privada, material extra,
    cadeia de blocos ou entradas não limitadas.
@@ -35,7 +35,7 @@ A função \`prepare_public_key_handoff(public_pem, independent_spki_sha256)\`:
    o fingerprint resultante ao informado **externamente** com comparação
    de tempo constante e exige ASN.1 exato para P-256 / ponto X9.63
    não comprimido.
-4. Retorna somente \`canonical_spki_sha256\`, \`x963_public_key_hex\` e
+4. Retorna somente `canonical_spki_sha256`, `x963_public_key_hex` e
    flags de negação explícita: chave de produção NÃO configurada,
    editor NÃO autenticado no dispositivo, release NÃO verificado,
    peer NÃO autenticado e instalação NÃO autorizada/executada.
@@ -46,18 +46,18 @@ das suítes de teste.
 
 ## Testes
 
-- \`ci/test_build68_release_public_key_handoff.py\`: fingerprint correto,
+- `ci/test_build68_release_public_key_handoff.py`: fingerprint correto,
   SPKI canônico, X9.63 65 bytes, chave e pin divergentes, pin ausente,
   curva errada, chave privada em lugar de pública, PEM duplicado, entradas
   malformadas, imutabilidade do recibo e ausência de permissão de instalar.
-- \`ci/test_native_build68_release_public_key_handoff.py\`: cria uma chave
+- `ci/test_native_build68_release_public_key_handoff.py`: cria uma chave
   descartável em diretório temporário; OpenSSL assina um payload sintético;
   a conversão SPKI → X9.63 é confrontada com o Security.framework real
-  do macOS (\`SecKeyCreateWithData\`, \`SecKeyVerifySignature\`), incluindo
+  do macOS (`SecKeyCreateWithData`, `SecKeyVerifySignature`), incluindo
   recusa de mensagem adulterada e chave incorreta.
-- \`.github/workflows/chimera-phase-r-public-key-handoff.yml\`: Linux para
+- `.github/workflows/chimera-phase-r-public-key-handoff.yml`: Linux para
   regressões do trust gate e macOS para interoperabilidade, sem IPA,
-  appinst, jailbreak ou Release. O workflow não altera \`main\`.
+  appinst, jailbreak ou Release. O workflow não altera `main`.
 
 **Aprovação da Fase R depende de CI do HEAD exato; nenhuma aprovação
 de dispositivo iOS12 decorre do Security.framework em macOS.**
@@ -73,10 +73,10 @@ de dispositivo iOS12 decorre do Security.framework em macOS.**
 - A assinatura ad hoc de uma IPA comprova integridade de seu próprio código
   perante as regras de assinatura aplicáveis, **não** identidade editorial.
 - Mesmo um manifesto v2 com assinatura válida não concede
-  \`install_authorized\`. O helper Chimera precisa verificar os bytes
+  `install_authorized`. O helper Chimera precisa verificar os bytes
   reais e a autorização do solicitante em um mecanismo independente.
-- O app conserva \`productionPublicKeyX963: Data? = nil\` e
-  \`WebReaderAppinstSocket.liveInstallationEnabled = false\`.
+- O app conserva `productionPublicKeyX963: Data? = nil` e
+  `WebReaderAppinstSocket.liveInstallationEnabled = false`.
 
 ## Próximo gate técnico
 
@@ -104,18 +104,18 @@ nenhuma IPA Build68 é distribuída nesta fase.
 ## Resultado final de CI (08/11/2026)
 
 **GitHub Actions:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42450242694
-**Commit de código testado:** \`72b98a0def04eedc75b5efe4ac72bf3a0ffa3c64\`
+**Commit de código testado:** `72b98a0def04eedc75b5efe4ac72bf3a0ffa3c64`
 **Status:** **SUCCESS**, ambos os jobs concluídos.
 
-- Linux / \`pure-host-trust-regression\`: passou a suíte nova de pin/SPKI e
+- Linux / `pure-host-trust-regression`: passou a suíte nova de pin/SPKI e
   a regressão do verificador de release da Build66; o gate de produção
-  continua com chave \`nil\` e instalação desabilitada.
-- macOS / \`security-framework-interop\`: executou com sucesso a
+  continua com chave `nil` e instalação desabilitada.
+- macOS / `security-framework-interop`: executou com sucesso a
   interoperabilidade real entre OpenSSL P-256/SPKI e Swift
   Security.framework/X9.63, inclusive testes negativos de assinatura.
 
 A primeira execução identificou um erro apenas no helper de testes:
-\`None\` explícito era confundido com o argumento opcional omitido. A suíte
+`None` explícito era confundido com o argumento opcional omitido. A suíte
 foi corrigida para usar um sentinela distinto; os testes de rejeição de
 entradas ausentes passaram na nova execução.
 
