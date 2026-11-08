@@ -126,8 +126,7 @@ completa, preservando os dados anteriores até a remoção explícita.
 que executa políticas Linux, testes nativos Swift/macOS e compilação
 integral Debug/Release ARM64/iOS12, sem empacotar IPA.
 
-**Estado de CI deste handoff:** pendente de conclusão. Não declarar
-sucesso até que o GitHub Actions confirme ambos os jobs.
+**Estado final da CI: SUCCESS (2/2 jobs)** no [run #42457465974](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42457465974), commit de código `d4a6ab15ba1f029de7cfd117c6c39ead3a110a67`. O job Linux aprovou os testes de política e regressões da biblioteca/offline. O job macOS executou os testes Swift nativos — incluindo arquivo `.partial` abandonado e download completo sem retomar —, compilou o aplicativo completo **Debug e Release ARM64/iOS12** e confirmou a identidade do binário e o bloqueio do instalador. **Nenhuma IPA Build69 foi produzida ou instalada**. A CI não substitui QA física.
 
 ## Segurança e estado do projeto
 
