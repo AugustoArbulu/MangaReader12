@@ -95,10 +95,10 @@ class Build68AtomicIPAAudit(unittest.TestCase):
             "max(Int64(16 * 1024 * 1024)",
             "min(Int64(64 * 1024 * 1024)",
             "free.int64Value",
-            "Darwin.lstat(directory.path, &directoryInfo)",
+            "Darwin.fstat(dirFD, &dirInfo)",
             "mode_t(S_IFDIR)",
             "case insufficientSpace",
-            "[.posixPermissions: 0o600]",
+            "Darwin.fchmod(outputFD, mode_t(0o600))",
         ):
             with self.subTest(term=term):
                 self.assertIn(term, STAGER)
