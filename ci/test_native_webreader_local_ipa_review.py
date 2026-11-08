@@ -122,7 +122,8 @@ denied("512MiB limit") { try imported(oversize) }
 // reviewer to write inside another application folder or user Library.
 let mockLibrary = root.appendingPathComponent("mock-library", isDirectory: true)
 try! FileManager.default.createDirectory(at: mockLibrary,
-                                        withIntermediateDirectories: false)
+                                        withIntermediateDirectories: false,
+                                        attributes: nil)
 let linkedFolder = root.appendingPathComponent("redirected-QA-directory")
 try! FileManager.default.createSymbolicLink(
     at: linkedFolder, withDestinationURL: mockLibrary
