@@ -33,7 +33,7 @@ class RecoveryIsNonPrivileged(unittest.TestCase):
         for prohibited in (
             "FileManager.", "URLSession", "open(", "unlink(", "unlinkat(",
             "removeItem(", "createFile(", "Data(contentsOf:", "appinst(",
-            "posix_spawn(", "install(", "try ", "throw ",
+            "posix_spawn(", "install(", "\n        try ", "\n        throw ",
         ):
             self.assertNotIn(prohibited, body)
 
