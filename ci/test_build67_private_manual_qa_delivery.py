@@ -140,7 +140,7 @@ class ManualQADeliveryTests(unittest.TestCase):
         self.refuse()
 
     def test_receipt_wrong_build(self):
-        self.receipt["build"] = 67
+        self.receipt["build"] = 68
         self.write_receipt()
         self.refuse()
 
