@@ -36,6 +36,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var localQASpaceBusy = false
     private var localQASpaceStatus = "Toque para contar cópias antigas e espaço ocupado"
     private var releaseCacheBusy = false
+    private var didInspectRecoveryOnOpen = false
     private var releaseCacheStatus = "Toque para conferir downloads antigos do atualizador"
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
@@ -97,6 +98,16 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
         applyTheme()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // After an app kill, only inspect old partial downloads. Never
+        // resume or delete on startup. User confirmation remains mandatory
+        // for any later removal of aged cache files.
+        guard !isIPCDiagnostic, !didInspectRecoveryOnOpen else { return }
+        didInspectRecoveryOnOpen = true
+        inspectReleaseCache(cleanup: false)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -499,7 +510,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (6, 7):
             cell.textLabel?.text = "Limpar downloads antigos…"
             cell.detailTextLabel?.text =
-                "Só cache WebReaderUpdates com mais de 24 h • pedir confirmação"
+                "Só cache WebReaderUpdates com mais de 24 h • sem retomada parcial"
             if !releaseCacheBusy && !stagingIPA && !verifyingExport &&
                 !localQASpaceBusy {
                 cell.accessoryType = .disclosureIndicator
@@ -1031,11 +1042,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     self.tableView.reloadData()
                     return
                 }
+                let summary = WebReaderReleaseRecoverySummary.readOnly(scan)
                 self.releaseCacheStatus = String(
-                    format: "%d arquivo(s) antigo(s) • %.1f MB • %d preservado(s)",
-                    scan.eligible.count,
-                    Double(scan.eligibleBytes) / 1_048_576,
-                    scan.ignoredEntries
+                    format: "%d download(s) incompleto(s) antigo(s) • %.1f MB " +
+                        "• %d IPA(s) antiga(s) • %d preservado(s). " +
+                        "Sem retomada de arquivos parciais; limpeza só com confirmação.",
+                    summary.interruptedFiles,
+                    Double(summary.interruptedBytes) / 1_048_576,
+                    summary.completedFiles,
+                    summary.ignoredEntries
                 )
                 self.tableView.reloadData()
                 if cleanup { self.confirmReleaseCacheCleanup(scan) }
