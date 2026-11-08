@@ -123,6 +123,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if source == 1 { return 2 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
+        if source == 3 { return 5 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -289,13 +290,27 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             cell.accessoryType = .none
             cell.selectionStyle = .none
 
-        case (3, _):
-            cell.textLabel?.text = "Atualizações seguras"
+        case (3, 0):
+            cell.textLabel?.text = "Segurança das atualizações"
             cell.detailTextLabel?.text =
-                "Consulta GitHub via HTTPS, SHA-256 e inspeção IPA. " +
-                "Não há assinatura independente do editor neste modo. " +
-                "A instalação via appinst está bloqueada nesta Build. " +
-                "PING e pareamento não autorizam instalação."
+                "GitHub Releases via HTTPS e SHA-256 não autenticam o editor"
+        case (3, 1):
+            cell.textLabel?.text = "Assinatura editorial"
+            cell.detailTextLabel?.text = WebReaderUpdaterSecuritySnapshot.keyDescription
+        case (3, 2):
+            cell.textLabel?.text = "Autorização do Chimera"
+            cell.detailTextLabel?.text = WebReaderUpdaterSecuritySnapshot.peerDescription
+        case (3, 3):
+            cell.textLabel?.text = "Operações permitidas"
+            cell.detailTextLabel?.text =
+                WebReaderUpdaterSecuritySnapshot.allowedDescription + "\n" +
+                WebReaderUpdaterSecuritySnapshot.deniedDescription
+        case (3, 4):
+            cell.textLabel?.text = "Copiar diagnóstico de segurança"
+            cell.detailTextLabel?.text =
+                "Resumo sem caminhos, chaves privadas ou dados da biblioteca"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -552,6 +567,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 !manualReviewInProgress { inspectLocalQAStorage(cleanup: true) }
             if indexPath.row == 6 { inspectReleaseCache(cleanup: false) }
             if indexPath.row == 7 { inspectReleaseCache(cleanup: true) }
+            return
+        }
+        if selectedSection == 3, indexPath.row == 4, !isIPCDiagnostic {
+            copyUpdaterSecurityReport()
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -875,6 +894,26 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 self.tableView.reloadData()
             }
         }
+    }
+
+    // MARK: - Nonprivileged security status, without installation capabilities
+
+    private func copyUpdaterSecurityReport() {
+        guard !isIPCDiagnostic else { return }
+        let ios = ProcessInfo.processInfo.operatingSystemVersion
+        let version = String(ios.majorVersion) + "." +
+            String(ios.minorVersion) + "." + String(ios.patchVersion)
+        UIPasteboard.general.string = WebReaderUpdaterSecuritySnapshot.safeReport(
+            installedBuild: installedBuild, iosVersion: version
+        )
+        let alert = UIAlertController(
+            title: "Diagnóstico copiado",
+            message: "O relatório é somente leitura e não executa instalação. " +
+                "Não inclui arquivos pessoais nem credenciais.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     // MARK: - Release download cache (separate from manually imported QA IPAs)
