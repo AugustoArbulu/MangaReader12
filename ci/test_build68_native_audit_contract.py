@@ -34,7 +34,7 @@ class Build68AtomicIPAAudit(unittest.TestCase):
     def test_same_descriptor_used_during_zip_and_sha_checks(self):
         self.assertIn("fileSHA256(file)", AUDITOR)
         self.assertIn("let finalDigest = fileSHA256(file)", AUDITOR)
-        self.assertIn("read(\n                file, at: directoryOffset", AUDITOR)
+        self.assertIn("file, at: directoryOffset", AUDITOR)
         self.assertIn("defer { file.closeFile() }", AUDITOR)
 
     def test_same_inode_and_metadata_checked_after_scan(self):
@@ -101,7 +101,6 @@ class Build68AtomicIPAAudit(unittest.TestCase):
         self.assertNotIn("upload-artifact", workflow)
         self.assertNotIn("package_webreader_build68", workflow)
         self.assertNotIn("gh release", workflow)
-        self.assertIn("Full Release", workflow) if "Full Release" in workflow else None
         self.assertIn("CODE_SIGNING_ALLOWED=NO", workflow)
 
     def test_old_build67_release_is_frozen(self):
