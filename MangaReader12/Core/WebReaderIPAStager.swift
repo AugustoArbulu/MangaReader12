@@ -37,6 +37,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private let destinationDirectory: URL
     private let testProtocolClasses: [AnyClass]?
     private let testAvailableSpace: Int64?
+    private let testFreeBytesSampler: (() -> Int64?)?
     private let testInstalledBuild: Int?
     private let onProgress: ((Int) -> Void)?
     // Deterministic test-only race gates; cannot be enabled without an
@@ -52,6 +53,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private var partialURL: URL?
     private var count: Int64 = 0
     private var lastProgressBucket = 0
+    private var lastSpaceCheckAt: Int64 = 0
     private var digest = CC_SHA256_CTX()
     private var redirects = 0
 
@@ -62,6 +64,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         )[0].appendingPathComponent("WebReaderUpdates", isDirectory: true),
         testProtocolClasses: [AnyClass]? = nil,
         testAvailableSpace: Int64? = nil,
+        testFreeBytesSampler: (() -> Int64?)? = nil,
         testInstalledBuild: Int? = nil,
         onProgress: ((Int) -> Void)? = nil,
         beforeFinalCommit: (() -> Void)? = nil,
@@ -72,6 +75,8 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         self.testProtocolClasses = testProtocolClasses
         // Test-only override is ignored without an injected transport.
         self.testAvailableSpace = testProtocolClasses == nil ? nil : testAvailableSpace
+        self.testFreeBytesSampler = testProtocolClasses == nil ?
+            nil : testFreeBytesSampler
         self.testInstalledBuild = testProtocolClasses == nil ? nil : testInstalledBuild
         self.onProgress = onProgress
         self.beforeFinalCommit = testProtocolClasses == nil ? nil : beforeFinalCommit
@@ -143,9 +148,14 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         // Do not start a transfer that could exhaust the user's manga,
         // backup or offline reading storage. Unknown filesystem capacity
         // fails closed. This is a preflight, not a disk-space reservation.
-        guard let free = testAvailableSpace ??
-            WebReaderIPADownloadBudget.availableFreeBytes(in: destinationDirectory)
-        else {
+        let freeAtStart: Int64?
+        if let sampler = testFreeBytesSampler {
+            freeAtStart = sampler()
+        } else {
+            freeAtStart = testAvailableSpace ??
+                WebReaderIPADownloadBudget.availableFreeBytes(in: destinationDirectory)
+        }
+        guard let free = freeAtStart else {
             stateLock.unlock()
             callback(.failed(.storage))
             return
@@ -202,6 +212,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         self.partialURL = staging
         self.count = 0
         self.lastProgressBucket = 0
+        self.lastSpaceCheckAt = 0
         self.redirects = 0
         CC_SHA256_Init(&digest)
         stateLock.unlock()
@@ -341,6 +352,32 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             stateLock.unlock()
             if !data.isEmpty { finish(.failed(.sizeMismatch)) }
             return
+        }
+        // Check capacity again before writing the first chunk and after
+        // each additional 4 MiB. An unrelated process can consume storage
+        // after the initial admission check. Repeated checks retain the
+        // ORIGINAL IPA-size reserve, not a shrinking safety margin.
+        if count == 0 || count - lastSpaceCheckAt >= 4 * 1024 * 1024 {
+            let freeNow: Int64?
+            if let sampler = testFreeBytesSampler {
+                freeNow = sampler()
+            } else {
+                freeNow = testAvailableSpace ??
+                    WebReaderIPADownloadBudget.availableFreeBytes(
+                        in: destinationDirectory
+                    )
+            }
+            guard let remainingFree = freeNow,
+                  WebReaderIPADownloadBudget.enoughSpaceDuringTransfer(
+                    freeBytes: remainingFree,
+                    remainingBytes: update.ipaSize - count,
+                    totalIPABytes: update.ipaSize
+                  ) else {
+                stateLock.unlock()
+                finish(.failed(.insufficientSpace))
+                return
+            }
+            lastSpaceCheckAt = count
         }
         let success = data.withUnsafeBytes { raw -> Bool in
             guard let start = raw.bindMemory(to: UInt8.self).baseAddress else {
