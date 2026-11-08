@@ -1167,6 +1167,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case .disabled: return "Canal de lançamentos assinado não configurado"
         case .busy: return "Já existe um download em andamento"
         case .invalidRelease: return "Release fora das regras do WebReader"
+        case .notNewerThanInstalled: return "Build anterior ou igual à instalada • download bloqueado"
         case .storage: return "Não foi possível salvar a IPA"
         case .insufficientSpace: return "Espaço livre insuficiente • preserve os capítulos offline"
         case .cancelled: return "Download cancelado • cópia parcial removida"
