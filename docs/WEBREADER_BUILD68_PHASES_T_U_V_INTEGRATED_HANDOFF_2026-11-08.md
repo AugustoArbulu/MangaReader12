@@ -137,7 +137,11 @@ enviado ao iPad pelo laboratório.
 
 - Job Linux com contratos da UI, assinatura e biblioteca: **SUCCESS**.
 - Job macOS: testes Swift nativos, auditorias herdadas e compilação Debug +
-  Release iOS12 ARM64; **verificar conclusão antes de aprovar T/U**.
+  Release iOS12 ARM64 **SUCCESS**. Checagem final do executável, bundle,
+  iOS mínimo e bloqueio de instalação **SUCCESS**.
+- **Estado final T/U: SUCCESS (2/2 jobs)**, run #42451263546 no commit de código
+  `70a7ee15b62f6b910e06929d9f4a2a60ad33f05e`.
+- A aprovação é de CI Linux/macOS; **não** substitui QA física no Chimera.
 - Não empacota nem publica IPA, não instala apps e não utiliza chave real.
 
 **CI Chimera V:** [GitHub Actions #42451360332](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42451360332) — **SUCCESS**, testes de entradas falsas, relatório físico observado e políticas anteriores.
