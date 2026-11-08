@@ -117,9 +117,33 @@ Build67, compara com o entitlement já aprovado, verifica SHA/estrutura
 e exige revalidação do conteúdo antes de disponibilizar um artifact
 privado e temporário. Não publica GitHub Release e não instala no iPad.
 
-**Estado do pipeline privado quando este documento foi criado:**
-workflow #42445422628 na fila. Sua conclusão e hash só devem
-ser inseridos depois de observados efetivamente.
+**Pipeline privado de Build67 validado e entrega realizada:**
+workflow [#42445422628](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42445422628)
+terminou **SUCCESS** no commit df6d8a44b56ed2fe693df4ad114b3de885f69542.
+Compilou o aplicativo completo Debug e Release para ARM64/iOS12,
+empacotou a cópia com versão 67, auditou a assinatura ad hoc
+e submeteu os bytes à segunda verificação rigorosa do script de entrega.
+
+- Artifact privado: WebReader-Build67-Private-ManualQA-Filza-iOS12
+- Artifact ID: 13603049559 (retention: 14 dias)
+- IPA: WebReader-Build67-iOS12-adhoc.ipa
+- IPA bytes: **17.777.098**
+- SHA-256: **56fca5893ef3c713bf91b163fc8fe11d6b7ee6cfc6614191f0b754dadb39e897**
+- Bundle ID: com.example.MangaReader12
+- Application identifier: AR5SFJC432.com.example.MangaReader12.AR5SFJC432
+- Info.plist CFBundleVersion: 67; MinimumOSVersion: 12.0
+- Publicador autenticado independentemente: NÃO
+- Instalação automática/privilegiada: NÃO
+
+O ZIP publicado no Actions foi baixado em um contêiner separado,
+inspecionado, e a IPA dele foi extraída para disponibilização direta
+nesta conversa. O SHA-256 recalculado da IPA coincide exatamente com
+o .sha256 e com os dois JSONs do pacote. O Info.plist do arquivo dentro
+da IPA foi conferido novamente, confirmando Build67, bundle e mínimo iOS.
+
+O artifact contém a IPA, o checksum, o JSON da auditoria,
+o JSON do gate de entrega e o checklist de QA físico. Nenhuma
+chave editorial de produção foi configurada, nem GitHub Release publicado.
 
 ## 6. Limites ainda pendentes antes de autoinstalação
 
@@ -139,8 +163,16 @@ ser inseridos depois de observados efetivamente.
 
 ## 7. Próximo marco
 
-Após o pipeline privado passar, disponibilizar ao proprietário
-a IPA e o SHA-256 exatos do mesmo run para testar manualmente pelo Filza,
-após exportar um backup independente da biblioteca da Build66.
-Nenhum teste físico deve ser considerado aprovado sem a confirmação
-direta do usuário. Preservar sempre a main e a PR #90 Draft.
+A IPA de QA Build67 está pronta para teste manual, **não aprovado fisicamente**.
+O proprietário deve primeiro exportar e guardar fora do iPad um backup
+da biblioteca da Build66, verificar o SHA do pacote e somente então,
+se desejar, atualizar pelo Filza sem desinstalar o aplicativo.
+Confirmar versão nos Ajustes, leitura offline e biblioteca antes de
+testar a seção de IPA local. As cópias locais de QA ficam em uma
+pasta separada e podem ser descartadas pela própria tela; evitar
+acúmulo de arquivos temporários grandes.
+
+Não confundir download de artifact privado com GitHub Release
+assinado. O autor/editor não é autenticado apenas pelo digest.
+Nenhum teste físico da Build67 deve ser considerado aprovado sem
+confirmação direta do proprietário. Preservar main e PR #90 Draft.
