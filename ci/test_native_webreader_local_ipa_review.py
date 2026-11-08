@@ -20,6 +20,7 @@ SOURCES = [
     CORE / "WebReaderGitHubReleaseParser.swift",
     CORE / "WebReaderUpdateChecker.swift",
     CORE / "WebReaderNativeIPAAuditor.swift",
+    CORE / "WebReaderIPADownloadBudget.swift",
     CORE / "WebReaderIPAStager.swift",
 ]
 HARNESS = r'''
