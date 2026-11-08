@@ -52,7 +52,13 @@ func reject(_ body: Data, _ expectedChannel: String, _ label: String) {
         _ = try inspect(body, expectedChannel)
         fatalError("accepted a signed manifest from wrong channel: " + label)
     } catch WebReaderUpdateValidationError.wrongApplication {
-        // Correct: the signature is valid but wrong signed channel.
+        ensure(expectedChannel != "releases",
+               "arbitrary unsupported channel must be invalidPayload")
+        // The signature was genuine but the signed channel differs.
+    } catch WebReaderUpdateValidationError.invalidPayload {
+        ensure(expectedChannel == "releases",
+               "valid development/production channels cannot be invalid")
+        // Unsupported API channel parameter must fail before acceptance.
     } catch {
         fatalError("unexpected channel rejection: " + label)
     }
