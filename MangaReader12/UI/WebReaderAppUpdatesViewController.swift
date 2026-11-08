@@ -34,6 +34,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var manualImportStatus = "Escolha uma IPA e informe SHA-256 externo"
     private var localQASpaceBusy = false
     private var localQASpaceStatus = "Toque para contar cópias antigas e espaço ocupado"
+    private var releaseCacheBusy = false
+    private var releaseCacheStatus = "Toque para conferir downloads antigos do atualizador"
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
 
@@ -119,7 +121,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return source == 5 ? 2 : 1
         }
         if source == 1 { return 2 }
-        if source == 6 { return 6 }
+        if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
@@ -444,6 +446,27 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 cell.selectionStyle = .default
             }
 
+        case (6, 6):
+            cell.textLabel?.text = releaseCacheBusy ?
+                "Conferindo downloads do atualizador…" :
+                "Espaço usado por downloads antigos"
+            cell.detailTextLabel?.text = releaseCacheStatus
+            if !releaseCacheBusy && !stagingIPA && !verifyingExport &&
+                !localQASpaceBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (6, 7):
+            cell.textLabel?.text = "Limpar downloads antigos…"
+            cell.detailTextLabel?.text =
+                "Só cache WebReaderUpdates com mais de 24 h • pedir confirmação"
+            if !releaseCacheBusy && !stagingIPA && !verifyingExport &&
+                !localQASpaceBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
         default:
             break
         }
@@ -514,7 +537,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         if selectedSection == 6 {
-            guard !localQASpaceBusy else { return }
+            guard !localQASpaceBusy, !releaseCacheBusy else { return }
             if indexPath.row == 0 && !manualImportInProgress &&
                 !manualReviewInProgress { promptLocalIPAImport() }
             if indexPath.row == 1 && !manualImportInProgress &&
@@ -527,6 +550,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 !manualReviewInProgress { inspectLocalQAStorage(cleanup: false) }
             if indexPath.row == 5 && !manualImportInProgress &&
                 !manualReviewInProgress { inspectLocalQAStorage(cleanup: true) }
+            if indexPath.row == 6 { inspectReleaseCache(cleanup: false) }
+            if indexPath.row == 7 { inspectReleaseCache(cleanup: true) }
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -845,6 +870,106 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 self.localQASpaceStatus = String(
                     format: "%d cópia(s) removidas • %.1f MB liberados • " +
                         "demais arquivos preservados",
+                    removed, Double(released) / 1_048_576
+                )
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    // MARK: - Release download cache (separate from manually imported QA IPAs)
+
+    private func activeReleaseCacheName() -> String? {
+        guard let file = stagedIPAURL,
+            file.deletingLastPathComponent().standardizedFileURL ==
+                WebReaderReleaseCacheStorage.defaultDirectory.standardizedFileURL
+        else { return nil }
+        return file.lastPathComponent
+    }
+
+    private func inspectReleaseCache(cleanup: Bool) {
+        guard !isIPCDiagnostic, !releaseCacheBusy, !localQASpaceBusy,
+              !stagingIPA, !verifyingExport else { return }
+        releaseCacheBusy = true
+        releaseCacheStatus = "Inspecionando só a pasta WebReaderUpdates…"
+        tableView.reloadData()
+        let protectedName = activeReleaseCacheName()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let scan = try? WebReaderReleaseCacheStorage.inventory(
+                protectedName: protectedName
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.releaseCacheBusy = false
+                guard let scan = scan else {
+                    self.releaseCacheStatus =
+                        "Cache indisponível ou entradas demais; nada foi removido"
+                    self.tableView.reloadData()
+                    return
+                }
+                self.releaseCacheStatus = String(
+                    format: "%d arquivo(s) antigo(s) • %.1f MB • %d preservado(s)",
+                    scan.eligible.count,
+                    Double(scan.eligibleBytes) / 1_048_576,
+                    scan.ignoredEntries
+                )
+                self.tableView.reloadData()
+                if cleanup { self.confirmReleaseCacheCleanup(scan) }
+            }
+        }
+    }
+
+    private func confirmReleaseCacheCleanup(
+        _ scan: WebReaderLocalQAStorageInventory
+    ) {
+        guard !isIPCDiagnostic, !releaseCacheBusy, !localQASpaceBusy,
+              !stagingIPA, !verifyingExport, !scan.eligible.isEmpty else { return }
+        let message = String(
+            format: "%d arquivo(s) • %.1f MB. Apenas cópias baixadas ou " +
+                "downloads parciais abandonados há mais de 24 h em " +
+                "WebReaderUpdates. A IPA selecionada, capítulos, biblioteca, " +
+                "backups e arquivos do Filza permanecem intactos. Excluir?",
+            scan.eligible.count, Double(scan.eligibleBytes) / 1_048_576
+        )
+        let alert = UIAlertController(
+            title: "Limpar downloads antigos?", message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(
+            title: "Excluir cache antigo", style: .destructive
+        ) { [weak self] _ in
+            self?.discardReleaseCacheAfterConfirmation(scan)
+        })
+        present(alert, animated: true)
+    }
+
+    private func discardReleaseCacheAfterConfirmation(
+        _ scan: WebReaderLocalQAStorageInventory
+    ) {
+        guard !isIPCDiagnostic, !releaseCacheBusy, !localQASpaceBusy,
+              !stagingIPA, !verifyingExport else { return }
+        releaseCacheBusy = true
+        releaseCacheStatus = "Removendo somente cópias antigas confirmadas…"
+        tableView.reloadData()
+        // Never remove the IPA currently selected for manual export.
+        let protectedName = activeReleaseCacheName()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var removed = 0
+            var released: Int64 = 0
+            for candidate in scan.eligible {
+                if WebReaderReleaseCacheStorage.discardConfirmed(
+                    candidate, protectedName: protectedName
+                ) {
+                    removed += 1
+                    released += candidate.byteCount
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.releaseCacheBusy = false
+                self.releaseCacheStatus = String(
+                    format: "%d removido(s) • %.1f MB liberados • demais preservados",
                     removed, Double(released) / 1_048_576
                 )
                 self.tableView.reloadData()
