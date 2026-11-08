@@ -118,7 +118,7 @@ do {
     fatalError("directory symlink accepted")
 } catch WebReaderLocalQAStorageError.invalidDirectory {}
 
-for index in 0..<508 {
+for index in 0..<509 {
     let file = cache.appendingPathComponent("foreign-" + String(index))
     try! Data().write(to: file)
 }
