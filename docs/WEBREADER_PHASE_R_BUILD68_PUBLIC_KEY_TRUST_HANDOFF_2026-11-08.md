@@ -99,3 +99,26 @@ Antes de configurar uma chave editorial de produção:
 
 Nenhum dos testes altera bibliotecas, downloads ou arquivos do iPad;
 nenhuma IPA Build68 é distribuída nesta fase.
+
+
+## Resultado final de CI (08/11/2026)
+
+**GitHub Actions:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42450242694
+**Commit de código testado:** \`72b98a0def04eedc75b5efe4ac72bf3a0ffa3c64\`
+**Status:** **SUCCESS**, ambos os jobs concluídos.
+
+- Linux / \`pure-host-trust-regression\`: passou a suíte nova de pin/SPKI e
+  a regressão do verificador de release da Build66; o gate de produção
+  continua com chave \`nil\` e instalação desabilitada.
+- macOS / \`security-framework-interop\`: executou com sucesso a
+  interoperabilidade real entre OpenSSL P-256/SPKI e Swift
+  Security.framework/X9.63, inclusive testes negativos de assinatura.
+
+A primeira execução identificou um erro apenas no helper de testes:
+\`None\` explícito era confundido com o argumento opcional omitido. A suíte
+foi corrigida para usar um sentinela distinto; os testes de rejeição de
+entradas ausentes passaram na nova execução.
+
+**Escopo da aprovação:** compilação/executabilidade de testes host-only.
+Não é aprovação física do iPad, não valida identidade do solicitante do
+Chimera e não cria/instala/atualiza IPA.
