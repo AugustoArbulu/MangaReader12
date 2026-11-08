@@ -52,7 +52,9 @@ class LocalIPAScreenContractTests(unittest.TestCase):
         self.assertIn('appendingPathComponent("WebReaderLocalQAImports"', STAGING)
         self.assertNotIn("LibraryBackup", STAGING)
         self.assertNotIn("removeItem(at: sourceURL)", STAGING)
-        self.assertIn("fm.copyItem(at: sourceURL, to: saved)", STAGING)
+        self.assertIn("Darwin.openat(", STAGING)
+        self.assertIn("Darwin.read(sourceFD", STAGING)
+        self.assertIn("Darwin.write(", STAGING)
         self.assertIn("directory.standardizedFileURL", STAGING)
 
     def test_native_verifier_and_recheck(self):
@@ -65,9 +67,10 @@ class LocalIPAScreenContractTests(unittest.TestCase):
 
     def test_file_size_limit_and_atomic_cleanup(self):
         self.assertIn("512 * 1024 * 1024", STAGING)
-        self.assertIn("if !keep { try? fm.removeItem(at: saved) }", STAGING)
-        self.assertIn("attributes[.type] as? FileAttributeType == .typeRegular", STAGING)
-        self.assertIn("copied[.type] as? FileAttributeType == .typeRegular", STAGING)
+        self.assertIn("if ownsTemporary && !keep", STAGING)
+        self.assertIn("Darwin.unlinkat(dirFD, fileName, 0)", STAGING)
+        self.assertIn("Darwin.fstat(sourceFD, &original)", STAGING)
+        self.assertIn("Darwin.fstat(outputFD, &destinationAfter)", STAGING)
 
     def test_storage_budget_and_safe_copy_permissions(self):
         for text in (
@@ -75,10 +78,12 @@ class LocalIPAScreenContractTests(unittest.TestCase):
             "hasEnoughSpace(freeBytes:",
             "free.int64Value",
             "case insufficientSpace",
-            "Darwin.lstat(directory.path, &directoryInfo)",
+            "Darwin.openat(",
+            "Darwin.fstat(dirFD, &dirInfo)",
             "mode_t(S_IFDIR)",
+            "O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW",
             "fm.copyItem(at: sourceURL, to: saved)",
-            "[.posixPermissions: 0o600]",
+            "Darwin.fchmod(outputFD, mode_t(0o600))",
             "if !keep { try? fm.removeItem(at: saved) }",
         ):
             with self.subTest(text=text):
