@@ -138,8 +138,13 @@ macOS de staging/importação/armazenamento e compilação
 integral **Debug e Release ARM64 para iOS 12**, sem IPA
 assinada ou publicação.
 
-**Estado da CI:** a conferir após finalizar execução da
-última revisão; **não marcar como sucesso antes da conclusão**.
+**Estado final da CI: SUCCESS (2/2 jobs)** em [GitHub Actions #42452983919](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42452983919), commit de código `142a1c0a7f364eab92df42fa3a82325aeab0376d`.
+O job Linux aprovou as regressões de espaço, cancelamento, recibo,
+compatibilidade e leitura offline. O job macOS executou os testes
+**Swift nativos reais**, incluindo transporte sintético, orçamento de
+espaço e cancelamento de arquivo parcial; depois concluiu **Debug e
+Release ARM64/iOS 12 com sucesso**, verificou a identidade do binário
+e a trava de instalação. Não gerou/distribuiu IPA e não testou o iPad.
 
 ## Travas de segurança preservadas
 
