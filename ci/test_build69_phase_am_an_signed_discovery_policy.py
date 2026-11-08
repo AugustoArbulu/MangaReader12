@@ -11,6 +11,9 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 SIGNED = (ROOT / "MangaReader12/Core/WebReaderProductionSignedReleaseChecker.swift").read_text()
 TRUST = (ROOT / "MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+VERIFIER = (ROOT / "MangaReader12/Core/WebReaderUpdateManifestVerifier.swift").read_text()
+GATE = (ROOT / "MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift").read_text()
+CHANNEL_NATIVE = (ROOT / "ci/test_native_webreader_release_channel_separation.py").read_text()
 PUB = (ROOT / "MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
 UI = (ROOT / "MangaReader12/UI/WebReaderAppUpdatesViewController.swift").read_text()
 PROJECT = (ROOT / "MangaReader12.xcodeproj/project.pbxproj").read_text()
@@ -81,6 +84,17 @@ class ProductionSignedDiscovery(unittest.TestCase):
         self.assertIn("static let productionTrustGeneration = 0", TRUST)
         self.assertIn("static let productionPublicKeyX963: Data? = nil", PUB)
         self.assertIn("static let liveInstallationEnabled = false", INSTALL)
+
+    def test_valid_dev_signature_does_not_authorize_production_metadata(self):
+        self.assertIn('expectedChannel: String = "development"', VERIFIER)
+        self.assertIn('manifest["channel"] as? String == expectedChannel', VERIFIER)
+        self.assertIn('expectedChannel: String = "development"', GATE)
+        self.assertIn('expectedChannel: expectedChannel', GATE)
+        self.assertIn('expectedChannel: "production"', TRUST)
+        self.assertIn("reject(dev, \"production\"", CHANNEL_NATIVE)
+        self.assertIn("reject(prod, \"development\"", CHANNEL_NATIVE)
+        self.assertIn("signed-v2 channel binding: dev/prod do not cross", CHANNEL_NATIVE)
+        self.assertNotIn("productionTrustGeneration = 1", TRUST)
 
     def test_ui_separates_public_unsigned_signed_and_private_actions(self):
         self.assertIn("if source == 1 { return 4 }", UI)
