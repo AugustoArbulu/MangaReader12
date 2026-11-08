@@ -118,6 +118,90 @@ class Build68AtomicIPAAudit(unittest.TestCase):
                 self.assertIn(term, suite)
         self.assertIn("Espaço insuficiente para copiar a IPA", UI)
 
+    def test_source_is_opened_once_and_not_following_symlinks(self):
+        for item in (
+            "let sourceFD = Darwin.open(",
+            "sourceURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK",
+            "Darwin.fstat(sourceFD, &original)",
+            "mode_t(S_IFREG)",
+            "original.st_ino == sourceAfter.st_ino",
+            "original.st_mtimespec.tv_nsec == sourceAfter.st_mtimespec.tv_nsec",
+            "original.st_ctimespec.tv_nsec == sourceAfter.st_ctimespec.tv_nsec",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, STAGER)
+        self.assertNotIn("fm.copyItem(at: sourceURL, to: saved)", STAGER)
+        self.assertNotIn("attributesOfItem(atPath: sourceURL.path)", STAGER)
+
+    def test_destination_is_anchored_and_created_exclusively(self):
+        for item in (
+            "let dirFD = Darwin.open(",
+            "O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK",
+            "Darwin.fstat(dirFD, &dirInfo)",
+            "Darwin.openat(",
+            "O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW",
+            "Darwin.fchmod(outputFD, mode_t(0o600))",
+            "Darwin.fsync(outputFD)",
+            "writtenBytes == candidateSize",
+            "Darwin.unlinkat(dirFD, fileName, 0)",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, STAGER)
+
+    def test_native_copy_bounded_io_and_eintr(self):
+        for item in (
+            "64 * 1024",
+            "while writtenBytes < candidateSize",
+            "Darwin.read(sourceFD",
+            "Darwin.write(",
+            "if count < 0 && errno == EINTR { continue }",
+            "if amount < 0 && errno == EINTR { continue }",
+            "count - offset",
+            "candidateSize - writtenBytes",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, STAGER)
+
+    def test_immutable_local_review_file_identity(self):
+        for item in (
+            "let stagingDevice: UInt64",
+            "let stagingInode: UInt64",
+            "stagingDevice: UInt64(destinationAfter.st_dev)",
+            "stagingInode: UInt64(destinationAfter.st_ino)",
+            "verifiedByName.st_dev == destinationAfter.st_dev",
+            "verifiedByName.st_ino == destinationAfter.st_ino",
+            "UInt64(before.st_dev) == review.stagingDevice",
+            "UInt64(before.st_ino) == review.stagingInode",
+            "currentPath.st_dev == before.st_dev",
+            "currentPath.st_ino == before.st_ino",
+            "UInt64(recorded.st_dev) == review.stagingDevice",
+            "UInt64(recorded.st_ino) == review.stagingInode",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, STAGER)
+
+    def test_drop_foreign_symlink_or_different_inode_without_deletion(self):
+        for item in (
+            "AT_SYMLINK_NOFOLLOW",
+            "fileName.hasPrefix(expectedPrefix)",
+            "fileName.hasSuffix(\".ipa\")",
+            "UUID(uuidString:",
+            "Darwin.unlinkat(directoryFD, fileName, 0)",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, STAGER)
+        native = (ROOT / "ci/test_native_webreader_local_ipa_review.py").read_text()
+        for item in (
+            "source FIFO without writer",
+            "byte-identical replacement accepted as original QA inode",
+            "cannot delete byte-identical foreign inode",
+            "replaced directory did not delete mock Library data",
+            "restoring the verified inode allows cleanup",
+            "19 negative cases",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, native)
+
     def test_no_automatic_authorization(self):
         self.assertIn("static let liveInstallationEnabled = false", APPINST)
         self.assertIn("DispatchQueue.main.async { completion(.rejected) }", APPINST)
