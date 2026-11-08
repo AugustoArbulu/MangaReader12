@@ -408,6 +408,11 @@ enum WebReaderLocalIPAReviewer {
         return ipaBytes + reserve
     }
 
+    static func hasEnoughSpace(freeBytes: Int64, ipaBytes: Int64) -> Bool {
+        return ipaBytes > 0 && ipaBytes <= maximumSize &&
+            freeBytes >= requiredFreeBytes(ipaBytes: ipaBytes)
+    }
+
     static var defaultDirectory: URL {
         return FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
@@ -457,7 +462,7 @@ enum WebReaderLocalIPAReviewer {
         }
         guard let storage = try? fm.attributesOfFileSystem(forPath: directory.path),
               let free = storage[.systemFreeSize] as? NSNumber,
-              free.int64Value >= requiredFreeBytes(ipaBytes: candidateSize) else {
+              hasEnoughSpace(freeBytes: free.int64Value, ipaBytes: candidateSize) else {
             throw WebReaderLocalIPAReviewError.insufficientSpace
         }
         let saved = directory.appendingPathComponent(
