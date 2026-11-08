@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AL — Crash-Safe IPA Recovery and iOS12 Audit
+name: WebReader Build69 Dev AC-AN — Signed Channel and Private Manual Updates iOS12
 
 on:
   push:
@@ -6,16 +6,21 @@ on:
       - feat/chimera-updater-phase1-protocol-audit
     paths:
       - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/Core/WebReaderProductionSignedReleaseChecker.swift'
+      - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
       - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
       - 'MangaReader12/Core/WebReaderPhysicalQAChecklist.swift'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'MangaReader12.xcodeproj/project.pbxproj'
       - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_native_webreader_signed_production_discovery.py'
       - 'ci/test_native_webreader_ipa_download_budget.py'
       - 'ci/test_native_webreader_physical_qa_checklist.py'
       - 'ci/test_build69_phase_ac_ad_ae_policy.py'
       - 'ci/test_build69_phase_ag_ah_ai_transfer_policy.py'
       - 'ci/test_build69_phase_aj_ak_al_crash_recovery_policy.py'
+      - 'ci/test_build69_phase_am_an_signed_discovery_policy.py'
+      - 'ci/test_app_updates_screen.py'
       - 'ci/test_native_webreader_release_cache_storage.py'
       - 'ci/test_build68_phase_tu_readonly_contract.py'
       - '.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml'
@@ -39,6 +44,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_ac_ad_ae_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_ag_ah_ai_transfer_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_aj_ak_al_crash_recovery_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_am_an_signed_discovery_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_tu_readonly_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_aa_ab_manual_controls.py' -v
@@ -65,6 +71,7 @@ jobs:
           xcodebuild -version
       - name: Real Swift tests — protected local import, CDN transfer, forward-only Build and privacy
         run: |
+          python3 ci/test_native_webreader_signed_production_discovery.py
           python3 ci/test_native_webreader_physical_qa_checklist.py
           python3 ci/test_native_webreader_ipa_stager.py
           python3 ci/test_native_webreader_local_ipa_review.py
@@ -99,4 +106,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AL source only; crash-safe read-only recovery, no IPA or install'
+          echo 'PASS: Build69 AC-AN source only; signed channel fail-closed and no IPA or install'
