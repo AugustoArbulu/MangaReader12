@@ -106,8 +106,7 @@ reintroduzir esse método exclusivo do iOS13 na resposta HTTP.
 
 A validação atual é o
 [run #42455563835](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42455563835),
-cujo job Linux passou novamente e cujo job macOS precisa terminar antes
-de confirmar as compilações. Os runs anteriores são tentativas falhas
+com **SUCCESS (2/2 jobs)** no commit de código `7852f9f79761f57519d13dbfeef22d89ad915868`. O job Linux aprovou todas as políticas e regressões de biblioteca/offline; o job macOS executou os testes Swift nativos, compilou **Debug e Release ARM64/iOS 12** e conferiu a identidade do binário, sem produzir IPA. Os runs anteriores são tentativas falhas
 documentadas, não evidência de aprovação final.
 
 ## Testes e integração
@@ -127,7 +126,7 @@ local, auditorias ECDSA/IPA, cache e do roteiro físico; compila o app
 completo em Debug e Release ARM64/iOS12 e verifica a identidade
 legada e a desativação do instalador.
 
-**Resultado:** aguardar conclusão antes de marcar como aprovado.
+**Resultado final: SUCCESS (2/2 jobs)** em [GitHub Actions #42455563835](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42455563835), fonte de código `7852f9f79761f57519d13dbfeef22d89ad915868`. Ambos os builds iOS12 e o bloqueio de instalação foram validados. Isso é CI, **não QA física** da futura Build69.
 
 ## Invariantes obrigatórios
 
