@@ -300,6 +300,29 @@ check(raceFiles.isEmpty,
 racing.cancel()
 check(raceFiles.isEmpty, "repeat cancellation does not change storage")
 
+// Reuse a cancelled stager: the new request is a distinct owner action,
+// cannot inherit the cancelled state, and late callbacks from the old
+// URLSession cannot mutate or delete the successfully rechecked IPA.
+IPAStubProtocol.body = sample
+let retryDone = DispatchSemaphore(value: 0)
+var retryResult: WebReaderIPAStageResult?
+cancelled.stage { result in
+    retryResult = result
+    retryDone.signal()
+}
+check(retryDone.wait(timeout: .now() + 10) == .success,
+      "stager can explicitly retry after cancelled transfer")
+switch retryResult! {
+case .staged(let url):
+    check(try! Data(contentsOf: url) == sample,
+          "retry of same stager yields identical validated bytes")
+    cancelled.cancel() // Late cancellation must not delete committed IPA.
+    check(FileManager.default.fileExists(atPath: url.path),
+          "cancel after successful final commit does not remove IPA")
+    try! FileManager.default.removeItem(at: url)
+default: fatalError("retry incorrectly inherits cancellation state")
+}
+
 // Version 2 keeps the exact build-named, ad-hoc release filename. This does
 // not test publisher signing: an ad-hoc seal is NOT publisher authentication.
 var v2Details = payload
