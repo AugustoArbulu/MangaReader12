@@ -146,7 +146,7 @@ def verify_private_manual_qa(ipa_path, sha256_file, audit_json_file):
     )
     if (receipt.get("status") != "PASS" or
             receipt.get("qaArtifact") != IPA_NAME or
-            type(receipt.get("build")) is not int or receipt["build"] != 67 or
+            type(receipt.get("build")) is not int or receipt["build"] != 68 or
             type(receipt.get("upgradesFromObservedBuild")) is not int or
             receipt["upgradesFromObservedBuild"] != 66 or
             receipt.get("minimumIOS") != "12.0" or
@@ -174,7 +174,7 @@ def verify_private_manual_qa(ipa_path, sha256_file, audit_json_file):
         raise ManualQADeliveryRejected("candidate IPA changed since audit")
     return ManualQADelivery(
         artifact=IPA_NAME,
-        build=67,
+        build=68,
         installedBuildReference=66,
         sha256=current_hash,
         ipaBytes=receipt["ipaBytes"],
