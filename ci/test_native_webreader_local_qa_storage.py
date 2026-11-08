@@ -165,6 +165,10 @@ insist(try! Data(contentsOf: old.copiedIPAURL) ==
        Data(contentsOf: source), "foreign replacement remains in place")
 try! FileManager.default.removeItem(at: old.copiedIPAURL)
 try! FileManager.default.moveItem(at: oldIdentity, to: old.copiedIPAURL)
+try! FileManager.default.setAttributes(
+    [.modificationDate: Date(timeIntervalSinceNow: -3600)],
+    ofItemAtPath: old.copiedIPAURL.path
+)
 // Renaming the genuine file back changes its ctime. Its *old* snapshot must
 // remain rejected, even though the inode and SHA are still identical.
 insist(!clean(candidate, now: future),
