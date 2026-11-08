@@ -69,7 +69,8 @@ class RaceSafeIPAStaging(unittest.TestCase):
         for token in (
             "self.beforeFinalCommit = testProtocolClasses == nil ? nil : beforeFinalCommit",
             "self.afterFinalCommit = testProtocolClasses == nil ? nil : afterFinalCommit",
-            "testProtocolClasses == nil ? nil : testFreeBytesSampler",
+            "self.testFreeBytesSampler = testProtocolClasses == nil ?",
+            "nil : testFreeBytesSampler",
         ):
             self.assertIn(token, STAGER)
         self.assertIn("guard currentTask == nil && completion == nil", STAGER)
