@@ -44,6 +44,8 @@ final class IPAStubProtocol: URLProtocol {
     static var requests = 0
     static var status = 200
     static var mime = "application/octet-stream"
+    static var contentEncoding: String?
+    static var contentRange: String?
     static var body = Data()
     static var sentPartially = false
     static var keepOpenForCancel = false
@@ -58,13 +60,18 @@ final class IPAStubProtocol: URLProtocol {
         IPAStubProtocol.requests += 1
         let status = IPAStubProtocol.status
         let mime = IPAStubProtocol.mime
+        let contentEncoding = IPAStubProtocol.contentEncoding
+        let contentRange = IPAStubProtocol.contentRange
         let bytes = IPAStubProtocol.body
         let split = IPAStubProtocol.sentPartially
         let hang = IPAStubProtocol.keepOpenForCancel
         IPAStubProtocol.lock.unlock()
+        var headers: [String: String] = ["Content-Type": mime]
+        if let value = contentEncoding { headers["Content-Encoding"] = value }
+        if let value = contentRange { headers["Content-Range"] = value }
         let response = HTTPURLResponse(
             url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": mime]
+            headerFields: headers
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         if hang {
@@ -300,6 +307,23 @@ IPAStubProtocol.status = 200
 IPAStubProtocol.mime = "text/html"
 fail(good, .unexpectedContentType)
 IPAStubProtocol.mime = "application/octet-stream"
+
+// A full 200 response with Content-Encoding or Content-Range is still not
+// an untransformed full-archive transfer. Refuse both before ZIP inspection.
+IPAStubProtocol.contentEncoding = "gzip"
+fail(good, .unexpectedContentType)
+IPAStubProtocol.contentEncoding = "identity"
+IPAStubProtocol.contentRange = "bytes 0-10/100"
+fail(good, .unexpectedContentType)
+IPAStubProtocol.contentRange = nil
+IPAStubProtocol.contentEncoding = nil
+IPAStubProtocol.body = sample
+switch run(good) {
+case .staged(let path):
+    check(try! Data(contentsOf: path) == sample, "identity encoding is safe")
+    try! FileManager.default.removeItem(at: path)
+default: fatalError("normal full untransformed IPA should still work")
+}
 
 // Forged ZIP header with a correctly signed hash is still only staged,
 // never installed; a subsequent IPA validator/helper must inspect Info.plist.
