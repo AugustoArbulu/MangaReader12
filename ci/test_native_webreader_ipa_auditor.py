@@ -8,6 +8,7 @@ No networking, root privileges, appinst or production signing keys.
 import argparse
 import hashlib
 import io
+import os
 from pathlib import Path
 import plistlib
 import stat
@@ -197,6 +198,39 @@ def main():
                 str(build), minimum, str(installed),
                 "pass" if should_pass else "reject"
             ], check=True)
+
+        # A name that resolves to a real valid ZIP must still be rejected
+        # when its last path component is a symlink. That cannot be proven by
+        # hashing the resolved target path or reading ZIP metadata alone.
+        genuine = cases[0][0]
+        valid_sha = hashlib.sha256(genuine.read_bytes()).hexdigest()
+        valid_size = str(genuine.stat().st_size)
+        untrusted_paths = []
+        symlink_path = temp / "alias-to-valid-archive.ipa"
+        symlink_path.symlink_to(genuine)
+        untrusted_paths.append(("symlink-to-valid", symlink_path))
+        fifo_path = temp / "blocking-named-pipe.ipa"
+        os.mkfifo(fifo_path)
+        untrusted_paths.append(("FIFO-without-writer", fifo_path))
+        directory_path = temp / "directory-not-ipa.ipa"
+        directory_path.mkdir()
+        untrusted_paths.append(("directory", directory_path))
+        for label, untrusted in untrusted_paths:
+            outcome = subprocess.run([
+                str(binary), str(untrusted), valid_sha, valid_size,
+                "57", "12.0", "56", "reject"
+            ], capture_output=True, text=True, timeout=10)
+            assert outcome.returncode == 0, (
+                label + " not rejected: " + outcome.stdout + outcome.stderr
+            )
+            assert "PASS rejected malicious IPA" in outcome.stdout
+
+        source = (ROOT / "MangaReader12/Core/WebReaderNativeIPAAuditor.swift").read_text()
+        assert "O_NOFOLLOW | O_NONBLOCK" in source
+        assert "let finalDigest = fileSHA256(file)" in source
+        assert "opened.st_ino == finished.st_ino" in source
+        assert "opened.st_ctimespec.tv_nsec" in source
+        assert "FileHandle(forReadingFrom: ipaURL)" not in source
 
         # Tested separately from fixtures: the actual unsigned Build56 IPA
         # compiled by CI must match signed metadata for build 56.
