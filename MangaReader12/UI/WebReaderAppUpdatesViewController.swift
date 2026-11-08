@@ -7,6 +7,10 @@ import UIKit
 /// manually exported IPAs; it never installs or runs appinst.
 final class WebReaderAppUpdatesViewController: UITableViewController, UIDocumentPickerDelegate {
     private var checker: WebReaderUpdateChecker?
+    private var signedChecker: WebReaderProductionSignedReleaseChecker?
+    private var signedChannelBusy = false
+    private var signedChannelStatus =
+        "Chave editorial independente ainda não provisionada • sem requisições"
     private var checking = false
     private var lastResult: WebReaderUpdateCheckResult = .disabled
     private var httpsProbe: WebReaderReleaseHTTPSProbe?
@@ -114,6 +118,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         super.viewWillDisappear(animated)
         // Leaving this screen cannot accidentally trigger a later action.
         checker?.cancel()
+        signedChecker?.cancel()
         // Invalidate any progress dispatch that was queued before leaving.
         // Its session ID must no longer match the current screen state.
         downloadSessionID = nil
@@ -135,7 +140,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if isChimeraOneApp {
             return source == 5 ? 2 : 1
         }
-        if source == 1 { return 2 }
+        if source == 1 { return 4 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
         if source == 3 { return 6 }
@@ -172,9 +177,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
         switch sectionType(section) {
         case 1:
-            return "Somente GitHub Releases públicos do repositório WebReader " +
-                "são consultados. Commits ou artefatos temporários do " +
-                "GitHub Actions não são atualizações disponíveis."
+            return "A consulta pública usa apenas GitHub Releases, sem " +
+                "autenticação editorial. O canal assinado exige chave e pin " +
+                "conferidos independentemente; Builds privadas do Actions " +
+                "continuam manuais, sem token no aplicativo."
         case 2:
             return "O download exige sua confirmação e validação de SHA-256/IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
@@ -247,6 +253,22 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (1, 1):
             cell.textLabel?.text = "Abrir GitHub Releases"
             cell.detailTextLabel?.text = "Consultar lançamentos no GitHub"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (1, 2):
+            cell.textLabel?.text = signedChannelBusy ?
+                "Verificando assinatura editorial…" : "Verificar canal assinado"
+            cell.detailTextLabel?.text = signedChannelStatus
+            if !signedChannelBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (1, 3):
+            cell.textLabel?.text = "Abrir Builds privadas no GitHub Actions"
+            cell.detailTextLabel?.text =
+                "Abrir no navegador com sua conta GitHub • IPA manual via Filza"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -630,6 +652,20 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             return
         }
+        if selectedSection == 1, indexPath.row == 2 {
+            checkSignedProductionChannel()
+            return
+        }
+        if selectedSection == 1, indexPath.row == 3 {
+            // Private GitHub Actions artifacts cannot be discovered without
+            // authentication. Open GitHub in the browser; NEVER collect or
+            // embed a token in iOS12 app preferences or an API request.
+            let url = URL(string:
+                "https://github.com/AugustoArbulu/MangaReader12/actions"
+            )!
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            return
+        }
         if selectedSection == 2, indexPath.row == 2 {
             if stagingIPA {
                 ipaStatus = "Cancelando transferência e descartando IPA parcial…"
@@ -662,7 +698,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         guard selectedSection == 2, indexPath.row == 0,
-              !isIPCDiagnostic, !checking, !stagingIPA, !verifyingExport
+              !isIPCDiagnostic, !checking, !signedChannelBusy,
+              !stagingIPA, !verifyingExport
         else { return }
         checking = true
         stagedIPAURL = nil
@@ -686,6 +723,64 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
     }
 
+
+    /// Production-only signed discovery. The shipped key and independently
+    /// trusted SPKI pin are both absent. No key is imported from GitHub or
+    /// user preferences, and no HTTP request occurs until owner provisioning.
+    private func checkSignedProductionChannel() {
+        guard !isIPCDiagnostic, !checking, !signedChannelBusy,
+              !stagingIPA, !verifyingExport else { return }
+        guard WebReaderProductionPublisherTrust.isProvisioned else {
+            signedChannelStatus =
+                "Canal bloqueado: falta chave editorial e SPKI independente"
+            tableView.reloadData()
+            return
+        }
+        signedChannelBusy = true
+        signedChannelStatus = "Conferindo manifesto ECDSA P-256 assinado…"
+        // Do not mix metadata from a previous unsigned public release
+        // with a newly requested signed-source inspection.
+        lastResult = .disabled
+        stagedIPAURL = nil
+        stagedSHA256 = nil
+        tableView.reloadData()
+        let signed = WebReaderProductionSignedReleaseChecker(
+            installedBuild: installedBuild,
+            installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+        )
+        signedChecker = signed
+        signed.check { [weak self, weak signed] result in
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let signed = signed,
+                      self.signedChecker === signed else { return }
+                self.signedChecker = nil
+                self.signedChannelBusy = false
+                switch result {
+                case .disabled:
+                    self.signedChannelStatus =
+                        "Canal assinado não provisionado; nenhuma atualização autenticada"
+                    self.lastResult = .disabled
+                case .updateAvailable(let update):
+                    self.signedChannelStatus = "Manifesto editorial ECDSA verificado • Build " +
+                        String(update.build) + " • instalação manual"
+                    self.lastResult = .updateAvailable(update)
+                case .upToDate:
+                    self.signedChannelStatus =
+                        "Manifesto assinado verificado • nenhuma Build mais recente"
+                    self.lastResult = .upToDate
+                case .failed(.unexpectedHTTPStatus(let code)):
+                    self.signedChannelStatus = "Manifesto assinado indisponível • HTTP " +
+                        String(code) + " • não afirmar versão atualizada"
+                    self.lastResult = .disabled
+                case .failed:
+                    self.signedChannelStatus =
+                        "Falha na autenticação ou transporte do canal assinado"
+                    self.lastResult = .disabled
+                }
+                self.tableView.reloadData()
+            }
+        }
+    }
 
     // MARK: - User-owned local IPA QA, independent of GitHub Releases
 
