@@ -12,6 +12,7 @@ on:
       - 'ci/test_native_webreader_local_ipa_review.py'
       - 'ci/test_native_webreader_ipa_stager.py'
       - 'ci/test_build68_native_audit_contract.py'
+      - 'ci/test_build67_local_ipa_screen.py'
       - '.github/workflows/chimera-build68-security-preflight.yml'
   workflow_dispatch:
 
