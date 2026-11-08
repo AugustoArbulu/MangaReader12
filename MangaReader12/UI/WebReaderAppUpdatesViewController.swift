@@ -20,6 +20,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var pairingReport = "Pareamento temporário ainda não testado"
     private var stager: WebReaderIPAStager?
     private var stagingIPA = false
+    private var downloadSessionID: UUID?
     private var verifyingExport = false
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando consulta aos metadados do GitHub"
@@ -258,7 +259,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (2, 2):
             if stagingIPA {
                 cell.textLabel?.text = "Baixando e validando IPA…"
-                cell.detailTextLabel?.text = "Saia da tela para cancelar"
+                cell.detailTextLabel?.text = ipaStatus + "\nSaia da tela para cancelar"
             } else if verifyingExport {
                 cell.textLabel?.text = "Conferindo IPA antes de compartilhar…"
                 cell.detailTextLabel?.text = "Verificando novamente SHA-256, ZIP e Bundle ID"
@@ -1047,7 +1048,20 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         stagingIPA = true
         ipaStatus = "Baixando e verificando hash, versão e conteúdo da IPA"
         tableView.reloadData()
-        let downloader = WebReaderIPAStager(verifiedUpdate: update)
+        let id = UUID()
+        downloadSessionID = id
+        let downloader = WebReaderIPAStager(
+            verifiedUpdate: update,
+            onProgress: { [weak self] percent in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self, self.downloadSessionID == id,
+                          self.stagingIPA else { return }
+                    self.ipaStatus = "Recebidos " + String(percent) +
+                        "% • hash e ZIP são conferidos ao concluir"
+                    self.tableView.reloadData()
+                }
+            }
+        )
         stager = downloader
         downloader.stage { [weak self, weak downloader] result in
             DispatchQueue.main.async {
@@ -1055,6 +1069,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                       self.stager === downloader else { return }
                 self.stager = nil
                 self.stagingIPA = false
+                self.downloadSessionID = nil
                 switch result {
                 case .staged(let url):
                     self.stagedIPAURL = url
@@ -1076,6 +1091,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case .busy: return "Já existe um download em andamento"
         case .invalidRelease: return "Release fora das regras do WebReader"
         case .storage: return "Não foi possível salvar a IPA"
+        case .insufficientSpace: return "Espaço livre insuficiente • preserve os capítulos offline"
         case .transport: return "Download HTTPS não concluído"
         case .redirectRejected: return "Redirecionamento de download não permitido"
         case .unexpectedHTTPStatus(let code): return "Resposta HTTP " + String(code)
