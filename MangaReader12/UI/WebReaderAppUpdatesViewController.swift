@@ -32,6 +32,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var manualExpectedBuild: Int?
     private var manualExpectedSHA256: String?
     private var manualImportStatus = "Escolha uma IPA e informe SHA-256 externo"
+    private var localQASpaceBusy = false
+    private var localQASpaceStatus = "Toque para contar cópias antigas e espaço ocupado"
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
 
@@ -117,7 +119,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return source == 5 ? 2 : 1
         }
         if source == 1 { return 2 }
-        if source == 6 { return 4 }
+        if source == 6 { return 6 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
@@ -417,6 +419,26 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 "Nenhum arquivo para descartar" :
                 "Remove apenas a cópia importada, nunca a biblioteca"
             if manualIPAReview != nil && !manualImportInProgress &&
+                !manualReviewInProgress && !localQASpaceBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (6, 4):
+            cell.textLabel?.text = localQASpaceBusy ?
+                "Conferindo armazenamento local…" : "Espaço ocupado por IPAs antigas"
+            cell.detailTextLabel?.text = localQASpaceStatus
+            if !localQASpaceBusy && !manualImportInProgress &&
+                !manualReviewInProgress {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (6, 5):
+            cell.textLabel?.text = "Limpar cópias antigas de QA…"
+            cell.detailTextLabel?.text =
+                "Confirmação obrigatória • apenas arquivos de QA com mais de 24 h"
+            if !localQASpaceBusy && !manualImportInProgress &&
                 !manualReviewInProgress {
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
@@ -492,6 +514,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         if selectedSection == 6 {
+            guard !localQASpaceBusy else { return }
             if indexPath.row == 0 && !manualImportInProgress &&
                 !manualReviewInProgress { promptLocalIPAImport() }
             if indexPath.row == 1 && !manualImportInProgress &&
@@ -500,6 +523,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 !manualReviewInProgress { copyLocalIPAHash() }
             if indexPath.row == 3 && !manualImportInProgress &&
                 !manualReviewInProgress { discardLocalIPA() }
+            if indexPath.row == 4 && !manualImportInProgress &&
+                !manualReviewInProgress { inspectLocalQAStorage(cleanup: false) }
+            if indexPath.row == 5 && !manualImportInProgress &&
+                !manualReviewInProgress { inspectLocalQAStorage(cleanup: true) }
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -733,6 +760,96 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         manualIPAReview = nil
         manualImportStatus = "Cópia de QA descartada; a biblioteca permanece intacta"
         tableView.reloadData()
+    }
+
+    // MARK: - User-confirmed stale QA copy storage management
+
+    private func inspectLocalQAStorage(cleanup: Bool) {
+        guard !isIPCDiagnostic, !localQASpaceBusy, !manualImportInProgress,
+              !manualReviewInProgress else { return }
+        localQASpaceBusy = true
+        localQASpaceStatus = "Contando apenas arquivos da pasta QA…"
+        tableView.reloadData()
+        let active = manualIPAReview
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let scan = try? WebReaderLocalQAStorage.inventory(
+                protected: active
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.localQASpaceBusy = false
+                guard let scan = scan else {
+                    self.localQASpaceStatus =
+                        "Pasta de QA indisponível ou entradas demais; nenhum arquivo apagado"
+                    self.tableView.reloadData()
+                    return
+                }
+                let mb = Double(scan.eligibleBytes) / 1_048_576
+                self.localQASpaceStatus = String(
+                    format: "%d cópia(s) antigas • %.1f MB • %d item(ns) preservados",
+                    scan.eligible.count, mb, scan.ignoredEntries
+                )
+                self.tableView.reloadData()
+                if cleanup { self.confirmStaleQACleanup(scan) }
+            }
+        }
+    }
+
+    private func confirmStaleQACleanup(_ scan: WebReaderLocalQAStorageInventory) {
+        guard !isIPCDiagnostic, !manualImportInProgress,
+              !manualReviewInProgress, !localQASpaceBusy,
+              !scan.eligible.isEmpty else { return }
+        let size = Double(scan.eligibleBytes) / 1_048_576
+        let message = String(
+            format: "%d cópia(s) antigas • %.1f MB. Só arquivos IPA de QA com " +
+                "mais de 24 horas, dentro da pasta temporária do WebReader. " +
+                "Arquivos novos, sua IPA atual, biblioteca e capítulos ficam " +
+                "preservados. Deseja excluir essas cópias?",
+            scan.eligible.count, size
+        )
+        let alert = UIAlertController(
+            title: "Limpar cópias antigas de QA?", message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Excluir cópias antigas",
+                                      style: .destructive) { [weak self] _ in
+            self?.discardStaleQAAfterConfirmation(scan)
+        })
+        present(alert, animated: true)
+    }
+
+    private func discardStaleQAAfterConfirmation(
+        _ scan: WebReaderLocalQAStorageInventory
+    ) {
+        guard !isIPCDiagnostic, !localQASpaceBusy,
+              !manualImportInProgress, !manualReviewInProgress else { return }
+        localQASpaceBusy = true
+        localQASpaceStatus = "Removendo somente cópias antigas confirmadas…"
+        tableView.reloadData()
+        let active = manualIPAReview
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var removed = 0
+            var released: Int64 = 0
+            for candidate in scan.eligible {
+                if WebReaderLocalQAStorage.discardConfirmed(
+                    candidate, protected: active
+                ) {
+                    removed += 1
+                    released += candidate.byteCount
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.localQASpaceBusy = false
+                self.localQASpaceStatus = String(
+                    format: "%d cópia(s) removidas • %.1f MB liberados • " +
+                        "demais arquivos preservados",
+                    removed, Double(released) / 1_048_576
+                )
+                self.tableView.reloadData()
+            }
+        }
     }
 
     private func confirmIPADownload() {
