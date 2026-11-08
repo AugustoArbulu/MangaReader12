@@ -103,6 +103,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         super.viewWillDisappear(animated)
         // Leaving this screen cannot accidentally trigger a later action.
         checker?.cancel()
+        // Invalidate any progress dispatch that was queued before leaving.
+        // Its session ID must no longer match the current screen state.
+        downloadSessionID = nil
         stager?.cancel()
         httpsProbe?.cancel()
         httpsProbe = nil
@@ -619,6 +622,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if selectedSection == 2, indexPath.row == 2 {
             if stagingIPA {
                 ipaStatus = "Cancelando transferência e descartando IPA parcial…"
+                // Progress is dispatched asynchronously from URLSession.
+                // Invalidate its ID BEFORE stopping transfer so stale UI
+                // updates cannot replace the cancellation message.
+                downloadSessionID = nil
                 stager?.cancel()
                 tableView.reloadData()
                 return
