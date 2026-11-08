@@ -1047,6 +1047,45 @@ enum WebReaderLocalQAStorage {
 
 // MARK: - Owner-confirmed cleanup of completed/abandoned GitHub Release downloads
 
+/// Read-only recovery snapshot. A stale partial may be a previously killed
+/// download; NEVER treat it as a resumable, integrity-verified IPA. No network,
+/// file writes, deletion, privilege escalation or automatic retry is allowed.
+struct WebReaderReleaseRecoverySummary {
+    let interruptedFiles: Int
+    let interruptedBytes: Int64
+    let completedFiles: Int
+    let completedBytes: Int64
+    let ignoredEntries: Int
+    let canResumePartial: Bool = false
+    let cleanupRequiresOwnerConfirmation: Bool = true
+    let installationAuthorized: Bool = false
+
+    static func readOnly(
+        _ inventory: WebReaderLocalQAStorageInventory
+    ) -> WebReaderReleaseRecoverySummary {
+        var partialCount = 0
+        var partialBytes: Int64 = 0
+        var completedCount = 0
+        var completedBytes: Int64 = 0
+        for entry in inventory.eligible {
+            if entry.fileName.hasSuffix(".partial") {
+                partialCount += 1
+                partialBytes += entry.byteCount
+            } else if entry.fileName.hasSuffix(".ipa") {
+                completedCount += 1
+                completedBytes += entry.byteCount
+            }
+        }
+        return WebReaderReleaseRecoverySummary(
+            interruptedFiles: partialCount,
+            interruptedBytes: partialBytes,
+            completedFiles: completedCount,
+            completedBytes: completedBytes,
+            ignoredEntries: inventory.ignoredEntries
+        )
+    }
+}
+
 /// Separate from WebReaderLocalQAImports. Handles ONLY files created by the
 /// download stager inside Application Support/WebReaderUpdates. This never
 /// deletes source IPAs, chapter downloads, SQLite, backups or exported files.
