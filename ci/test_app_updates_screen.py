@@ -41,8 +41,11 @@ assert "Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\")" in screen
 assert "Verificar atualizações" in screen
 assert "GitHub Releases • HTTPS • sem autenticação editorial independente" in screen
 assert "instalação pelo Chimera ainda está em desenvolvimento" in screen
-assert "Somente GitHub Releases públicos" in screen
-assert "GitHub Actions não são atualizações disponíveis" in screen
+assert "A consulta pública usa apenas GitHub Releases" in screen
+assert "Builds privadas do Actions" in screen
+assert "Verificar canal assinado" in screen
+assert "Abrir Builds privadas no GitHub Actions" in screen
+assert "WebReaderProductionSignedReleaseChecker(" in screen
 assert "productionPublicKeyX963: Data? = nil" in checker
 assert "static var isConfigured: Bool { return productionPublicKeyX963 != nil }" in checker
 assert project.count("WebReaderAppUpdatesViewController.swift in Sources") == 2
