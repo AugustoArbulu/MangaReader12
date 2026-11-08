@@ -45,7 +45,8 @@ enum WebReaderSignedReleaseTrustGate {
         publicKeyX963: Data,
         independentlyTrustedSPKISHA256: String?,
         installedBuild: Int,
-        installedIOS: OperatingSystemVersion
+        installedIOS: OperatingSystemVersion,
+        expectedChannel: String = "development"
     ) throws -> WebReaderSignedReleasePreview {
         guard let pin = independentlyTrustedSPKISHA256,
               pin.range(
@@ -83,7 +84,8 @@ enum WebReaderSignedReleaseTrustGate {
             envelopeData: envelopeData,
             publicKeyX963: publicKeyX963,
             installedBuild: installedBuild,
-            installedIOS: installedIOS
+            installedIOS: installedIOS,
+            expectedChannel: expectedChannel
         )
         return WebReaderSignedReleasePreview(
             update: verified, observedSPKISHA256: observed
