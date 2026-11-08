@@ -17,6 +17,7 @@ FILES = [
     CORE / "WebReaderUpdateChecker.swift",
     CORE / "WebReaderGitHubReleaseParser.swift",
     CORE / "WebReaderNativeIPAAuditor.swift",
+    CORE / "WebReaderIPADownloadBudget.swift",
     CORE / "WebReaderIPAStager.swift",
 ]
 HARNESS = r'''
