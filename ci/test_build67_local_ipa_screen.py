@@ -82,6 +82,9 @@ class LocalIPAScreenContractTests(unittest.TestCase):
     def test_manual_sharing_only(self):
         self.assertIn("UIActivityViewController(", UI)
         self.assertIn("activityItems: [receipt.copiedIPAURL]", UI)
+        self.assertIn("if source == 6 { return 4 }", UI)
+        self.assertIn("copyLocalIPAHash()", UI)
+        self.assertIn("UIPasteboard.general.string = receipt.expectedSHA256", UI)
         self.assertIn("Cópia de QA descartada; a biblioteca permanece intacta", UI)
         self.assertIn("section: 6", UI)
 
