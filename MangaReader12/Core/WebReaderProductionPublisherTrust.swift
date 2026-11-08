@@ -60,7 +60,8 @@ enum WebReaderProductionPublisherTrust {
         return try WebReaderSignedReleaseTrustGate.inspectReadOnlyV2(
             envelopeData: envelopeData, publicKeyX963: key,
             independentlyTrustedSPKISHA256: pin,
-            installedBuild: installedBuild, installedIOS: installedIOS
+            installedBuild: installedBuild, installedIOS: installedIOS,
+            expectedChannel: "production"
         )
     }
 }
