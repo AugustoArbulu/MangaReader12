@@ -39,9 +39,14 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private let testAvailableSpace: Int64?
     private let testInstalledBuild: Int?
     private let onProgress: ((Int) -> Void)?
+    // Deterministic test-only race gates; cannot be enabled without an
+    // injected URLProtocol. Production transfers never execute them.
+    private let beforeFinalCommit: (() -> Void)?
+    private let afterFinalCommit: (() -> Void)?
     private let stateLock = NSLock()
     private var session: URLSession?
     private var currentTask: URLSessionDataTask?
+    private var cancelRequested = false
     private var completion: ((WebReaderIPAStageResult) -> Void)?
     private var stream: OutputStream?
     private var partialURL: URL?
@@ -58,7 +63,9 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         testProtocolClasses: [AnyClass]? = nil,
         testAvailableSpace: Int64? = nil,
         testInstalledBuild: Int? = nil,
-        onProgress: ((Int) -> Void)? = nil
+        onProgress: ((Int) -> Void)? = nil,
+        beforeFinalCommit: (() -> Void)? = nil,
+        afterFinalCommit: (() -> Void)? = nil
     ) {
         self.update = verifiedUpdate
         self.destinationDirectory = destinationDirectory
@@ -67,6 +74,8 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         self.testAvailableSpace = testProtocolClasses == nil ? nil : testAvailableSpace
         self.testInstalledBuild = testProtocolClasses == nil ? nil : testInstalledBuild
         self.onProgress = onProgress
+        self.beforeFinalCommit = testProtocolClasses == nil ? nil : beforeFinalCommit
+        self.afterFinalCommit = testProtocolClasses == nil ? nil : afterFinalCommit
         super.init()
     }
 
@@ -116,7 +125,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             return
         }
         stateLock.lock()
-        guard currentTask == nil else {
+        guard currentTask == nil && completion == nil else {
             stateLock.unlock()
             callback(.failed(.busy))
             return
@@ -187,6 +196,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         let task = newSession.dataTask(with: request)
         self.session = newSession
         self.currentTask = task
+        self.cancelRequested = false
         self.completion = callback
         self.stream = fileStream
         self.partialURL = staging
@@ -200,13 +210,18 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
 
     func cancel() {
         stateLock.lock()
-        let task = currentTask
+        // Mark cancellation BEFORE stopping the URLSession. Completion and
+        // promotion must observe the same lock-serialized decision.
+        guard let active = currentTask, completion != nil,
+              !cancelRequested else {
+            stateLock.unlock()
+            return
+        }
+        cancelRequested = true
         stateLock.unlock()
-        guard let active = task else { return }
         active.cancel()
-        // Completing locally avoids leaving a partial IPA behind when the
-        // network transport never calls its completion callback after cancel.
-        // finish is lock-protected and delivers a single result.
+        // A stalled transport may never send a final callback. In that case
+        // finish removes the private partial IPA immediately, exactly once.
         finish(.failed(.cancelled))
     }
 
@@ -428,13 +443,26 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             "WebReader-build" + String(update.build) + "-" +
             UUID().uuidString + ".ipa"
         )
+        beforeFinalCommit?()
+        defer { afterFinalCommit?() }
+        // The promotion is atomic with respect to cancel(): a cancelled
+        // review can never leave behind an orphan named .ipa. A successful
+        // promotion clears currentTask *before* releasing the lock, so late
+        // cancellation cannot turn successful staging into a false failure.
+        stateLock.lock()
+        guard currentTask === task, completion != nil,
+              !cancelRequested, partialURL == fileURL else {
+            stateLock.unlock()
+            return
+        }
         do {
             try FileManager.default.moveItem(at: fileURL, to: destination)
-            stateLock.lock()
             partialURL = nil
+            currentTask = nil
             stateLock.unlock()
             finish(.staged(destination))
         } catch {
+            stateLock.unlock()
             finish(.failed(.storage))
         }
     }
@@ -442,6 +470,10 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private func finish(_ result: WebReaderIPAStageResult) {
         stateLock.lock()
         let callback = completion
+        // A concurrent transport failure can race with the owner's cancel.
+        // The cancellation decision wins if committed first.
+        let resolved: WebReaderIPAStageResult =
+            cancelRequested ? .failed(.cancelled) : result
         completion = nil
         currentTask = nil
         stream?.close()
@@ -453,7 +485,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         stateLock.unlock()
         if let temp = temp { try? FileManager.default.removeItem(at: temp) }
         oldSession?.invalidateAndCancel()
-        callback?(result)
+        callback?(resolved)
     }
 }
 
