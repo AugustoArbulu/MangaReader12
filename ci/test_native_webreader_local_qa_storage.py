@@ -165,6 +165,16 @@ insist(try! Data(contentsOf: old.copiedIPAURL) ==
        Data(contentsOf: source), "foreign replacement remains in place")
 try! FileManager.default.removeItem(at: old.copiedIPAURL)
 try! FileManager.default.moveItem(at: oldIdentity, to: old.copiedIPAURL)
+// Renaming the genuine file back changes its ctime. Its *old* snapshot must
+// remain rejected, even though the inode and SHA are still identical.
+insist(!clean(candidate, now: future),
+       "stale metadata after rename blocks deletion")
+let refreshed = inventory(future, active).eligible.first {
+    $0.fileInode == old.stagingInode
+}!
+insist(refreshed.changedNanoseconds != candidate.changedNanoseconds ||
+       refreshed.changedSeconds != candidate.changedSeconds,
+       "snapshot records the renewed ctime and does not hide rename")
 
 // A snapshot whose metadata is stale must also be refused; no path
 // scanning or unauthenticated SHA is sufficient for deletion.
@@ -184,8 +194,8 @@ insist(!clean(mismatched, now: future),
 // After the user's affirmative consent and still-valid receipt, exactly
 // the old copy is discarded. Original Filza selection and active review
 // remain intact.
-insist(clean(candidate, now: future, protected: active),
-       "an exact, aged non-active candidate is eligible after confirmation")
+insist(clean(refreshed, now: future, protected: active),
+       "a freshly inventoried, aged non-active candidate is eligible after confirmation")
 insist(!FileManager.default.fileExists(atPath: old.copiedIPAURL.path),
        "only explicitly selected stale QA inode was removed")
 insist(FileManager.default.fileExists(atPath: active.copiedIPAURL.path),
