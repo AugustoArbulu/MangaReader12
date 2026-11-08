@@ -432,32 +432,45 @@ enum WebReaderLocalIPAReviewer {
               ) != nil
         else { throw WebReaderLocalIPAReviewError.invalidReference }
 
-        let fm = FileManager.default
-        let attributes: [FileAttributeKey: Any]
-        do {
-            attributes = try fm.attributesOfItem(atPath: sourceURL.path)
-        } catch {
+        // Open the SOURCE only once, refusing symlink, FIFO and directory
+        // substitutions before any read or copy. Its descriptor remains
+        // bound to the original inode even if its filename is renamed.
+        let sourceFD = Darwin.open(
+            sourceURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        )
+        guard sourceFD >= 0 else {
             throw WebReaderLocalIPAReviewError.unreadableFile
         }
-        guard attributes[.type] as? FileAttributeType == .typeRegular,
-              let size = attributes[.size] as? NSNumber else {
+        defer { _ = Darwin.close(sourceFD) }
+        var original = stat()
+        guard Darwin.fstat(sourceFD, &original) == 0,
+              (original.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
             throw WebReaderLocalIPAReviewError.unreadableFile
         }
-        let candidateSize = size.int64Value
+        let candidateSize = Int64(original.st_size)
         guard candidateSize > 0, candidateSize <= maximumSize else {
             throw WebReaderLocalIPAReviewError.tooLarge
         }
+
+        let fm = FileManager.default
         do {
             try fm.createDirectory(at: directory, withIntermediateDirectories: true,
                                    attributes: [.posixPermissions: 0o700])
         } catch {
             throw WebReaderLocalIPAReviewError.failedToCopy
         }
-        // The final component must be a real directory, not a symlink
-        // pointing at Library, Documents or the downloaded chapter cache.
-        var directoryInfo = stat()
-        guard Darwin.lstat(directory.path, &directoryInfo) == 0,
-              (directoryInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+        // An opened directory descriptor anchors every create/unlink to the
+        // SAME folder even when its pathname is replaced. The final path
+        // component cannot point to Library or Documents via a symlink.
+        let dirFD = Darwin.open(
+            directory.path,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        )
+        guard dirFD >= 0 else { throw WebReaderLocalIPAReviewError.failedToCopy }
+        defer { _ = Darwin.close(dirFD) }
+        var dirInfo = stat()
+        guard Darwin.fstat(dirFD, &dirInfo) == 0,
+              (dirInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
             throw WebReaderLocalIPAReviewError.failedToCopy
         }
         guard let storage = try? fm.attributesOfFileSystem(forPath: directory.path),
@@ -465,31 +478,91 @@ enum WebReaderLocalIPAReviewer {
               hasEnoughSpace(freeBytes: free.int64Value, ipaBytes: candidateSize) else {
             throw WebReaderLocalIPAReviewError.insufficientSpace
         }
-        let saved = directory.appendingPathComponent(
-            "WebReader-Build" + String(expectedBuild) + "-local-" +
-            UUID().uuidString + ".ipa"
+
+        let fileName = "WebReader-Build" + String(expectedBuild) +
+            "-local-" + UUID().uuidString + ".ipa"
+        let saved = directory.appendingPathComponent(fileName)
+        // O_EXCL prevents collisions and O_NOFOLLOW prevents substituting a
+        // link for the target; neither an existing file nor a source is ever
+        // overwritten. The FD is private to this process and no appinst is
+        // involved.
+        let outputFD = Darwin.openat(
+            dirFD, fileName,
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+            mode_t(0o600)
         )
+        guard outputFD >= 0 else { throw WebReaderLocalIPAReviewError.failedToCopy }
+        let ownsTemporary = true
         var keep = false
         defer {
-            if !keep { try? fm.removeItem(at: saved) }
+            if ownsTemporary && !keep {
+                _ = Darwin.unlinkat(dirFD, fileName, 0)
+            }
         }
+        var copySucceeded = false
+        var writtenBytes: Int64 = 0
+        var destinationBefore = stat()
         do {
-            try fm.copyItem(at: sourceURL, to: saved)
-            try fm.setAttributes([.posixPermissions: 0o600],
-                                 ofItemAtPath: saved.path)
+            guard Darwin.fchmod(outputFD, mode_t(0o600)) == 0,
+                  Darwin.fstat(outputFD, &destinationBefore) == 0,
+                  (destinationBefore.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
+                throw WebReaderLocalIPAReviewError.failedToCopy
+            }
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            while writtenBytes < candidateSize {
+                let requested = Int(min(Int64(buffer.count),
+                                        candidateSize - writtenBytes))
+                let count = buffer.withUnsafeMutableBytes { raw -> Int in
+                    return Darwin.read(sourceFD, raw.baseAddress, requested)
+                }
+                if count < 0 && errno == EINTR { continue }
+                if count <= 0 {
+                    throw WebReaderLocalIPAReviewError.failedToCopy
+                }
+                var offset = 0
+                while offset < count {
+                    let amount = buffer.withUnsafeBytes { raw -> Int in
+                        return Darwin.write(
+                            outputFD,
+                            raw.baseAddress!.advanced(by: offset),
+                            count - offset
+                        )
+                    }
+                    if amount < 0 && errno == EINTR { continue }
+                    if amount <= 0 {
+                        throw WebReaderLocalIPAReviewError.failedToCopy
+                    }
+                    offset += amount
+                }
+                writtenBytes += Int64(count)
+            }
+            var sourceAfter = stat()
+            var destinationAfter = stat()
+            guard Darwin.fsync(outputFD) == 0,
+                  Darwin.fstat(sourceFD, &sourceAfter) == 0,
+                  Darwin.fstat(outputFD, &destinationAfter) == 0,
+                  writtenBytes == candidateSize,
+                  original.st_dev == sourceAfter.st_dev,
+                  original.st_ino == sourceAfter.st_ino,
+                  original.st_size == sourceAfter.st_size,
+                  original.st_mtimespec.tv_sec == sourceAfter.st_mtimespec.tv_sec,
+                  original.st_mtimespec.tv_nsec == sourceAfter.st_mtimespec.tv_nsec,
+                  original.st_ctimespec.tv_sec == sourceAfter.st_ctimespec.tv_sec,
+                  original.st_ctimespec.tv_nsec == sourceAfter.st_ctimespec.tv_nsec,
+                  destinationBefore.st_ino == destinationAfter.st_ino,
+                  destinationAfter.st_size == candidateSize else {
+                throw WebReaderLocalIPAReviewError.failedToCopy
+            }
+            copySucceeded = true
         } catch {
+            _ = Darwin.close(outputFD)
             throw WebReaderLocalIPAReviewError.failedToCopy
         }
-        let copied: [FileAttributeKey: Any]
-        do {
-            copied = try fm.attributesOfItem(atPath: saved.path)
-        } catch {
-            throw WebReaderLocalIPAReviewError.unreadableFile
-        }
-        guard copied[.type] as? FileAttributeType == .typeRegular,
-              (copied[.size] as? NSNumber)?.int64Value == candidateSize else {
-            throw WebReaderLocalIPAReviewError.failedToCopy
-        }
+        _ = Darwin.close(outputFD)
+        guard copySucceeded else { throw WebReaderLocalIPAReviewError.failedToCopy }
+        // The auditor reopens the freshly copied PRIVATE file to confirm its
+        // full digest and structural identity; its own audit is same-FD and
+        // rejects changes that happen while it is inspecting.
         // This object is a LOCAL EXPECTATION, not a signed manifest or a
         // GitHub Release. The native auditor compares exact size/SHA, ZIP
         // entries, Info.plist, build, bundle, executable and iOS version.
