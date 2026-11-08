@@ -213,7 +213,10 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             components.scheme == "https",
             components.user == nil, components.password == nil,
-            components.port == nil,
+            components.port == nil, components.fragment == nil,
+            request.httpMethod == "GET", request.httpBody == nil,
+            request.value(forHTTPHeaderField: "Authorization") == nil,
+            request.value(forHTTPHeaderField: "Cookie") == nil,
             let host = components.host,
             host == "release-assets.githubusercontent.com" ||
                 host == "objects.githubusercontent.com"
@@ -245,6 +248,18 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         guard http.statusCode == 200 else {
             completionHandler(.cancel)
             finish(.failed(.unexpectedHTTPStatus(http.statusCode)))
+            return
+        }
+        // Only accept the exact, untransformed whole IPA. CDN range
+        // responses, gzip transforms or intermediaries returning partial
+        // content must not become a download candidate.
+        let encoding = http.value(forHTTPHeaderField: "Content-Encoding")?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard encoding == nil || encoding == "identity",
+              http.value(forHTTPHeaderField: "Content-Range") == nil
+        else {
+            completionHandler(.cancel)
+            finish(.failed(.unexpectedContentType))
             return
         }
         let permitted = Set([
