@@ -2,7 +2,7 @@ import Foundation
 
 /// Phase W: a separate, fail-closed *production* entry point for signed
 /// WebReader releases. Unlike the laboratory verifier, this API never takes
-/// its trusted fingerprint from a caller, a network payload or UserDefaults.
+/// its trusted fingerprint from a caller, a network payload or local app preferences.
 ///
 /// The publisher's independently verified public key and fingerprint must
 /// be compiled in a new reviewed iOS12 build by the owner. Until that
