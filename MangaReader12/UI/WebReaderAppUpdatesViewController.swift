@@ -630,11 +630,25 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             defer {
                 if access { source.stopAccessingSecurityScopedResource() }
             }
-            let result = try? WebReaderLocalIPAReviewer.importForReview(
-                sourceURL: source, expectedBuild: expectedBuild,
-                expectedSHA256: expectedSHA,
-                installedBuild: currentBuild, installedIOS: currentIOS
-            )
+            var result: WebReaderLocalIPAReview?
+            var failureReason =
+                "IPA ou SHA-256 inválidos, versão antiga ou arquivo inacessível"
+            do {
+                result = try WebReaderLocalIPAReviewer.importForReview(
+                    sourceURL: source, expectedBuild: expectedBuild,
+                    expectedSHA256: expectedSHA,
+                    installedBuild: currentBuild, installedIOS: currentIOS
+                )
+            } catch WebReaderLocalIPAReviewError.insufficientSpace {
+                failureReason =
+                    "Espaço insuficiente para copiar a IPA e manter reserva livre"
+            } catch WebReaderLocalIPAReviewError.tooLarge {
+                failureReason = "IPA excede o limite de 512 MB"
+            } catch WebReaderLocalIPAReviewError.failedToCopy {
+                failureReason = "Não foi possível criar a cópia local de QA"
+            } catch {
+                // Invalid identity or checksum: never stage an unaudited IPA.
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else {
                     if let result = result {
@@ -650,8 +664,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     self.manualIPAReview = receipt
                     self.manualImportStatus = "SHA-256, ZIP e identidade conferidos"
                 } else {
-                    self.manualImportStatus =
-                        "IPA ou SHA-256 inválidos, versão antiga ou arquivo inacessível"
+                    self.manualImportStatus = failureReason
                 }
                 self.tableView.reloadData()
             }
