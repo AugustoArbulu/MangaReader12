@@ -258,7 +258,8 @@ case .staged(let path):
     try! FileManager.default.removeItem(at: path)
 default: fatalError("verified IPA must be staged")
 }
-check(IPAStubProtocol.requests == 1, "exactly one GET")
+check(IPAStubProtocol.requests == requestsBeforeDynamic + 2,
+      "one verified GET plus one deliberately aborted mid-transfer GET")
 check(!progressValues.isEmpty, "download emits coarse progress")
 check(progressValues.allSatisfy { $0 >= 5 && $0 <= 95 && $0 % 5 == 0 },
       "transfer progress bounded at 95 until integrity finalized")
