@@ -185,7 +185,7 @@ for oldInstalled in [57, 58] {
     }
 }
 check(IPAStubProtocol.requests == 0, "replayed/downgrade candidates zero GET")
-switch run(good, testInstalledBuild: 56, testFreeBytes: 0) {
+switch run(good, testFreeBytes: 0, testInstalledBuild: 56) {
 case .failed(.insufficientSpace): break
 default: fatalError("newer candidate still subject to disk budget")
 }
