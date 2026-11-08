@@ -1214,8 +1214,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private func confirmIPADownload() {
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               let update = availableUpdate,
-              update.provenance == .publicGitHubRelease ||
-                WebReaderUpdateChannel.isConfigured else { return }
+              (update.provenance == .publicGitHubRelease ||
+                (update.provenance == .signedManifest &&
+                 WebReaderUpdateChannel.isConfigured &&
+                 WebReaderProductionPublisherTrust.isProvisioned))
+        else { return }
         let mb = Double(update.ipaSize) / (1024 * 1024)
         let channelNotice = update.provenance == .publicGitHubRelease ?
             "Metadados do GitHub não têm assinatura editorial independente. " : ""
@@ -1234,8 +1237,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
     private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
-              update.provenance == .publicGitHubRelease ||
-                WebReaderUpdateChannel.isConfigured,
+              (update.provenance == .publicGitHubRelease ||
+                (update.provenance == .signedManifest &&
+                 WebReaderUpdateChannel.isConfigured &&
+                 WebReaderProductionPublisherTrust.isProvisioned)),
               let current = availableUpdate,
               current.build == update.build, current.sha256 == update.sha256
         else { return }
