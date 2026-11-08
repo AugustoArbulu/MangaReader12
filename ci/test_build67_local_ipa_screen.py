@@ -82,9 +82,10 @@ class LocalIPAScreenContractTests(unittest.TestCase):
             "Darwin.fstat(dirFD, &dirInfo)",
             "mode_t(S_IFDIR)",
             "O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW",
-            "fm.copyItem(at: sourceURL, to: saved)",
+            "Darwin.openat(",
             "Darwin.fchmod(outputFD, mode_t(0o600))",
-            "if !keep { try? fm.removeItem(at: saved) }",
+            "if ownsTemporary && !keep",
+            "Darwin.unlinkat(dirFD, fileName, 0)",
         ):
             with self.subTest(text=text):
                 self.assertIn(text, STAGING)
