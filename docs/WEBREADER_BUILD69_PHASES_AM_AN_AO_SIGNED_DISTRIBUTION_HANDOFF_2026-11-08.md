@@ -101,7 +101,7 @@ Workflow integrado `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.
 
 O workflow executa regressões da Biblioteca/offline, validações de segurança da UI, Swift nativo ECDSA/dev-prod, verificação de canal signed fail-closed e compilação Debug/Release ARM64 para iOS 12, sem produzir IPA.
 
-**Status:** verificar o resultado final antes de declarar SUCCESS. O código foi atualizado após esta referência; o run definitivo pode ter outro número. O handoff deve ser atualizado com o último run que concluiu sem erros.
+**Resultado definitivo: SUCCESS (2/2 jobs)** no [GitHub Actions #42460488168](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42460488168), SHA de código testado `bdbcc921bc98f67782970f637db53a0ace1ab99a`. Linux passou em todas as regressões da UI, canal assinado, biblioteca e bloqueios de produção. MacOS passou nos testes Swift reais de assinatura ECDSA dev/prod, consulta bloqueada antes da rede e demais verificações; compilou o aplicativo inteiro **Debug e Release ARM64/iOS 12** e confirmou identidade do binário e instalador bloqueado. O workflow **não empacotou IPA**, não criou Release e não alterou o iPad. Esta aprovação de CI não substitui QA física de uma futura Build69.
 
 ## Estado de produção preservado
 
