@@ -258,8 +258,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
         case (2, 2):
             if stagingIPA {
-                cell.textLabel?.text = "Baixando e validando IPA…"
-                cell.detailTextLabel?.text = ipaStatus + "\nSaia da tela para cancelar"
+                cell.textLabel?.text = "Cancelar download em andamento"
+                cell.detailTextLabel?.text = ipaStatus +
+                    "\nToque para interromper • arquivo parcial será removido"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
             } else if verifyingExport {
                 cell.textLabel?.text = "Conferindo IPA antes de compartilhar…"
                 cell.detailTextLabel?.text = "Verificando novamente SHA-256, ZIP e Bundle ID"
@@ -582,7 +585,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         if selectedSection == 2, indexPath.row == 2 {
-            guard !stagingIPA, !verifyingExport else { return }
+            if stagingIPA {
+                ipaStatus = "Cancelando transferência e descartando IPA parcial…"
+                stager?.cancel()
+                tableView.reloadData()
+                return
+            }
+            guard !verifyingExport else { return }
             if let file = stagedIPAURL,
                FileManager.default.fileExists(atPath: file.path) {
                 shareStagedIPA(file)
@@ -1092,6 +1101,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case .invalidRelease: return "Release fora das regras do WebReader"
         case .storage: return "Não foi possível salvar a IPA"
         case .insufficientSpace: return "Espaço livre insuficiente • preserve os capítulos offline"
+        case .cancelled: return "Download cancelado • cópia parcial removida"
         case .transport: return "Download HTTPS não concluído"
         case .redirectRejected: return "Redirecionamento de download não permitido"
         case .unexpectedHTTPStatus(let code): return "Resposta HTTP " + String(code)
