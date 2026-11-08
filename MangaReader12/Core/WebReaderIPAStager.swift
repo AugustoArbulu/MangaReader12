@@ -717,7 +717,9 @@ struct WebReaderLocalQAStaleCandidate: Equatable {
     let fileDevice: UInt64
     let fileInode: UInt64
     let modifiedSeconds: Int64
+    let modifiedNanoseconds: Int64
     let changedSeconds: Int64
+    let changedNanoseconds: Int64
 }
 
 struct WebReaderLocalQAStorageInventory {
@@ -832,7 +834,9 @@ enum WebReaderLocalQAStorage {
                 fileName: name, byteCount: bytes,
                 fileDevice: UInt64(st.st_dev), fileInode: UInt64(st.st_ino),
                 modifiedSeconds: Int64(st.st_mtimespec.tv_sec),
-                changedSeconds: Int64(st.st_ctimespec.tv_sec)
+                modifiedNanoseconds: Int64(st.st_mtimespec.tv_nsec),
+                changedSeconds: Int64(st.st_ctimespec.tv_sec),
+                changedNanoseconds: Int64(st.st_ctimespec.tv_nsec)
             ))
         }
         return WebReaderLocalQAStorageInventory(
@@ -871,7 +875,9 @@ enum WebReaderLocalQAStorage {
               UInt64(st.st_dev) == candidate.fileDevice,
               UInt64(st.st_ino) == candidate.fileInode,
               Int64(st.st_mtimespec.tv_sec) == candidate.modifiedSeconds,
+              Int64(st.st_mtimespec.tv_nsec) == candidate.modifiedNanoseconds,
               Int64(st.st_ctimespec.tv_sec) == candidate.changedSeconds,
+              Int64(st.st_ctimespec.tv_nsec) == candidate.changedNanoseconds,
               Int64(st.st_mtimespec.tv_sec) <= cutoff,
               Int64(st.st_ctimespec.tv_sec) <= cutoff else { return false }
         return Darwin.unlinkat(dirFD, candidate.fileName, 0) == 0
