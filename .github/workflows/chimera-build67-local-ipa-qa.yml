@@ -1,19 +1,8 @@
 name: WebReader Build67 — Local IPA Import + Full iOS12 Compile (No Release)
 
+# FROZEN: Build67 is the already generated QA candidate, not to be rebuilt
+# under this version number from later experimental commits.
 on:
-  push:
-    branches:
-      - feat/chimera-updater-phase1-protocol-audit
-    paths:
-      - 'MangaReader12/Core/WebReaderIPAStager.swift'
-      - 'MangaReader12/Core/WebReaderNativeIPAAuditor.swift'
-      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
-      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
-      - 'ci/test_native_webreader_local_ipa_review.py'
-      - 'ci/test_build67_local_ipa_screen.py'
-      - 'ci/test_native_webreader_ipa_stager.py'
-      - 'ci/test_app_updates_screen.py'
-      - '.github/workflows/chimera-build67-local-ipa-qa.yml'
   workflow_dispatch:
 
 permissions:
