@@ -51,8 +51,13 @@ enum WebReaderUpdateManifestVerifier {
         envelopeData: Data,
         publicKeyX963: Data,
         installedBuild: Int,
-        installedIOS: OperatingSystemVersion
+        installedIOS: OperatingSystemVersion,
+        expectedChannel: String = "development"
     ) throws -> WebReaderVerifiedUpdate {
+        guard expectedChannel == "development" ||
+              expectedChannel == "production" else {
+            throw WebReaderUpdateValidationError.invalidPayload
+        }
         guard !envelopeData.isEmpty, envelopeData.count <= maxEnvelopeBytes else {
             throw WebReaderUpdateValidationError.oversizedEnvelope
         }
@@ -130,7 +135,7 @@ enum WebReaderUpdateManifestVerifier {
         }
         guard manifest["application"] as? String == "WebReader",
             manifest["bundleId"] as? String == bundleID,
-            manifest["channel"] as? String == "development",
+            manifest["channel"] as? String == expectedChannel,
             (manifestVersion == 1 ||
              manifest["applicationIdentifier"] as? String ==
                 installedApplicationIdentifier)
