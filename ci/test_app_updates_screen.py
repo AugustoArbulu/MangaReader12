@@ -70,7 +70,9 @@ assert "posix_spawn" not in helper
 assert "appinst" not in helper or "install an IPA" in helper
 
 # Explicit staging is allowed after a verified update and user confirmation.
-assert 'if source == 2 { return availableUpdate != nil ? 5 : 1 }' in screen
+assert 'if source == 2 { return availableUpdate != nil ? 6 : 1 }' in screen
+assert 'case (2, 5):' in screen
+assert 'copyStagedIPAReceipt()' in screen
 assert 'if source == 5 { return build60DisposableAvailable ? 6 : (pairingDiagnosticAvailable ? 5 : 4) }' in screen
 assert '"Instalar atualização (Chimera)"' not in screen
 assert 'build60DisposableAvailable' in screen
