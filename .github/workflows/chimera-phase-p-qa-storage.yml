@@ -1,0 +1,109 @@
+name: WebReader Phase P — Safe QA Storage Inventory + Full iOS12
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderNativeIPAAuditor.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/test_native_webreader_ipa_auditor.py'
+      - 'ci/test_native_webreader_local_ipa_review.py'
+      - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_build68_native_audit_contract.py'
+      - 'ci/test_native_webreader_local_qa_storage.py'
+      - 'ci/test_phase_p_local_qa_inventory_policy.py'
+      - '.github/workflows/chimera-phase-p-qa-storage.yml'
+      - 'ci/test_build67_local_ipa_screen.py'
+      - '.github/workflows/chimera-build68-security-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-phase-p-qa-storage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-no-install-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify atomic read-only audit contract, frozen Build66/67 and library safeguards
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_native_audit_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_p_local_qa_inventory_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build67_local_ipa_screen.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build54_branding.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          python3 - <<'PY'
+          from pathlib import Path
+          a = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          b = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in a
+          assert "DispatchQueue.main.async { completion(.rejected) }" in a
+          assert "static let productionPublicKeyX963: Data? = nil" in b
+          for name in (
+              "chimera-build66-private-manual-qa.yml",
+              "chimera-build67-private-manual-qa.yml",
+          ):
+              text = Path(".github/workflows", name).read_text()
+              assert "  push:" not in text, name
+              assert "  workflow_dispatch:" in text, name
+          assert 'test "$GITHUB_SHA" = "df6d8a44b56ed2fe693df4ad114b3de885f69542"' in Path(
+              ".github/workflows/chimera-build67-private-manual-qa.yml"
+          ).read_text()
+          print("PASS: pinned prior QA packages; never install or change library")
+          PY
+
+  native-security-and-full-ios12:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS12 capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Execute real Swift IPA descriptor/race tests and full update path
+        run: |
+          python3 ci/test_native_webreader_ipa_auditor.py
+          python3 ci/test_native_webreader_local_ipa_review.py
+          python3 ci/test_native_webreader_local_qa_storage.py
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_native_webreader_update_checker.py
+          python3 ci/test_public_github_release_parser.py
+          python3 ci/test_chimera_build62_install_admission.py
+      - name: Prepare app icons and bounded iOS12 WebP dependency
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile full Debug application for iOS12 ARM64 (NO IPA)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile full Release application for iOS12 ARM64 (NO IPA)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Confirm original installed identity remains and no privileged actions
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: Phase P safe manual QA storage inventory; no IPA published or installed'
