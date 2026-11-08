@@ -37,10 +37,12 @@ class ReleasePublicKeyHandoffTests(unittest.TestCase):
         cls.good = cls.keys["prime256v1"][1]
         cls.pin = public_key_spki_sha256(cls.good)
 
-    def verified(self, key=None, pin=None):
+    _UNSET = object()
+
+    def verified(self, key=_UNSET, pin=_UNSET):
         return prepare_public_key_handoff(
-            self.good if key is None else key,
-            self.pin if pin is None else pin
+            self.good if key is self._UNSET else key,
+            self.pin if pin is self._UNSET else pin
         )
 
     def test_independently_pinned_p256_matches_swift_x963_format(self):
