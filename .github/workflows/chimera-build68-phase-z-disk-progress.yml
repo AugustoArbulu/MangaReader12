@@ -15,6 +15,7 @@ on:
       - 'ci/test_native_webreader_local_qa_storage.py'
       - 'ci/test_native_webreader_release_cache_storage.py'
       - 'ci/test_build68_phase_z_download_budget_policy.py'
+      - 'ci/test_build68_phase_aa_ab_manual_controls.py'
       - '.github/workflows/chimera-build68-phase-z-disk-progress.yml'
   workflow_dispatch:
 
@@ -34,6 +35,7 @@ jobs:
       - name: Validate no-offline-data-loss and nonprivileged download policy
         run: |
           python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_aa_ab_manual_controls.py' -v
           python3 -m unittest discover -s ci -p 'test_phase_p_local_qa_inventory_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build67_local_ipa_screen.py' -v
