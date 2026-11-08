@@ -883,3 +883,154 @@ enum WebReaderLocalQAStorage {
         return Darwin.unlinkat(dirFD, candidate.fileName, 0) == 0
     }
 }
+
+
+// MARK: - Owner-confirmed cleanup of completed/abandoned GitHub Release downloads
+
+/// Separate from WebReaderLocalQAImports. Handles ONLY files created by the
+/// download stager inside Application Support/WebReaderUpdates. This never
+/// deletes source IPAs, chapter downloads, SQLite, backups or exported files.
+/// The caller must obtain explicit owner consent before calling discardConfirmed.
+enum WebReaderReleaseCacheStorage {
+    static let minimumAgeSeconds: Int64 = 24 * 60 * 60
+    static let maximumScannedNames = 512
+
+    static var defaultDirectory: URL {
+        return FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0].appendingPathComponent("WebReaderUpdates", isDirectory: true)
+    }
+
+    static func isManagedName(_ name: String) -> Bool {
+        guard name.utf8.count <= 100 else { return false }
+        let completed = "^WebReader-build[1-9][0-9]{0,8}-" +
+            "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-" +
+            "[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\.ipa$"
+        let abandoned = "^\\.webreader-" +
+            "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-" +
+            "[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\.partial$"
+        return name.range(of: completed, options: .regularExpression) != nil ||
+            name.range(of: abandoned, options: .regularExpression) != nil
+    }
+
+    private static func openDirectory(_ directory: URL) throws -> Int32 {
+        guard directory.isFileURL else {
+            throw WebReaderLocalQAStorageError.invalidDirectory
+        }
+        let fd = Darwin.open(
+            directory.path,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        )
+        guard fd >= 0 else { throw WebReaderLocalQAStorageError.invalidDirectory }
+        var info = stat()
+        guard Darwin.fstat(fd, &info) == 0,
+              (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            _ = Darwin.close(fd)
+            throw WebReaderLocalQAStorageError.invalidDirectory
+        }
+        return fd
+    }
+
+    private static func matches(
+        _ candidate: WebReaderLocalQAStaleCandidate, _ st: stat,
+        now: Date
+    ) -> Bool {
+        let cutoff = Int64(now.timeIntervalSince1970) - minimumAgeSeconds
+        return (st.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) &&
+            st.st_nlink == 1 &&
+            st.st_size >= 0 &&
+            st.st_size <= WebReaderLocalIPAReviewer.maximumSize &&
+            (candidate.fileName.hasSuffix(".partial") || st.st_size > 0) &&
+            UInt64(st.st_dev) == candidate.fileDevice &&
+            UInt64(st.st_ino) == candidate.fileInode &&
+            Int64(st.st_size) == candidate.byteCount &&
+            Int64(st.st_mtimespec.tv_sec) == candidate.modifiedSeconds &&
+            Int64(st.st_mtimespec.tv_nsec) == candidate.modifiedNanoseconds &&
+            Int64(st.st_ctimespec.tv_sec) == candidate.changedSeconds &&
+            Int64(st.st_ctimespec.tv_nsec) == candidate.changedNanoseconds &&
+            Int64(st.st_mtimespec.tv_sec) <= cutoff &&
+            Int64(st.st_ctimespec.tv_sec) <= cutoff
+    }
+
+    static func inventory(
+        directory: URL = defaultDirectory, now: Date = Date(),
+        protectedName: String? = nil
+    ) throws -> WebReaderLocalQAStorageInventory {
+        var status = stat()
+        if Darwin.lstat(directory.path, &status) != 0 {
+            if errno == ENOENT {
+                return WebReaderLocalQAStorageInventory(
+                    eligible: [], eligibleBytes: 0,
+                    ignoredEntries: 0, inspectionLimited: false
+                )
+            }
+            throw WebReaderLocalQAStorageError.unreadable
+        }
+        let fd = try openDirectory(directory)
+        defer { _ = Darwin.close(fd) }
+        // Listing supplies names only. File identity and metadata are always
+        // anchored to the already-open, non-symlinked directory descriptor.
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        } catch { throw WebReaderLocalQAStorageError.unreadable }
+        guard names.count <= maximumScannedNames else {
+            throw WebReaderLocalQAStorageError.tooManyEntries
+        }
+        var eligible: [WebReaderLocalQAStaleCandidate] = []
+        var ignored = 0
+        var bytes: Int64 = 0
+        for name in names {
+            guard isManagedName(name), name != protectedName else {
+                ignored += 1
+                continue
+            }
+            var st = stat()
+            guard Darwin.fstatat(fd, name, &st, AT_SYMLINK_NOFOLLOW) == 0 else {
+                ignored += 1
+                continue
+            }
+            let candidate = WebReaderLocalQAStaleCandidate(
+                fileName: name, byteCount: Int64(st.st_size),
+                fileDevice: UInt64(st.st_dev), fileInode: UInt64(st.st_ino),
+                modifiedSeconds: Int64(st.st_mtimespec.tv_sec),
+                modifiedNanoseconds: Int64(st.st_mtimespec.tv_nsec),
+                changedSeconds: Int64(st.st_ctimespec.tv_sec),
+                changedNanoseconds: Int64(st.st_ctimespec.tv_nsec)
+            )
+            guard matches(candidate, st, now: now) else {
+                ignored += 1
+                continue
+            }
+            guard bytes <= Int64.max - candidate.byteCount else {
+                throw WebReaderLocalQAStorageError.unreadable
+            }
+            bytes += candidate.byteCount
+            eligible.append(candidate)
+        }
+        return WebReaderLocalQAStorageInventory(
+            eligible: eligible.sorted { $0.fileName < $1.fileName },
+            eligibleBytes: bytes, ignoredEntries: ignored,
+            inspectionLimited: false
+        )
+    }
+
+    /// No scan, no recursion, no shell. Rechecks the exact candidate after
+    /// owner confirmation. This is NOT an atomic operation against a hostile
+    /// process with write permission to the same sandbox directory.
+    static func discardConfirmed(
+        _ candidate: WebReaderLocalQAStaleCandidate,
+        directory: URL = defaultDirectory, now: Date = Date(),
+        protectedName: String? = nil
+    ) -> Bool {
+        guard isManagedName(candidate.fileName),
+              candidate.fileName != protectedName else { return false }
+        guard let fd = try? openDirectory(directory) else { return false }
+        defer { _ = Darwin.close(fd) }
+        var st = stat()
+        guard Darwin.fstatat(
+            fd, candidate.fileName, &st, AT_SYMLINK_NOFOLLOW
+        ) == 0, matches(candidate, st, now: now) else { return false }
+        return Darwin.unlinkat(fd, candidate.fileName, 0) == 0
+    }
+}
