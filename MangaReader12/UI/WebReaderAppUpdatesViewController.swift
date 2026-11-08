@@ -123,7 +123,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
         if source == 1 { return 2 }
         if source == 6 { return 8 }
-        if source == 2 { return availableUpdate != nil ? 5 : 1 }
+        if source == 2 { return availableUpdate != nil ? 6 : 1 }
         if source == 3 { return 5 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
@@ -293,6 +293,16 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 "Aguardando política independente de autorização e chave editorial"
             cell.accessoryType = .none
             cell.selectionStyle = .none
+
+        case (2, 5):
+            cell.textLabel?.text = "Copiar recibo de integridade da IPA"
+            cell.detailTextLabel?.text = stagedIPAURL == nil ?
+                "Disponível após baixar e conferir uma IPA • sem instalação" :
+                "Confere o arquivo novamente e copia Build, tamanho e SHA-256"
+            if stagedIPAURL != nil && !stagingIPA && !verifyingExport {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
 
         case (3, 0):
             cell.textLabel?.text = "Segurança das atualizações"
@@ -607,6 +617,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         if selectedSection == 2, indexPath.row == 4 { return }
+        if selectedSection == 2, indexPath.row == 5 {
+            copyStagedIPAReceipt()
+            return
+        }
         guard selectedSection == 2, indexPath.row == 0,
               !isIPCDiagnostic, !checking
         else { return }
@@ -1171,6 +1185,65 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                         at: IndexPath(row: 2, section: 2))
                 }
                 self.present(activity, animated: true)
+            }
+        }
+    }
+
+    /// Owner-requested read-only integrity receipt for the *current* IPA.
+    /// GitHub SHA-256 is not an independent publisher signature.
+    /// The same-FD ZIP/Info.plist/SHA256 review is repeated before copying.
+    private func copyStagedIPAReceipt() {
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
+              let update = availableUpdate,
+              let url = stagedIPAURL,
+              stagedSHA256 == update.sha256 else { return }
+        verifyingExport = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let report = try? WebReaderNativeIPAAuditor.inspect(
+                ipaURL: url, signedUpdate: update,
+                installedBuild: currentBuild, installedIOS: currentIOS
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.verifyingExport = false
+                guard self.stagedIPAURL == url else { return }
+                guard let report = report,
+                      report.verifiedSHA256 == update.sha256 else {
+                    self.stagedIPAURL = nil
+                    self.stagedSHA256 = nil
+                    self.ipaStatus = "IPA local modificada; baixe novamente"
+                    self.tableView.reloadData()
+                    return
+                }
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                let provenance = update.provenance == .publicGitHubRelease ?
+                    "GitHub Release público; editor NÃO autenticado" :
+                    "Manifesto assinado; confiança editorial exige verificação separada"
+                let lines = [
+                    "WebReader • recibo de integridade, NÃO de instalação",
+                    "Build: " + String(report.build),
+                    "Bundle: " + report.bundleID,
+                    "iOS mínimo: " + report.minimumIOS,
+                    "Tamanho: " + String(update.ipaSize) + " bytes",
+                    "SHA-256: " + report.verifiedSHA256,
+                    "Entradas ZIP: " + String(report.zipEntries),
+                    "Origem: " + provenance,
+                    "IPA revalidada localmente; arquivo pode mudar após a revisão",
+                    "Instalação automática: NÃO autorizada e NÃO realizada"
+                ]
+                UIPasteboard.general.string = lines.joined(separator: "\n")
+                let alert = UIAlertController(
+                    title: "Recibo copiado",
+                    message: "SHA-256 e identidade local conferidos novamente. " +
+                        "Não substitui autenticação editorial, backup ou Filza.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
             }
         }
     }
