@@ -210,6 +210,21 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         finish(.failed(.cancelled))
     }
 
+    /// iOS 12 compatible response-header lookup. The convenience accessor
+    /// HTTPURLResponse.value(forHTTPHeaderField:) is iOS 13+, unlike
+    /// allHeaderFields, which has been available since early iOS.
+    /// Header keys can arrive as NSString/AnyHashable; compare ignoring case.
+    private func responseHeader(
+        _ name: String, from response: HTTPURLResponse
+    ) -> String? {
+        for (key, value) in response.allHeaderFields {
+            guard String(describing: key).caseInsensitiveCompare(name) ==
+                .orderedSame else { continue }
+            return String(describing: value)
+        }
+        return nil
+    }
+
     // Real GitHub Releases may redirect once to the release-asset CDN.
     // Redirects never carry credentials. All bytes must match the signed SHA.
     func urlSession(
@@ -268,10 +283,10 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         // Only accept the exact, untransformed whole IPA. CDN range
         // responses, gzip transforms or intermediaries returning partial
         // content must not become a download candidate.
-        let encoding = http.value(forHTTPHeaderField: "Content-Encoding")?
+        let encoding = responseHeader("Content-Encoding", from: http)?
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard encoding == nil || encoding == "identity",
-              http.value(forHTTPHeaderField: "Content-Range") == nil
+              responseHeader("Content-Range", from: http) == nil
         else {
             completionHandler(.cancel)
             finish(.failed(.unexpectedContentType))
