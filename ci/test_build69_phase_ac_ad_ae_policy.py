@@ -82,6 +82,26 @@ class Build69SecurityRegression(unittest.TestCase):
         ):
             self.assertIn(marker, NATIVE)
 
+    def test_forward_only_staging_rechecks_current_build(self):
+        stage = STAGER.split("func stage(completion", 1)[1].split(
+            "func cancel()", 1
+        )[0]
+        for marker in (
+            "testProtocolClasses == nil ? nil : testInstalledBuild",
+            "let currentBuild = testInstalledBuild ?? bundleBuild",
+            "update.build > currentBuild",
+            "callback(.failed(.notNewerThanInstalled))",
+        ):
+            self.assertIn(marker, STAGER)
+        self.assertLess(stage.index("update.build > currentBuild"),
+                        stage.index("let staging = destinationDirectory"))
+        self.assertIn(
+            "Build anterior ou igual à instalada • download bloqueado", UI
+        )
+        self.assertIn(
+            "replayed/downgrade candidates zero GET", NATIVE
+        )
+
     def test_refresh_cannot_discard_active_download_reference(self):
         self.assertIn(
             "!isIPCDiagnostic, !checking, !stagingIPA, !verifyingExport", UI
