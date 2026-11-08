@@ -14,6 +14,8 @@ on:
       - 'ci/test_build68_native_audit_contract.py'
       - 'ci/test_native_webreader_local_qa_storage.py'
       - 'ci/test_phase_p_local_qa_inventory_policy.py'
+      - 'ci/test_phase_q_release_cache_policy.py'
+      - 'ci/test_native_webreader_release_cache_storage.py'
       - '.github/workflows/chimera-phase-p-qa-storage.yml'
       - 'ci/test_build67_local_ipa_screen.py'
       - '.github/workflows/chimera-build68-security-preflight.yml'
@@ -36,6 +38,7 @@ jobs:
         run: |
           python3 -m unittest discover -s ci -p 'test_build68_native_audit_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_phase_p_local_qa_inventory_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build67_local_ipa_screen.py' -v
           python3 ci/test_app_updates_screen.py
           python3 ci/test_build54_branding.py
@@ -76,6 +79,7 @@ jobs:
           python3 ci/test_native_webreader_ipa_auditor.py
           python3 ci/test_native_webreader_local_ipa_review.py
           python3 ci/test_native_webreader_local_qa_storage.py
+          python3 ci/test_native_webreader_release_cache_storage.py
           python3 ci/test_native_webreader_ipa_stager.py
           python3 ci/test_native_webreader_update_verifier.py
           python3 ci/test_native_webreader_update_checker.py
