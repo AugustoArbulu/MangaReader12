@@ -5,7 +5,7 @@ import UIKit
 /// This is deliberately SEPARATE from the existing chapter Updates tab and
 /// background Library updater. This screen verifies SHA/ZIP metadata for
 /// manually exported IPAs; it never installs or runs appinst.
-final class WebReaderAppUpdatesViewController: UITableViewController {
+final class WebReaderAppUpdatesViewController: UITableViewController, UIDocumentPickerDelegate {
     private var checker: WebReaderUpdateChecker?
     private var checking = false
     private var lastResult: WebReaderUpdateCheckResult = .disabled
@@ -24,6 +24,14 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando consulta aos metadados do GitHub"
     private var stagedSHA256: String?
+    // Local, manually selected QA IPAs are separate from GitHub releases:
+    // a matching owner-entered SHA-256 does NOT authenticate the publisher.
+    private var manualIPAReview: WebReaderLocalIPAReview?
+    private var manualImportInProgress = false
+    private var manualReviewInProgress = false
+    private var manualExpectedBuild: Int?
+    private var manualExpectedSHA256: String?
+    private var manualImportStatus = "Escolha uma IPA e informe SHA-256 externo"
     private var runningOneAppTest = false
     private var oneAppReport = "Toque em Testar Chimera para começar."
 
@@ -97,7 +105,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return isIPCDiagnostic ? 2 : 6
+        return isIPCDiagnostic ? 2 : 7
     }
 
     override func tableView(
@@ -109,6 +117,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             return source == 5 ? 2 : 1
         }
         if source == 1 { return 2 }
+        if source == 6 { return 3 }
         if source == 2 { return availableUpdate != nil ? 5 : 1 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
@@ -129,6 +138,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 2: return "ATUALIZAÇÕES DISPONÍVEIS"
         case 3: return "SEGURANÇA"
         case 4: return "DIAGNÓSTICO HTTPS (iOS 12)"
+        case 6: return "IPA LOCAL (ARQUIVOS OU FILZA)"
         default: return "HELPER LOCAL (DIAGNÓSTICO)"
         }
     }
@@ -148,6 +158,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
         case 2:
             return "O download exige sua confirmação e validação de SHA-256/IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
+        case 6:
+            return "Use o SHA-256 obtido separadamente no GitHub Actions. " +
+                "O arquivo local é copiado para uma pasta exclusiva de QA e " +
+                "sua estrutura é verificada. Isso NÃO autentica o publicador " +
+                "nem permite instalação automática."
         case 5:
             return "Testes locais PING/PONG, sem instalação. " +
                 "A ponte appinst usa um socket separado e encerra depois " +
@@ -358,6 +373,44 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 cell.selectionStyle = .default
             }
 
+        case (6, 0):
+            cell.textLabel?.text = manualImportInProgress ?
+                "Conferindo IPA local…" : "Importar IPA local para conferir"
+            cell.detailTextLabel?.text =
+                "Arquivos/Filza • informe Build e SHA-256 do artefato QA"
+            if !manualImportInProgress && !manualReviewInProgress {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (6, 1):
+            if let receipt = manualIPAReview {
+                cell.textLabel?.text = manualReviewInProgress ?
+                    "Conferindo novamente antes de compartilhar…" :
+                    "Compartilhar IPA local conferida"
+                cell.detailTextLabel?.text =
+                    "Build " + String(receipt.build) + " • " +
+                    String(receipt.zipEntries) + " entradas ZIP • uso manual"
+                if !manualReviewInProgress && !manualImportInProgress {
+                    cell.accessoryType = .disclosureIndicator
+                    cell.selectionStyle = .default
+                }
+            } else {
+                cell.textLabel?.text = "Nenhuma IPA local conferida"
+                cell.detailTextLabel?.text = manualImportStatus
+            }
+
+        case (6, 2):
+            cell.textLabel?.text = "Descartar cópia local de QA"
+            cell.detailTextLabel?.text = manualIPAReview == nil ?
+                "Nenhum arquivo para descartar" :
+                "Remove apenas a cópia importada, nunca a biblioteca"
+            if manualIPAReview != nil && !manualImportInProgress &&
+                !manualReviewInProgress {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
         default:
             break
         }
@@ -427,6 +480,15 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
             }
             return
         }
+        if selectedSection == 6 {
+            if indexPath.row == 0 && !manualImportInProgress &&
+                !manualReviewInProgress { promptLocalIPAImport() }
+            if indexPath.row == 1 && !manualImportInProgress &&
+                !manualReviewInProgress { shareLocalIPA() }
+            if indexPath.row == 2 && !manualImportInProgress &&
+                !manualReviewInProgress { discardLocalIPA() }
+            return
+        }
         if selectedSection == 1, indexPath.row == 1 {
             let url = URL(string:
                 "https://github.com/AugustoArbulu/MangaReader12/releases"
@@ -474,6 +536,168 @@ final class WebReaderAppUpdatesViewController: UITableViewController {
                 self.tableView.reloadData()
             }
         }
+    }
+
+
+    // MARK: - User-owned local IPA QA, independent of GitHub Releases
+
+    private func promptLocalIPAImport() {
+        guard !isIPCDiagnostic, !manualImportInProgress,
+              !manualReviewInProgress else { return }
+        let alert = UIAlertController(
+            title: "Conferir IPA local",
+            message: "Informe a Build e o SHA-256 exato que aparece no " +
+                "artefato do GitHub Actions. Isso verifica os bytes e o pacote, " +
+                "mas NÃO autentica o editor nem instala o aplicativo.",
+            preferredStyle: .alert
+        )
+        alert.addTextField { field in
+            field.placeholder = "Build (ex.: 67)"
+            field.keyboardType = .numberPad
+            field.autocorrectionType = .no
+        }
+        alert.addTextField { field in
+            field.placeholder = "SHA-256 (64 caracteres hexadecimais)"
+            field.keyboardType = .asciiCapable
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+        }
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Selecionar IPA", style: .default) {
+            [weak self, weak alert] _ in
+            guard let self = self, let fields = alert?.textFields,
+                  fields.count == 2 else { return }
+            let rawBuild = fields[0].text?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+            let rawSHA = fields[1].text?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).lowercased() ?? ""
+            guard rawBuild.range(
+                of: "^[1-9][0-9]{0,8}$", options: .regularExpression
+            ) != nil,
+                  let build = Int(rawBuild), build > self.installedBuild,
+                  rawSHA.range(
+                    of: "^[0-9a-f]{64}$", options: .regularExpression
+                  ) != nil else {
+                self.manualImportStatus =
+                    "Build deve ser maior que a instalada; SHA-256 deve ter 64 caracteres"
+                self.tableView.reloadData()
+                return
+            }
+            self.manualExpectedBuild = build
+            self.manualExpectedSHA256 = rawSHA
+            let picker = UIDocumentPickerViewController(
+                documentTypes: ["public.data"], in: .import
+            )
+            picker.delegate = self
+            picker.modalPresentationStyle = .formSheet
+            self.present(picker, animated: true)
+        })
+        present(alert, animated: true)
+    }
+
+    func documentPicker(
+        _ controller: UIDocumentPickerViewController,
+        didPickDocumentsAt urls: [URL]
+    ) {
+        guard !isIPCDiagnostic, !manualImportInProgress,
+              let source = urls.first,
+              let expectedBuild = manualExpectedBuild,
+              let expectedSHA = manualExpectedSHA256 else { return }
+        manualExpectedBuild = nil
+        manualExpectedSHA256 = nil
+        manualImportInProgress = true
+        manualImportStatus = "Copiando e conferindo IPA local sem instalar"
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let access = source.startAccessingSecurityScopedResource()
+            defer {
+                if access { source.stopAccessingSecurityScopedResource() }
+            }
+            let result = try? WebReaderLocalIPAReviewer.importForReview(
+                sourceURL: source, expectedBuild: expectedBuild,
+                expectedSHA256: expectedSHA,
+                installedBuild: currentBuild, installedIOS: currentIOS
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    if let result = result {
+                        WebReaderLocalIPAReviewer.discard(result)
+                    }
+                    return
+                }
+                self.manualImportInProgress = false
+                if let receipt = result {
+                    if let old = self.manualIPAReview {
+                        WebReaderLocalIPAReviewer.discard(old)
+                    }
+                    self.manualIPAReview = receipt
+                    self.manualImportStatus = "SHA-256, ZIP e identidade conferidos"
+                } else {
+                    self.manualImportStatus =
+                        "IPA ou SHA-256 inválidos, versão antiga ou arquivo inacessível"
+                }
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        manualExpectedBuild = nil
+        manualExpectedSHA256 = nil
+    }
+
+    private func shareLocalIPA() {
+        guard !isIPCDiagnostic, !manualImportInProgress,
+              !manualReviewInProgress, let receipt = manualIPAReview else { return }
+        manualReviewInProgress = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let safe = (try? WebReaderLocalIPAReviewer.recheck(
+                receipt, installedBuild: currentBuild,
+                installedIOS: currentIOS
+            )) != nil
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.manualReviewInProgress = false
+                guard self.manualIPAReview?.copiedIPAURL ==
+                    receipt.copiedIPAURL else { return }
+                if !safe {
+                    WebReaderLocalIPAReviewer.discard(receipt)
+                    self.manualIPAReview = nil
+                    self.manualImportStatus =
+                        "IPA local alterada; importe e confira novamente"
+                    self.tableView.reloadData()
+                    return
+                }
+                let share = UIActivityViewController(
+                    activityItems: [receipt.copiedIPAURL],
+                    applicationActivities: nil
+                )
+                if let popover = share.popoverPresentationController {
+                    let index = IndexPath(row: 1, section: 6)
+                    popover.sourceView = self.tableView
+                    popover.sourceRect = self.tableView.rectForRow(at: index)
+                }
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                self.present(share, animated: true)
+            }
+        }
+    }
+
+    private func discardLocalIPA() {
+        guard !manualImportInProgress, !manualReviewInProgress,
+              let receipt = manualIPAReview else { return }
+        WebReaderLocalIPAReviewer.discard(receipt)
+        manualIPAReview = nil
+        manualImportStatus = "Cópia de QA descartada; a biblioteca permanece intacta"
+        tableView.reloadData()
     }
 
     private func confirmIPADownload() {
