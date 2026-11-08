@@ -20,6 +20,8 @@ enum WebReaderUpdateValidationError: Error {
 enum WebReaderUpdateProvenance: Equatable {
     case signedManifest
     case publicGitHubRelease
+    // User-selected local IPA from Files/Filza. No release/editor authentication.
+    case manualLocalFile
 }
 
 struct WebReaderVerifiedUpdate {
