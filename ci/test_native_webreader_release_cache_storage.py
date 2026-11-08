@@ -82,10 +82,29 @@ try! FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: sou
 
 let fresh = inventory()
 insist(fresh.eligible.count == 0, "24h retention is enforced")
+let freshRecovery = WebReaderReleaseRecoverySummary.readOnly(fresh)
+insist(freshRecovery.interruptedFiles == 0 &&
+       freshRecovery.completedFiles == 0,
+       "recent in-progress file not treated as abandoned")
+insist(!freshRecovery.canResumePartial &&
+       freshRecovery.cleanupRequiresOwnerConfirmation &&
+       !freshRecovery.installationAuthorized,
+       "no resume or automatic cleanup authority")
 let aged = inventory(future, kept)
 insist(aged.eligible.count == 2 && aged.eligibleBytes == 17,
        "old completed and zero-byte partial, excluding protected active")
 insist(aged.ignoredEntries == 4, "active, stranger, symlink, hardlink retained")
+let recovery = WebReaderReleaseRecoverySummary.readOnly(aged)
+insist(recovery.interruptedFiles == 1 &&
+       recovery.interruptedBytes == 0 &&
+       recovery.completedFiles == 1 &&
+       recovery.completedBytes == 17 &&
+       recovery.ignoredEntries == 4,
+       "crash-recovery summary splits aged partials and completed IPAs")
+insist(!recovery.canResumePartial &&
+       recovery.cleanupRequiresOwnerConfirmation &&
+       !recovery.installationAuthorized,
+       "counting old partials cannot resume, delete or install")
 let candidate = aged.eligible.first { $0.fileName == good }!
 let oldPartial = aged.eligible.first { $0.fileName == partial }!
 insist(!discard(candidate), "recent file cannot be deleted")
