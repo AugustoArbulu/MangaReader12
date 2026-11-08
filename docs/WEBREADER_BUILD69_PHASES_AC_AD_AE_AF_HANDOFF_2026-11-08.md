@@ -92,6 +92,24 @@ quando não permitido.
 privilegiado do downloader. Ela NÃO cria antirreplay persistente
 ou controle de downgrade dentro de um helper root Chimera.
 
+## Compatibilidade iOS 12 detectada e corrigida na CI
+
+A primeira rodada de testes nativos detectou uma ordem incorreta dos
+argumentos de teste Swift; foi corrigida sem alterar a lógica de produção.
+Uma segunda rodada passou nos testes Swift de laboratório, mas o
+**build real de Debug para iOS12** rejeitou
+`HTTPURLResponse.value(forHTTPHeaderField:)`, disponível somente a partir
+do iOS 13. Substituí a leitura desse cabeçalho pelo dicionário
+`HTTPURLResponse.allHeaderFields`, com busca case-insensitive; este é
+compatível com iOS12. Também adicionei regra estática para impedir
+reintroduzir esse método exclusivo do iOS13 na resposta HTTP.
+
+A validação atual é o
+[run #42455563835](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42455563835),
+cujo job Linux passou novamente e cujo job macOS precisa terminar antes
+de confirmar as compilações. Os runs anteriores são tentativas falhas
+documentadas, não evidência de aprovação final.
+
 ## Testes e integração
 
 Arquivos de testes alterados/adicionados:
@@ -101,7 +119,7 @@ Arquivos de testes alterados/adicionados:
 - `ci/test_build69_phase_ac_ad_ae_policy.py`
 - `ci/test_build68_phase_tu_readonly_contract.py`
 
-**Workflow:** [Build69 AC–AF integrado #42455302935](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42455302935)
+**Workflow:** [Build69 AC–AF integrado #42455563835](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42455563835)
 
 Executa políticas estáticas e testes de migração/leitura offline em
 Linux; em macOS executa testes Swift reais do downloader, importação
