@@ -1,6 +1,7 @@
 import Foundation
 import Compression
 import CommonCrypto
+import Darwin
 
 /// Read-only, bounded ZIP/IPA and identity inspection for the exact bytes
 /// referenced by an authenticated WebReader release manifest.
@@ -73,9 +74,10 @@ enum WebReaderNativeIPAAuditor {
         return b
     }
 
-    private static func fileSHA256(_ url: URL) throws -> String {
-        let file = try FileHandle(forReadingFrom: url)
-        defer { file.closeFile() }
+    /// Hash the SAME opened regular-file descriptor used by ZIP inspection.
+    /// Never reopen by filename between hash, ZIP parse and final hash.
+    private static func fileSHA256(_ file: FileHandle) -> String {
+        file.seek(toFileOffset: 0)
         var ctx = CC_SHA256_CTX()
         CC_SHA256_Init(&ctx)
         while true {
@@ -142,21 +144,32 @@ enum WebReaderNativeIPAAuditor {
         ipaURL: URL, signedUpdate: WebReaderVerifiedUpdate,
         installedBuild: Int, installedIOS: OperatingSystemVersion
     ) throws -> WebReaderIPAAuditReport {
-        let attrs = try FileManager.default.attributesOfItem(atPath: ipaURL.path)
-        guard let sizeNumber = attrs[.size] as? NSNumber else {
+        // open(O_NOFOLLOW) prevents following a substituted last-component
+        // symlink, including on a jailbroken device with a writable sandbox.
+        // fstat binds the descriptor to a regular file and a fixed size.
+        guard ipaURL.isFileURL else { throw WebReaderIPAAuditError.unreadable }
+        let descriptor = Darwin.open(
+            ipaURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+        )
+        guard descriptor >= 0 else { throw WebReaderIPAAuditError.unreadable }
+        var opened = stat()
+        guard Darwin.fstat(descriptor, &opened) == 0,
+              (opened.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              opened.st_size >= 22 else {
+            Darwin.close(descriptor)
             throw WebReaderIPAAuditError.unreadable
         }
-        let size = sizeNumber.uint64Value
-        guard size >= 22, size <= maxArchiveBytes,
+        let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { file.closeFile() }
+        let size = UInt64(opened.st_size)
+        guard size <= maxArchiveBytes,
               signedUpdate.ipaSize > 0,
               size == UInt64(signedUpdate.ipaSize) else {
             throw WebReaderIPAAuditError.excessiveSize
         }
-        guard try fileSHA256(ipaURL) == signedUpdate.sha256 else {
+        guard fileSHA256(file) == signedUpdate.sha256 else {
             throw WebReaderIPAAuditError.hashMismatch
         }
-        let file = try FileHandle(forReadingFrom: ipaURL)
-        defer { file.closeFile() }
         let tailLength = Int(min(size, 65_557))
         let tail = try read(
             file, at: size - UInt64(tailLength),
@@ -357,10 +370,26 @@ enum WebReaderNativeIPAAuditor {
               ] else {
             throw WebReaderIPAAuditError.incompatibleIOS
         }
+        // A malicious process may replace a file *during* ZIP inspection.
+        // We cannot authorize installation from this check, but we do reject
+        // a changed inode or in-place mutation before returning a review.
+        let finalDigest = fileSHA256(file)
+        var finished = stat()
+        guard Darwin.fstat(descriptor, &finished) == 0,
+              finalDigest == signedUpdate.sha256,
+              opened.st_dev == finished.st_dev,
+              opened.st_ino == finished.st_ino,
+              opened.st_size == finished.st_size,
+              opened.st_mtimespec.tv_sec == finished.st_mtimespec.tv_sec,
+              opened.st_mtimespec.tv_nsec == finished.st_mtimespec.tv_nsec,
+              opened.st_ctimespec.tv_sec == finished.st_ctimespec.tv_sec,
+              opened.st_ctimespec.tv_nsec == finished.st_ctimespec.tv_nsec else {
+            throw WebReaderIPAAuditError.hashMismatch
+        }
         return WebReaderIPAAuditReport(
             bundleID: "com.example.MangaReader12", build: build,
             minimumIOS: rawIOS, zipEntries: entries.count,
-            verifiedSHA256: signedUpdate.sha256
+            verifiedSHA256: finalDigest
         )
     }
 }
