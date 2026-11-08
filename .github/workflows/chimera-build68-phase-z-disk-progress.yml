@@ -1,0 +1,89 @@
+name: WebReader Build68 Phase Z — Safe IPA Disk Budget and Progress iOS12
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'ci/test_native_webreader_ipa_download_budget.py'
+      - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_native_webreader_local_ipa_review.py'
+      - 'ci/test_native_webreader_local_qa_storage.py'
+      - 'ci/test_native_webreader_release_cache_storage.py'
+      - 'ci/test_build68_phase_z_download_budget_policy.py'
+      - '.github/workflows/chimera-build68-phase-z-disk-progress.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build68-phase-z-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-storage-and-offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate no-offline-data-loss and nonprivileged download policy
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_p_local_qa_inventory_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build67_local_ipa_screen.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS Phase Z: offline content preserved; install and publisher trust locked'
+
+  macos-real-swift-ios12:
+    runs-on: macos-15
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS12-capable toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Execute real Swift budget, URLProtocol staging and existing QA storage
+        run: |
+          python3 ci/test_native_webreader_ipa_download_budget.py
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_local_ipa_review.py
+          python3 ci/test_native_webreader_local_qa_storage.py
+          python3 ci/test_native_webreader_release_cache_storage.py
+          python3 ci/test_native_webreader_ipa_auditor.py
+          python3 ci/test_native_webreader_update_checker.py
+      - name: Prepare resource files and iOS12 WebP
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile full app iOS12 Debug ARM64 without IPA
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-z-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile full app iOS12 Release ARM64 without IPA
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-z-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Validate bundle and disabled installer
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-z-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS Build68 Phase Z: no IPA or installation, full iOS12 Debug/Release validated'
