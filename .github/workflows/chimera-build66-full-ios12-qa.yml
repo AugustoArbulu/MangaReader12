@@ -1,18 +1,9 @@
 name: WebReader Build66 Full iOS12 Compile and Private QA Audit
 
+# FROZEN Build66: the last owner-tested IPA is immutable; changes to the
+# experimental branch belong to a new Build67+ QA pipeline.
+# No automatic build/upload of a new IPA falsely labeled Build66.
 on:
-  push:
-    branches:
-      - feat/chimera-updater-phase1-protocol-audit
-    paths:
-      - 'MangaReader12/**'
-      - 'MangaReader12.xcodeproj/**'
-      - 'ci/package_webreader_build66_rehearsal.sh'
-      - 'ci/audit_webreader_build66_rehearsal.py'
-      - 'ci/test_build66_rehearsal_readonly_gate.py'
-      - 'ci/test_app_updates_screen.py'
-      - 'ci/test_build54_branding.py'
-      - '.github/workflows/chimera-build66-full-ios12-qa.yml'
   workflow_dispatch:
 
 permissions:
@@ -36,6 +27,7 @@ jobs:
       - name: Verify project is the expected experimental branch
         run: |
           test "$GITHUB_REF_NAME" = "feat/chimera-updater-phase1-protocol-audit"
+          test "$GITHUB_SHA" = "0939a5d7a480b2daa18d5a653a8ecf69f305f013"
           test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" = 2
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'DispatchQueue.main.async { completion(.rejected) }' MangaReader12/Core/WebReaderAppinstSocket.swift
