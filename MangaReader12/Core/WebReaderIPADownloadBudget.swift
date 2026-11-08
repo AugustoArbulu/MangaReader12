@@ -29,6 +29,23 @@ enum WebReaderIPADownloadBudget {
         return freeBytes >= needed
     }
 
+    /// Repeated transfer check: retain the *original* IPA-size reserve,
+    /// even as the unwritten byte count decreases. This never deletes user
+    /// content or promises a filesystem reservation; it can only abort.
+    static func enoughSpaceDuringTransfer(
+        freeBytes: Int64, remainingBytes: Int64, totalIPABytes: Int64
+    ) -> Bool {
+        guard freeBytes >= 0, totalIPABytes > 0,
+              totalIPABytes <= maximumIPASize, remainingBytes >= 0,
+              remainingBytes <= totalIPABytes else { return false }
+        let reserve = max(minimumReserve, totalIPABytes / 8)
+        let (first, overflow) = remainingBytes.addingReportingOverflow(reserve)
+        guard !overflow else { return false }
+        let (needed, otherOverflow) =
+            first.addingReportingOverflow(overheadReserve)
+        return !otherOverflow && freeBytes >= needed
+    }
+
     /// Open directory with O_NOFOLLOW, then query its actual filesystem.
     /// Symlinked destination directories and inaccessible volumes are denied.
     static func availableFreeBytes(in directory: URL) -> Int64? {
