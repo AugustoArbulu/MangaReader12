@@ -88,6 +88,36 @@ class Build68AtomicIPAAudit(unittest.TestCase):
         self.assertIn("publisherAuthenticated: Bool = false", STAGER)
         self.assertIn("installationAuthorized: Bool = false", STAGER)
 
+    def test_local_import_budget_and_symlinked_target_denial(self):
+        for term in (
+            "static func requiredFreeBytes(ipaBytes: Int64)",
+            "static func hasEnoughSpace(freeBytes: Int64, ipaBytes: Int64)",
+            "max(Int64(16 * 1024 * 1024)",
+            "min(Int64(64 * 1024 * 1024)",
+            "free.int64Value",
+            "Darwin.lstat(directory.path, &directoryInfo)",
+            "mode_t(S_IFDIR)",
+            "case insufficientSpace",
+            "[.posixPermissions: 0o600]",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, STAGER)
+
+    def test_native_import_negative_symlinked_directory_and_headroom(self):
+        suite = (ROOT / "ci/test_native_webreader_local_ipa_review.py").read_text()
+        for term in (
+            "requiredFreeBytes(ipaBytes: small)",
+            "hasEnoughSpace(",
+            "576 * 1024 * 1024",
+            "redirected-QA-directory",
+            "mockLibrary",
+            "staging directory symlink unexpectedly accepted",
+            "private, not inherited world-readable",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, suite)
+        self.assertIn("Espaço insuficiente para copiar a IPA", UI)
+
     def test_no_automatic_authorization(self):
         self.assertIn("static let liveInstallationEnabled = false", APPINST)
         self.assertIn("DispatchQueue.main.async { completion(.rejected) }", APPINST)
