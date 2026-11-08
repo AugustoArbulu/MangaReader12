@@ -100,7 +100,7 @@ class QAStorageControls(unittest.TestCase):
     def test_not_exposed_to_ipc_probe(self):
         self.assertIn("return isIPCDiagnostic ? 2 : 7", SCREEN)
         self.assertIn("guard !isIPCDiagnostic", SCREEN)
-        self.assertIn("if source == 6 { return 6 }", SCREEN)
+        self.assertIn("if source == 6 { return 8 }", SCREEN)
         self.assertIn("case (6, 4):", SCREEN)
         self.assertIn("case (6, 5):", SCREEN)
 
