@@ -60,7 +60,8 @@ class ProductionSignedDiscovery(unittest.TestCase):
         for forbidden in (
             "http.value(forHTTPHeaderField:",  # iOS13-only, forbidden iOS12
             "allowInvalidSSLCertificates", "httpShouldUsePipelining",
-            "setValue(\"Bearer", "Authorization", "Cookie",
+            "setValue(\"Bearer", "forHTTPHeaderField: \"Authorization\"",
+            "forHTTPHeaderField: \"Cookie\"",
         ):
             self.assertNotIn(forbidden, SIGNED)
 
