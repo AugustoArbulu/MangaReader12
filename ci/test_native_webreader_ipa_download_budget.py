@@ -48,6 +48,27 @@ ensure(policy.enoughSpace(freeBytes: needed, ipaBytes: Int64(large)),
        "exact threshold allowed")
 ensure(!policy.enoughSpace(freeBytes: needed - 1, ipaBytes: Int64(large)),
        "one byte below threshold denied")
+// The reserve must NEVER shrink when most of a large IPA has arrived.
+let fixedReserve = Int64(64 * 1024 * 1024 + 8 * 1024 * 1024)
+ensure(policy.enoughSpaceDuringTransfer(
+    freeBytes: fixedReserve, remainingBytes: 0, totalIPABytes: Int64(large)
+), "exact original budget remains after last chunk")
+ensure(!policy.enoughSpaceDuringTransfer(
+    freeBytes: fixedReserve - 1, remainingBytes: 0, totalIPABytes: Int64(large)
+), "cannot spend fixed original safety reserve on the final chunk")
+ensure(policy.enoughSpaceDuringTransfer(
+    freeBytes: needed, remainingBytes: Int64(large), totalIPABytes: Int64(large)
+), "initial sampled transfer threshold equals preflight threshold")
+ensure(!policy.enoughSpaceDuringTransfer(
+    freeBytes: Int64.max, remainingBytes: Int64(large) + 1,
+    totalIPABytes: Int64(large)
+), "invalid remaining bytes denied")
+ensure(!policy.enoughSpaceDuringTransfer(
+    freeBytes: Int64.max, remainingBytes: -1, totalIPABytes: Int64(large)
+), "negative remaining bytes denied")
+ensure(!policy.enoughSpaceDuringTransfer(
+    freeBytes: Int64.max, remainingBytes: 0, totalIPABytes: 0
+), "zero original IPA denied")
 ensure(!policy.enoughSpace(freeBytes: -1, ipaBytes: Int64(large)),
        "unknown free space denied")
 ensure(!policy.enoughSpace(freeBytes: Int64.max, ipaBytes: Int64.max),
