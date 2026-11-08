@@ -28,7 +28,7 @@ class ManualQADeliveryTests(unittest.TestCase):
         self.report = root / "WebReader-Build68-private-rehearsal-audit.json"
         self.receipt = {
             "status": "PASS", "qaArtifact": IPA_NAME,
-            "build": 67, "upgradesFromObservedBuild": 66,
+            "build": 68, "upgradesFromObservedBuild": 66,
             "minimumIOS": "12.0", "ipaBytes": self.ipa.stat().st_size,
             "ipaSHA256": hashlib.sha256(self.ipa.read_bytes()).hexdigest(),
             "bundleID": "com.example.MangaReader12",
@@ -63,7 +63,7 @@ class ManualQADeliveryTests(unittest.TestCase):
 
     def test_synthetic_sidecars_consistent_only_for_private_transfer(self):
         item = self.call()
-        self.assertEqual(item.build, 67)
+        self.assertEqual(item.build, 68)
         self.assertEqual(item.installedBuildReference, 66)
         self.assertEqual(item.artifact, IPA_NAME)
         self.assertEqual(item.sha256, self.receipt["ipaSHA256"])
