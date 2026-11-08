@@ -364,3 +364,167 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         callback?(result)
     }
 }
+
+
+// MARK: - iOS12 local QA IPA review (manual, no GitHub credential, no install)
+
+/// A local file and a manually supplied checksum are NOT publisher identity.
+/// The separately obtained digest only binds the expected bytes. An official
+/// release signing key remains absent; neither this receipt nor its import
+/// URL may ever be passed to appinst without an independent security design.
+enum WebReaderLocalIPAReviewError: Error {
+    case invalidReference
+    case unreadableFile
+    case tooLarge
+    case failedToCopy
+    case invalidIPA
+}
+
+struct WebReaderLocalIPAReview {
+    let copiedIPAURL: URL
+    let build: Int
+    let expectedSHA256: String
+    let ipaBytes: Int64
+    let zipEntries: Int
+    let manualSourceOnly: Bool = true
+    let publisherAuthenticated: Bool = false
+    let installationAuthorized: Bool = false
+    let installationPerformed: Bool = false
+}
+
+/// Restricted to a dedicated staging directory, separate from Library,
+/// downloaded chapters, backups, and the network update cache. A new import
+/// is always audited AFTER copying it inside the app's own sandbox.
+enum WebReaderLocalIPAReviewer {
+    static let maximumSize: Int64 = 512 * 1024 * 1024
+
+    static var defaultDirectory: URL {
+        return FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0].appendingPathComponent("WebReaderLocalQAImports", isDirectory: true)
+    }
+
+    static func importForReview(
+        sourceURL: URL, expectedBuild: Int, expectedSHA256: String,
+        installedBuild: Int, installedIOS: OperatingSystemVersion,
+        directory: URL = defaultDirectory
+    ) throws -> WebReaderLocalIPAReview {
+        guard sourceURL.isFileURL, sourceURL.pathExtension.lowercased() == "ipa",
+              expectedBuild > installedBuild, expectedBuild <= 2_147_483_647,
+              installedBuild > 0,
+              expectedSHA256.range(
+                of: "^[0-9a-f]{64}$", options: .regularExpression
+              ) != nil
+        else { throw WebReaderLocalIPAReviewError.invalidReference }
+
+        let fm = FileManager.default
+        let attributes: [FileAttributeKey: Any]
+        do {
+            attributes = try fm.attributesOfItem(atPath: sourceURL.path)
+        } catch {
+            throw WebReaderLocalIPAReviewError.unreadableFile
+        }
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber else {
+            throw WebReaderLocalIPAReviewError.unreadableFile
+        }
+        let candidateSize = size.int64Value
+        guard candidateSize > 0, candidateSize <= maximumSize else {
+            throw WebReaderLocalIPAReviewError.tooLarge
+        }
+        do {
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true,
+                                   attributes: [.posixPermissions: 0o700])
+        } catch {
+            throw WebReaderLocalIPAReviewError.failedToCopy
+        }
+        let saved = directory.appendingPathComponent(
+            "WebReader-Build" + String(expectedBuild) + "-local-" +
+            UUID().uuidString + ".ipa"
+        )
+        do {
+            try fm.copyItem(at: sourceURL, to: saved)
+        } catch {
+            throw WebReaderLocalIPAReviewError.failedToCopy
+        }
+        var keep = false
+        defer {
+            if !keep { try? fm.removeItem(at: saved) }
+        }
+        let copied: [FileAttributeKey: Any]
+        do {
+            copied = try fm.attributesOfItem(atPath: saved.path)
+        } catch {
+            throw WebReaderLocalIPAReviewError.unreadableFile
+        }
+        guard copied[.type] as? FileAttributeType == .typeRegular,
+              (copied[.size] as? NSNumber)?.int64Value == candidateSize else {
+            throw WebReaderLocalIPAReviewError.failedToCopy
+        }
+        // This object is a LOCAL EXPECTATION, not a signed manifest or a
+        // GitHub Release. The native auditor compares exact size/SHA, ZIP
+        // entries, Info.plist, build, bundle, executable and iOS version.
+        var expected = WebReaderVerifiedUpdate(
+            build: expectedBuild, minimumIOS: "12.0",
+            ipaURL: saved, ipaSize: candidateSize,
+            sha256: expectedSHA256, publishedAt: "",
+            releaseNotes: []
+        )
+        expected.provenance = .manualLocalFile
+        let report: WebReaderIPAAuditReport
+        do {
+            report = try WebReaderNativeIPAAuditor.inspect(
+                ipaURL: saved, signedUpdate: expected,
+                installedBuild: installedBuild, installedIOS: installedIOS
+            )
+        } catch {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
+        guard report.build == expectedBuild,
+              report.verifiedSHA256 == expectedSHA256 else {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
+        keep = true
+        return WebReaderLocalIPAReview(
+            copiedIPAURL: saved, build: report.build,
+            expectedSHA256: expectedSHA256, ipaBytes: candidateSize,
+            zipEntries: report.zipEntries
+        )
+    }
+
+    /// Recheck the copied bytes immediately before the manual Share Sheet.
+    /// The hash reference remains observational and never authorizes install.
+    static func recheck(
+        _ review: WebReaderLocalIPAReview,
+        installedBuild: Int, installedIOS: OperatingSystemVersion
+    ) throws {
+        var expected = WebReaderVerifiedUpdate(
+            build: review.build, minimumIOS: "12.0",
+            ipaURL: review.copiedIPAURL, ipaSize: review.ipaBytes,
+            sha256: review.expectedSHA256, publishedAt: "", releaseNotes: []
+        )
+        expected.provenance = .manualLocalFile
+        do {
+            _ = try WebReaderNativeIPAAuditor.inspect(
+                ipaURL: review.copiedIPAURL, signedUpdate: expected,
+                installedBuild: installedBuild, installedIOS: installedIOS
+            )
+        } catch {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
+    }
+
+    /// Delete ONLY the imported QA copy we created, never Library or
+    /// chapter directories. No application installation is ever performed.
+    static func discard(_ review: WebReaderLocalIPAReview,
+                        directory: URL = defaultDirectory) {
+        let file = review.copiedIPAURL.standardizedFileURL
+        guard file.deletingLastPathComponent().standardizedFileURL ==
+                directory.standardizedFileURL,
+              file.lastPathComponent.hasPrefix(
+                "WebReader-Build" + String(review.build) + "-local-"
+              ),
+              file.pathExtension.lowercased() == "ipa" else { return }
+        try? FileManager.default.removeItem(at: file)
+    }
+}
