@@ -79,9 +79,6 @@ denied("actual IPA has old version") { try imported(old) }
 denied("wrong application bundle") { try imported(wrongBundle) }
 denied("requires iOS13") { try imported(wrongIOS) }
 denied("invalid ZIP even with matching hash") {
-    let bytes = try! Data(contentsOf: corrupt)
-    let h = bytes.reduce(into: [UInt8]()) { _, _ in } // Not used.
-    _ = h
     // Corrupt fixture's checksum is passed as a known full 64-char digest.
     let bad = ProcessInfo.processInfo.environment["QA_BAD_SHA"]!
     return try imported(corrupt, digest: bad)
