@@ -141,12 +141,14 @@ let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
 defer { try? FileManager.default.removeItem(at: scratch) }
 func run(
     _ metadata: WebReaderVerifiedUpdate, useTransport: Bool = true,
-    testFreeBytes: Int64? = nil, progress: ((Int) -> Void)? = nil
+    testFreeBytes: Int64? = nil, testInstalledBuild: Int? = nil,
+    progress: ((Int) -> Void)? = nil
 ) -> WebReaderIPAStageResult {
     let stager = WebReaderIPAStager(
         verifiedUpdate: metadata, destinationDirectory: scratch,
         testProtocolClasses: useTransport ? [IPAStubProtocol.self] : nil,
-        testAvailableSpace: testFreeBytes, onProgress: progress
+        testAvailableSpace: testFreeBytes,
+        testInstalledBuild: testInstalledBuild, onProgress: progress
     )
     let semaphore = DispatchSemaphore(value: 0)
     var result: WebReaderIPAStageResult?
@@ -173,6 +175,21 @@ case .failed(.disabled): break
 default: fatalError("must fail closed without producer key")
 }
 check(IPAStubProtocol.requests == 0, "disabled -> zero requests")
+
+// A previously verified Release cannot be staged after the installed
+// app catches up to that Build: no GET, no partial IPA, no downgrade.
+for oldInstalled in [57, 58] {
+    switch run(good, testInstalledBuild: oldInstalled) {
+    case .failed(.notNewerThanInstalled): break
+    default: fatalError("equal or newer installed Build must block download")
+    }
+}
+check(IPAStubProtocol.requests == 0, "replayed/downgrade candidates zero GET")
+switch run(good, testInstalledBuild: 56, testFreeBytes: 0) {
+case .failed(.insufficientSpace): break
+default: fatalError("newer candidate still subject to disk budget")
+}
+check(IPAStubProtocol.requests == 0, "newer candidate low-space zero GET")
 
 IPAStubProtocol.body = sample
 IPAStubProtocol.sentPartially = true
