@@ -1,0 +1,6 @@
+WEBREADER_BUILD68_PRIVATE_MANUAL_QA_ONLY_NO_RELEASE_NO_INSTALL
+Reference installed owner-approved build: 66
+Candidate: 68 ad-hoc signed exclusively for manual Filza iOS12 QA
+Never upload to GitHub Releases, never call appinst, never touch main
+Require native codesign ARM64 + bundle/entitlement + SHA256 delivery gate
+Require owner backup and explicit device-side Filza installation decision
