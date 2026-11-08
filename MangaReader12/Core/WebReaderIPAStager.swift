@@ -1,5 +1,6 @@
 import Foundation
 import CommonCrypto
+import Darwin
 
 /// Phase 4 download *staging only*. This class never calls appinst, unpacks an
 /// archive or replaces an installed application.
@@ -376,6 +377,7 @@ enum WebReaderLocalIPAReviewError: Error {
     case invalidReference
     case unreadableFile
     case tooLarge
+    case insufficientSpace
     case failedToCopy
     case invalidIPA
 }
@@ -397,6 +399,14 @@ struct WebReaderLocalIPAReview {
 /// is always audited AFTER copying it inside the app's own sandbox.
 enum WebReaderLocalIPAReviewer {
     static let maximumSize: Int64 = 512 * 1024 * 1024
+
+    /// Reserve room for both the IPA copy and a small filesystem margin.
+    /// The source is not consumed, moved or deleted.
+    static func requiredFreeBytes(ipaBytes: Int64) -> Int64 {
+        let reserve = max(Int64(16 * 1024 * 1024),
+            min(Int64(64 * 1024 * 1024), ipaBytes / 8))
+        return ipaBytes + reserve
+    }
 
     static var defaultDirectory: URL {
         return FileManager.default.urls(
@@ -438,18 +448,32 @@ enum WebReaderLocalIPAReviewer {
         } catch {
             throw WebReaderLocalIPAReviewError.failedToCopy
         }
+        // The final component must be a real directory, not a symlink
+        // pointing at Library, Documents or the downloaded chapter cache.
+        var directoryInfo = stat()
+        guard Darwin.lstat(directory.path, &directoryInfo) == 0,
+              (directoryInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            throw WebReaderLocalIPAReviewError.failedToCopy
+        }
+        guard let storage = try? fm.attributesOfFileSystem(forPath: directory.path),
+              let free = storage[.systemFreeSize] as? NSNumber,
+              free.int64Value >= requiredFreeBytes(ipaBytes: candidateSize) else {
+            throw WebReaderLocalIPAReviewError.insufficientSpace
+        }
         let saved = directory.appendingPathComponent(
             "WebReader-Build" + String(expectedBuild) + "-local-" +
             UUID().uuidString + ".ipa"
         )
-        do {
-            try fm.copyItem(at: sourceURL, to: saved)
-        } catch {
-            throw WebReaderLocalIPAReviewError.failedToCopy
-        }
         var keep = false
         defer {
             if !keep { try? fm.removeItem(at: saved) }
+        }
+        do {
+            try fm.copyItem(at: sourceURL, to: saved)
+            try fm.setAttributes([.posixPermissions: 0o600],
+                                 ofItemAtPath: saved.path)
+        } catch {
+            throw WebReaderLocalIPAReviewError.failedToCopy
         }
         let copied: [FileAttributeKey: Any]
         do {
