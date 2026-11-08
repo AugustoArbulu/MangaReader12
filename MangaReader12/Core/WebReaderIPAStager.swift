@@ -388,6 +388,9 @@ struct WebReaderLocalIPAReview {
     let expectedSHA256: String
     let ipaBytes: Int64
     let zipEntries: Int
+    // Capture the exact verified copy, not just its mutable pathname.
+    let stagingDevice: UInt64
+    let stagingInode: UInt64
     let manualSourceOnly: Bool = true
     let publisherAuthenticated: Bool = false
     let installationAuthorized: Bool = false
@@ -502,6 +505,7 @@ enum WebReaderLocalIPAReviewer {
         var copySucceeded = false
         var writtenBytes: Int64 = 0
         var destinationBefore = stat()
+        var destinationAfter = stat()
         do {
             guard Darwin.fchmod(outputFD, mode_t(0o600)) == 0,
                   Darwin.fstat(outputFD, &destinationBefore) == 0,
@@ -537,7 +541,6 @@ enum WebReaderLocalIPAReviewer {
                 writtenBytes += Int64(count)
             }
             var sourceAfter = stat()
-            var destinationAfter = stat()
             guard Darwin.fsync(outputFD) == 0,
                   Darwin.fstat(sourceFD, &sourceAfter) == 0,
                   Darwin.fstat(outputFD, &destinationAfter) == 0,
@@ -560,6 +563,14 @@ enum WebReaderLocalIPAReviewer {
         }
         _ = Darwin.close(outputFD)
         guard copySucceeded else { throw WebReaderLocalIPAReviewError.failedToCopy }
+        var destinationByName = stat()
+        guard Darwin.fstatat(dirFD, fileName, &destinationByName,
+                             AT_SYMLINK_NOFOLLOW) == 0,
+              (destinationByName.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              destinationByName.st_dev == destinationAfter.st_dev,
+              destinationByName.st_ino == destinationAfter.st_ino else {
+            throw WebReaderLocalIPAReviewError.failedToCopy
+        }
         // The auditor reopens the freshly copied PRIVATE file to confirm its
         // full digest and structural identity; its own audit is same-FD and
         // rejects changes that happen while it is inspecting.
@@ -586,11 +597,21 @@ enum WebReaderLocalIPAReviewer {
               report.verifiedSHA256 == expectedSHA256 else {
             throw WebReaderLocalIPAReviewError.invalidIPA
         }
+        var verifiedByName = stat()
+        guard Darwin.fstatat(dirFD, fileName, &verifiedByName,
+                             AT_SYMLINK_NOFOLLOW) == 0,
+              (verifiedByName.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              verifiedByName.st_dev == destinationAfter.st_dev,
+              verifiedByName.st_ino == destinationAfter.st_ino else {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
         keep = true
         return WebReaderLocalIPAReview(
             copiedIPAURL: saved, build: report.build,
             expectedSHA256: expectedSHA256, ipaBytes: candidateSize,
-            zipEntries: report.zipEntries
+            zipEntries: report.zipEntries,
+            stagingDevice: UInt64(destinationAfter.st_dev),
+            stagingInode: UInt64(destinationAfter.st_ino)
         )
     }
 
@@ -606,12 +627,38 @@ enum WebReaderLocalIPAReviewer {
             sha256: review.expectedSHA256, publishedAt: "", releaseNotes: []
         )
         expected.provenance = .manualLocalFile
+        // Bind the share-time check to the same inode that import verified.
+        // A byte-identical replacement has the same SHA but NOT the same
+        // staging identity and must be explicitly re-imported.
+        let checkFD = Darwin.open(
+            review.copiedIPAURL.path,
+            O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        )
+        guard checkFD >= 0 else { throw WebReaderLocalIPAReviewError.invalidIPA }
+        defer { _ = Darwin.close(checkFD) }
+        var before = stat()
+        guard Darwin.fstat(checkFD, &before) == 0,
+              (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              UInt64(before.st_dev) == review.stagingDevice,
+              UInt64(before.st_ino) == review.stagingInode else {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
         do {
             _ = try WebReaderNativeIPAAuditor.inspect(
                 ipaURL: review.copiedIPAURL, signedUpdate: expected,
                 installedBuild: installedBuild, installedIOS: installedIOS
             )
         } catch {
+            throw WebReaderLocalIPAReviewError.invalidIPA
+        }
+        var after = stat()
+        guard Darwin.fstat(checkFD, &after) == 0,
+              after.st_dev == before.st_dev, after.st_ino == before.st_ino,
+              after.st_size == before.st_size,
+              after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
+              after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec,
+              after.st_ctimespec.tv_sec == before.st_ctimespec.tv_sec,
+              after.st_ctimespec.tv_nsec == before.st_ctimespec.tv_nsec else {
             throw WebReaderLocalIPAReviewError.invalidIPA
         }
     }
@@ -645,7 +692,9 @@ enum WebReaderLocalIPAReviewer {
         guard Darwin.fstatat(
             directoryFD, fileName, &recorded, AT_SYMLINK_NOFOLLOW
         ) == 0,
-              (recorded.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
+              (recorded.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              UInt64(recorded.st_dev) == review.stagingDevice,
+              UInt64(recorded.st_ino) == review.stagingInode else {
             return
         }
         _ = Darwin.unlinkat(directoryFD, fileName, 0)
