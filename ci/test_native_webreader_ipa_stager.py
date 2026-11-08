@@ -46,6 +46,8 @@ final class IPAStubProtocol: URLProtocol {
     static var mime = "application/octet-stream"
     static var body = Data()
     static var sentPartially = false
+    static var keepOpenForCancel = false
+    static let firstChunkDelivered = DispatchSemaphore(value: 0)
 
     override class func canInit(with request: URLRequest) -> Bool { return true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
@@ -58,12 +60,18 @@ final class IPAStubProtocol: URLProtocol {
         let mime = IPAStubProtocol.mime
         let bytes = IPAStubProtocol.body
         let split = IPAStubProtocol.sentPartially
+        let hang = IPAStubProtocol.keepOpenForCancel
         IPAStubProtocol.lock.unlock()
         let response = HTTPURLResponse(
             url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": mime]
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if hang {
+            client?.urlProtocol(self, didLoad: Data(bytes.prefix(5)))
+            IPAStubProtocol.firstChunkDelivered.signal()
+            return // Keep an unfinished transfer for explicit cancellation.
+        }
         if split {
             let first = Data(bytes.prefix(5))
             let second = Data(bytes.dropFirst(5))
@@ -194,6 +202,35 @@ check(!progressValues.isEmpty, "download emits coarse progress")
 check(progressValues.allSatisfy { $0 >= 5 && $0 <= 95 && $0 % 5 == 0 },
       "transfer progress bounded at 95 until integrity finalized")
 check(progressValues == progressValues.sorted(), "download progress monotonic")
+
+// A stalled partial download can be explicitly cancelled without leaving
+// a partial file or requiring the user to close the WebReader updates screen.
+IPAStubProtocol.keepOpenForCancel = true
+let cancelled = WebReaderIPAStager(
+    verifiedUpdate: good, destinationDirectory: scratch,
+    testProtocolClasses: [IPAStubProtocol.self]
+)
+let cancelDone = DispatchSemaphore(value: 0)
+var cancellationResult: WebReaderIPAStageResult?
+cancelled.stage { result in
+    cancellationResult = result
+    cancelDone.signal()
+}
+check(IPAStubProtocol.firstChunkDelivered.wait(timeout: .now() + 10) == .success,
+      "stalled transport began with a partial IPA")
+cancelled.cancel()
+check(cancelDone.wait(timeout: .now() + 10) == .success,
+      "cancel invokes completion even without HTTP didComplete")
+switch cancellationResult! {
+case .failed(.cancelled): break
+default: fatalError("explicit cancel misclassified as download failure")
+}
+cancelled.cancel() // Idempotent: must not fire the callback twice.
+check((try! FileManager.default.contentsOfDirectory(
+    atPath: scratch.path
+)).filter { $0.hasSuffix(".partial") }.isEmpty,
+    "cancel immediately removes incomplete IPA from private staging")
+IPAStubProtocol.keepOpenForCancel = false
 
 // Version 2 keeps the exact build-named, ad-hoc release filename. This does
 // not test publisher signing: an ad-hoc seal is NOT publisher authentication.
