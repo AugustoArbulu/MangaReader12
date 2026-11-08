@@ -56,10 +56,14 @@ def _validated_revocations(items):
     """
     if type(items) not in (frozenset, tuple):
         raise LifecycleReviewDenied("revocation list must be immutable")
-    if len(items) > MAX_REVOCATIONS or len(set(items)) != len(items):
-        raise LifecycleReviewDenied("revocation list too large or duplicate")
+    if len(items) > MAX_REVOCATIONS:
+        raise LifecycleReviewDenied("revocation list too large")
+    # Validate types before constructing a set: untrusted tuple entries may
+    # be unhashable (dict/list); a bad list should deny, not crash the tool.
     if any(type(v) is not str or HEX.fullmatch(v) is None for v in items):
         raise LifecycleReviewDenied("invalid revoked SPKI fingerprint")
+    if len(set(items)) != len(items):
+        raise LifecycleReviewDenied("duplicate revoked SPKI fingerprint")
     return frozenset(items)
 
 
