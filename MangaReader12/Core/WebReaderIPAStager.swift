@@ -652,7 +652,12 @@ enum WebReaderLocalIPAReviewer {
             throw WebReaderLocalIPAReviewError.invalidIPA
         }
         var after = stat()
+        var currentPath = stat()
         guard Darwin.fstat(checkFD, &after) == 0,
+              Darwin.lstat(review.copiedIPAURL.path, &currentPath) == 0,
+              (currentPath.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              currentPath.st_dev == before.st_dev,
+              currentPath.st_ino == before.st_ino,
               after.st_dev == before.st_dev, after.st_ino == before.st_ino,
               after.st_size == before.st_size,
               after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
