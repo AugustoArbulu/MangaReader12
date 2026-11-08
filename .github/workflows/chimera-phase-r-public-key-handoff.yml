@@ -1,0 +1,52 @@
+name: WebReader Phase R — Independently Pinned Public Key Handoff (NO INSTALL)
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build68_release_public_key_handoff.py'
+      - 'ci/test_build68_release_public_key_handoff.py'
+      - 'ci/test_native_build68_release_public_key_handoff.py'
+      - 'ci/build66_release_key_pinning_gate.py'
+      - 'ci/test_build66_release_key_pinning_gate.py'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
+      - '.github/workflows/chimera-phase-r-public-key-handoff.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-phase-r-public-key-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pure-host-trust-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject untrusted/malformed keys and preserve old trust gate
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_release_public_key_handoff.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_pinning_gate.py' -v
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: no production key, no appinst and no release enrollment'
+
+  security-framework-interop:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select macOS Apple Security.framework toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Verify public SPKI/X9.63 handoff and ECDSA positive/negative test
+        run: |
+          python3 ci/test_native_build68_release_public_key_handoff.py
+          echo 'PASS: offline ephemeral test only; no IPA, release, production key, or installer'
