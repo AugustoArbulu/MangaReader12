@@ -111,7 +111,7 @@ class LocalIPAScreenContractTests(unittest.TestCase):
     def test_manual_sharing_only(self):
         self.assertIn("UIActivityViewController(", UI)
         self.assertIn("activityItems: [receipt.copiedIPAURL]", UI)
-        self.assertIn("if source == 6 { return 6 }", UI)
+        self.assertIn("if source == 6 { return 8 }", UI)
         self.assertIn("copyLocalIPAHash()", UI)
         self.assertIn("inspectLocalQAStorage(cleanup: false)", UI)
         self.assertIn("inspectLocalQAStorage(cleanup: true)", UI)
