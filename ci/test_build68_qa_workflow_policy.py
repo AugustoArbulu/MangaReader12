@@ -86,7 +86,7 @@ class ManualBuild68PublishPolicy(unittest.TestCase):
         self.assertIn("Não apague ou desinstale o WebReader", CHECKLIST)
         self.assertIn("Build 66", CHECKLIST)
         self.assertIn("Capítulos offline", CHECKLIST)
-        self.assertIn("Nunca", CHECKLIST + "Nunca")  # Portuguese safe manual QA
+        self.assertIn("não foi", CHECKLIST.lower())
         self.assertNotIn("git checkout main", WORKFLOW)
         self.assertNotIn("git push", WORKFLOW)
 
