@@ -19,9 +19,15 @@ SOURCES = [
     CORE / "WebReaderStrictJSON.swift",
     CORE / "WebReaderUpdateManifestVerifier.swift",
     CORE / "WebReaderSignedReleaseTrustGate.swift",
+    CORE / "WebReaderProductionPublisherTrust.swift",
 ]
 SWIFT = r'''
 import Foundation
+
+// Actual running channel is nil until a separately reviewed owner build.
+enum WebReaderUpdateChannel {
+    static let productionPublicKeyX963: Data? = nil
+}
 
 func expect(_ condition: @autoclosure () -> Bool, _ label: String) {
     if !condition() { fatalError(label) }
@@ -68,6 +74,19 @@ func reject(
         fatalError("unexpected error type " + name)
     }
 }
+// A test key/pin can verify a fixture with the lab API, but cannot enroll
+// production trust or enable a real in-app release channel.
+expect(!WebReaderProductionPublisherTrust.isProvisioned,
+       "production trust must be absent even with valid fixture key")
+do {
+    _ = try WebReaderProductionPublisherTrust.inspectProductionManifestReadOnly(
+        envelopeData: v2, installedBuild: 66, installedIOS: ios
+    )
+    fatalError("developer fixture illegally configured production trust")
+} catch WebReaderPublisherTrustError.noProvisionedOwnerTrust {
+    // Expected: no production key and no independently installed key pin.
+}
+
 let preview = try! inspect(v2, point, pin)
 expect(preview.update.build == 69, "signed v2 accepted")
 expect(preview.update.provenance == .signedManifest, "signed origin")
