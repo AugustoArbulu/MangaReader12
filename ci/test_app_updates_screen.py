@@ -100,7 +100,9 @@ assert '"Baixar e conferir IPA"' in screen
 assert "update.provenance == .publicGitHubRelease" in screen
 assert '"Compartilhar IPA conferida"' in screen
 assert 'UIAlertController(title: "Baixar IPA?"' in screen
-assert 'WebReaderIPAStager(verifiedUpdate: update)' in screen
+assert 'let downloader = WebReaderIPAStager(' in screen
+assert 'verifiedUpdate: update,' in screen
+assert 'onProgress:' in screen
 assert 'downloader.stage { [weak self, weak downloader] result in' in screen
 assert 'let current = availableUpdate' in screen
 assert 'WebReaderUpdateChannel.isConfigured' in screen
