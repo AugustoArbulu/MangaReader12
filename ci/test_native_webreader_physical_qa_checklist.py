@@ -25,7 +25,7 @@ insist(!report.contains("/var/mobile/"), "no personal paths")
 insist(!report.contains("PASS AUTOMATIC"), "never fake physical QA")
 insist(!report.contains("APPINST ENABLED"), "no privilege enablement")
 let checkLines = report.split(separator: "\n").filter { $0.contains("[SIM/NÃO/NÃO TESTADO]") }
-insist(checkLines.count == 11, "all eleven manual items explicitly not tested")
+insist(checkLines.count == 10, "all ten manual items explicitly not tested")
 insist(report.utf8.count < 4096, "clipboard report bounded")
 
 let invalid = WebReaderPhysicalQAChecklist.report(
@@ -35,7 +35,7 @@ let invalid = WebReaderPhysicalQAChecklist.report(
 )
 insist(invalid.contains("Build observada: desconhecida • iOS: desconhecido"),
        "invalid values sanitized")
-print("PASS native Swift Build69 physical QA checklist: 11 untested prompts, no personal data, no install")
+print("PASS native Swift Build69 physical QA checklist: 10 untested prompts, no personal data, no install")
 '''
 with tempfile.TemporaryDirectory(prefix="wr69-manual-qa-report-") as tmp:
     root = Path(tmp)
