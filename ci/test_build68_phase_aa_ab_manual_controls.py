@@ -29,6 +29,7 @@ class ManualUpdateControls(unittest.TestCase):
         )[0]
         self.assertIn("active.cancel()", start)
         self.assertIn("finish(.failed(.cancelled))", start)
+        self.assertIn("cancelRequested = true", start)
         finished = STAGER.split(
             "private func finish(_ result: WebReaderIPAStageResult)", 1
         )[1].split("// MARK: - iOS12 local QA", 1)[0]
@@ -36,7 +37,7 @@ class ManualUpdateControls(unittest.TestCase):
             "let temp = partialURL", "partialURL = nil",
             "stream?.close()", "oldSession?.invalidateAndCancel()",
             "if let temp = temp { try? FileManager.default.removeItem(at: temp) }",
-            "callback?(result)",
+            "callback?(resolved)",
         ):
             self.assertIn(token, finished)
         self.assertNotIn("Library", finished)
