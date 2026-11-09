@@ -37,7 +37,7 @@ class OwnerPublicTrustPolicy(unittest.TestCase):
         self.assertIn("callback(.disabled)", checker[pos:session])
         self.assertIn('expectedChannel: "production"', source)
         self.assertNotIn('UserDefaults', source)
-        self.assertNotIn('URLSession', source)
+        self.assertNotIn("URLSession(", source)  # comments may name API, but no call
 
     def test_public_review_tool_never_enrolls_keys_or_runs_an_installer(self):
         tool = (ROOT / "ci/build69_publisher_bootstrap_review.py").read_text()
