@@ -78,7 +78,7 @@ class PrivatePackagingGate(unittest.TestCase):
             'feat/chimera-updater-phase1-protocol-audit',
             'WebReader-Build69-iOS12-adhoc.ipa',
             'build69_ba_unsigned_candidate_audit.py',
-            'TMP="$(mktemp -d)"',
+            'TMP="$(mktemp -d "$OUTPUT_DIR/.wr69-private-qa.XXXXXXXX")',
             'trap cleanup EXIT',
             '/usr/bin/ditto "$APP_PATH" "$TMP/Payload/MangaReader12.app"',
             'APP="$TMP/Payload/MangaReader12.app"',
