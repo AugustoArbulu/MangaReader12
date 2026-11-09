@@ -34,6 +34,7 @@ enum OfflineDownloadPath {
 enum ChapterDownloadError: Error, LocalizedError {
     case applicationSupportUnavailable
     case emptyPages
+    case tooManyPages
     case httpStatus(Int)
     case missingCompletedFiles
     case invalidImagePayload
@@ -46,6 +47,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "Application Support directory is unavailable."
         case .emptyPages:
             return "This chapter returned no pages to download."
+        case .tooManyPages:
+            return "O capítulo excede o limite de 5.000 páginas por download recuperável. Nenhum arquivo foi modificado."
         case .httpStatus(let status):
             return "Image server returned HTTP \(status) during download."
         case .missingCompletedFiles:
@@ -228,6 +231,10 @@ final class ChapterDownloadManager {
     }
 
     private func savePlan(for job: ChapterDownloadJob) throws {
+        guard job.pages.count > 0,
+              job.pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages else {
+            throw ChapterDownloadError.tooManyPages
+        }
         let plan = DownloadRecoveryPlan(
             schemaVersion: 1, sourceID: job.sourceID,
             manga: job.manga, chapter: job.chapter, pages: job.pages,
@@ -339,6 +346,12 @@ final class ChapterDownloadManager {
         guard !pages.isEmpty else {
             DispatchQueue.main.async {
                 completion(.failure(ChapterDownloadError.emptyPages))
+            }
+            return
+        }
+        guard pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages else {
+            DispatchQueue.main.async {
+                completion(.failure(ChapterDownloadError.tooManyPages))
             }
             return
         }
