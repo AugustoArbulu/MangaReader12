@@ -106,7 +106,8 @@ enum WebReaderUpgradeContinuitySnapshot {
             ).first else {
             return (header + [
                 "Banco: INDISPONÍVEL (não significa biblioteca vazia)",
-                "Nenhum dado foi modificado."
+                "Nenhum dado foi modificado.",
+                "Este diagnóstico não abre imagens, não altera arquivos nem usa rede."
             ]).joined(separator: "\n")
         }
         let databaseURL = support
@@ -116,7 +117,8 @@ enum WebReaderUpgradeContinuitySnapshot {
             return (header + [
                 "Banco: INDISPONÍVEL (ausente, bloqueado ou schema incompatível)",
                 "Nenhum dado foi modificado.",
-                "Não reinstale nem restaure automaticamente se houver falha."
+                "Não reinstale nem restaure automaticamente se houver falha.",
+                "Este diagnóstico não abre imagens, não altera arquivos nem usa rede."
             ]).joined(separator: "\n")
         }
         return (header + [
