@@ -39,7 +39,7 @@ O workflow AC–BK [#42567641859](https://github.com/AugustoArbulu/MangaReader12
 - `ci/test_native_webreader_offline_completion_receipt.py`: executa Swift em diretório descartável, validando legado sem recibo, novo recibo válido, ausência da última página, página excedente, recibo vazio, manipulado, grande demais, symlink e diretório no lugar do recibo.
 - `ci/test_build69_bm_completion_receipt_policy.py`: confirma a ordem arquivos → recibo → SQLite `completed`, validação no leitor antes de rebind de caminho e ausência de operações destrutivas.
 - `ci/test_native_webreader_offline_preservation_audit.py`: valida novo contador de recibos com SQLite v1 sintético, inclusive IDs fictícios e nenhuma divulgação de dados.
-- CI integrado **AC–BM** [#42570180542](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42570180542): Linux e macOS/Swift + Xcode iOS12. Consultar o resultado; não afirmar sucesso antes da execução mais recente.
+- A primeira execução **AC–BM** [#42570180542](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42570180542) encontrou dois erros nos testes (asserção legada de caminho temporário e tupla em vez de array Swift), ambos corrigidos. O CI consolidado [AC–BM #42570364142](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42570364142) concluiu **SUCCESS 2/2 jobs**, incluindo Swift nativo e compilação iOS12.
 
 ## O que falta para uma IPA privada real
 
