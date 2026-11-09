@@ -116,6 +116,19 @@ switch parse(fixture("build56")) {
 case .upToDate: break
 default: fatalError("same version should not stage")
 }
+// Even an OLD public release must have a coherent uploaded asset and digest;
+// otherwise the UI must not misleadingly report "já atualizado".
+var oldNoAsset = fixture("build56")
+oldNoAsset["assets"] = []
+shouldReject(oldNoAsset, "old release without IPA is not up-to-date")
+var oldBadDigest = fixture("build56", digest: "bad")
+shouldReject(oldBadDigest, "old release with invalid SHA is not up-to-date")
+var oldWrongURL = fixture("build56")
+var oldAsset = (oldWrongURL["assets"] as! [[String: Any]])[0]
+oldAsset["browser_download_url"] = "https://example.com/false.ipa"
+oldWrongURL["assets"] = [oldAsset]
+shouldReject(oldWrongURL, "old release with wrong origin is not up-to-date")
+
 var invalid = fixture()
 invalid["draft"] = true
 shouldReject(invalid, "draft")
