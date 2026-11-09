@@ -21,6 +21,8 @@ from build66_code_signature_gate import (
 )
 from prepare_signed_webreader_update import prepare, ReleasePreparationRejected
 from webreader_update_manifest import validate
+from build66_release_key_pinning_gate import public_key_spki_sha256
+from build69_production_release_preflight import review_production_release
 
 
 def encode(value):
@@ -53,7 +55,7 @@ class CodeSignatureGateTests(unittest.TestCase):
 
     def create_fixture(self, identifier=INSTALLED_APPLICATION_IDENTIFIER,
                        *, sign=True, tamper=False, extra_entitlement=False,
-                       arch="arm64"):
+                       arch="arm64", build="66"):
         payload = self.directory / "staging" / "Payload"
         app = payload / "MangaReader12.app"
         app.mkdir(parents=True)
@@ -61,7 +63,7 @@ class CodeSignatureGateTests(unittest.TestCase):
             "CFBundleIdentifier": "com.example.MangaReader12",
             "CFBundleExecutable": "MangaReader12",
             "CFBundleDisplayName": "WebReader",
-            "CFBundleVersion": "66",
+            "CFBundleVersion": build,
             "MinimumOSVersion": "12.0",
         }
         (app / "Info.plist").write_bytes(plistlib.dumps(info))
@@ -180,6 +182,47 @@ class CodeSignatureGateTests(unittest.TestCase):
         self.assertFalse(report["installationAuthorized"])
         self.assertFalse(metadata["published"])
         self.assertFalse(metadata["installation_performed"])
+
+    def test_native_codesign_v2_production_rehearsal_is_not_publication(self):
+        # Real macOS ARM64 test code seal, ephemeral key, no iOS IPA.
+        self.create_fixture(build="69")
+        new_ipa = self.directory / "WebReader-Build69-iOS12-adhoc.ipa"
+        self.ipa.rename(new_ipa)
+        self.ipa = new_ipa
+        notes = self.directory / "production-fixture-notes.json"
+        notes.write_text('["Ephemeral macOS-only production test"]', encoding="utf8")
+        output = self.directory / "channel-production-v2.json"
+        owner_pin = public_key_spki_sha256(self.pinned)
+        metadata = prepare(
+            self.ipa, self.private, self.public, notes, output,
+            "2026-11-08T22:00:00Z", installed_build=68, schema_version=2,
+            channel="production", independently_trusted_spki_sha256=owner_pin
+        )
+        self.assertEqual(metadata["channel"], "production")
+        claims = validate(
+            output.read_bytes(), self.pinned, installed_build=68,
+            expected_channel="production"
+        )
+        self.assertEqual(claims["build"], 69)
+        receipt = review_production_release(
+            public_key_pem=self.pinned, independent_spki_sha256=owner_pin,
+            manifest_v2=output.read_bytes(), ipa_path=self.ipa, installed_build=68
+        )
+        self.assertEqual(receipt["publicSPKISHA256"], owner_pin)
+        self.assertTrue(receipt["nativeCodeSealVerified"])
+        for flag in ("publicKeyProvisionedOnDevice", "ownerPublicationApprovalRecorded",
+                     "githubReleasePublished", "mainModified", "chimeraPeerAuthenticated",
+                     "installationAuthorized", "installationPerformed"):
+            self.assertFalse(receipt[flag], flag)
+
+        wrong_output = self.directory / "wrong-pin-production.json"
+        with self.assertRaises(ReleasePreparationRejected):
+            prepare(
+                self.ipa, self.private, self.public, notes, wrong_output,
+                "2026-11-08T22:00:00Z", installed_build=68, schema_version=2,
+                channel="production", independently_trusted_spki_sha256="0" * 64
+            )
+        self.assertFalse(wrong_output.exists())
 
     def test_native_codesign_v2_signer_rejects_unsigned_ipa(self):
         self.create_fixture(sign=False)
