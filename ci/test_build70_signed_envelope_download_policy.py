@@ -87,6 +87,26 @@ class SignedEnvelopeContinuityPolicy(unittest.TestCase):
         self.assertIn("installedBuild: installedBuild", s)
         self.assertNotIn("install(", s)
 
+    def test_isolated_swift_harnesses_include_new_binding_dependencies(self):
+        # These tests intentionally compile source lists instead of the Xcode
+        # target. Every harness that imports the stager must now link the real
+        # signed-envelope binding, owner root and trust verifier.
+        for name in (
+            "test_native_webreader_ipa_stager.py",
+            "test_native_webreader_local_ipa_review.py",
+            "test_native_webreader_local_qa_storage.py",
+            "test_native_webreader_release_cache_storage.py",
+        ):
+            with self.subTest(test=name):
+                source = (ROOT / "ci" / name).read_text()
+                for imported in (
+                    'CORE / "WebReaderIPAStager.swift"',
+                    'CORE / "WebReaderSignedReleaseTrustGate.swift"',
+                    'CORE / "WebReaderProductionPublisherTrust.swift"',
+                    'CORE / "WebReaderSignedProductionEnvelopeBinding.swift"',
+                ):
+                    self.assertIn(imported, source)
+
     def test_actual_production_and_chimera_remain_disabled(self):
         self.assertIn(
             "static let liveInstallationEnabled = false",
