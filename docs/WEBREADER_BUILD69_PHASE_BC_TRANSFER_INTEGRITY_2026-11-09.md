@@ -66,3 +66,10 @@ O CI integrado `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml`
 **Cuidado com backup:** `.mr12backup` não preserva páginas offline e restaurar esse arquivo apaga downloads existentes. A futura atualização deve instalar uma IPA aprovada **por cima**, sem apagar a versão atual, seguida dos 14 testes de QA. Se houver erro, não restaurar automaticamente nem limpar a biblioteca.
 
 Próximo trabalho sugerido: fechar CI BC e preparar o gate de revisão de uma futura **entrega privada** com recibo BB autenticado separadamente; isso é distinto da ativação do canal de produção e da futura autenticação do helper Chimera.
+
+
+## Endurecimento adicional — arquivos especiais FIFO / O_NONBLOCK
+
+A inspeção de caminhos controlados pelo operador não pode ficar bloqueada tentando abrir um FIFO ou outro arquivo especial antes de conferir `fstat`. A Fase BC passou a abrir os descritores com `O_NOFOLLOW | O_NONBLOCK` e rejeitar todos os tipos que não sejam arquivos regulares, mantendo os limites de SHA/tamanho e os checks antes/depois da leitura. A mesma proteção foi aplicada aos leitores compartilhados `ci/build66_ipa_preflight.py`, `ci/build69_production_release_preflight.py` e `ci/build69_ba_unsigned_candidate_audit.py`. Os testes de FIFO são executados sem writer: o leitor não deve ficar aguardando e deve recusar imediatamente.
+
+O gatilho do workflow também cobre mudanças no preflight compartilhado. [Rodada AC–BC consolidada #42562761441](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42562761441). Execuções anteriores podem aparecer como `cancelled` porque a CI usa `cancel-in-progress: true`; apenas o resultado da execução mais recente serve de evidência para esta revisão.
