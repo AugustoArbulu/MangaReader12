@@ -389,23 +389,14 @@ final class DownloadsViewController: UITableViewController {
     ) {
         guard editingStyle == .delete,
               startupError == nil,
-              let manager = manager,
+              manager != nil,
+              indexPath.row < records.count,
               records[indexPath.row].state != "downloading" else {
             return
         }
-
-        let record = records[indexPath.row]
-
-        do {
-            try manager.remove(
-                sourceID: record.sourceID,
-                mangaID: record.sourceMangaID,
-                chapterID: record.sourceChapterID
-            )
-            reloadDownloads()
-        } catch {
-            showError(error)
-        }
+        // The system swipe-to-delete must pass through the SAME consent
+        // as the custom Remover action. Offline pages are not in .mr12backup.
+        confirmRemoveDownload(records[indexPath.row])
     }
 
     override func tableView(
@@ -432,7 +423,7 @@ final class DownloadsViewController: UITableViewController {
 
         let remove = UITableViewRowAction(
             style: .destructive, title: "Remover"
-        ) { [weak self] _, _ in self?.removeDownload(record) }
+        ) { [weak self] _, _ in self?.confirmRemoveDownload(record) }
 
         if record.state == "paused" {
             let resume = UITableViewRowAction(
@@ -505,6 +496,22 @@ final class DownloadsViewController: UITableViewController {
         }
     }
 
+    private func confirmRemoveDownload(_ record: DownloadListRecord) {
+        guard presentedViewController == nil else { return }
+        let alert = UIAlertController(
+            title: "Apagar páginas offline?",
+            message: "Esta ação remove as imagens baixadas deste capítulo. " +
+                "O arquivo .mr12backup não contém essas imagens. " +
+                "A exclusão não pode ser desfeita por restauração de backup.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Apagar download", style: .destructive) {
+            [weak self] _ in self?.removeDownload(record)
+        })
+        present(alert, animated: true)
+    }
+
     private func removeDownload(_ record: DownloadListRecord) {
         guard let manager = manager else { return }
         let key = [record.sourceID, record.sourceMangaID, record.sourceChapterID]
@@ -543,6 +550,22 @@ final class DownloadsViewController: UITableViewController {
     }
 
     private func retryDownload(_ record: DownloadListRecord) {
+        guard presentedViewController == nil else { return }
+        let alert = UIAlertController(
+            title: "Reiniciar este download?",
+            message: "Uma tentativa anterior pode ter páginas parciais. " +
+                "Reiniciar substitui os arquivos locais dessa tentativa. " +
+                "As imagens não estão incluídas no .mr12backup.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Reiniciar download", style: .destructive) {
+            [weak self] _ in self?.beginRetryDownload(record)
+        })
+        present(alert, animated: true)
+    }
+
+    private func beginRetryDownload(_ record: DownloadListRecord) {
         let key = [record.sourceID, record.sourceMangaID, record.sourceChapterID]
             .joined(separator: "\u{1F}")
         guard !retryInFlight.contains(key) else { return }
