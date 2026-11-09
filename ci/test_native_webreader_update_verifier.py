@@ -123,6 +123,52 @@ let verifiedV2 = accept(signedEnvelope(v2))
 check(verifiedV2.build == 66, "signed v2 build")
 check(verifiedV2.ipaURL.lastPathComponent ==
       "WebReader-Build66-iOS12-adhoc.ipa", "signed v2 asset")
+// A signed old Build can only mean "up to date" once the *entire*
+ // authenticated URL, content metadata and app identity are valid.
+func classifySignedOld(_ details: [String: Any]) -> String {
+    do {
+        _ = try WebReaderUpdateManifestVerifier.verify(
+            envelopeData: signedEnvelope(details),
+            publicKeyX963: publicX963, installedBuild: 66,
+            installedIOS: systemVersion, expectedChannel: "development"
+        )
+        return "unexpected-update"
+    } catch WebReaderUpdateValidationError.notNewer {
+        return "current"
+    } catch WebReaderUpdateValidationError.disallowedURL {
+        return "invalid-url"
+    } catch WebReaderUpdateValidationError.invalidPayload {
+        return "invalid-payload"
+    } catch WebReaderUpdateValidationError.incompatibleIOS {
+        return "incompatible-ios"
+    } catch WebReaderUpdateValidationError.wrongApplication {
+        return "wrong-identity"
+    } catch {
+        return "other-rejection"
+    }
+}
+check(classifySignedOld(v2) == "current", "fully verified equal Build is up-to-date")
+var oldWrongURL = v2
+oldWrongURL["ipaUrl"] = "https://example.com/untrusted.ipa"
+check(classifySignedOld(oldWrongURL) == "invalid-url",
+      "signed old Build with invalid URL must not become up-to-date")
+var oldWrongSHA = v2
+oldWrongSHA["sha256"] = "not-a-digest"
+check(classifySignedOld(oldWrongSHA) == "invalid-payload",
+      "signed old Build with invalid digest must not become up-to-date")
+var oldWrongIOS = v2
+oldWrongIOS["minimumIOS"] = "13.0"
+check(classifySignedOld(oldWrongIOS) == "incompatible-ios",
+      "signed old Build with unsupported iOS must not become up-to-date")
+var oldWrongChannel = v2
+oldWrongChannel["channel"] = "production"
+check(classifySignedOld(oldWrongChannel) == "wrong-identity",
+      "signed old Build from another channel must not become up-to-date")
+var oldExtraClaim = v2
+oldExtraClaim["developerOverride"] = true
+check(classifySignedOld(oldExtraClaim) == "invalid-payload",
+      "signed old Build with unknown field must not become up-to-date")
+
 var wrongV2Identity = v2
 wrongV2Identity["applicationIdentifier"] = "ATTACKER"
 reject(signedEnvelope(wrongV2Identity))
