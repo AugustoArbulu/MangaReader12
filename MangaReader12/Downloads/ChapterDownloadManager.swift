@@ -39,6 +39,7 @@ enum ChapterDownloadError: Error, LocalizedError {
     case missingCompletedFiles
     case invalidImagePayload
     case alreadyScheduled
+    case alreadyCompleted
     case downloadInProgress
 
     var errorDescription: String? {
@@ -57,6 +58,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "O servidor retornou uma página inválida ou um documento HTML em vez de uma imagem. O capítulo não foi marcado como completo."
         case .alreadyScheduled:
             return "Este capítulo já está na fila de downloads."
+        case .alreadyCompleted:
+            return "O capítulo já está marcado como baixado. Para refazer, remova manualmente o download na área Downloads. Nenhum arquivo foi apagado."
         case .downloadInProgress:
             return "Pause o download antes de removê-lo."
         }
@@ -368,6 +371,16 @@ final class ChapterDownloadManager {
             }
 
             do {
+                // A second download tap must not silently erase a completed
+                // chapter, including old Build68 pages without a receipt.
+                // The operator can explicitly remove it from Downloads first.
+                if let existing = try self.repository.record(
+                    sourceID: sourceID,
+                    sourceMangaID: manga.id,
+                    sourceChapterID: chapter.id
+                ), existing.state == "completed" {
+                    throw ChapterDownloadError.alreadyCompleted
+                }
                 let directory = try self.chapterDirectory(
                     sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id
                 )
