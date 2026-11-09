@@ -64,7 +64,6 @@ class OfflinePresenceSafety(unittest.TestCase):
     def test_no_claim_of_full_image_integrity(self):
         self.assertIn("não faz download", AUDIT)
         self.assertIn("Teste a leitura REAL sem Wi-Fi", AUDIT)
-        self.assertIn("nunca alteradas", AUDIT.lower() + " nunca alteradas")
         self.assertIn("nenhuma página foi modificada", AUDIT.lower())
 
 
