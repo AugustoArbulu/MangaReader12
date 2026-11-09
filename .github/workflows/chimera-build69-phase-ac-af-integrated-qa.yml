@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AR — Offline Production Release Rehearsal iOS12
+name: WebReader Build69 Dev AC-AT — Owner Public Trust Readiness iOS12
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - 'MangaReader12/Core/WebReaderIPAStager.swift'
       - 'MangaReader12/Core/WebReaderProductionSignedReleaseChecker.swift'
       - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
       - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
       - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
@@ -28,6 +29,10 @@ on:
       - 'ci/build69_production_release_preflight.py'
       - 'ci/prepare_signed_webreader_update.py'
       - 'ci/test_build69_phase_ap_aq_ar_production_rehearsal.py'
+      - 'ci/build69_publisher_bootstrap_review.py'
+      - 'ci/test_build69_phase_at_owner_bootstrap.py'
+      - 'ci/test_build69_phase_as_at_owner_trust_policy.py'
+      - 'ci/test_native_webreader_owner_trust_readiness.py'
       - 'ci/test_build66_code_signature_gate.py'
       - 'ci/test_app_updates_screen.py'
       - 'ci/test_native_webreader_release_cache_storage.py'
@@ -55,6 +60,8 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_aj_ak_al_crash_recovery_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_am_an_signed_discovery_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_ap_aq_ar_production_rehearsal.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_at_owner_bootstrap.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
           python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
           python3 -m unittest discover -s ci -p 'test_prepare_signed_webreader_update.py' -v
@@ -88,6 +95,7 @@ jobs:
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
           python3 ci/test_native_webreader_signed_production_discovery.py
+          python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 ci/test_native_webreader_physical_qa_checklist.py
           python3 ci/test_native_webreader_ipa_stager.py
@@ -123,4 +131,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AR production preflight remains inactive; no publisher key, IPA or install'
+          echo 'PASS: Build69 AC-AT owner public trust remains inactive; no publisher key, IPA or install'
