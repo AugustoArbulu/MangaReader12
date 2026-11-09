@@ -106,7 +106,7 @@ def _hash_single_regular_file(path, max_bytes):
     if not hasattr(os, "O_NOFOLLOW") or path.is_symlink():
         raise CopiedQARejected("unsupported or symlinked IPA")
     try:
-        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as f:
             initial = os.fstat(f.fileno())
             if not stat.S_ISREG(initial.st_mode) or not 0 < initial.st_size <= max_bytes:
