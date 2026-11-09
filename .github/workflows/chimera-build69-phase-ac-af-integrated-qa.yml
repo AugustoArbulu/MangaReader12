@@ -42,6 +42,9 @@ on:
       - 'ci/test_build69_phase_av_aw_ax_ay_update_policy.py'
       - 'ci/test_build69_az_backup_restore_consent.py'
       - 'ci/test_build69_az_persisted_library_sqlite.py'
+      - 'ci/build69_az_candidate_readiness.py'
+      - 'ci/test_build69_az_candidate_readiness.py'
+      - 'MangaReader12/Info.plist'
       - 'ci/test_build53_backup_pins.py'
       - 'ci/test_build65_offline_relocation.py'
       - 'ci/test_native_webreader_physical_qa_checklist.py'
@@ -83,6 +86,8 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_av_aw_ax_ay_update_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_az_backup_restore_consent.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_az_persisted_library_sqlite.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_candidate_readiness.py' -v
+          python3 ci/build69_az_candidate_readiness.py
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -103,7 +108,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AZ data preservation, restore warning and QA gates; no release key, IPA or install'
+          echo 'PASS: Build69 AZ data/backup/physical QA checks and explicit version56 not IPA69 gate; no release or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
