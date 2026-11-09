@@ -13,6 +13,7 @@ import argparse
 import base64
 import binascii
 import json
+import math
 from pathlib import Path
 import re
 import sqlite3
@@ -59,7 +60,15 @@ def _read_counts_from_sqlite(raw: bytes):
                 raise PortableBaselineRejected("unsupported library schema")
             if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
                 raise PortableBaselineRejected("corrupt backup SQLite snapshot")
-            results = {}
+            # The production BackupManager sanitizes these fields in a
+            # portable copy. They cannot prove real offline files are kept.
+            if (db.execute("SELECT COUNT(*) FROM downloads").fetchone() != (0,)
+                    or db.execute(
+                        "SELECT COUNT(*) FROM chapters WHERE downloaded <> 0"
+                    ).fetchone() != (0,)
+                    or db.execute("SELECT COUNT(*) FROM sources").fetchone() != (0,)):
+                raise PortableBaselineRejected("backup was not safely sanitized")
+            results = {
             for name, sql in zip(METRICS, QUERIES):
                 if sql is None:
                     results[name] = None
@@ -91,7 +100,10 @@ def read_build68_portable_baseline(backup: bytes) -> dict:
             } or type(envelope.get("formatVersion")) is not int
             or envelope["formatVersion"] != 1
             or type(envelope.get("databaseBase64")) is not str
-            or type(envelope.get("preferences")) is not dict):
+            or type(envelope.get("preferences")) is not dict
+            or type(envelope.get("createdAt")) not in (int, float)
+            or not math.isfinite(envelope["createdAt"])
+            or envelope["createdAt"] <= 0):
         raise PortableBaselineRejected("unsupported backup envelope")
     encoded = envelope["databaseBase64"]
     if len(encoded) > (MAX_DATABASE_BYTES * 4 // 3 + 8):
@@ -111,6 +123,7 @@ def read_build68_portable_baseline(backup: bytes) -> dict:
         "buildAtExportAuthenticatedByTool": False,
         "metrics": counts,
         "missingDownloadCount": True,
+        "portableDownloadsResetConfirmed": True,
         "offlineChapterImagesIncluded": False,
         "offlinePagesPreservedByBackup": False,
         "sensitiveValuesPrinted": False,
