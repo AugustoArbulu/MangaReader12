@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BY — Offline Page Retention and Storage Safety iOS12
+name: WebReader Build69 Dev AC-BZ — Offline Page Retention and Storage Safety iOS12
 
 on:
   push:
@@ -91,6 +91,7 @@ on:
       - 'ci/test_build69_bx_reviewed_source_gate.py'
       - 'ci/build69_by_private_qa_candidate_mac.sh'
       - 'ci/test_build69_by_private_qa_candidate_mac.py'
+      - 'ci/test_build69_bz_optimized_python_admission.py'
       - 'MangaReader12/UI/DataStorageViewController.swift'
       - 'ci/test_native_webreader_offline_recovery_plan_reader.py'
       - 'MangaReader12/UI/DownloadsViewController.swift'
@@ -166,6 +167,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bw_storage_reindex_deletion_consent.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bx_reviewed_source_gate.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_by_private_qa_candidate_mac.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -186,7 +188,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AC-BY bounded pages, confirm delete/retry/reindex and clear-all; no IPA or install'
+          echo 'PASS: Build69 AC-BZ bounded pages, confirm delete/retry/reindex and clear-all; no IPA or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -277,4 +279,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BY iOS12 native build, temporary signature and offline storage consent; no IPA or install'
+          echo 'PASS: Build69 AC-BZ iOS12 native build, temporary signature and offline storage consent; no IPA or install'
