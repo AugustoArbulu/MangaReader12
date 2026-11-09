@@ -186,7 +186,7 @@ staged, final = map(Path, sys.argv[1:3])
 checksum_staged = Path(str(staged) + ".sha256")
 checksum_final = Path(str(final) + ".sha256")
 expected_line = (
-    rb"([0-9a-f]{64})  WebReader-Build69-iOS12-adhoc\\.ipa\\n"
+    rb"([0-9a-f]{64})  WebReader-Build69-iOS12-adhoc\.ipa\n"
 )
 # The checksum and IPA have already passed the signed-app audit. This
 # additional check ensures the FINAL published link names have matching bytes.
