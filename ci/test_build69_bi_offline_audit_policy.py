@@ -28,7 +28,7 @@ class OfflinePresenceSafety(unittest.TestCase):
         self.assertLess(body.index("WebReaderOfflinePreservationAudit.diagnostic("),
                         body.index("DispatchQueue.main.async"))
         self.assertLess(body.index("DispatchQueue.main.async"),
-                        body.index("UIPasteboard.general.string = report"))
+                        body.index("UIPasteboard.general.string = audit.report"))
         self.assertIn("guard self.view.window != nil else { return }", body)
         self.assertIn("Lote de até 64 capítulos copiado", body)
 
