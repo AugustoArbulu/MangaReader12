@@ -113,7 +113,7 @@ class Build69SecurityRegression(unittest.TestCase):
         self.assertEqual(PROJECT.count(f"{name} in Sources"), 2)
         self.assertIn(f"A20000000000000000000041 /* {name} */,", PROJECT)
         self.assertIn(f"A10000000000000000000041 /* {name} in Sources */,", PROJECT)
-        self.assertIn("if source == 3 { return 7 }", UI)
+        self.assertIn("if source == 3 { return 8 }", UI)
         self.assertIn("case (3, 5):", UI)
         self.assertIn("Copiar roteiro de testes físicos", UI)
         self.assertIn("WebReaderPhysicalQAChecklist.report(", UI)
