@@ -66,6 +66,7 @@
 		A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */; };
 		A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */; };
 		A10000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */; };
+		A10000000000000000000047 /* WebReaderOfflineResumePrefix.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */; };
 		A10000000000000000000031 /* WebReaderHelperPingProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* WebReaderHelperPingProbe.swift */; };
 		A10000000000000000000032 /* WebReaderGitHubReleaseParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* WebReaderGitHubReleaseParser.swift */; };
 		A10000000000000000000033 /* WebReaderAppinstSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* WebReaderAppinstSocket.swift */; };
@@ -134,6 +135,7 @@
 		A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePageInventory.swift; sourceTree = "<group>"; };
 		A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePreservationAudit.swift; sourceTree = "<group>"; };
 		A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineCompletionReceipt.swift; sourceTree = "<group>"; };
+		A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineResumePrefix.swift; sourceTree = "<group>"; };
 		A20000000000000000000031 /* WebReaderHelperPingProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderHelperPingProbe.swift; sourceTree = "<group>"; };
 		A20000000000000000000032 /* WebReaderGitHubReleaseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderGitHubReleaseParser.swift; sourceTree = "<group>"; };
 		A20000000000000000000033 /* WebReaderAppinstSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderAppinstSocket.swift; sourceTree = "<group>"; };
@@ -289,6 +291,7 @@
 				A20000000000000000000016 /* ChapterDownloadManager.swift */,
 				A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */,
 				A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */,
+				A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */,
 			);
 			path = Downloads;
 			sourceTree = "<group>";
@@ -437,6 +440,7 @@
 				A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */,
 				A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */,
 				A10000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift in Sources */,
+				A10000000000000000000047 /* WebReaderOfflineResumePrefix.swift in Sources */,
 				A10000000000000000000031 /* WebReaderHelperPingProbe.swift in Sources */,
 				A10000000000000000000032 /* WebReaderGitHubReleaseParser.swift in Sources */,
 				A10000000000000000000033 /* WebReaderAppinstSocket.swift in Sources */,
