@@ -60,6 +60,8 @@ ensure(!WebReaderProductionPublisherTrust.isProvisioned,
 let checker = WebReaderProductionSignedReleaseChecker(
     installedBuild: 68, installedIOS: ios
 )
+ensure(checker.verifiedEnvelopeCopy() == nil,
+       "no signed v2 bytes can appear before owner trust is configured")
 
 for _ in 0..<3 {
     let semaphore = DispatchSemaphore(value: 0)
@@ -75,6 +77,8 @@ for _ in 0..<3 {
     ensure(semaphore.wait(timeout: .now() + 2) == .success,
            "nil production trust returns immediately")
     ensure(count == 1, "exactly one denial callback")
+    ensure(checker.verifiedEnvelopeCopy() == nil,
+           "disabled channel did not cache any signed manifest")
     checker.cancel() // no effect, no task opened
 }
 ensure(WebReaderProductionPublisherTrust.productionTrustGeneration == 0,
