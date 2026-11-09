@@ -50,7 +50,7 @@ def _bounded_regular_file(path: Path, *, max_bytes: int) -> bytes:
             before = os.fstat(stream.fileno())
             data = stream.read(max_bytes + 1)
             after = os.fstat(stream.fileno())
-        if (before.st_dev, before.st_ino, before.st_size, before.st.mtime_ns if False else before.st_mtime_ns) != (
+        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
             after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
         ) or len(data) != before.st_size:
             raise UnsignedCandidateRejected("candidate file changed during inspection")
@@ -135,9 +135,9 @@ def inspect_unsigned_candidate(app_directory: Path, *, source_root: Path = ROOT)
             raise UnsignedCandidateRejected("app metadata mismatch: " + key)
     if info.get("CFBundlePackageType") != "APPL":
         raise UnsignedCandidateRejected("app is not an application bundle")
-    if (info.get("CFBundleIcons", {})
-            .get("CFBundlePrimaryIcon", {})
-            .get("CFBundleIconName") != "AppIcon"):
+    icons = info.get("CFBundleIcons")
+    primary_icon = icons.get("CFBundlePrimaryIcon") if isinstance(icons, dict) else None
+    if not isinstance(primary_icon, dict) or primary_icon.get("CFBundleIconName") != "AppIcon":
         raise UnsignedCandidateRejected("approved application icon missing")
     _bounded_regular_file(app / "Assets.car", max_bytes=128 * 1024 * 1024)
     binary = _bounded_regular_file(app / EXECUTABLE, max_bytes=256 * 1024 * 1024)
