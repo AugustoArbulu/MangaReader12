@@ -72,6 +72,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bl_atomic_private_delivery.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_ipa_preflight.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_private_qa_ipa_preflight.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bf_portable_backup_baseline.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bh_offline_reader_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bv_destructive_download_consent.py' -v
