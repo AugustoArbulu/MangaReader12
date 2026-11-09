@@ -175,20 +175,65 @@ PY
 # os.link fails if any destination already exists (no overwrite), including
 # symlinks; interrupted work leaves no partly written final .ipa.
 python3 - "$STAGED_IPA" "$OUTPUT" <<'PY'
+import hashlib
 import os
 from pathlib import Path
+import re
+import stat
 import sys
+
 staged, final = map(Path, sys.argv[1:3])
 checksum_staged = Path(str(staged) + ".sha256")
 checksum_final = Path(str(final) + ".sha256")
+expected_line = (
+    rb"([0-9a-f]{64})  WebReader-Build69-iOS12-adhoc\\.ipa\\n"
+)
+# The checksum and IPA have already passed the signed-app audit. This
+# additional check ensures the FINAL published link names have matching bytes.
+# No check below relies on Python assert (which can disappear with -O).
+def snapshot(path):
+    fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= 512 * 1024 * 1024:
+            raise RuntimeError("QA published IPA type/size invalid")
+        sha = hashlib.sha256()
+        size = 0
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            size += len(chunk)
+            if size > before.st_size:
+                raise RuntimeError("QA published IPA exceeded initial size")
+            sha.update(chunk)
+        after = os.fstat(stream.fileno())
+        if (before.st_dev, before.st_ino, before.st_size,
+                before.st_ctime_ns, before.st_mtime_ns) != (
+                after.st_dev, after.st_ino, after.st_size,
+                after.st_ctime_ns, after.st_mtime_ns) or size != before.st_size:
+            raise RuntimeError("QA published IPA changed during verification")
+        return before.st_dev, before.st_ino, size, sha.hexdigest()
+
 created = []
 try:
     if final.exists() or final.is_symlink() or checksum_final.exists() or checksum_final.is_symlink():
         raise RuntimeError("QA output appeared after initial preflight")
+    checksum_bytes = checksum_staged.read_bytes()
+    match = re.fullmatch(expected_line, checksum_bytes)
+    if match is None:
+        raise RuntimeError("staged QA checksum format is invalid")
+    expected_sha = match.group(1).decode("ascii")
+    staged_identity = snapshot(staged)
+    if staged_identity[3] != expected_sha:
+        raise RuntimeError("staged QA IPA differs from checksum before publication")
     os.link(checksum_staged, checksum_final)
     created.append(checksum_final)
     os.link(staged, final)
     created.append(final)
+    # Same-inode hard link is necessary but not sufficient: re-read the final
+    # pathname and reject any mutation or replacement before returning success.
+    published_identity = snapshot(final)
+    if (published_identity != staged_identity
+            or checksum_final.read_bytes() != checksum_bytes):
+        raise RuntimeError("published QA IPA or checksum changed after linking")
 except BaseException:
     for path in reversed(created):
         path.unlink(missing_ok=True)
