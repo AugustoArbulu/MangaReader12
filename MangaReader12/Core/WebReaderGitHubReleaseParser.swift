@@ -33,7 +33,8 @@ enum WebReaderGitHubReleaseParser {
               let assets = json["assets"] as? [[String: Any]],
               assets.count <= 40
         else { return .failed(.invalidGitHubRelease) }
-        guard build > installedBuild else { return .upToDate }
+        // A stale tag is not proof of a complete or legitimate release.
+        // Inspect its exact asset, size, digest and download URL first.
         guard installedIOS.majorVersion >= 12 else {
             return .failed(.invalidGitHubRelease)
         }
@@ -86,6 +87,9 @@ enum WebReaderGitHubReleaseParser {
             .filter { !$0.isEmpty }
             .prefix(5)
             .map { String($0.prefix(180)) }
+        // Only structurally valid, completely checked old metadata can
+        // become "up to date"; missing/malformed asset remains an error.
+        guard build > installedBuild else { return .upToDate }
         var update = WebReaderVerifiedUpdate(
             build: build, minimumIOS: "12.0",
             ipaURL: url, ipaSize: number.int64Value,
