@@ -24,8 +24,8 @@ class OfflinePresenceSafety(unittest.TestCase):
             "private func copyUpgradeContinuitySnapshot()", 1
         )[0]
         self.assertLess(body.index("DispatchQueue.global(qos: .utility)"),
-                        body.index("WebReaderOfflinePreservationAudit.report("))
-        self.assertLess(body.index("WebReaderOfflinePreservationAudit.report("),
+                        body.index("WebReaderOfflinePreservationAudit.diagnostic("))
+        self.assertLess(body.index("WebReaderOfflinePreservationAudit.diagnostic("),
                         body.index("DispatchQueue.main.async"))
         self.assertLess(body.index("DispatchQueue.main.async"),
                         body.index("UIPasteboard.general.string = report"))
