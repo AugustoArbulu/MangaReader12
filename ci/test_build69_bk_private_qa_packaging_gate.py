@@ -90,7 +90,7 @@ class PrivatePackagingGate(unittest.TestCase):
             '/usr/bin/codesign --verify --verbose=2 "$APP"',
             'inspect_ipa(',
             'audit_code_signature_snapshot(',
-            'assert seal["installedApplicationIdentifierMatch"]',
+            'if seal.get("installedApplicationIdentifierMatch") is not True:',
             '/usr/bin/zip -qry "$STAGED_IPA" Payload',
             '/usr/bin/shasum -a 256 "$EXPECTED_NAME"',
             'TMP="$(mktemp -d "$OUTPUT_DIR/.wr69-private-qa.XXXXXXXX")"',
