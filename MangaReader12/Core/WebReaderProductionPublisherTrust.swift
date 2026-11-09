@@ -41,7 +41,7 @@ enum WebReaderProductionPublisherTrust {
               let key = publicKeyX963,
               !revokedPins.contains(pin),
               // Validate the EC point and canonical SPKI fingerprint BEFORE
-              // the production checker creates any URLSession or request.
+              // the production checker creates any network request.
               WebReaderSignedReleaseTrustGate.observedP256SPKISHA256(
                 for: key
               ) == pin
