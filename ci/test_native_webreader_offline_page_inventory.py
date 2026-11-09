@@ -46,7 +46,8 @@ check(snapshot.count == 3, "three files")
 check(snapshot.map { $0.lastPathComponent } == [
     "page-00000.bin", "page-00001.bin", "page-00002.bin"
 ], "page indexes unchanged")
-check(try Data(contentsOf: page(0)).count == 4, "no bytes mutated")
+let originalBytes = try Data(contentsOf: page(0))
+check(originalBytes.count == 4, "no bytes mutated")
 try fm.removeItem(at: page(1))
 rejected("gap in middle")
 try save(1)
@@ -66,7 +67,8 @@ rejected("directory disguised as image")
 try fm.removeItem(at: page(3))
 let foreign = folder.appendingPathComponent("unrelated-file.txt")
 try Data([1]).write(to: foreign)
-check(try WebReaderOfflinePageInventory.inspect(directory: folder).count == 3,
+let unaffectedPages = try WebReaderOfflinePageInventory.inspect(directory: folder)
+check(unaffectedPages.count == 3,
       "unrelated marker must not rewrite or invalidate pages")
 try save(10)
 rejected("gap after last previous page")
@@ -80,7 +82,8 @@ try Data([1, 2]).write(to: moved)
 try fm.removeItem(at: folder)
 try fm.createSymbolicLink(at: folder, withDestinationURL: root)
 rejected("symbolic link chapter directory")
-check(try Data(contentsOf: moved).count == 2, "target untouched")
+let targetBytes = try Data(contentsOf: moved)
+check(targetBytes.count == 2, "target untouched")
 print("PASS native Swift BH: strict contiguous offline pages, no data mutation")
 '''
 with tempfile.TemporaryDirectory(prefix="wr69-bh-offline-pages-") as td:
