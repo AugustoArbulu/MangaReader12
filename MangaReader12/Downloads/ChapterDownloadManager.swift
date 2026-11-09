@@ -245,17 +245,12 @@ final class ChapterDownloadManager {
     }
 
     private func completedPagePrefix(in directory: URL, count: Int) -> Int {
-        var index = 0
-        while index < count {
-            let path = directory.appendingPathComponent(
-                String(format: "page-%05d.bin", index)
-            ).path
-            guard let attributes = try? fileManager.attributesOfItem(atPath: path),
-                  let size = attributes[.size] as? NSNumber,
-                  size.intValue > 0 else { break }
-            index += 1
-        }
-        return index
+        // A resumable download may contain only an initial subset. Never
+        // reuse a symlink, directory, zero-byte file or oversized file as an
+        // already validated page after an interrupted transfer.
+        return WebReaderOfflineResumePrefix.count(
+            directory: directory, plannedPages: count, fileManager: fileManager
+        )
     }
 
     private func restorePreviousSession() throws {
