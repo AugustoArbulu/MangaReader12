@@ -1,4 +1,4 @@
-name: WebReader Build70 Dev AC-CF — Signed Production IPA Review and iOS12 Safety
+name: WebReader Build70 Dev AC-CG — Owner Public Root Preview and iOS12 Safety
 
 on:
   push:
@@ -42,6 +42,8 @@ on:
       - 'MangaReader12/Core/WebReaderSignedIPAReview.swift'
       - 'MangaReader12/Core/WebReaderProductionSignedIPAReview.swift'
       - 'ci/test_native_webreader_production_signed_ipa_review.py'
+      - 'ci/build70_owner_public_root_patch_preview.py'
+      - 'ci/test_build70_owner_public_root_patch_preview.py'
       - 'ci/test_native_webreader_ipa_stager.py'
       - 'ci/test_native_webreader_signed_production_discovery.py'
       - 'ci/test_native_webreader_release_channel_separation.py'
@@ -185,6 +187,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_private_qa_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_owner_qa_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_owner_public_root_patch_preview.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
