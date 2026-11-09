@@ -19,7 +19,7 @@ import Darwin
 func insist(_ condition: @autoclosure () -> Bool, _ message: String) {
     if !condition() { fatalError(message) }
 }
-func expectDenied(_ context: String, action: () throws -> Void) {
+func expectDenied(_ context: String, _ action: () throws -> Void) {
     do {
         try action()
         fatalError("accepted invalid recovery write: " + context)
