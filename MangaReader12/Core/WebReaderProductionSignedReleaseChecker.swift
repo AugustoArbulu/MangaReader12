@@ -26,6 +26,15 @@ final class WebReaderProductionSignedReleaseChecker:
     private var task: URLSessionDataTask?
     private var completion: ((WebReaderUpdateCheckResult) -> Void)?
     private var responseData = Data()
+    // Exact bytes previously authenticated by the compiled production root.
+    // The UI must reverify these bytes before a signed IPA download.
+    private var verifiedEnvelopeData: Data?
+
+    func verifiedEnvelopeCopy() -> Data? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return verifiedEnvelopeData
+    }
 
     init(installedBuild: Int, installedIOS: OperatingSystemVersion) {
         self.installedBuild = installedBuild
@@ -70,6 +79,7 @@ final class WebReaderProductionSignedReleaseChecker:
         task = next
         completion = callback
         responseData = Data()
+        verifiedEnvelopeData = nil
         stateLock.unlock()
         next.resume()
     }
@@ -169,7 +179,14 @@ final class WebReaderProductionSignedReleaseChecker:
                     envelopeData: bytes, installedBuild: installedBuild,
                     installedIOS: installedIOS
                 )
-            // A signed manifest preview is not an install authorization.
+            // Bind the exact authenticated bytes to the reported update.
+            // The downloader must independently recheck this envelope before
+            // opening a network transfer. This does NOT authorize installation.
+            stateLock.lock()
+            let current = self.session === session && self.task === task
+            if current { verifiedEnvelopeData = bytes }
+            stateLock.unlock()
+            guard current else { return }
             finish(.updateAvailable(preview.update))
         } catch WebReaderUpdateValidationError.notNewer {
             // This result can only be reached after verification by the
@@ -186,6 +203,11 @@ final class WebReaderProductionSignedReleaseChecker:
         completion = nil
         task = nil
         responseData = Data()
+        if case .updateAvailable = result {
+            // Remain available for the same checker callback only.
+        } else {
+            verifiedEnvelopeData = nil
+        }
         let oldSession = session
         session = nil
         stateLock.unlock()
