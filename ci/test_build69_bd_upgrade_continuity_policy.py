@@ -20,7 +20,7 @@ class UpgradeContinuityContract(unittest.TestCase):
             "A10000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift in Sources */,",
             PROJECT
         )
-        self.assertIn("if source == 3 { return 7 }", UI)
+        self.assertIn("if source == 3 { return 8 }", UI)
         self.assertIn("case (3, 6):", UI)
         self.assertIn('Copiar contagens da biblioteca para comparar', UI)
         self.assertIn("if selectedSection == 3, indexPath.row == 6, !isIPCDiagnostic {", UI)
