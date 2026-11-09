@@ -1,5 +1,11 @@
 import Foundation
 
+/// Phase CE: the caller must choose the exact signed channel. This is a
+/// verification parameter, NOT a request to provision a key or grant install.
+/// The default preserves existing development-only QA fixtures; production
+/// additionally requires a verified production manifest and a separately
+/// approved owner pin at the call site.
+///
 /// Phase T: compose signed publisher metadata with a *separate* same-FD
 /// read-only audit of an IPA selected by the owner. This is not an installer.
 ///
@@ -38,7 +44,8 @@ enum WebReaderSignedIPAReview {
         independentlyTrustedSPKISHA256: String?,
         localIPAURL: URL,
         installedBuild: Int,
-        installedIOS: OperatingSystemVersion
+        installedIOS: OperatingSystemVersion,
+        expectedChannel: String = "development"
     ) throws -> WebReaderSignedIPAReviewResult {
         // Never accept public GitHub Releases metadata (unsigned) as an
         // editor-signed manifest. The independent SPKI pin is mandatory.
@@ -46,7 +53,8 @@ enum WebReaderSignedIPAReview {
             envelopeData: envelopeData,
             publicKeyX963: independentlyTrustedPublicKeyX963,
             independentlyTrustedSPKISHA256: independentlyTrustedSPKISHA256,
-            installedBuild: installedBuild, installedIOS: installedIOS
+            installedBuild: installedBuild, installedIOS: installedIOS,
+            expectedChannel: expectedChannel
         )
         // This routine independently verifies the real local IPA's hash,
         // bounds, ZIP entries, executable filename, Info.plist and version
