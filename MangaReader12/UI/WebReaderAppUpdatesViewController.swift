@@ -9,6 +9,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var checker: WebReaderUpdateChecker?
     private var signedChecker: WebReaderProductionSignedReleaseChecker?
     private var signedChannelBusy = false
+    private var continuitySnapshotBusy = false
     private var signedChannelStatus =
         "Chave editorial independente ainda não provisionada • sem requisições"
     private var checking = false
@@ -378,10 +379,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
         case (3, 6):
             cell.textLabel?.text = "Copiar contagens da biblioteca para comparar"
-            cell.detailTextLabel?.text =
+            cell.detailTextLabel?.text = continuitySnapshotBusy ?
+                "Lendo somente os totais SQLite…" :
                 "Antes/depois da atualização • só totais SQLite, sem títulos ou caminhos"
-            cell.accessoryType = .disclosureIndicator
-            cell.selectionStyle = .default
+            if !continuitySnapshotBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -748,21 +752,33 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
     /// Read-only SQLite COUNTS, not a backup and not a scan of page files.
     private func copyUpgradeContinuitySnapshot() {
-        guard !isIPCDiagnostic else { return }
-        let report = WebReaderUpgradeContinuitySnapshot.report(
-            installedBuild: installedBuild,
-            ios: ProcessInfo.processInfo.operatingSystemVersion
-        )
-        UIPasteboard.general.string = report
-        let alert = UIAlertController(
-            title: "Contagens locais copiadas",
-            message: "Compare antes e depois da instalação por cima. " +
-                "São apenas totais do banco; capítulos offline exigem " +
-                "teste real com Wi-Fi desligado. Nenhum dado foi modificado.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        guard !isIPCDiagnostic, !continuitySnapshotBusy else { return }
+        continuitySnapshotBusy = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let ios = ProcessInfo.processInfo.operatingSystemVersion
+        // A busy SQLite connection must never freeze the iPad UI thread.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let report = WebReaderUpgradeContinuitySnapshot.report(
+                installedBuild: currentBuild, ios: ios
+            )
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.continuitySnapshotBusy = false
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                UIPasteboard.general.string = report
+                let alert = UIAlertController(
+                    title: "Contagens locais copiadas",
+                    message: "Compare antes e depois da instalação por cima. " +
+                        "São apenas totais do banco; capítulos offline exigem " +
+                        "teste real com Wi-Fi desligado. Nenhum dado foi modificado.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
+            }
+        }
     }
 
     /// Read-only owner trust report, never imports secrets or touches library.
