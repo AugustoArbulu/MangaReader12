@@ -142,10 +142,12 @@ enum WebReaderUpdateManifestVerifier {
         else {
             throw WebReaderUpdateValidationError.wrongApplication
         }
+        // Validate the entire signed payload BEFORE reporting "up to date".
+        // An older yet invalid URL, SHA, iOS requirement or asset must fail
+        // as malformed, not be silently translated into a successful result.
         guard let build = exactInteger(manifest["build"]),
-            build > installedBuild, build <= 2_147_483_647
-        else {
-            throw WebReaderUpdateValidationError.notNewer
+              build > 0, build <= 2_147_483_647 else {
+            throw WebReaderUpdateValidationError.invalidPayload
         }
         guard let minVersion = manifest["minimumIOS"] as? String,
             let minParts = versionComponents(minVersion),
@@ -183,6 +185,10 @@ enum WebReaderUpdateManifestVerifier {
             let url = components.url
         else {
             throw WebReaderUpdateValidationError.disallowedURL
+        }
+        // Only a fully authenticated, structurally valid OLD build is current.
+        guard build > installedBuild else {
+            throw WebReaderUpdateValidationError.notNewer
         }
         return WebReaderVerifiedUpdate(
             build: build, minimumIOS: minVersion,
