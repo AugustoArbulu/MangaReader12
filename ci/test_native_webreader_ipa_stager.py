@@ -169,6 +169,15 @@ func fail(
     }
 }
 
+// Local Files/Filza imports are not GitHub Release assets; even a lab
+// transport must never present them as signed/public release downloads.
+var localOnly = good
+localOnly.provenance = .manualLocalFile
+let manualRequestCount = IPAStubProtocol.requests
+fail(localOnly, .invalidRelease)
+check(IPAStubProtocol.requests == manualRequestCount,
+      "manual local provenance cannot open a release download")
+
 check(!WebReaderUpdateChannel.isConfigured, "test only: production channel disabled")
 switch run(good, useTransport: false) {
 case .failed(.disabled): break
