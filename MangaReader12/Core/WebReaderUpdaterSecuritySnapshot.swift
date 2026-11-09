@@ -27,6 +27,42 @@ enum WebReaderUpdaterSecuritySnapshot {
         return WebReaderAppinstSocket.liveInstallationEnabled
     }
 
+    /// A copyable *offline* diagnostic for the future signed release channel.
+    /// Callers supply only present/absent status of the independently compiled
+    /// PUBLIC trust root. No PEM, SPKI fingerprint, private key or file path is
+    /// included. A positive readiness status is not permission to install.
+    static func signedChannelReadinessReport(
+        installedBuild: Int, iosVersion: String,
+        publicKeyPresent: Bool, independentPinPresent: Bool,
+        trustGeneration: Int, verifiedReadiness: Bool
+    ) -> String {
+        let build = installedBuild >= 0 && installedBuild <= 2_147_483_647
+            ? String(installedBuild) : "desconhecida"
+        let ios = iosVersion.range(
+            of: "^[0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2}$",
+            options: .regularExpression
+        ) != nil ? iosVersion : "desconhecido"
+        let generation = trustGeneration >= 0 && trustGeneration <= 2_147_483_647
+            ? String(trustGeneration) : "inválida"
+        let ready = publicKeyPresent && independentPinPresent &&
+            trustGeneration >= 1 && verifiedReadiness
+        return [
+            "WebReader • diagnóstico offline do canal assinado",
+            "Build instalada: " + build + " • iOS: " + ios,
+            "Chave pública editorial embutida: " + (publicKeyPresent ? "SIM" : "NÃO"),
+            "Fingerprint SPKI independente embutido: " +
+                (independentPinPresent ? "SIM" : "NÃO"),
+            "Geração editorial compilada: " + generation,
+            "Chave P-256 e fingerprint conferidos: " + (ready ? "SIM" : "NÃO"),
+            "Consulta autenticada pronta: " + (ready ? "SIM" : "NÃO"),
+            "GitHub Release público: canal separado, sem assinatura editorial",
+            "Builds privadas do Actions: transferência manual via Android/PC e Filza",
+            "Este relatório não consulta a rede, nem abre ou modifica sua biblioteca.",
+            "Nenhuma IPA foi baixada ou instalada por este relatório.",
+            "Instalação direta pelo Chimera: BLOQUEADA; exige autenticação do helper."
+        ].joined(separator: "\\n")
+    }
+
     static func safeReport(installedBuild: Int, iosVersion: String) -> String {
         let build = installedBuild >= 0 && installedBuild <= 2_147_483_647
             ? String(installedBuild) : "desconhecida"
