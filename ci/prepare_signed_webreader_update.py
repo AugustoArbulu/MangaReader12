@@ -85,7 +85,7 @@ def prepare(
             # A matching fingerprint is only useful when it was obtained and
             # approved independently, NEVER copied from the Release payload.
             prepare_public_key_handoff(
-                Path(public_key).read_bytes(), independently_trusted_spki_sha256
+                ensure_external(public_key).read_bytes(), independently_trusted_spki_sha256
             )
         except (PublicKeyHandoffRejected, OSError) as exc:
             raise ReleasePreparationRejected("production public key is not independently pinned") from exc
