@@ -149,8 +149,10 @@ def write_external_proposal(patch: str, destination: Path) -> None:
     if not parent.is_dir() or parent.is_symlink() or dest.exists():
         raise OwnerPublicProposalRejected("output parent is unsafe or already exists")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    created = False
     try:
         handle = os.open(str(dest), flags, 0o600)
+        created = True
         with os.fdopen(handle, "wb") as out:
             before = os.fstat(out.fileno())
             if not stat.S_ISREG(before.st_mode):
@@ -159,8 +161,9 @@ def write_external_proposal(patch: str, destination: Path) -> None:
             out.flush()
             os.fsync(out.fileno())
     except BaseException:
-        # Avoid silently publishing partial material after a failed write.
-        dest.unlink(missing_ok=True)
+        # Never unlink a file we failed to create (e.g. EEXIST race).
+        if created:
+            dest.unlink(missing_ok=True)
         raise
 
 
