@@ -27,22 +27,37 @@ enum WebReaderProductionPublisherTrust {
     /// remote metadata cannot clear or replace this list.
     static let revokedPublisherPins: Set<String> = []
 
-    /// Checking configured policy does not install anything, and does not
-    /// establish a Chimera requester identity or per-install consent.
-    static var isProvisioned: Bool {
-        guard let pin = independentlyProvisionedSPKISHA256,
-              productionTrustGeneration >= 1,
+    /// Pure offline candidate review. Even true does NOT provision trust or
+    /// authorize a network check; only isProvisioned uses compiled-in policy.
+    /// It is exposed within the module for synthetic tests with throwaway keys.
+    static func isCandidateReadyForReview(
+        ownerPin: String?, generation: Int, publicKeyX963: Data?,
+        revokedPins: Set<String>
+    ) -> Bool {
+        guard let pin = ownerPin,
+              generation >= 1,
               pin.range(of: "^[0-9a-f]{64}$",
                         options: .regularExpression) != nil,
-              let key = WebReaderUpdateChannel.productionPublicKeyX963,
-              !revokedPublisherPins.contains(pin),
-              // Do not even contact GitHub if the compiled public point is
-              // malformed or its canonical DER SPKI disagrees with the pin.
+              let key = publicKeyX963,
+              !revokedPins.contains(pin),
+              // Validate the EC point and canonical SPKI fingerprint BEFORE
+              // the production checker creates any URLSession or request.
               WebReaderSignedReleaseTrustGate.observedP256SPKISHA256(
                 for: key
               ) == pin
         else { return false }
         return true
+    }
+
+    /// Only compiled, owner-reviewed constants may authorize HTTPS discovery;
+    /// the preview never establishes Chimera peer identity or install consent.
+    static var isProvisioned: Bool {
+        return isCandidateReadyForReview(
+            ownerPin: independentlyProvisionedSPKISHA256,
+            generation: productionTrustGeneration,
+            publicKeyX963: WebReaderUpdateChannel.productionPublicKeyX963,
+            revokedPins: revokedPublisherPins
+        )
     }
 
     /// Separate from the test-only injected-key inspection API.
