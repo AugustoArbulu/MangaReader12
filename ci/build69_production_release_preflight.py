@@ -37,7 +37,7 @@ def _read_external_regular(path, max_bytes):
     if not hasattr(os, "O_NOFOLLOW"):
         raise ProductionPreflightRejected("platform lacks no-follow file opening")
     try:
-        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as handle:
             before = os.fstat(handle.fileno())
             if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= max_bytes:
