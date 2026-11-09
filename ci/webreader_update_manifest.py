@@ -68,7 +68,7 @@ def _version(text):
     parts = tuple(int(v) for v in text.split("."))
     return parts + (0,) * (3 - len(parts))
 
-def _validate_payload(obj, installed_build, installed_ios):
+def _validate_payload(obj, installed_build, installed_ios, expected_channel):
     version = obj.get("schemaVersion")
     if type(version) is not int or version not in (1, 2):
         raise ManifestRejected("unsupported payload schema")
@@ -78,8 +78,12 @@ def _validate_payload(obj, installed_build, installed_ios):
         raise ManifestRejected("wrong installed application-identifier")
     if obj["application"] != "WebReader" or obj["bundleId"] != APP_BUNDLE_ID:
         raise ManifestRejected("wrong application identity")
-    if obj["channel"] != "development":
-        raise ManifestRejected("unsupported release channel")
+    if type(expected_channel) is not str or expected_channel not in ("development", "production"):
+        raise ManifestRejected("unsupported required release channel")
+    if obj["channel"] != expected_channel:
+        raise ManifestRejected("signed release channel mismatch")
+    if expected_channel == "production" and version != 2:
+        raise ManifestRejected("production requires signed v2 identity")
     if type(obj["build"]) is not int or not 1 <= obj["build"] <= 2_147_483_647:
         raise ManifestRejected("invalid build")
     if type(installed_build) is not int or obj["build"] <= installed_build:
@@ -120,7 +124,7 @@ def _validate_payload(obj, installed_build, installed_ios):
         raise ManifestRejected("not a permitted stable public Release URL")
     return obj
 
-def validate(envelope_json, pinned_public_key_pem, installed_build=56, installed_ios="12.5.8"):
+def validate(envelope_json, pinned_public_key_pem, installed_build=56, installed_ios="12.5.8", *, expected_channel="development"):
     """Verify a signed envelope and validate its claims. Never downloads files."""
     envelope = _json_object(envelope_json, MAX_ENVELOPE_BYTES)
     if set(envelope) != {"schemaVersion", "algorithm", "payload", "signature"}:
@@ -153,7 +157,8 @@ def validate(envelope_json, pinned_public_key_pem, installed_build=56, installed
         if result.returncode != 0:
             raise ManifestRejected("manifest signature rejected")
     verified = _validate_payload(
-        _json_object(payload, MAX_PAYLOAD_BYTES), installed_build, installed_ios
+        _json_object(payload, MAX_PAYLOAD_BYTES), installed_build, installed_ios,
+        expected_channel
     )
     # Version is covered by the signature *and* repeated in the wrapper;
     # fail closed rather than interpreting a v1 payload as a v2 release.
