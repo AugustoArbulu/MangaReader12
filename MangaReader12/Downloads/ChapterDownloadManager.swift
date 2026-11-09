@@ -632,7 +632,11 @@ final class ChapterDownloadManager {
         let directory = try chapterDirectory(
             sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
         )
-        guard fileManager.fileExists(atPath: directory.path) else { return nil }
+        // A completed record with a missing directory is not an uncached
+        // chapter. Report missing local data instead of falling back to web.
+        guard fileManager.fileExists(atPath: directory.path) else {
+            throw ChapterDownloadError.missingCompletedFiles
+        }
 
         // A completed SQLite row does not prove every local page survived.
         // Reject gaps, empty files and symbolic links instead of renumbering
