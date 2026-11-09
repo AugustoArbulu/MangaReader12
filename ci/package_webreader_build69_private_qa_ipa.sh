@@ -103,14 +103,20 @@ import plistlib
 import sys
 signed = plistlib.loads(Path(sys.argv[1]).read_bytes())
 info = plistlib.loads(Path(sys.argv[2]).read_bytes())
-assert signed == {
+expected_entitlements = {
     "application-identifier": "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
 }
-assert info["CFBundleIdentifier"] == "com.example.MangaReader12"
-assert info["CFBundleDisplayName"] == "WebReader"
-assert info["CFBundleExecutable"] == "MangaReader12"
-assert info["CFBundleVersion"] == "69"
-assert info["MinimumOSVersion"] == "12.0"
+if signed != expected_entitlements:
+    raise SystemExit("BLOCKED: QA app entitlements mismatch")
+expected_metadata = {
+    "CFBundleIdentifier": "com.example.MangaReader12",
+    "CFBundleDisplayName": "WebReader",
+    "CFBundleExecutable": "MangaReader12",
+    "CFBundleVersion": "69",
+    "MinimumOSVersion": "12.0",
+}
+if any(info.get(key) != value for key, value in expected_metadata.items()):
+    raise SystemExit("BLOCKED: QA app metadata mismatch")
 PY
 
 (
@@ -131,7 +137,8 @@ from build66_code_signature_gate import (
 ipa = Path(sys.argv[1])
 from build66_ipa_preflight import MAX_IPA_BYTES
 size = ipa.stat().st_size
-assert 0 < size <= MAX_IPA_BYTES, "QA IPA exceeds maximum size"
+if not (0 < size <= MAX_IPA_BYTES):
+    raise SystemExit("BLOCKED: QA IPA size is empty or exceeds maximum")
 with ipa.open("rb") as stream:
     sha = hashlib.sha256()
     while True:
@@ -145,12 +152,17 @@ report = inspect_ipa(
     require_exact_identity=True, return_snapshot=True
 )
 snapshot = report.pop("ipa_snapshot")
-assert report["build"] == 69 and report["minimum_ios"] == "12.0"
+if report.get("build") != 69 or report.get("minimum_ios") != "12.0":
+    raise SystemExit("BLOCKED: QA IPA build or iOS target mismatch")
 seal = audit_code_signature_snapshot(snapshot, digest, size)
-assert seal["adHocSignatureIntegrityVerified"]
-assert seal["installedApplicationIdentifierMatch"]
-assert seal["applicationIdentifier"] == INSTALLED_APPLICATION_IDENTIFIER
-assert seal["thinArm64ExecutableVerified"]
+if seal.get("adHocSignatureIntegrityVerified") is not True:
+    raise SystemExit("BLOCKED: ad-hoc CodeDirectory seal not verified")
+if seal.get("installedApplicationIdentifierMatch") is not True:
+    raise SystemExit("BLOCKED: installed application identifier does not match")
+if seal.get("applicationIdentifier") != INSTALLED_APPLICATION_IDENTIFIER:
+    raise SystemExit("BLOCKED: expected installed application identifier absent")
+if seal.get("thinArm64ExecutableVerified") is not True:
+    raise SystemExit("BLOCKED: iOS arm64 executable seal not verified")
 print("PASS: Build69 QA archive and ad-hoc CodeDirectory verified (host only).")
 print("LIMIT: no publisher authentication, distribution or installation approval.")
 PY
