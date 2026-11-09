@@ -49,7 +49,7 @@ enum ChapterDownloadError: Error, LocalizedError {
         case .httpStatus(let status):
             return "Image server returned HTTP \(status) during download."
         case .missingCompletedFiles:
-            return "The downloaded chapter files are missing."
+            return "O capítulo offline está incompleto: uma ou mais páginas estão ausentes, vazias ou inválidas. Nenhum arquivo foi apagado."
         case .invalidImagePayload:
             return "O servidor retornou uma página inválida ou um documento HTML em vez de uma imagem. O capítulo não foi marcado como completo."
         case .alreadyScheduled:
