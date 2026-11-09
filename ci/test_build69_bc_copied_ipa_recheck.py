@@ -5,10 +5,18 @@ These are host byte-transfer tests, NOT a real iOS code-signing result.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 
+from build66_ipa_preflight import AdmissionDenied, inspect_ipa
+from build69_production_release_preflight import (
+    ProductionPreflightRejected, _read_external_regular
+)
+from build69_ba_unsigned_candidate_audit import (
+    UnsignedCandidateRejected, _bounded_regular_file
+)
 from build69_bc_copied_ipa_recheck import (
     CopiedQARejected, FALSE_FLAGS, TRUE_FLAGS,
     QA_FILE_NAME, parse_host_receipt, review_copied_qa_ipa
@@ -120,6 +128,23 @@ class CopiedPrivateQATests(unittest.TestCase):
         self.asset.rename(wrong_filename)
         with self.assertRaises(CopiedQARejected):
             self.review(asset=wrong_filename)
+
+    def test_special_fifo_path_is_rejected_without_blocking_on_open(self):
+        folder = self.root / "fifo-path"
+        folder.mkdir()
+        fifo = folder / QA_FILE_NAME
+        os.mkfifo(fifo)
+        with self.assertRaises(CopiedQARejected):
+            self.review(asset=fifo)
+        with self.assertRaises(AdmissionDenied):
+            inspect_ipa(
+                fifo, self.receipt["ipaSHA256"], self.asset.stat().st_size, 68,
+                require_exact_identity=True, return_snapshot=False
+            )
+        with self.assertRaises(ProductionPreflightRejected):
+            _read_external_regular(fifo, 512)
+        with self.assertRaises(UnsignedCandidateRejected):
+            _bounded_regular_file(fifo, max_bytes=512)
 
     def test_duplicate_json_fields_and_nonfinite_rejected(self):
         data = json.dumps(self.receipt)
