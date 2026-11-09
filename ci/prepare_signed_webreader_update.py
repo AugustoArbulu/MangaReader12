@@ -68,10 +68,29 @@ def sha256_file(path: Path) -> str:
 def prepare(
     ipa: Path, private_key: Path, public_key: Path, notes_file: Path,
     output: Path, published_at: str, installed_build: int = 56,
-    schema_version: int = 1
+    schema_version: int = 1, channel: str = "development",
+    independently_trusted_spki_sha256: str = None
 ) -> dict:
     if type(schema_version) is not int or schema_version not in (1, 2):
         raise ReleasePreparationRejected("unsupported signed release schema")
+    if channel not in ("development", "production") or type(channel) is not str:
+        raise ReleasePreparationRejected("unsupported signed release channel")
+    if channel == "production":
+        if schema_version != 2 or type(installed_build) is not int or installed_build < 68:
+            raise ReleasePreparationRejected("production requires v2 and explicit Build68+ baseline")
+        from build68_release_public_key_handoff import (
+            PublicKeyHandoffRejected, prepare_public_key_handoff
+        )
+        try:
+            # A matching fingerprint is only useful when it was obtained and
+            # approved independently, NEVER copied from the Release payload.
+            prepare_public_key_handoff(
+                Path(public_key).read_bytes(), independently_trusted_spki_sha256
+            )
+        except (PublicKeyHandoffRejected, OSError) as exc:
+            raise ReleasePreparationRejected("production public key is not independently pinned") from exc
+    elif independently_trusted_spki_sha256 is not None:
+        raise ReleasePreparationRejected("development may not claim production owner pin")
     ipa = ensure_external(ipa)
     private_key = ensure_external(private_key)
     public_key = ensure_external(public_key)
@@ -152,7 +171,7 @@ def prepare(
         "schemaVersion": schema_version,
         "application": "WebReader",
         "bundleId": "com.example.MangaReader12",
-        "channel": "development",
+        "channel": channel,
         "build": build,
         "minimumIOS": minimum,
         "ipaUrl": ("https://github.com/AugustoArbulu/MangaReader12/"
@@ -192,7 +211,8 @@ def prepare(
             encoded = json.dumps(
                 envelope, sort_keys=True, separators=(",", ":")
             ).encode("utf-8") + b"\n"
-            validate(encoded, public_key.read_bytes(), installed_build, "12.5.8")
+            validate(encoded, public_key.read_bytes(), installed_build, "12.5.8",
+                     expected_channel=channel)
         except (OSError, subprocess.TimeoutExpired, ManifestRejected) as exc:
             raise ReleasePreparationRejected("signature/key validation rejected") from exc
     if len(encoded) > 64 * 1024:
@@ -208,7 +228,10 @@ def prepare(
         output.unlink(missing_ok=True)
         raise
     return {
-        "build": build, "signed_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+        "build": build, "channel": channel,
+        "independent_public_pin_matched": channel == "production",
+        "publisher_trust_root_configured_on_device": False,
+        "signed_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
         "ipa_sha256": digest, "ipa_size": size, "minimumIOS": minimum,
         "release_url": payload["ipaUrl"], "envelope_path": str(output),
         "published": False, "installation_performed": False,
@@ -225,11 +248,16 @@ def main():
     parser.add_argument("--installed-build", type=int, default=56)
     parser.add_argument("--schema-version", type=int, choices=(1, 2), default=1,
                         help="v2 requires native macOS codesign approval")
+    parser.add_argument("--channel", choices=("development", "production"),
+                        default="development", help="production requires v2 and independent pin")
+    parser.add_argument("--independent-spki-sha256",
+                        help="fingerprint from a separately authenticated owner channel")
     args = parser.parse_args()
     result = prepare(
         args.ipa, args.private_key, args.public_key, args.notes_file,
         args.output, args.published_at, args.installed_build,
-        schema_version=args.schema_version
+        schema_version=args.schema_version, channel=args.channel,
+        independently_trusted_spki_sha256=args.independent_spki_sha256
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
