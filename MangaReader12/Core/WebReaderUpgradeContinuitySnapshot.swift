@@ -4,7 +4,7 @@ import SQLite3
 /// Build69 BD. A conservative, read-only before/after upgrade snapshot.
 ///
 /// This uses a separate SQLite READONLY connection to the *existing* database.
-/// It does not create directories, migrate tables, mutate UserDefaults,
+/// It does not create directories, migrate tables, or alter preferences,
 /// enumerate image files, or inspect private title/source/path strings.
 ///
 /// This is a count of database RECORDS, not proof that the corresponding
