@@ -100,7 +100,7 @@ os.link = fail_second_link
 
     def test_wrong_staged_checksum_blocks_publication(self):
         Path(str(self.source) + ".sha256").write_bytes(
-            b"0" * 64 + b"  " + self.filename.encode() + b"\\n"
+            b"0" * 64 + b"  " + self.filename.encode() + b"\n"
         )
         result = self.run_publisher()
         self.assertNotEqual(result.returncode, 0)
