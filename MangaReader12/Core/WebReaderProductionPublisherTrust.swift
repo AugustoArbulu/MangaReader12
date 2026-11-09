@@ -35,8 +35,12 @@ enum WebReaderProductionPublisherTrust {
               pin.range(of: "^[0-9a-f]{64}$",
                         options: .regularExpression) != nil,
               let key = WebReaderUpdateChannel.productionPublicKeyX963,
-              key.count == 65, key.first == 0x04,
-              !revokedPublisherPins.contains(pin)
+              !revokedPublisherPins.contains(pin),
+              // Do not even contact GitHub if the compiled public point is
+              // malformed or its canonical DER SPKI disagrees with the pin.
+              WebReaderSignedReleaseTrustGate.observedP256SPKISHA256(
+                for: key
+              ) == pin
         else { return false }
         return true
     }
