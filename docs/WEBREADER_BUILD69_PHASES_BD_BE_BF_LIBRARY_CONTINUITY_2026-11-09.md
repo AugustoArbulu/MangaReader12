@@ -72,3 +72,12 @@ A workflow integrada [AC–BF](https://github.com/AugustoArbulu/MangaReader12/ac
 ## Próximo passo após CI verde
 
 Preparar critérios finais de geração de uma IPA QA privada **somente após aprovação expressa do proprietário**, incluindo os gates BB/BC de identidade e SHA, e o teste físico de preservação guiado pelo baseline BF. Isso não deve ser confundido com disponibilizar atualizações automáticas pelo Chimera: root de confiança editorial e identidade do helper continuam bloqueados.
+
+
+## BG — leitura SQLite fora da thread principal do iPad (estabilização iOS12)
+
+A opção `Copiar contagens da biblioteca para comparar` passou a usar `DispatchQueue.global(qos: .utility)` para executar a leitura SQLite com tempo de bloqueio limitado, e `DispatchQueue.main.async` **somente** para atualizar a interface, copiar ao clipboard e exibir o alerta. Assim, a consulta não bloqueia a animação/rolagem da tela de Ajustes em iPads antigos quando o banco está ocupado.
+
+O estado `continuitySnapshotBusy` recusa toques duplicados durante a leitura e só deixa a linha selecionável quando a operação terminou. O callback usa `[weak self]` e exige `view.window != nil` antes de copiar, evitando apresentar um resultado numa tela já fechada. Não toca no instalador ou na biblioteca além de consultas SELECT.
+
+Teste `ci/test_build69_bg_ui_nonblocking_snapshot.py` verifica a ordem background → relatório → main thread → clipboard/alerta, o controle de duplicidade e a exclusão dos apps IPC de diagnóstico. O workflow integrado [AC–BG #42564766964](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42564766964) roda também os testes Swift/SQLite, a regressão antiga de UI e compilação Xcode ARM64 iOS12. **Não interpretar teste estático verde como QA no aparelho.** A Build68 permanece intacta.
