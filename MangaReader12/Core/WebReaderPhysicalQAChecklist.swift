@@ -21,6 +21,8 @@ enum WebReaderPhysicalQAChecklist {
             "Instalou por cima, sem remover o WebReader anterior? [SIM/NÃO/NÃO TESTADO]",
             "Biblioteca, favoritos e progresso preservados? [SIM/NÃO/NÃO TESTADO]",
             "Capítulos previamente baixados com Wi-Fi DESLIGADO? [SIM/NÃO/NÃO TESTADO]",
+            "Amostra offline: arquivos sequenciais sem páginas ausentes? [SIM/NÃO/NÃO TESTADO]",
+            "Páginas dos capítulos offline pré-existentes carregam integralmente? [SIM/NÃO/NÃO TESTADO]",
             "Fechou/reabriu o app ainda offline e os capítulos persistiram? [SIM/NÃO/NÃO TESTADO]",
             "Páginas do leitor e escala largura/altura? [SIM/NÃO/NÃO TESTADO]",
             "Fontes Webtoons / WeebCentral / Asura? [SIM/NÃO/NÃO TESTADO]",
