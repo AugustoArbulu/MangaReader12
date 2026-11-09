@@ -791,6 +791,13 @@ final class DownloadsViewController: UITableViewController {
             )
             reader.hidesBottomBarWhenPushed = true
             navigationController?.pushViewController(reader, animated: true)
+        } catch ChapterDownloadError.missingCompletedFiles {
+            showMessage(
+                title: "Capítulo offline incompleto",
+                message: "Este download possui páginas ausentes, vazias ou " +
+                    "inválidas. Nenhum arquivo foi apagado. " +
+                    "Não restaure o backup para corrigir este capítulo."
+            )
         } catch {
             showError(error)
         }
