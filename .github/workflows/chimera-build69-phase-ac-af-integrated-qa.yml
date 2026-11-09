@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AU — Trust Bootstrap + Key Rotation iOS12
+name: WebReader Build69 Dev AC-AY — Verified Updates UX and Provenance iOS12
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
       - feat/chimera-updater-phase1-protocol-audit
     paths:
       - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderUpdaterSecuritySnapshot.swift'
       - 'MangaReader12/Core/WebReaderProductionSignedReleaseChecker.swift'
       - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
       - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
@@ -33,6 +35,11 @@ on:
       - 'ci/test_build69_phase_at_owner_bootstrap.py'
       - 'ci/build69_owner_rotation_review.py'
       - 'ci/test_build69_phase_au_owner_rotation.py'
+      - 'ci/test_build69_phase_av_aw_ax_ay_update_policy.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/test_native_webreader_update_checker.py'
+      - 'ci/test_native_webreader_update_security_snapshot.py'
+      - 'ci/test_public_github_release_parser.py'
       - 'ci/test_build69_phase_as_at_owner_trust_policy.py'
       - 'ci/test_native_webreader_owner_trust_readiness.py'
       - 'ci/test_build66_code_signature_gate.py'
@@ -64,6 +71,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_ap_aq_ar_production_rehearsal.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_at_owner_bootstrap.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_au_owner_rotation.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_av_aw_ax_ay_update_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -84,7 +92,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: AP-AR offline rehearsal, no production key, no release, no install'
+          echo 'PASS: Build69 AV-AY full metadata and provenance regressions; no release key, IPA or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -98,6 +106,9 @@ jobs:
       - name: Real Swift tests — protected local import, CDN transfer, forward-only Build and privacy
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_public_github_release_parser.py
+          python3 ci/test_native_webreader_update_checker.py
           python3 ci/test_native_webreader_signed_production_discovery.py
           python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
@@ -135,4 +146,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AU owner public trust and rotation are review-only; no publisher key, IPA or install'
+          echo 'PASS: Build69 AC-AY trusted updates and manual Filza export only; no key, IPA or install'
