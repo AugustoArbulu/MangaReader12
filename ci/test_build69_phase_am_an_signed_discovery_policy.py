@@ -97,7 +97,8 @@ class ProductionSignedDiscovery(unittest.TestCase):
         self.assertNotIn("productionTrustGeneration = 1", TRUST)
 
     def test_ui_separates_public_unsigned_signed_and_private_actions(self):
-        self.assertIn("if source == 1 { return 4 }", UI)
+        self.assertIn("if source == 1 { return 5 }", UI)
+        self.assertIn("Copiar diagnóstico do canal assinado", UI)
         self.assertIn("case (1, 2):", UI)
         self.assertIn("case (1, 3):", UI)
         self.assertIn("Verificar canal assinado", UI)
