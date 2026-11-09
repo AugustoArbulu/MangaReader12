@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
 concurrency:
   group: webreader-build69-owner-approved-qa-one-shot
   cancel-in-progress: false
@@ -53,7 +56,16 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
+      - name: Prepare immutable source snapshot outside the clean review checkout
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wr69-owner-source"
+          git archive --format=tar HEAD | tar -xf - -C "$RUNNER_TEMP/wr69-owner-source"
+          test -f "$RUNNER_TEMP/wr69-owner-source/MangaReader12.xcodeproj/project.pbxproj"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
       - name: Run private QA, backup and updater regressions
+        working-directory: ${{ runner.temp }}/wr69-owner-source
         run: |
           python3 -m compileall -q ci
           python3 -m unittest discover -s ci -p 'test_build69_cb_actions_qa_gate.py' -v
@@ -69,12 +81,14 @@ jobs:
           python3 ci/test_build65_upgrade_compatibility.py
 
       - name: Generate WebReader icon and prepare hash-pinned iOS12 libwebp
+        working-directory: ${{ runner.temp }}/wr69-owner-source
         run: |
           chmod +x ci/*.sh
           python3 ci/prepare_webreader_icons.py
           bash ci/prepare_libwebp_ios.sh
 
       - name: Build actual unsigned WebReader 69 Release for iOS12 ARM64
+        working-directory: ${{ runner.temp }}/wr69-owner-source
         run: |
           set -euo pipefail
           xcodebuild -project MangaReader12.xcodeproj \
