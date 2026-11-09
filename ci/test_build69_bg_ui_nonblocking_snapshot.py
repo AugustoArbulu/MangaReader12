@@ -44,7 +44,7 @@ class NonblockingReadOnlySnapshotUI(unittest.TestCase):
         self.assertIn("if !continuitySnapshotBusy", row)
         self.assertIn("cell.accessoryType = .disclosureIndicator", row)
         self.assertIn("cell.selectionStyle = .default", row)
-        self.assertIn("if source == 3 { return 7 }", UI)
+        self.assertIn("if source == 3 { return 8 }", UI)
         self.assertIn("return isIPCDiagnostic ? 2 : 7", UI)
         self.assertIn("if selectedSection == 3, indexPath.row == 6, !isIPCDiagnostic {", UI)
 
