@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BM — Atomic QA Packaging + Offline Completion Receipts iOS12
+name: WebReader Build69 Dev AC-BN — Native Signed App Preview with No IPA iOS12
 
 on:
   push:
@@ -71,6 +71,8 @@ on:
       - 'ci/test_build69_bl_atomic_private_delivery.py'
       - 'ci/test_build69_bm_completion_receipt_policy.py'
       - 'ci/test_native_webreader_offline_completion_receipt.py'
+      - 'ci/build69_bn_real_signed_app_preview.py'
+      - 'ci/test_build69_bn_real_signed_app_preview_policy.py'
       - 'MangaReader12/UI/DownloadsViewController.swift'
       - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
       - 'ci/test_build69_az_candidate_readiness.py'
@@ -132,6 +134,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bk_private_qa_packaging_gate.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bl_atomic_private_delivery.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bm_completion_receipt_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bn_real_signed_app_preview_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -152,7 +155,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AC-BM atomic unpublished QA packaging, offline receipts and protected legacy; no release or install'
+          echo 'PASS: Build69 AC-BN atomic private-package checks, legacy receipts and signed-app-only review; no release or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -227,10 +230,17 @@ jobs:
           git diff --exit-code -- MangaReader12.xcodeproj/project.pbxproj MangaReader12/Info.plist
           test ! -f ci/build69_candidate_trigger.txt
           echo 'PASS: temporary unsigned CFBundleVersion69 ARM64 iOS12 app; no IPA/sign/install'
+      - name: Verify real Build69 app with disposable ad-hoc signature (NO IPA)
+        run: |
+          python3 ci/build69_bn_real_signed_app_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr69-ba-unsigned-preview/Build/Products/Release-iphoneos/MangaReader12.app"
+          git diff --exit-code -- MangaReader12.xcodeproj/project.pbxproj MangaReader12/Info.plist
+          test ! -f ci/build69_candidate_trigger.txt
+          echo 'PASS: real app ephemeral ad-hoc seal and installed entitlement; no IPA made'
       - name: Confirm stable identity and no privileged installation
         run: |
           ./ci/verify_binary.sh \
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BM native offline receipt, legacy compatibility and iOS12 build; packager never executed'
+          echo 'PASS: Build69 AC-BN native iOS12 app plus disposable ad-hoc identity review; no IPA or installation'
