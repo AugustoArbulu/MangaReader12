@@ -26,7 +26,8 @@ def _ios_tuple(value):
 
 def verify_signed_release(
     envelope_json, pinned_public_key_pem, ipa_path,
-    installed_build=65, installed_ios="12.5.8", *, include_snapshot=False
+    installed_build=65, installed_ios="12.5.8", *, include_snapshot=False,
+    expected_channel="development"
 ):
     """Check signed metadata against the locally staged IPA, entirely offline.
 
@@ -42,7 +43,8 @@ def verify_signed_release(
     if not isinstance(envelope_json, bytes) or not isinstance(pinned_public_key_pem, bytes):
         raise SignedReleaseRejected("missing trusted signature inputs")
     try:
-        signed = validate(envelope_json, pinned_public_key_pem, installed_build, installed_ios)
+        signed = validate(envelope_json, pinned_public_key_pem, installed_build,
+                          installed_ios, expected_channel=expected_channel)
         # Structural, executable-name and digest checks all inspect ONE
         # hash-verified snapshot from a single O_NOFOLLOW file descriptor.
         # Do not reopen an attacker-controlled path after this point.
