@@ -40,6 +40,33 @@ class PrivatePackagingGate(unittest.TestCase):
                 self.assertFalse(expected.exists())
                 self.assertFalse(Path(str(expected)+".sha256").exists())
 
+    def test_even_correct_human_marker_cannot_run_on_ci(self):
+        with tempfile.TemporaryDirectory(prefix="wr69-bl-automated-ipa-denial-") as td:
+            root = Path(td)
+            app = root / "MangaReader12.app"
+            app.mkdir()
+            dest = root / "WebReader-Build69-iOS12-adhoc.ipa"
+            for forbidden_environment in ("CI", "GITHUB_ACTIONS"):
+                with self.subTest(environment=forbidden_environment):
+                    env = dict(os.environ)
+                    env.pop("CI", None)
+                    env.pop("GITHUB_ACTIONS", None)
+                    env["WR69_PRIVATE_QA_PACKAGE_APPROVAL"] = (
+                        "I-APPROVE-BUILD69-PRIVATE-QA-PACKAGING"
+                    )
+                    env[forbidden_environment] = "true"
+                    process = subprocess.run(
+                        ["bash", str(PACKAGE), str(app), str(dest)],
+                        env=env, text=True, capture_output=True, timeout=10
+                    )
+                    self.assertNotEqual(process.returncode, 0)
+                    self.assertIn(
+                        "BLOCKED: private QA packaging is not permitted in automation",
+                        process.stderr
+                    )
+                    self.assertFalse(dest.exists())
+                    self.assertFalse(Path(str(dest) + ".sha256").exists())
+
     def test_script_signs_only_temporary_copy_and_never_uploads(self):
         source = PACKAGE.read_text()
         for required in (
@@ -61,8 +88,20 @@ class PrivatePackagingGate(unittest.TestCase):
             'inspect_ipa(',
             'audit_code_signature_snapshot(',
             'assert seal["installedApplicationIdentifierMatch"]',
-            '/usr/bin/zip -qry "$OUTPUT" Payload',
-            '/usr/bin/shasum -a 256 "$OUTPUT"',
+            '/usr/bin/zip -qry "$STAGED_IPA" Payload',
+            '/usr/bin/shasum -a 256 "$EXPECTED_NAME"',
+            'TMP="$(mktemp -d "$OUTPUT_DIR/.wr69-private-qa.XXXXXXXX")"',
+            'STAGED_IPA="$TMP/$EXPECTED_NAME"',
+            'python3 - "$STAGED_IPA" "$OUTPUT"',
+            'os.link(checksum_staged, checksum_final)',
+            'os.link(staged, final)',
+            'GITHUB_ACTIONS:-',
+            'CI:-',
+            'BLOCKED: private QA packaging is not permitted in automation.',
+            'size = ipa.stat().st_size',
+            '0 < size <= MAX_IPA_BYTES',
+            'final.is_symlink()',
+            'checksum_final.is_symlink()',
             'no GitHub upload, release, main change, or Chimera installation',
         ):
             with self.subTest(required=required):
