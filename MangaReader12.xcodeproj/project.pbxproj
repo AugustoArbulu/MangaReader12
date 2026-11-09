@@ -63,6 +63,7 @@
 		A10000000000000000000041 /* WebReaderPhysicalQAChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */; };
 		A10000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */; };
 		A10000000000000000000050 /* WebReaderProductionSignedIPAReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */; };
+		A10000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */; };
 		A10000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */; };
 		A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */; };
 		A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */; };
@@ -135,6 +136,7 @@
 		A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderPhysicalQAChecklist.swift; sourceTree = "<group>"; };
 		A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderProductionSignedReleaseChecker.swift; sourceTree = "<group>"; };
 		A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderProductionSignedIPAReview.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderSignedProductionEnvelopeBinding.swift; sourceTree = "<group>"; };
 		A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpgradeContinuitySnapshot.swift; sourceTree = "<group>"; };
 		A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePageInventory.swift; sourceTree = "<group>"; };
 		A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePreservationAudit.swift; sourceTree = "<group>"; };
@@ -221,6 +223,7 @@
 				A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */,
 				A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */,
 				A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */,
+				A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */,
 				A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */,
 				A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */,
 				A20000000000000000000031 /* WebReaderHelperPingProbe.swift */,
@@ -446,6 +449,7 @@
 				A10000000000000000000041 /* WebReaderPhysicalQAChecklist.swift in Sources */,
 				A10000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift in Sources */,
 				A10000000000000000000050 /* WebReaderProductionSignedIPAReview.swift in Sources */,
+				A10000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift in Sources */,
 				A10000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift in Sources */,
 				A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */,
 				A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */,
