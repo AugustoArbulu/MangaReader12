@@ -169,12 +169,7 @@ final class DataStorageViewController: UITableViewController {
             }
 
         case (2, 2):
-            performMaintenance(
-                title: "Downloads reindexados"
-            ) { manager in
-                let removed = try manager.reindexDownloads()
-                return "\(removed) registro(s) sem arquivo foram removidos."
-            }
+            confirmReindexDownloads()
 
         case (3, 0):
             navigationController?.pushViewController(
@@ -208,10 +203,37 @@ final class DataStorageViewController: UITableViewController {
         }
     }
 
+    private func confirmReindexDownloads() {
+        guard presentedViewController == nil else { return }
+        let alert = UIAlertController(
+            title: "Reindexar e remover registros?",
+            message: "Esta ação exclui do banco os registros de downloads " +
+                "cujos arquivos pareçam ausentes. Durante uma atualização, " +
+                "um caminho antigo pode causar uma ausência aparente. " +
+                "Não use esta opção para tentar consertar a migração. " +
+                "O .mr12backup não contém páginas offline.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Reindexar mesmo assim", style: .destructive) {
+            [weak self] _ in
+            self?.performMaintenance(
+                title: "Downloads reindexados"
+            ) { manager in
+                let removed = try manager.reindexDownloads()
+                return "\(removed) registro(s) sem arquivo foram removidos."
+            }
+        })
+        present(alert, animated: true)
+    }
+
     private func confirmClearDownloads() {
         let alert = UIAlertController(
             title: "Apagar todos os downloads?",
-            message: "Os capítulos offline serão removidos. Biblioteca, progresso e histórico não serão apagados.",
+            message: "Todos os capítulos offline e suas imagens serão removidos. " +
+                "O backup .mr12backup não contém essas páginas; restaurá-lo " +
+                "não recupera os downloads. Biblioteca, progresso e " +
+                "histórico não serão apagados.",
             preferredStyle: .alert
         )
 
