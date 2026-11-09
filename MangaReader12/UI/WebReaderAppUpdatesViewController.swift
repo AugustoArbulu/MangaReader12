@@ -11,6 +11,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var signedChannelBusy = false
     private var continuitySnapshotBusy = false
     private var offlinePresenceBusy = false
+    private var offlineSampleOffset = 0
     private var signedChannelStatus =
         "Chave editorial independente ainda não provisionada • sem requisições"
     private var checking = false
@@ -392,7 +393,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             cell.textLabel?.text = "Conferir presença dos capítulos offline"
             cell.detailTextLabel?.text = offlinePresenceBusy ?
                 "Conferindo até 64 capítulos, sem abrir imagens…" :
-                "Amostra local • identifica páginas ausentes, vazias ou fora de sequência"
+                "Próximo lote: índice " + String(offlineSampleOffset) +
+                    " • até 64 capítulos, sem alterar downloads"
             if !offlinePresenceBusy {
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
@@ -772,21 +774,25 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         tableView.reloadData()
         let currentBuild = installedBuild
         let ios = ProcessInfo.processInfo.operatingSystemVersion
+        let requestedOffset = offlineSampleOffset
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let report = WebReaderOfflinePreservationAudit.report(
-                installedBuild: currentBuild, ios: ios
+            let audit = WebReaderOfflinePreservationAudit.diagnostic(
+                installedBuild: currentBuild, ios: ios,
+                sampleOffset: requestedOffset
             )
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.offlinePresenceBusy = false
+                self.offlineSampleOffset = audit.nextOffset
                 self.tableView.reloadData()
                 guard self.view.window != nil else { return }
-                UIPasteboard.general.string = report
+                UIPasteboard.general.string = audit.report
                 let alert = UIAlertController(
                     title: "Presença offline copiada",
-                    message: "Amostra limitada a 64 capítulos. Arquivos " +
-                        "presentes não comprovam imagem legível: teste " +
-                        "páginas reais com Wi-Fi desligado antes de aprovar a IPA.",
+                    message: "Lote de até 64 capítulos copiado. Toque novamente " +
+                        "para conferir o próximo lote (reinicia ao terminar). " +
+                        "Arquivos presentes não comprovam imagem legível: " +
+                        "teste páginas reais sem Wi-Fi antes de aprovar a IPA.",
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
