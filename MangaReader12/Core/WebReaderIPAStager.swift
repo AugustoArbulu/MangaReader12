@@ -95,11 +95,25 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         }
         let releasePath = "/AugustoArbulu/MangaReader12/releases/download/" +
             "build" + String(update.build) + "/"
-        let allowedPaths: Set<String> = [
-            releasePath + "WebReader-iOS12-unsigned.ipa",
-            releasePath + "WebReader-Build" + String(update.build) +
-                "-iOS12-adhoc.ipa"
-        ]
+        let legacyPath = releasePath + "WebReader-iOS12-unsigned.ipa"
+        let signedV2Path = releasePath + "WebReader-Build" +
+            String(update.build) + "-iOS12-adhoc.ipa"
+        let allowedPaths: Set<String>
+        switch update.provenance {
+        case .signedManifest:
+            // Real signed-production discovery accepts v2 ad-hoc assets ONLY.
+            // Legacy v1 is still exercised by synthetic, injected URLProtocol
+            // tests, but cannot be downloaded via the live signed channel.
+            allowedPaths = testProtocolClasses == nil ?
+                [signedV2Path] : [legacyPath, signedV2Path]
+        case .publicGitHubRelease:
+            // Both old and new asset naming conventions are public/unsigned
+            // *metadata*. Neither grants publisher authentication.
+            allowedPaths = [legacyPath, signedV2Path]
+        case .manualLocalFile:
+            // Imported Files/Filza IPAs have a separate audited local route.
+            allowedPaths = []
+        }
         guard let components = URLComponents(
             url: update.ipaURL, resolvingAgainstBaseURL: false
         ),
