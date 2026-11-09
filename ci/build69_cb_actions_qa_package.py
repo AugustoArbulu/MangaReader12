@@ -4,7 +4,7 @@
 Owner specifically authorized a single Build69 QA IPA. This *separate* Actions
 entry point does not change the default-deny local BK/BY packaging policy.
 The trigger must be the sole change in the latest commit on the experiment
-branch. No GitHub release, credential, privileged appinst or installation.
+branch. No GitHub release, credentials, privileged installer or device installation.
 """
 from __future__ import annotations
 
