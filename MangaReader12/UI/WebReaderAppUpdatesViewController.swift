@@ -1345,8 +1345,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             "2. Selecione Compartilhar IPA conferida e escolha Filza " +
             "ou Salvar em Arquivos, se disponível.\n" +
             "3. Abra a IPA no Filza e toque em Install.\n" +
-            "Não remova o WebReader instalado: faça backup da biblioteca " +
-            "e dos capítulos offline antes de atualizar."
+            "Não remova o WebReader instalado. Exporte o backup da " +
+            "biblioteca (.mr12backup), mas lembre-se: ele NÃO inclui " +
+            "as páginas offline. Restaurar o backup apaga downloads; " +
+            "para uma atualização, instale por cima sem restaurar."
         let alert = UIAlertController(
             title: "Instalação manual no Filza",
             message: text, preferredStyle: .alert
