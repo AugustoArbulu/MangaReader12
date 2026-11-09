@@ -64,6 +64,15 @@ else
   }
 fi
 
+# BX: exact independently reviewed commit and clean checkout are required.
+# This is source hygiene only, NOT proof that the .app came from this SHA.
+if [[ ! "${WR69_PRIVATE_QA_REVIEWED_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "BLOCKED: owner-reviewed full Git commit SHA is required." >&2
+  exit 2
+fi
+python3 "$ROOT/ci/build69_bx_reviewed_source_gate.py" \
+  --checkout "$ROOT" --reviewed-commit "$WR69_PRIVATE_QA_REVIEWED_COMMIT" >/dev/null
+
 # The source branch remains at version56; only isolated xcodebuild override69
 # is permitted. This exact .app must already be produced by the owner.
 python3 "$ROOT/ci/build69_ba_unsigned_candidate_audit.py" "$APP_PATH" >/dev/null
