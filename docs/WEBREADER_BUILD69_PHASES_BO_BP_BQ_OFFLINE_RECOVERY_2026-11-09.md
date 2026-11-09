@@ -51,13 +51,13 @@ Testes `ci/test_native_webreader_offline_recovery_plan_reader.py` compilam Swift
 
 ## CI e segurança de entrega
 
-Integrado em `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml`, workflow **AC–BQ**, com testes Linux e macOS/Swift, Xcode Debug/Release e prévia unsigned 69, seguida da auditoria ad hoc efêmera da BN. A execução consolidada é [#42572758345](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42572758345). **Verificar status e corrigir falhas antes de afirmar sucesso.** Outras execuções anteriores podem aparecer como canceladas pela concorrência.
+Integrado em `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml`, workflow **AC–BQ**, com testes Linux e macOS/Swift, Xcode Debug/Release e prévia unsigned 69, seguida da auditoria ad hoc efêmera da BN. A execução consolidada é [#42572758345](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42572758345). **CI concluída: SUCCESS nos dois jobs (Linux e macOS/iOS12), com Swift nativo, Debug/Release, preview unsigned Build69 e auditoria ad hoc efêmera do app real. Nenhuma IPA foi gerada.** Outras execuções anteriores podem aparecer como canceladas pela concorrência.
 
 | Gate | Situação |
 |---|---|
 | BO–BQ na branch experimental | Implementadas |
 | CI AC–BN anterior | **SUCCESS 2/2** |
-| CI AC–BQ consolidada | **Em validação no momento do registro** |
+| CI AC–BQ consolidada | **SUCCESS 2/2 jobs** |
 | Build68 iPad, biblioteca e offline existentes | Intocados |
 | Build69 IPA assinada e distribuída | **NÃO PRODUZIDA** |
 | Assinatura editorial de produção e helper Chimera | Não habilitados |
