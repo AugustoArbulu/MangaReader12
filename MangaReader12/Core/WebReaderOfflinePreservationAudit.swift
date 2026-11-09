@@ -40,7 +40,7 @@ enum WebReaderOfflinePreservationAudit {
 
     private static func readSample(
         databaseURL: URL, support: URL
-    ) -> (all: Int64, scanned: Int, valid: Int, pages: Int)? {
+    ) -> (all: Int64, scanned: Int, valid: Int, sealed: Int, pages: Int)? {
         guard FileManager.default.fileExists(atPath: databaseURL.path) else { return nil }
         var db: OpaquePointer?
         let openedOK = sqlite3_open_v2(
@@ -88,6 +88,7 @@ enum WebReaderOfflinePreservationAudit {
         defer { sqlite3_finalize(prepared) }
         var scanned = 0
         var valid = 0
+        var sealed = 0
         var pages = 0
         while true {
             let next = sqlite3_step(prepared)
@@ -105,13 +106,16 @@ enum WebReaderOfflinePreservationAudit {
             // counted failure, NEVER a reason to repair, move or delete.
             if let files = try? WebReaderOfflinePageInventory.inspect(
                 directory: directory
+            ), let hasReceipt = try? WebReaderOfflineCompletionReceipt.verifyIfPresent(
+                directory: directory, actualPages: files.count
             ) {
                 valid += 1
+                if hasReceipt { sealed += 1 }
                 pages += files.count
             }
         }
         guard Int64(scanned) <= total else { return nil }
-        return (total, scanned, valid, pages)
+        return (total, scanned, valid, sealed, pages)
     }
 
     static func report(
@@ -153,10 +157,12 @@ enum WebReaderOfflinePreservationAudit {
             "Capítulos completos no banco: " + String(sample.all),
             "Capítulos da amostra inspecionados: " + String(sample.scanned),
             "Capítulos com arquivos sequenciais e não vazios: " + String(sample.valid),
+            "Com recibo de quantidade de páginas: " + String(sample.sealed),
+            "Legados sem recibo entre os válidos: " + String(sample.valid - sample.sealed),
             "Capítulos faltantes, incompletos ou inseguros: " + String(bad),
             "Capítulos fora da amostra: " + String(remaining),
             "Arquivos de páginas presentes na amostra: " + String(sample.pages),
-            "Presença de arquivo NÃO comprova imagem íntegra ou capítulo completo na origem.",
+            "Presença de arquivo ou recibo NÃO comprova imagem íntegra ou capítulo completo na origem.",
             "Se houver falhas, não desinstale nem restaure backup automaticamente.",
             "Teste a leitura REAL sem Wi-Fi, inclusive após fechar e reabrir o app.",
             "Nenhuma página foi modificada; este diagnóstico não faz download."
