@@ -28,10 +28,10 @@ def review_owner_public_bootstrap(*, public_pem: bytes, independently_verified_p
         raise OwnerBootstrapRejected("baseline requires physically accepted Build68 or newer")
     if type(revoked_pins) is not tuple or len(revoked_pins) > 64:
         raise OwnerBootstrapRejected("immutable bounded revocation policy required")
-    if (len(set(revoked_pins)) != len(revoked_pins) or
-        any(type(pin) is not str or len(pin) != 64 or
+    if (any(type(pin) is not str or len(pin) != 64 or
             any(ch not in "0123456789abcdef" for ch in pin)
-            for pin in revoked_pins)):
+            for pin in revoked_pins) or
+        len(set(revoked_pins)) != len(revoked_pins)):
         raise OwnerBootstrapRejected("invalid or duplicated revoked SPKI fingerprint")
     try:
         material = prepare_public_key_handoff(public_pem, independently_verified_pin)
