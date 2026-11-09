@@ -60,7 +60,7 @@ enum WebReaderUpdaterSecuritySnapshot {
             "Este relatório não consulta a rede, nem abre ou modifica sua biblioteca.",
             "Nenhuma IPA foi baixada ou instalada por este relatório.",
             "Instalação direta pelo Chimera: BLOQUEADA; exige autenticação do helper."
-        ].joined(separator: "\\n")
+        ].joined(separator: "\n")
     }
 
     static func safeReport(installedBuild: Int, iosVersion: String) -> String {
