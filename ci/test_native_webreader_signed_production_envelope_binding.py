@@ -90,7 +90,11 @@ for (index, item) in forged.enumerated() {
     ensure(!matches(item), "forged metadata field accepted: " + String(index))
 }
 ensure(!matches(verified, altered), "changed signature rejected")
-ensure(!matches(verified, manifest, "0" + String(pin.dropFirst())), "wrong SPKI pin rejected")
+ensure(!matches(verified, manifest,
+                pin == String(repeating: "0", count: 64) ?
+                    String(repeating: "f", count: 64) :
+                    String(repeating: "0", count: 64)),
+       "wrong SPKI pin rejected")
 ensure(!matches(verified, manifest, nil), "absent independently trusted SPKI pin rejected")
 ensure(!matches(verified, manifest, pin, 71), "repeated/downgrade build rejected")
 ensure(!matches(verified, Data()), "missing envelope rejected")
