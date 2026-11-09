@@ -45,7 +45,7 @@ def _bounded_regular_file(path: Path, *, max_bytes: int) -> bytes:
         metadata = path.stat()
         if not stat.S_ISREG(metadata.st_mode) or not 0 < metadata.st_size <= max_bytes:
             raise UnsignedCandidateRejected("invalid or oversized candidate file")
-        fd = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             before = os.fstat(stream.fileno())
             data = stream.read(max_bytes + 1)
