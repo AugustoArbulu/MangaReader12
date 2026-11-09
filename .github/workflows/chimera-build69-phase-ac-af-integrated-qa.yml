@@ -1,4 +1,4 @@
-name: WebReader Build70 Dev AC-CD — Landscape Webtoon QA IPA and iOS12 Safety
+name: WebReader Build70 Dev AC-CF — Signed Production IPA Review and iOS12 Safety
 
 on:
   push:
@@ -39,6 +39,9 @@ on:
       - 'ci/test_build70_owner_qa_gate.py'
       - '.github/workflows/chimera-build70-owner-approved-one-shot-qa.yml'
       - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'MangaReader12/Core/WebReaderSignedIPAReview.swift'
+      - 'MangaReader12/Core/WebReaderProductionSignedIPAReview.swift'
+      - 'ci/test_native_webreader_production_signed_ipa_review.py'
       - 'ci/test_native_webreader_ipa_stager.py'
       - 'ci/test_native_webreader_signed_production_discovery.py'
       - 'ci/test_native_webreader_release_channel_separation.py'
@@ -222,6 +225,7 @@ jobs:
           python3 ci/test_native_webreader_update_checker.py
           python3 ci/test_native_webreader_signed_production_discovery.py
           python3 ci/test_native_webreader_owner_trust_readiness.py
+          python3 ci/test_native_webreader_production_signed_ipa_review.py
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 -m unittest discover -s ci -p 'test_build70_private_qa_ipa_preflight.py' -v
           python3 ci/test_native_webreader_physical_qa_checklist.py
