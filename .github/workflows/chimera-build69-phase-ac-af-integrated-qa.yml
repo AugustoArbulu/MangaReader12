@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BH — Strict Offline Reader Integrity iOS12
+name: WebReader Build69 Dev AC-BI — Offline Reader + Presence Audit iOS12
 
 on:
   push:
@@ -21,6 +21,7 @@ on:
       - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
       - 'MangaReader12/Downloads/WebReaderOfflinePageInventory.swift'
+      - 'MangaReader12/Core/WebReaderOfflinePreservationAudit.swift'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'MangaReader12.xcodeproj/project.pbxproj'
       - 'ci/test_native_webreader_ipa_stager.py'
@@ -61,6 +62,8 @@ on:
       - 'ci/test_build69_bg_ui_nonblocking_snapshot.py'
       - 'ci/test_build69_bh_offline_reader_policy.py'
       - 'ci/test_native_webreader_offline_page_inventory.py'
+      - 'ci/test_native_webreader_offline_preservation_audit.py'
+      - 'ci/test_build69_bi_offline_audit_policy.py'
       - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
       - 'ci/test_build69_az_candidate_readiness.py'
       - 'MangaReader12/Info.plist'
@@ -116,6 +119,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bf_portable_backup_baseline.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bg_ui_nonblocking_snapshot.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bh_offline_reader_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bi_offline_audit_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -136,7 +140,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AC-BH backup/continuity and strict offline page validation; no release or install'
+          echo 'PASS: Build69 AC-BI strict offline pages, private-safe limited inventory and backup QA; no release or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -160,6 +164,7 @@ jobs:
           python3 ci/test_native_webreader_physical_qa_checklist.py
           python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
           python3 ci/test_native_webreader_offline_page_inventory.py
+          python3 ci/test_native_webreader_offline_preservation_audit.py
           python3 ci/test_build53_backup_pins.py
           python3 ci/test_build65_offline_relocation.py
           python3 ci/test_native_webreader_ipa_stager.py
@@ -215,4 +220,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BH native strict offline pages and iOS12 build; no IPA distribution or install'
+          echo 'PASS: Build69 AC-BI native offline page integrity and privacy audit, iOS12 build; no IPA or install'
