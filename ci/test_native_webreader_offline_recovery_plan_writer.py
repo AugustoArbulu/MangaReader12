@@ -74,7 +74,8 @@ expectDenied("existing symlink", {
 })
 let dataAfterSymlink = try Data(contentsOf: wrong)
 insist(dataAfterSymlink == Data("OWNER DATA".utf8), "symlink target unchanged")
-insist(file.isFileURL && (try file.resourceValues(forKeys: [.isSymbolicLinkKey])).isSymbolicLink == true,
+let linkValues = try file.resourceValues(forKeys: [.isSymbolicLinkKey])
+insist(file.isFileURL && linkValues.isSymbolicLink == true,
        "link not replaced")
 try fm.removeItem(at: file)
 
