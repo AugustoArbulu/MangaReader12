@@ -32,6 +32,7 @@ on:
       - 'ci/test_build69_phase_am_an_signed_discovery_policy.py'
       - 'ci/webreader_update_manifest.py'
       - 'ci/build66_signed_release_preflight.py'
+      - 'ci/build66_ipa_preflight.py'
       - 'ci/build69_production_release_preflight.py'
       - 'ci/prepare_signed_webreader_update.py'
       - 'ci/test_build69_phase_ap_aq_ar_production_rehearsal.py'
