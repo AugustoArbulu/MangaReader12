@@ -34,6 +34,9 @@ enum WebReaderIPAStageResult {
 
 final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
     private let update: WebReaderVerifiedUpdate
+    // Exact signed production-v2 envelope; a provenance flag alone is NOT
+    // evidence of editorial authentication. No permanent credential is held.
+    private let signedManifestEnvelopeData: Data?
     private let destinationDirectory: URL
     private let testProtocolClasses: [AnyClass]?
     private let testAvailableSpace: Int64?
@@ -59,6 +62,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
 
     init(
         verifiedUpdate: WebReaderVerifiedUpdate,
+        signedManifestEnvelopeData: Data? = nil,
         destinationDirectory: URL = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         )[0].appendingPathComponent("WebReaderUpdates", isDirectory: true),
@@ -71,6 +75,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         afterFinalCommit: (() -> Void)? = nil
     ) {
         self.update = verifiedUpdate
+        self.signedManifestEnvelopeData = signedManifestEnvelopeData
         self.destinationDirectory = destinationDirectory
         self.testProtocolClasses = testProtocolClasses
         // Test-only override is ignored without an injected transport.
@@ -87,6 +92,22 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     /// Explicit, manual staging. Even with a valid update object, this is
     /// fail-closed when no production key has been configured in the app.
     func stage(completion callback: @escaping (WebReaderIPAStageResult) -> Void) {
+        // Production must authenticate the *actual* signed bytes, not trust
+        // the update object's .signedManifest provenance marker.
+        // Keep synthetic injected-URLProtocol fixtures isolated from live I/O.
+        if update.provenance == .signedManifest && testProtocolClasses == nil {
+            guard let signedBytes = signedManifestEnvelopeData,
+                  WebReaderSignedProductionEnvelopeBinding.matchesCompiledOwnerRootReadOnly(
+                    envelopeData: signedBytes, update: update,
+                    installedBuild: Int(Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleVersion"
+                    ) as? String ?? "") ?? 0,
+                    installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+                  ) else {
+                callback(.failed(.disabled))
+                return
+            }
+        }
         guard WebReaderUpdateChannel.isConfigured ||
             update.provenance == .publicGitHubRelease ||
             testProtocolClasses != nil else {
