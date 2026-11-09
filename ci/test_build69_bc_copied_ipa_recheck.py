@@ -110,13 +110,16 @@ class CopiedPrivateQATests(unittest.TestCase):
             self.review(checksum=("0"*64 + "  " + QA_FILE_NAME).encode("ascii"))
 
     def test_symlink_and_wrong_filename_rejected(self):
-        symlink = self.root / "linked.ipa"
+        other_folder = self.root / "received"
+        other_folder.mkdir()
+        symlink = other_folder / QA_FILE_NAME
         symlink.symlink_to(self.asset)
         with self.assertRaises(CopiedQARejected):
             self.review(asset=symlink)
-        self.asset.rename(symlink.with_name("wrong.ipa"))
+        wrong_filename = self.root / "wrong.ipa"
+        self.asset.rename(wrong_filename)
         with self.assertRaises(CopiedQARejected):
-            self.review()
+            self.review(asset=wrong_filename)
 
     def test_duplicate_json_fields_and_nonfinite_rejected(self):
         data = json.dumps(self.receipt)
