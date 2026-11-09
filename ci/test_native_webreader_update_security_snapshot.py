@@ -40,6 +40,37 @@ ensure(text.contains("Nenhuma instalação foi solicitada"), "not installing")
 ensure(!text.contains("/var/mobile/"), "no personal paths")
 ensure(!text.contains("I-CONFIRM-INSTALL"), "no privileged commands")
 ensure(!text.contains("BEGIN PRIVATE KEY"), "no secret")
+let signedBlocked = WebReaderUpdaterSecuritySnapshot.signedChannelReadinessReport(
+    installedBuild: 68, iosVersion: "12.5.8",
+    publicKeyPresent: false, independentPinPresent: false,
+    trustGeneration: 0, verifiedReadiness: false
+)
+ensure(signedBlocked.contains("Chave pública editorial embutida: NÃO"), "public key absent")
+ensure(signedBlocked.contains("Fingerprint SPKI independente embutido: NÃO"), "pin absent")
+ensure(signedBlocked.contains("Consulta autenticada pronta: NÃO"), "channel disabled")
+ensure(signedBlocked.contains("Instalação direta pelo Chimera: BLOQUEADA"), "helper denied")
+ensure(signedBlocked.contains("\\nBuild instalada: 68"), "diagnostic is multiline")
+ensure(!signedBlocked.contains("/var/mobile/"), "no private paths")
+ensure(!signedBlocked.contains("BEGIN PUBLIC KEY"), "no PEM")
+ensure(!signedBlocked.contains("BEGIN PRIVATE KEY"), "no private key")
+ensure(!signedBlocked.contains("appinst "), "no privileged install commands")
+let contradictory = WebReaderUpdaterSecuritySnapshot.signedChannelReadinessReport(
+    installedBuild: 68, iosVersion: "12.5.8",
+    publicKeyPresent: false, independentPinPresent: true,
+    trustGeneration: 1, verifiedReadiness: true
+)
+ensure(contradictory.contains("Consulta autenticada pronta: NÃO"),
+       "an injected readiness claim never overrides absent public key")
+let reviewedOnly = WebReaderUpdaterSecuritySnapshot.signedChannelReadinessReport(
+    installedBuild: 69, iosVersion: "12.5.8",
+    publicKeyPresent: true, independentPinPresent: true,
+    trustGeneration: 1, verifiedReadiness: true
+)
+ensure(reviewedOnly.contains("Consulta autenticada pronta: SIM"),
+       "synthetic ready view reflects a fully checked public trust root")
+ensure(reviewedOnly.contains("Instalação direta pelo Chimera: BLOQUEADA"),
+       "even a ready signed channel does not authorize installation")
+
 let unknown = WebReaderUpdaterSecuritySnapshot.safeReport(
     installedBuild: -2, iosVersion: "../var/mobile/"
 )
