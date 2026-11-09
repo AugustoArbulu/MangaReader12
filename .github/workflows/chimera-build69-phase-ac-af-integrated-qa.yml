@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-CA — Offline Page Retention and Storage Safety iOS12
+name: WebReader Build69 Dev AC-CC — Adaptive Landscape Webtoon and iOS12 Safety
 
 on:
   push:
@@ -27,6 +27,10 @@ on:
       - 'MangaReader12/Downloads/WebReaderOfflineRecoveryPlanWriter.swift'
       - 'MangaReader12/Core/WebReaderOfflinePreservationAudit.swift'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12/UI/ReaderPreferences.swift'
+      - 'MangaReader12/UI/ReaderSettingsViewController.swift'
+      - 'MangaReader12/UI/ReaderViewController.swift'
+      - 'ci/test_reader_webtoon_landscape_width.py'
       - 'MangaReader12.xcodeproj/project.pbxproj'
       - 'ci/test_native_webreader_ipa_stager.py'
       - 'ci/test_native_webreader_signed_production_discovery.py'
@@ -168,6 +172,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bx_reviewed_source_gate.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_by_private_qa_candidate_mac.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
+          python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -210,6 +215,7 @@ jobs:
           python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
           python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
           python3 ci/test_native_webreader_offline_page_inventory.py
           python3 ci/test_native_webreader_offline_completion_receipt.py
