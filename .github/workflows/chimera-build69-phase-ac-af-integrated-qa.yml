@@ -1,4 +1,4 @@
-name: WebReader Build70 Dev AC-CH — Signed Manifest Download Binding and iOS12 Safety
+name: WebReader Build70 Dev AC-CI — Immutable Signed Release Readback and iOS12 Safety
 
 on:
   push:
@@ -51,6 +51,9 @@ on:
       - 'ci/test_native_webreader_signed_production_discovery.py'
       - 'ci/test_native_webreader_signed_production_envelope_binding.py'
       - 'ci/test_build70_signed_envelope_download_policy.py'
+      - 'ci/build70_immutable_public_release_readback.py'
+      - 'ci/test_build70_immutable_public_release_readback.py'
+      - 'ci/test_build70_real_ipa_signed_production_v2_lab.py'
       - 'ci/test_native_webreader_release_channel_separation.py'
       - 'ci/test_native_webreader_ipa_download_budget.py'
       - 'ci/test_native_webreader_physical_qa_checklist.py'
@@ -194,6 +197,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build70_owner_qa_gate.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_owner_public_root_patch_preview.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_signed_envelope_download_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_immutable_public_release_readback.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
