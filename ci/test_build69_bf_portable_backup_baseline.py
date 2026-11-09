@@ -24,7 +24,7 @@ DB_SOURCE = (ROOT / "MangaReader12/Database/SQLiteDatabase.swift").read_text("ut
 SCHEMA = re.search(r'private static let schemaV1 = """(.*?)"""', DB_SOURCE, re.S).group(1)
 
 
-def fake_backup(*, schema=1, extra=False):
+def fake_backup(*, schema=1, extra=False, unsanitized=False):
     db = sqlite3.connect(":memory:")
     try:
         db.execute("PRAGMA foreign_keys=ON")
@@ -49,6 +49,13 @@ def fake_backup(*, schema=1, extra=False):
         # Simulate BackupManager.sanitizePortableSnapshot: no downloaded page metadata.
         db.execute("DELETE FROM downloads")
         db.execute("UPDATE chapters SET downloaded = 0")
+        db.execute("DELETE FROM sources")
+        if unsanitized:
+            db.execute(
+                "INSERT INTO downloads(chapter_id,state,progress,updated_at)"
+                " VALUES(1,'completed',1.0,1730000120)"
+            )
+            db.execute("UPDATE chapters SET downloaded=1")
         db.commit()
         raw = db.serialize()
     finally:
@@ -93,6 +100,7 @@ class PortableBaseline(unittest.TestCase):
         self.assertEqual(r["metrics"]["Registros de histórico"], 1)
         self.assertIsNone(r["metrics"]["Downloads marcados completos no banco"])
         self.assertTrue(r["missingDownloadCount"])
+        self.assertTrue(r["portableDownloadsResetConfirmed"])
         for field in (
             "buildAtExportAuthenticatedByTool", "offlineChapterImagesIncluded",
             "offlinePagesPreservedByBackup", "sensitiveValuesPrinted",
@@ -133,6 +141,7 @@ class PortableBaseline(unittest.TestCase):
         cases = [
             b"", b"{}", b"[]", b'{"formatVersion": 1, "formatVersion": 1}',
             fake_backup(extra=True), fake_backup(schema=2),
+            fake_backup(unsanitized=True),
             valid.replace(b"SECRET READER PREF", b"SECRET READER PREF"),  # valid control
         ]
         for data in cases[:-1]:
@@ -141,6 +150,7 @@ class PortableBaseline(unittest.TestCase):
                     read_build68_portable_baseline(data)
         for altered in (
             {**env, "formatVersion": 2},
+            {**env, "createdAt": float("nan")},
             {**env, "databaseBase64": "!!!"},
             {**env, "databaseBase64": base64.b64encode(b"not sqlite").decode()},
             {**env, "preferences": []},
