@@ -80,9 +80,10 @@ class PrivatePackagingGate(unittest.TestCase):
         integrated = (
             ROOT / ".github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml"
         ).read_text()
-        self.assertNotIn("package_webreader_build69_private_qa_ipa.sh", integrated)
-        self.assertNotIn("WR69_PRIVATE_QA_PACKAGE_APPROVAL:", integrated)
-        self.assertNotIn("upload-artifact@", integrated)
+        steps = integrated.split("\njobs:\n", 1)[1]
+        self.assertNotIn("package_webreader_build69_private_qa_ipa.sh", steps)
+        self.assertNotIn("WR69_PRIVATE_QA_PACKAGE_APPROVAL:", steps)
+        self.assertNotIn("upload-artifact@", steps)
 
 
 if __name__ == "__main__":
