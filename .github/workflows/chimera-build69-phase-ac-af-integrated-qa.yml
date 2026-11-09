@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-CC — Adaptive Landscape Webtoon and iOS12 Safety
+name: WebReader Build70 Dev AC-CD — Landscape Webtoon QA IPA and iOS12 Safety
 
 on:
   push:
@@ -31,6 +31,13 @@ on:
       - 'MangaReader12/UI/ReaderSettingsViewController.swift'
       - 'MangaReader12/UI/ReaderViewController.swift'
       - 'ci/test_reader_webtoon_landscape_width.py'
+      - 'ci/build70_unsigned_candidate_audit.py'
+      - 'ci/build70_private_qa_ipa_preflight.py'
+      - 'ci/build70_actions_qa_package.py'
+      - 'ci/test_build70_private_qa_contract.py'
+      - 'ci/test_build70_private_qa_ipa_preflight.py'
+      - 'ci/test_build70_owner_qa_gate.py'
+      - '.github/workflows/chimera-build70-owner-approved-one-shot-qa.yml'
       - 'MangaReader12.xcodeproj/project.pbxproj'
       - 'ci/test_native_webreader_ipa_stager.py'
       - 'ci/test_native_webreader_signed_production_discovery.py'
@@ -173,6 +180,8 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_by_private_qa_candidate_mac.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
           python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_private_qa_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_owner_qa_gate.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -214,6 +223,7 @@ jobs:
           python3 ci/test_native_webreader_signed_production_discovery.py
           python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
+          python3 -m unittest discover -s ci -p 'test_build70_private_qa_ipa_preflight.py' -v
           python3 ci/test_native_webreader_physical_qa_checklist.py
           python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
           python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
