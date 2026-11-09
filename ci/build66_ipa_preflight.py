@@ -41,7 +41,7 @@ def inspect_ipa(path, expected_sha256, expected_size, min_build, *,
         raise AdmissionDenied("invalid baseline")
     # Open once with O_NOFOLLOW and inspect the actual descriptor. The bytes
     # validated here are an in-memory snapshot, never a mutable path to install.
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | os.O_NONBLOCK
     if not hasattr(os, "O_NOFOLLOW"):
         raise AdmissionDenied("platform cannot reject symlinks atomically")
     try:
