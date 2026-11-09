@@ -39,6 +39,19 @@ enum WebReaderUpgradeContinuitySnapshot {
         return count
     }
 
+    private static func runReadTransactionStatement(
+        _ db: OpaquePointer, sql: String
+    ) -> Bool {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+              let prepared = stmt else {
+            sqlite3_finalize(stmt)
+            return false
+        }
+        defer { sqlite3_finalize(prepared) }
+        return sqlite3_step(prepared) == SQLITE_DONE
+    }
+
     private static func readCounts(databaseURL: URL) -> [String]? {
         // Absence is NOT an empty library: it means there was no readable DB.
         guard FileManager.default.fileExists(atPath: databaseURL.path) else { return nil }
@@ -54,6 +67,12 @@ enum WebReaderUpgradeContinuitySnapshot {
         defer { sqlite3_close(opened) }
         guard sqlite3_db_readonly(opened, "main") == 1 else { return nil }
         sqlite3_busy_timeout(opened, 200)
+        // Pin the counters to ONE consistent SQLite read snapshot even if
+        // normal library operations add chapters during this QA diagnostic.
+        guard runReadTransactionStatement(opened, sql: "BEGIN DEFERRED;") else {
+            return nil
+        }
+        defer { _ = runReadTransactionStatement(opened, sql: "ROLLBACK;") }
         guard let version = exactCount(opened, sql: "PRAGMA user_version;"),
               version == Int64(expectedSchema) else { return nil }
         var lines: [String] = []
