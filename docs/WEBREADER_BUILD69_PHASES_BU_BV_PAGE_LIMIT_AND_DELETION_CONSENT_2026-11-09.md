@@ -44,3 +44,19 @@ Workflow `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml` atual
 Uma candidata privada Build69 verdadeira ainda precisa de autorização de empacotamento e distribuição, assinatura ad hoc compatível, preflight final ZIP/entitlements/SHA e conferência da transferência para Filza. Antes de instalar por cima da Build68, exportar `.mr12backup` para outro dispositivo **sem restaurá-lo** e anotar os capítulos completos offline; o backup não leva suas imagens. Após instalar, verificar biblioteca e capítulos antigos **integralmente sem Wi-Fi**, fechar/reabrir ainda offline, e executar o roteiro de 16 verificações.
 
 **Proibido nesta fase:** mesclar `main`, limpar biblioteca, criar Release editorial, provisionar trust root real, ativar `WebReaderAppinstSocket.liveInstallationEnabled` ou instalar IPA no iPad.
+
+
+## BW — proteger a manutenção de armazenamento contra perdas durante a migração
+
+**Achado:** em `DataStorageViewController`, selecionar **Reindexar downloads** executava imediatamente `StorageManager.reindexDownloads()`. Essa função pode apagar **registros do banco** se os arquivos correspondentes parecerem ausentes. Depois de um upgrade iOS, a localização ou permissões dos arquivos podem ter mudado temporariamente, então a operação não deve ser oferecida como reparo silencioso. A tela **Apagar todos os downloads** já exigia confirmação, mas o aviso não mencionava que as páginas não existem no backup portátil.
+
+**Implementação:**
+
+- A opção `Reindexar downloads` agora chama `confirmReindexDownloads()`, e só a ação destrutiva **Reindexar mesmo assim** executa `reindexDownloads()`; `Cancelar` não faz manutenção. O aviso destaca que um caminho antigo pode aparentar ausência, que reindexar não corrige a migração e que `.mr12backup` não contém imagens.
+- O alerta de **Apagar todos os downloads** continua exigindo confirmação e agora alerta explicitamente que `.mr12backup` não recupera as imagens e que a biblioteca/progresso/histórico não são apagados pelo comando.
+- A reindexação e a exclusão em massa continuam disponíveis apenas se o usuário **as escolher conscientemente**. Nenhuma limpeza/reindexação é executada por atualizar o WebReader ou por abrir a tela.
+- O teste `ci/test_build69_bw_storage_reindex_deletion_consent.py` verifica ambos os alertas, opções Cancelar/destrutiva, a ligação exclusiva entre aprovação e ação e a ausência de reindexação direta no `didSelectRowAt`.
+
+A CI integrada foi ampliada para [AC–BW #42578442673](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42578442673), com testes Linux BU/BV/BW, toda a regressão anterior, Swift nativo, Debug/Release ARM64 iOS12, preview Build69 unsigned e assinatura ad hoc de **cópia temporária** do aplicativo. Consultar a conclusão; o fluxo **não cria IPA** e não executa instalação.
+
+**Recomendação para a futura QA física:** **não usar Reindexar downloads, Apagar todos os downloads ou Restaurar backup** como tentativa de resolver perda de páginas após instalar por cima. Primeiro capturar os dois diagnósticos de biblioteca/presença offline, conferir o caminho do contêiner e investigar a origem sem alterações destrutivas.
