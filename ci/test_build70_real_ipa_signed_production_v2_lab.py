@@ -17,11 +17,13 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 
+from build70_immutable_public_release_readback import review_public_readback
 from build68_release_public_key_handoff import prepare_public_key_handoff
 from build66_release_key_pinning_gate import public_key_spki_sha256
 from build70_private_qa_ipa_preflight import preflight_private_qa_ipa
@@ -193,6 +195,45 @@ def main():
                 or verified["sha256"] != qa["ipaSHA256"]
                 or verified["ipaSize"] != qa["ipaSize"]):
             raise RuntimeError("host signer did not bind exact Build70 archive")
+        # Phase CI: simulate a public GitHub readback using TWO distinct
+        # copies of the genuine signed Build70 IPA, while keeping ALL files
+        # local. No Release, HTTP request, main commit or publication occurs.
+        mirror_folder = directory / "simulated-public-asset"
+        mirror_folder.mkdir()
+        mirror_ipa = mirror_folder / IPA_NAME
+        shutil.copyfile(args.ipa, mirror_ipa)
+        fake_release = {
+            "tag_name": "build70",
+            "html_url": "https://github.com/AugustoArbulu/MangaReader12/releases/tag/build70",
+            "draft": False, "prerelease": False, "immutable": True,
+            "published_at": "2026-11-09T23:00:00Z",
+            "assets": [{
+                "name": IPA_NAME, "state": "uploaded",
+                "content_type": "application/octet-stream",
+                "size": qa["ipaSize"], "digest": "sha256:" + qa["ipaSHA256"],
+                "browser_download_url": verified["ipaUrl"],
+            }],
+        }
+        readback_report = review_public_readback(
+            owner_public_pem=public.read_bytes(), independent_pin=pin,
+            private_manifest=signed.read_bytes(),
+            published_manifest=signed.read_bytes(),
+            local_ipa=args.ipa, readback_ipa=mirror_ipa,
+            release_rest_json=json.dumps(
+                fake_release, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8"),
+            installed_build=69
+        )
+        if not (readback_report["sourceAndReadbackNativeCodeSealsVerified"]
+                and readback_report["assetAPISHA256MatchedSignedPayload"]
+                and readback_report["readbackByteDigestMatched"]
+                and not readback_report["githubAPILiveVerifiedByThisTool"]
+                and not readback_report["publicationHappenedInThisTool"]
+                and not readback_report["installationPerformed"]):
+            raise RuntimeError("CI mocked public readback contract failed")
+        print("PASS CI: REAL Build70 native code seals (2 files), immutable"
+              " GitHub REST snapshot consistency and signed v2 envelope."
+              " All readback data is LOCAL and simulated; NO publication.")
         mutated = directory / "mutated-qa.ipa"
         # A byte mutation is detected by signed-digest comparison before
         # the ZIP parser can treat the potentially damaged archive as valid.
