@@ -43,6 +43,8 @@ python3 ci/build70_owner_public_root_patch_preview.py \
 
 O repositório `AugustoArbulu/MangaReader12` está **público** (verificado na API GitHub em 09/11/2026). O atual código de manifesto aceita `https://raw.githubusercontent.com/AugustoArbulu/MangaReader12/main/updates/channel-production-v2.json` e a IPA com nome `WebReader-BuildN-iOS12-adhoc.ipa` em Release tag `buildN`. **Ainda não publicamos esse manifesto nem um Release de produção**.
 
+**Verificação real pelo GitHub API em 09/11/2026:** o repositório está público, o endpoint `/releases` retornou lista vazia e `main/updates/channel-production-v2.json` retornou HTTP 404. Portanto não há atualização editorial de produção disponível ao app neste momento. Criar essa publicação só será adequado depois de revisar a chave pública real e o manifesto assinado.
+
 Artifatos temporários Actions (como as IPAs 69 e 70 de teste) não substituem um release estável: expiram e não têm o mesmo endereço canônico. O WebReader poderá consultar o Release público sem token do GitHub **quando** o manifesto v2 estiver publicado e a chave pública editorial estiver embutida no app.
 
 ## Testes e bloqueios
