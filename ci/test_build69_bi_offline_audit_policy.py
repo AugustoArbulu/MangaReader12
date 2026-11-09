@@ -30,7 +30,7 @@ class OfflinePresenceSafety(unittest.TestCase):
         self.assertLess(body.index("DispatchQueue.main.async"),
                         body.index("UIPasteboard.general.string = report"))
         self.assertIn("guard self.view.window != nil else { return }", body)
-        self.assertIn("Amostra limitada a 64 capítulos", body)
+        self.assertIn("Lote de até 64 capítulos copiado", body)
 
     def test_readonly_bounded_db_and_paths(self):
         for literal in (
@@ -40,7 +40,9 @@ class OfflinePresenceSafety(unittest.TestCase):
             "BEGIN DEFERRED;",
             "ROLLBACK;",
             "PRAGMA user_version;",
-            "LIMIT 64;",
+            "LIMIT ? OFFSET ?;",
+            "sqlite3_bind_int64(prepared, 1, Int64(sampleLimit))",
+            "sqlite3_bind_int64(prepared, 2, offset)",
             "sqlite3_busy_timeout(conn, 200)",
             "OfflineDownloadPath.chapterDirectory(",
             "WebReaderOfflinePageInventory.inspect(",
