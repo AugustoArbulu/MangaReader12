@@ -138,6 +138,9 @@ os.link = mutate_after_second_link
                         PACKAGE.index(MARKER))
         self.assertIn('os.link(checksum_staged, checksum_final)', PUBLISH)
         self.assertIn('os.link(staged, final)', PUBLISH)
+        self.assertIn('published_identity = snapshot(final)', PUBLISH)
+        self.assertIn('staged_identity = snapshot(staged)', PUBLISH)
+        self.assertIn('checksum_final.read_bytes() != checksum_bytes', PUBLISH)
         self.assertLess(PUBLISH.index('os.link(checksum_staged, checksum_final)'),
                         PUBLISH.index('os.link(staged, final)'))
         self.assertNotIn('os.replace(', PUBLISH)
