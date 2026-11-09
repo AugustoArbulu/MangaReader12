@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AT — Owner Public Trust Readiness iOS12
+name: WebReader Build69 Dev AC-AU — Trust Bootstrap + Key Rotation iOS12
 
 on:
   push:
@@ -31,6 +31,8 @@ on:
       - 'ci/test_build69_phase_ap_aq_ar_production_rehearsal.py'
       - 'ci/build69_publisher_bootstrap_review.py'
       - 'ci/test_build69_phase_at_owner_bootstrap.py'
+      - 'ci/build69_owner_rotation_review.py'
+      - 'ci/test_build69_phase_au_owner_rotation.py'
       - 'ci/test_build69_phase_as_at_owner_trust_policy.py'
       - 'ci/test_native_webreader_owner_trust_readiness.py'
       - 'ci/test_build66_code_signature_gate.py'
@@ -61,6 +63,8 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_am_an_signed_discovery_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_ap_aq_ar_production_rehearsal.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_at_owner_bootstrap.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_au_owner_rotation.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
           python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
@@ -131,4 +135,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AT owner public trust remains inactive; no publisher key, IPA or install'
+          echo 'PASS: Build69 AC-AU owner public trust and rotation are review-only; no publisher key, IPA or install'
