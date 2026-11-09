@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AZ — Backup Safety and Upgrade Continuity iOS12
+name: WebReader Build69 Dev AC-BA — Isolated Unsigned Build69 Compile iOS12
 
 on:
   push:
@@ -43,6 +43,8 @@ on:
       - 'ci/test_build69_az_backup_restore_consent.py'
       - 'ci/test_build69_az_persisted_library_sqlite.py'
       - 'ci/build69_az_candidate_readiness.py'
+      - 'ci/build69_ba_unsigned_candidate_audit.py'
+      - 'ci/test_build69_ba_unsigned_candidate_audit.py'
       - 'ci/test_build69_az_candidate_readiness.py'
       - 'MangaReader12/Info.plist'
       - 'ci/test_build53_backup_pins.py'
@@ -88,6 +90,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_az_persisted_library_sqlite.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_az_candidate_readiness.py' -v
           python3 ci/build69_az_candidate_readiness.py
+          python3 -m unittest discover -s ci -p 'test_build69_ba_unsigned_candidate_audit.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -158,10 +161,30 @@ jobs:
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/wr69-ac-af-release" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile isolated UNSIGNED Build69 preview (no IPA, no upload, no signing)
+        run: |
+          # A command-line override changes only the ephemeral build product;
+          # Xcode Debug/Release project source remains at build56.
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr69-ba-unsigned-preview" \
+            CURRENT_PROJECT_VERSION=69 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+          python3 ci/build69_ba_unsigned_candidate_audit.py \
+            "$RUNNER_TEMP/wr69-ba-unsigned-preview/Build/Products/Release-iphoneos/MangaReader12.app"
+          # No GitHub artifact step exists for this .app. It is NOT installable.
+          if find "$RUNNER_TEMP/wr69-ba-unsigned-preview" -name '*.ipa' -print -quit | grep -q .; then
+            echo 'ERROR: forbidden IPA appeared in isolated preview'
+            exit 1
+          fi
+          git diff --exit-code -- MangaReader12.xcodeproj/project.pbxproj MangaReader12/Info.plist
+          test ! -f ci/build69_candidate_trigger.txt
+          echo 'PASS: temporary unsigned CFBundleVersion69 ARM64 iOS12 app; no IPA/sign/install'
       - name: Confirm stable identity and no privileged installation
         run: |
           ./ci/verify_binary.sh \
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AZ trust and in-place upgrade diagnostics only; no key, IPA or install'
+          echo 'PASS: Build69 AC-BA stable source build56 + isolated unsigned preview69; no key, IPA or install'
