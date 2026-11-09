@@ -21,7 +21,12 @@ assert "cell.textLabel?.text = \"Atualizações do WebReader\"" in tabs
 assert "WebReaderAppUpdatesViewController()" in tabs
 assert "cell.textLabel?.text = \"Atualização da Biblioteca\"" in tabs
 assert "BackgroundLibraryUpdateManager.shared.isEnabled" in tabs
-assert "WebReaderUpdateChannel.isConfigured" in screen
+# Signed production downloads require the exact authenticated envelope,
+# not merely a publisher-key-present flag.
+assert "selectedSignedUpdateIsBound(update)" in screen
+assert "self.authenticatedSignedEnvelopeData = envelope" in screen
+assert "signedManifestEnvelopeData: update.provenance == .signedManifest ?" in screen
+assert "WebReaderSignedProductionEnvelopeBinding.swift in Sources" in project
 assert "WebReaderUpdateChecker(" in screen
 assert "usePublicGitHubReleases: true" in screen
 assert "WebReaderGitHubReleaseParser.swift in Sources" in project
@@ -110,7 +115,12 @@ assert 'verifiedUpdate: update,' in screen
 assert 'onProgress:' in screen
 assert 'downloader.stage { [weak self, weak downloader] result in' in screen
 assert 'let current = availableUpdate' in screen
-assert 'WebReaderUpdateChannel.isConfigured' in screen
+# Signed production downloads require the exact authenticated envelope,
+# not merely a publisher-key-present flag.
+assert "selectedSignedUpdateIsBound(update)" in screen
+assert "self.authenticatedSignedEnvelopeData = envelope" in screen
+assert "signedManifestEnvelopeData: update.provenance == .signedManifest ?" in screen
+assert "WebReaderSignedProductionEnvelopeBinding.swift in Sources" in project
 assert 'stager?.cancel()' in screen
 assert 'UIActivityViewController(activityItems: [url]' in screen
 # Public Release discovery is not independent publisher authentication.
