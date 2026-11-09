@@ -9,6 +9,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var checker: WebReaderUpdateChecker?
     private var signedChecker: WebReaderProductionSignedReleaseChecker?
     private var signedChannelBusy = false
+    // Store the actual owner-verified ECDSA envelope, never only a
+    // .signedManifest provenance marker.
+    private var authenticatedSignedEnvelopeData: Data?
     private var continuitySnapshotBusy = false
     private var offlinePresenceBusy = false
     private var offlineSampleOffset = 0
@@ -583,8 +586,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case .upToDate:
             return "Nenhuma Build mais recente encontrada nos metadados consultados"
         case .updateAvailable(let update):
-            return "Build " + String(update.build) +
-                " encontrada • verificar IPA antes da instalação manual"
+            let source = update.provenance == .signedManifest ?
+                "manifesto editorial assinado" : "GitHub Release sem assinatura editorial"
+            return "Build " + String(update.build) + " • " + source +
+                " • verificar IPA antes da instalação manual"
         case .failed(let error):
             switch error {
             case .busy: return "Uma verificação já está em andamento"
@@ -745,6 +750,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
               !stagingIPA, !verifyingExport
         else { return }
         checking = true
+        authenticatedSignedEnvelopeData = nil
         stagedIPAURL = nil
         stagedSHA256 = nil
         tableView.reloadData()
@@ -873,6 +879,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         signedChannelStatus = "Conferindo manifesto ECDSA P-256 assinado…"
         // Do not mix metadata from a previous unsigned public release
         // with a newly requested signed-source inspection.
+        authenticatedSignedEnvelopeData = nil
         lastResult = .disabled
         stagedIPAURL = nil
         stagedSHA256 = nil
@@ -894,9 +901,25 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                         "Canal assinado não provisionado; nenhuma atualização autenticada"
                     self.lastResult = .disabled
                 case .updateAvailable(let update):
-                    self.signedChannelStatus = "Manifesto editorial ECDSA verificado • Build " +
-                        String(update.build) + " • instalação manual"
-                    self.lastResult = .updateAvailable(update)
+                    // Recheck the exact bytes against compiled owner trust,
+                    // instead of treating provenance as evidence.
+                    if let envelope = signed.verifiedEnvelopeCopy(),
+                       WebReaderSignedProductionEnvelopeBinding.matchesCompiledOwnerRootReadOnly(
+                        envelopeData: envelope, update: update,
+                        installedBuild: self.installedBuild,
+                        installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+                       ) {
+                        self.authenticatedSignedEnvelopeData = envelope
+                        self.signedChannelStatus =
+                            "Manifesto editorial ECDSA verificado • Build " +
+                            String(update.build) + " • download manual disponível"
+                        self.lastResult = .updateAvailable(update)
+                    } else {
+                        self.authenticatedSignedEnvelopeData = nil
+                        self.signedChannelStatus =
+                            "Falha ao vincular assinatura e IPA • download bloqueado"
+                        self.lastResult = .disabled
+                    }
                 case .upToDate:
                     self.signedChannelStatus =
                         "Manifesto assinado verificado • nenhuma Build mais recente"
@@ -1344,17 +1367,27 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
     }
 
+    private func selectedSignedUpdateIsBound(_ update: WebReaderVerifiedUpdate) -> Bool {
+        guard update.provenance == .signedManifest,
+              let envelope = authenticatedSignedEnvelopeData else { return false }
+        return WebReaderSignedProductionEnvelopeBinding.matchesCompiledOwnerRootReadOnly(
+            envelopeData: envelope, update: update,
+            installedBuild: installedBuild,
+            installedIOS: ProcessInfo.processInfo.operatingSystemVersion
+        )
+    }
+
     private func confirmIPADownload() {
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               let update = availableUpdate,
               (update.provenance == .publicGitHubRelease ||
                 (update.provenance == .signedManifest &&
-                 WebReaderUpdateChannel.isConfigured &&
-                 WebReaderProductionPublisherTrust.isProvisioned))
+                 selectedSignedUpdateIsBound(update)))
         else { return }
         let mb = Double(update.ipaSize) / (1024 * 1024)
         let channelNotice = update.provenance == .publicGitHubRelease ?
-            "Metadados do GitHub não têm assinatura editorial independente. " : ""
+            "Metadados do GitHub não têm assinatura editorial independente. " :
+            "O manifesto ECDSA será revalidado antes do download. "
         let message = String(format:
             "Build %d • %.1f MB. Baixar e validar agora? " +
             channelNotice +
@@ -1372,10 +1405,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               (update.provenance == .publicGitHubRelease ||
                 (update.provenance == .signedManifest &&
-                 WebReaderUpdateChannel.isConfigured &&
-                 WebReaderProductionPublisherTrust.isProvisioned)),
+                 selectedSignedUpdateIsBound(update))),
               let current = availableUpdate,
-              current.build == update.build, current.sha256 == update.sha256
+              current.build == update.build, current.sha256 == update.sha256,
+              current.provenance == update.provenance,
+              current.ipaURL == update.ipaURL
         else { return }
         stagingIPA = true
         ipaStatus = "Baixando e verificando hash, versão e conteúdo da IPA"
@@ -1384,6 +1418,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         downloadSessionID = id
         let downloader = WebReaderIPAStager(
             verifiedUpdate: update,
+            signedManifestEnvelopeData: update.provenance == .signedManifest ?
+                authenticatedSignedEnvelopeData : nil,
             onProgress: { [weak self] percent in
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self, self.downloadSessionID == id,
@@ -1471,8 +1507,20 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         tableView.reloadData()
         let currentBuild = installedBuild
         let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        let signedEnvelope = authenticatedSignedEnvelopeData
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let valid = (try? WebReaderNativeIPAAuditor.inspect(
+            let signatureIsBound: Bool
+            if update.provenance == .signedManifest {
+                signatureIsBound = signedEnvelope.map {
+                    WebReaderSignedProductionEnvelopeBinding.matchesCompiledOwnerRootReadOnly(
+                        envelopeData: $0, update: update,
+                        installedBuild: currentBuild, installedIOS: currentIOS
+                    )
+                } ?? false
+            } else {
+                signatureIsBound = update.provenance == .publicGitHubRelease
+            }
+            let valid = signatureIsBound && (try? WebReaderNativeIPAAuditor.inspect(
                 ipaURL: url, signedUpdate: update,
                 installedBuild: currentBuild, installedIOS: currentIOS
             )) != nil
@@ -1513,11 +1561,23 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         tableView.reloadData()
         let currentBuild = installedBuild
         let currentIOS = ProcessInfo.processInfo.operatingSystemVersion
+        let signedEnvelope = authenticatedSignedEnvelopeData
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let report = try? WebReaderNativeIPAAuditor.inspect(
+            let signatureIsBound: Bool
+            if update.provenance == .signedManifest {
+                signatureIsBound = signedEnvelope.map {
+                    WebReaderSignedProductionEnvelopeBinding.matchesCompiledOwnerRootReadOnly(
+                        envelopeData: $0, update: update,
+                        installedBuild: currentBuild, installedIOS: currentIOS
+                    )
+                } ?? false
+            } else {
+                signatureIsBound = update.provenance == .publicGitHubRelease
+            }
+            let report = signatureIsBound ? (try? WebReaderNativeIPAAuditor.inspect(
                 ipaURL: url, signedUpdate: update,
                 installedBuild: currentBuild, installedIOS: currentIOS
-            )
+            )) : nil
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.verifyingExport = false
@@ -1534,7 +1594,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 guard self.view.window != nil else { return }
                 let provenance = update.provenance == .publicGitHubRelease ?
                     "GitHub Release público; editor NÃO autenticado" :
-                    "Manifesto assinado; confiança editorial exige verificação separada"
+                    "Manifesto de produção ECDSA v2 verificado pela chave editorial compilada"
                 let lines = [
                     "WebReader • recibo de integridade, NÃO de instalação",
                     "Build: " + String(report.build),
