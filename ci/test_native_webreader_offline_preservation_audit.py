@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 AUDIT = ROOT / "MangaReader12/Core/WebReaderOfflinePreservationAudit.swift"
 INVENTORY = ROOT / "MangaReader12/Downloads/WebReaderOfflinePageInventory.swift"
+RECEIPT = ROOT / "MangaReader12/Downloads/WebReaderOfflineCompletionReceipt.swift"
 MANAGER = (ROOT / "MangaReader12/Downloads/ChapterDownloadManager.swift").read_text()
 PATH_SOURCE = MANAGER.split("// BEGIN OFFLINE_PATH_RELOCATION", 1)[1].split(
     "// END OFFLINE_PATH_RELOCATION", 1
@@ -42,6 +43,8 @@ if mode == "three" {
     check(report.contains("Capítulos completos no banco: 3"), "completed count")
     check(report.contains("Capítulos da amostra inspecionados: 3"), "sample count")
     check(report.contains("Capítulos com arquivos sequenciais e não vazios: 1"), "valid files")
+    check(report.contains("Com recibo de quantidade de páginas: 1"), "Build69 receipt")
+    check(report.contains("Legados sem recibo entre os válidos: 0"), "no legacy valid chapter")
     check(report.contains("Capítulos faltantes, incompletos ou inseguros: 2"), "sparse/empty")
     check(report.contains("Capítulos fora da amostra: 0"), "full first sample")
     check(report.contains("Arquivos de páginas presentes na amostra: 2"), "two valid pages")
@@ -69,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="wr69-bi-privacy-") as temp:
     exe = root / "qa-offline"
     cmd = [
         "swiftc", "-swift-version", "5",
-        str(swift_path), str(INVENTORY), str(AUDIT), str(main),
+        str(swift_path), str(INVENTORY), str(RECEIPT), str(AUDIT), str(main),
         "-lsqlite3", "-o", str(exe),
     ]
     subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
@@ -109,6 +112,9 @@ with tempfile.TemporaryDirectory(prefix="wr69-bi-privacy-") as temp:
         if i == 0:
             for j in (0, 1):
                 (folder / f"page-{j:05d}.bin").write_bytes(b"fake_image")
+            (folder / ".webreader-completion-v1").write_bytes(
+                b"WR-OFFLINE-COMPLETE-V1:2\n"
+            )
         elif i == 1:
             for j in (0, 2):
                 (folder / f"page-{j:05d}.bin").write_bytes(b"fake_image")
