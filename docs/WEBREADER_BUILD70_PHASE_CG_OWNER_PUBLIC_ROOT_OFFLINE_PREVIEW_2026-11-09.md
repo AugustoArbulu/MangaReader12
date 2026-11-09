@@ -50,7 +50,7 @@ Artifatos temporários Actions (como as IPAs 69 e 70 de teste) não substituem u
 ## Testes e bloqueios
 
 - `ci/test_build70_owner_public_root_patch_preview.py` cobre chave P-256 efêmera, patch de somente dois arquivos, no-write à árvore, hash incorreto, PEM privado, baseline inválido, output symlink, output dentro do repo, output já existente e corrida `O_EXCL`.
-- [CI AC–CG](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42718943078): Python/Linux e compilações iOS12/Mac.
+- [CI AC–CG](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42718943078): **SUCCESS 2/2** — testes Python/Linux e compilações nativas iOS12/ARM64 Debug + Release no macOS.
 - [CE IPA70 real](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42712666573): SUCCESS.
 - [AC–CF produção fail-closed](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42712990625): SUCCESS 2/2.
 
