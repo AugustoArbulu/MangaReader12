@@ -39,7 +39,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git diff --name-only HEAD^ HEAD)" = "ci/build70_owner_approved_qa_trigger.txt"
           test -f ci/build70_owner_approved_qa_trigger.txt
-          test "$(sed -n '1p' ci/build70_owner_approved_qa_trigger.txt)" = "WEBREADER_BUILD69_OWNER_APPROVED_ONE_SHOT_ACTIONS_QA_IPA_NO_INSTALL"
+          test "$(sed -n '1p' ci/build70_owner_approved_qa_trigger.txt)" = "WEBREADER_BUILD70_OWNER_APPROVED_ONE_SHOT_ACTIONS_QA_IPA_NO_INSTALL"
           test "$(sed -n '2p' ci/build70_owner_approved_qa_trigger.txt)" = "$(git rev-parse HEAD^)"
           test "$(wc -l < ci/build70_owner_approved_qa_trigger.txt | tr -d ' ')" -eq 2
           test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
@@ -48,7 +48,7 @@ jobs:
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          echo 'PASS: one-shot source commit and Build68 upgrade safety flags'
+          echo 'PASS: one-shot source commit and Build69 upgrade safety flags'
 
       - name: Select tested Xcode 16.4 for iOS 12 ARM64
         run: |
@@ -59,13 +59,13 @@ jobs:
       - name: Prepare immutable source snapshot outside the clean review checkout
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/wr69-owner-source"
-          git archive --format=tar HEAD | tar -xf - -C "$RUNNER_TEMP/wr69-owner-source"
-          test -f "$RUNNER_TEMP/wr69-owner-source/MangaReader12.xcodeproj/project.pbxproj"
+          mkdir -p "$RUNNER_TEMP/wr70-owner-source"
+          git archive --format=tar HEAD | tar -xf - -C "$RUNNER_TEMP/wr70-owner-source"
+          test -f "$RUNNER_TEMP/wr70-owner-source/MangaReader12.xcodeproj/project.pbxproj"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
       - name: Run private QA, backup and updater regressions
-        working-directory: ${{ runner.temp }}/wr69-owner-source
+        working-directory: ${{ runner.temp }}/wr70-owner-source
         run: |
           python3 -m compileall -q ci
           python3 -m unittest discover -s ci -p 'test_build70_owner_qa_gate.py' -v
@@ -82,35 +82,35 @@ jobs:
           python3 ci/test_build65_upgrade_compatibility.py
 
       - name: Generate WebReader icon and prepare hash-pinned iOS12 libwebp
-        working-directory: ${{ runner.temp }}/wr69-owner-source
+        working-directory: ${{ runner.temp }}/wr70-owner-source
         run: |
           chmod +x ci/*.sh
           python3 ci/prepare_webreader_icons.py
           bash ci/prepare_libwebp_ios.sh
 
-      - name: Build actual unsigned WebReader 69 Release for iOS12 ARM64
-        working-directory: ${{ runner.temp }}/wr69-owner-source
+      - name: Build actual unsigned WebReader 70 Release for iOS12 ARM64
+        working-directory: ${{ runner.temp }}/wr70-owner-source
         run: |
           set -euo pipefail
           xcodebuild -project MangaReader12.xcodeproj \
             -scheme MangaReader12 -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/wr69-owner-approved-qa-build" \
-            CURRENT_PROJECT_VERSION=69 \
+            -derivedDataPath "$RUNNER_TEMP/wr70-owner-approved-qa-build" \
+            CURRENT_PROJECT_VERSION=70 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
           python3 ci/build70_unsigned_candidate_audit.py \
-            "$RUNNER_TEMP/wr69-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app"
+            "$RUNNER_TEMP/wr70-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app"
           test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
-          echo 'PASS: real unsigned WebReader 69 ARM64/iOS12 app, same installed bundle'
+          echo 'PASS: real unsigned WebReader 70 ARM64/iOS12 app, same installed bundle'
 
       - name: Sign QA copy, verify final IPA and write owner receipts (NO INSTALL)
         run: |
           set -euo pipefail
-          DELIVERY="$RUNNER_TEMP/wr69-owner-qa-artifact"
+          DELIVERY="$RUNNER_TEMP/wr70-owner-qa-artifact"
           mkdir -p "$DELIVERY"
           python3 ci/build70_actions_qa_package.py \
-            "$RUNNER_TEMP/wr69-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app" \
+            "$RUNNER_TEMP/wr70-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app" \
             "$DELIVERY" > "$DELIVERY/WebReader-Build70-packager-summary.json"
           python3 ci/build70_private_qa_ipa_preflight.py \
             --ipa "$DELIVERY/WebReader-Build70-iOS12-adhoc.ipa" \
@@ -129,7 +129,7 @@ jobs:
           if checksum != digest + "  " + base + "\n":
               raise SystemExit("BLOCKED: uploaded IPA differs from checksum")
           audit = json.loads((root / "WebReader-Build70-second-preflight.json").read_text())
-          if (audit.get("build") != 69
+          if (audit.get("build") != 70
                   or audit.get("ipaSHA256") != digest
                   or audit.get("adHocSignatureIntegrityVerified") is not True
                   or audit.get("installedApplicationIdentifierMatch") is not True
@@ -146,9 +146,9 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-iOS12-adhoc.ipa
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-iOS12-adhoc.ipa.sha256
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-private-qa-audit.json
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-source-provenance.json
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-second-preflight.json
-            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build70-packager-summary.json
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-iOS12-adhoc.ipa
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-iOS12-adhoc.ipa.sha256
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-private-qa-audit.json
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-source-provenance.json
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-second-preflight.json
+            ${{ runner.temp }}/wr70-owner-qa-artifact/WebReader-Build70-packager-summary.json
