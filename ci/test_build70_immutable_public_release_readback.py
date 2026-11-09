@@ -171,7 +171,7 @@ class ImmutablePublicReadbackTests(unittest.TestCase):
         with self.assertRaises(PublicReadbackRejected):
             self.run_gate(installed_build=71)
         with self.assertRaises(PublicReadbackRejected):
-            self.run_gate(installed_build=69)
+            self.run_gate(installed_build=68)
         with self.assertRaises(PublicReadbackRejected):
             self.run_gate(owner_public_pem=b"garbage")
 
