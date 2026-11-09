@@ -270,7 +270,12 @@ final class ChapterDownloadManager {
                     chapterID: record.sourceChapterID
                 )
                 guard record.localPath == expected.path else { continue }
-                let data = try Data(contentsOf: planURL(for: expected))
+                // Recovery metadata is untrusted after an interrupted
+                // transfer. Reject symlink/FIFO/oversized plans without
+                // removing the offline page files already on disk.
+                let data = try WebReaderOfflineRecoveryPlanReader.read(
+                    from: planURL(for: expected)
+                )
                 let plan = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: data)
                 guard plan.schemaVersion == 1,
                       plan.sourceID == record.sourceID,
