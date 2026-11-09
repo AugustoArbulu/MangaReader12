@@ -98,6 +98,7 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
     }
 
     private func chooseBackup() {
+        guard !restoring, !restoreConfirmationPending else { return }
         restoring = true
         let picker = UIDocumentPickerViewController(
             documentTypes: ["public.data"],
