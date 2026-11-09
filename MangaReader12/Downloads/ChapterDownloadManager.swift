@@ -634,14 +634,15 @@ final class ChapterDownloadManager {
         )
         guard fileManager.fileExists(atPath: directory.path) else { return nil }
 
-        let files = try fileManager.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
-        .filter { $0.lastPathComponent.hasPrefix("page-") && $0.pathExtension == "bin" }
-        .sorted { $0.lastPathComponent < $1.lastPathComponent }
-
-        guard !files.isEmpty else {
+        // A completed SQLite row does not prove every local page survived.
+        // Reject gaps, empty files and symbolic links instead of renumbering
+        // a sparse list and accidentally showing an incomplete chapter.
+        let files: [URL]
+        do {
+            files = try WebReaderOfflinePageInventory.inspect(
+                directory: directory, fileManager: fileManager
+            )
+        } catch {
             throw ChapterDownloadError.missingCompletedFiles
         }
 
