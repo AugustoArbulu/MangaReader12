@@ -48,7 +48,7 @@ class RecoveryPlanContract(unittest.TestCase):
 
     def test_restore_uses_bounded_reader_without_deleting_pages(self):
         restore = MANAGER.split("private func restorePreviousSession()", 1)[1].split(
-            "func enqueue(", 1
+            "private func jobKey(", 1
         )[0]
         self.assertIn("WebReaderOfflineRecoveryPlanReader.read(", restore)
         self.assertIn("from: planURL(for: expected)", restore)
