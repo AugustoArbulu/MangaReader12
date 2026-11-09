@@ -48,7 +48,7 @@ Teste `ci/test_build69_bt_completed_download_retention.py`: exige que a consulta
 
 Workflow `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml` renomeado **AC–BT**, com três suites estáticas novas no Linux e teste BR Swift real adicionado ao job macOS. Também roda toda a bateria anterior (AC–BQ), Xcode Debug/Release ARM64 iOS12, preview unsigned versionada 69 e assinatura ad hoc **de uma cópia descartável do WebReader real**, sem criar IPA.
 
-[GitHub Actions AC–BT #42574421076](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42574421076). **Confirmar conclusão e corrigir qualquer falha antes de declarar a rodada aprovada.** Execuções antigas podem aparecer canceladas automaticamente por `cancel-in-progress`.
+[GitHub Actions AC–BT #42574421076](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42574421076). **CI consolidada concluída: SUCCESS nos 2/2 jobs** (Linux e macOS). A primeira execução encontrou apenas uma chamada de função auxiliar com rótulo ausente no teste Swift; o teste foi corrigido. A execução final aprovou testes Swift reais, segurança Linux, Xcode Debug/Release ARM64 iOS12, preview unsigned Build69 e assinatura ad hoc efêmera do WebReader real. Nenhuma IPA foi produzida. Execuções antigas podem aparecer canceladas automaticamente por `cancel-in-progress`.
 
 ## Critério para a futura IPA privada
 
