@@ -103,10 +103,17 @@ with tempfile.TemporaryDirectory(prefix="wr69-bd-sqlite-privacy-") as tmp:
          "-lsqlite3", "-o", str(executable)],
         check=True, timeout=120
     )
-    run = lambda mode: subprocess.run(
-        [str(executable), str(support), mode],
-        check=True, timeout=30, capture_output=True, text=True
-    ).stdout
+    def run(mode):
+        result = subprocess.run(
+            [str(executable), str(support), mode],
+            check=False, timeout=30, capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Native snapshot fixture " + mode +
+                " failed (stderr): " + result.stderr[-3000:]
+            )
+        return result.stdout
     before = run("normal")
     after = run("normal")
     assert before == after, "read-only snapshot changed without a DB update"
