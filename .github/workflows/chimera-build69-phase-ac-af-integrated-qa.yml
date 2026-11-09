@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AO — Independently Signed Production Channel iOS12
+name: WebReader Build69 Dev AC-AR — Offline Production Release Rehearsal iOS12
 
 on:
   push:
@@ -23,6 +23,11 @@ on:
       - 'ci/test_build69_phase_ag_ah_ai_transfer_policy.py'
       - 'ci/test_build69_phase_aj_ak_al_crash_recovery_policy.py'
       - 'ci/test_build69_phase_am_an_signed_discovery_policy.py'
+      - 'ci/webreader_update_manifest.py'
+      - 'ci/build66_signed_release_preflight.py'
+      - 'ci/build69_production_release_preflight.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_build69_phase_ap_aq_ar_production_rehearsal.py'
       - 'ci/test_app_updates_screen.py'
       - 'ci/test_native_webreader_release_cache_storage.py'
       - 'ci/test_build68_phase_tu_readonly_contract.py'
@@ -48,6 +53,10 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_ag_ah_ai_transfer_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_aj_ak_al_crash_recovery_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_am_an_signed_discovery_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_ap_aq_ar_production_rehearsal.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
+          python3 -m unittest discover -s ci -p 'test_prepare_signed_webreader_update.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_tu_readonly_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_phase_aa_ab_manual_controls.py' -v
@@ -61,7 +70,9 @@ jobs:
           test ! -f ci/build69_candidate_trigger.txt
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: experimental code only; Build68 approved IPA remains immutable'
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          echo 'PASS: AP-AR offline rehearsal, no production key, no release, no install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -110,4 +121,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AO signed production channel isolated, no publisher key, IPA or install'
+          echo 'PASS: Build69 AC-AR production preflight remains inactive; no publisher key, IPA or install'
