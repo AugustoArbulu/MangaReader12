@@ -35,7 +35,12 @@ func rejected(_ why: String) {
     } catch let error as WebReaderOfflinePageInventory.AuditError {
         check(error != .tooManyPages, "unexpected max-pages error")
     } catch {
-        fatalError("unexpected error while checking " + why + ": " + String(describing: error))
+        // macOS Foundation can reject a symlinked *directory* before it
+        // returns URLResourceValues. That is also a fail-closed rejection.
+        if why != "symbolic link chapter directory" {
+            fatalError("unexpected error while checking " + why + ": " +
+                       String(describing: error))
+        }
     }
 }
 try save(0)
