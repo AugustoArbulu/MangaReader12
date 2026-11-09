@@ -140,7 +140,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if isChimeraOneApp {
             return source == 5 ? 2 : 1
         }
-        if source == 1 { return 4 }
+        if source == 1 { return 5 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
         if source == 3 { return 6 }
@@ -269,6 +269,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             cell.textLabel?.text = "Abrir Builds privadas no GitHub Actions"
             cell.detailTextLabel?.text =
                 "GitHub pode falhar no iOS 12 • use Android/PC e transfira ao Filza"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (1, 4):
+            cell.textLabel?.text = "Copiar diagnóstico do canal assinado"
+            cell.detailTextLabel?.text =
+                "Chave pública, fingerprint, geração e bloqueios • sem rede"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -666,6 +673,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             return
         }
+        if selectedSection == 1, indexPath.row == 4, !isIPCDiagnostic {
+            copySignedChannelReadinessReport()
+            return
+        }
         if selectedSection == 2, indexPath.row == 2 {
             if stagingIPA {
                 ipaStatus = "Cancelando transferência e descartando IPA parcial…"
@@ -723,6 +734,31 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
     }
 
+
+    /// Read-only owner trust report, never imports secrets or touches library.
+    private func copySignedChannelReadinessReport() {
+        guard !isIPCDiagnostic else { return }
+        let ios = ProcessInfo.processInfo.operatingSystemVersion
+        let iosVersion = String(ios.majorVersion) + "." +
+            String(ios.minorVersion) + "." + String(ios.patchVersion)
+        let report = WebReaderUpdaterSecuritySnapshot.signedChannelReadinessReport(
+            installedBuild: installedBuild, iosVersion: iosVersion,
+            publicKeyPresent: WebReaderUpdateChannel.productionPublicKeyX963 != nil,
+            independentPinPresent:
+                WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256 != nil,
+            trustGeneration: WebReaderProductionPublisherTrust.productionTrustGeneration,
+            verifiedReadiness: WebReaderProductionPublisherTrust.isProvisioned
+        )
+        UIPasteboard.general.string = report
+        let alert = UIAlertController(
+            title: "Diagnóstico do canal copiado",
+            message: "Relatório local, sem chaves, caminhos privados ou consultas " +
+                "ao GitHub. Cole o texto para revisar as condições de assinatura.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
 
     /// Production-only signed discovery. The shipped key and independently
     /// trusted SPKI pin are both absent. No key is imported from GitHub or
