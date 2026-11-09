@@ -12,6 +12,7 @@ from build69_publisher_bootstrap_review import (
 )
 
 class PublicBootstrapOfflineTests(unittest.TestCase):
+    _UNSET = object()
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory(prefix="wr69-bootstrap-tests-")
@@ -34,10 +35,10 @@ class PublicBootstrapOfflineTests(unittest.TestCase):
         cls.good = cls.values["prime256v1"][1]
         cls.pin = public_key_spki_sha256(cls.good)
 
-    def review(self, *, pub=None, pin=None, generation=1, revoked=(), baseline=68):
+    def review(self, *, pub=_UNSET, pin=_UNSET, generation=1, revoked=(), baseline=68):
         return review_owner_public_bootstrap(
-            public_pem=self.good if pub is None else pub,
-            independently_verified_pin=self.pin if pin is None else pin,
+            public_pem=self.good if pub is self._UNSET else pub,
+            independently_verified_pin=self.pin if pin is self._UNSET else pin,
             trust_generation=generation, revoked_pins=revoked,
             installed_build=baseline
         )
