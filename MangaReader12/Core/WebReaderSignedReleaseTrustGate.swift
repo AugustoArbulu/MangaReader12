@@ -1,6 +1,7 @@
 import Foundation
 import CommonCrypto
 import CoreFoundation
+import Security
 
 /// Build68 / Phase S — strictly read-only bridge between an independently
 /// provisioned public-key fingerprint and the existing iOS12 ECDSA verifier.
@@ -37,6 +38,32 @@ enum WebReaderSignedReleaseTrustGate {
         0x03, 0x01, 0x07, 0x03, 0x42, 0x00
     ]
 
+    /// Canonical fingerprint of a structurally valid P-256 public point.
+    /// Read-only utility for pre-network production trust readiness; does NOT
+    /// enroll keys, read a manifest, or change the installed trust policy.
+    static func observedP256SPKISHA256(for publicKeyX963: Data) -> String? {
+        guard publicKeyX963.count == 65,
+              publicKeyX963.first == 0x04 else { return nil }
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
+            kSecAttrKeySizeInBits as String: 256,
+            kSecAttrIsPermanent as String: false
+        ]
+        var error: Unmanaged<CFError>?
+        guard let key = SecKeyCreateWithData(
+            publicKeyX963 as CFData, attributes as CFDictionary, &error
+        ), SecKeyIsAlgorithmSupported(
+            key, .verify, .ecdsaSignatureMessageX962SHA256
+        ) else { return nil }
+        let spki = Data(p256SPKIPrefix) + publicKeyX963
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        _ = spki.withUnsafeBytes { raw -> UnsafeMutablePointer<UInt8>? in
+            return CC_SHA256(raw.baseAddress, CC_LONG(raw.count), &digest)
+        }
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     /// The SPKI fingerprint is obtained from separately trusted policy,
     /// NEVER from the downloaded manifest, IPA, or an editable GitHub field.
     /// If the owner has not provisioned a trust anchor, this method denies.
@@ -54,16 +81,9 @@ enum WebReaderSignedReleaseTrustGate {
               ) != nil else {
             throw WebReaderSignedReleaseTrustError.missingIndependentTrustAnchor
         }
-        guard publicKeyX963.count == 65,
-              publicKeyX963.first == 0x04 else {
+        guard let observed = observedP256SPKISHA256(for: publicKeyX963) else {
             throw WebReaderSignedReleaseTrustError.invalidPublicKey
         }
-        let spki = Data(p256SPKIPrefix) + publicKeyX963
-        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        _ = spki.withUnsafeBytes { raw -> UnsafeMutablePointer<UInt8>? in
-            return CC_SHA256(raw.baseAddress, CC_LONG(raw.count), &digest)
-        }
-        let observed = digest.map { String(format: "%02x", $0) }.joined()
         guard observed == pin else {
             throw WebReaderSignedReleaseTrustError.trustAnchorMismatch
         }
