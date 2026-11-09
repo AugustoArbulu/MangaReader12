@@ -49,7 +49,7 @@ ensure(signedBlocked.contains("Chave pública editorial embutida: NÃO"), "publi
 ensure(signedBlocked.contains("Fingerprint SPKI independente embutido: NÃO"), "pin absent")
 ensure(signedBlocked.contains("Consulta autenticada pronta: NÃO"), "channel disabled")
 ensure(signedBlocked.contains("Instalação direta pelo Chimera: BLOQUEADA"), "helper denied")
-ensure(signedBlocked.contains("\\nBuild instalada: 68"), "diagnostic is multiline")
+ensure(signedBlocked.contains("\nBuild instalada: 68"), "diagnostic is multiline")
 ensure(!signedBlocked.contains("/var/mobile/"), "no private paths")
 ensure(!signedBlocked.contains("BEGIN PUBLIC KEY"), "no PEM")
 ensure(!signedBlocked.contains("BEGIN PRIVATE KEY"), "no private key")
