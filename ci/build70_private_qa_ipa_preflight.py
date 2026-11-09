@@ -24,7 +24,7 @@ from build66_code_signature_gate import (
 from build70_unsigned_candidate_audit import (
     UnsignedCandidateRejected, _macho_ios_minimum
 )
-from build70_production_release_preflight import _read_external_regular
+from build69_production_release_preflight import _read_external_regular
 
 QA_BUILD = 70
 INSTALLED_BUILD = 69
@@ -128,7 +128,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ipa", type=Path, required=True)
     parser.add_argument("--sha256-file", type=Path, required=True)
-    parser.add_argument("--installed-build", type=int, default=68)
+    parser.add_argument("--installed-build", type=int, default=69)
     args = parser.parse_args()
     receipt = preflight_private_qa_ipa(
         args.ipa,
