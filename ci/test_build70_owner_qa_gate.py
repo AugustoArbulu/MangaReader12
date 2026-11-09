@@ -43,6 +43,9 @@ class OneShotManualArtifactPolicy(TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, src)
+        self.assertIn('baseline=69', src)
+        self.assertIn('from build70_private_qa_ipa_preflight import', src)
+        self.assertIn('from build70_unsigned_candidate_audit import', src)
         self.assertNotIn('appinst ', src)
         self.assertNotIn('gh release', src)
         self.assertNotIn('git push', src)
@@ -56,10 +59,10 @@ class OneShotManualArtifactPolicy(TestCase):
             "feat/chimera-updater-phase1-protocol-audit",
             MARKER,
             "fetch-depth: 2",
-            "CURRENT_PROJECT_VERSION=69",
+            "CURRENT_PROJECT_VERSION=70",
             "CODE_SIGNING_ALLOWED=NO",
-            "build70_cb_actions_qa_package.py",
-            "build70_bb_private_qa_ipa_preflight.py",
+            "build70_actions_qa_package.py",
+            "build70_private_qa_ipa_preflight.py",
             "actions/upload-artifact@v4",
             "retention-days: 14",
             "contents: read",
@@ -74,9 +77,6 @@ class OneShotManualArtifactPolicy(TestCase):
         self.assertNotIn("schedule:", src)
         self.assertNotIn("pull_request:", src)
         self.assertNotIn("gh release", src)
-        self.assertIn('baseline=69', src)
-        self.assertIn('from build70_private_qa_ipa_preflight import', src)
-        self.assertIn('from build70_unsigned_candidate_audit import', src)
         self.assertNotIn("appinst ", src)
         self.assertNotIn("WebReaderAppinstSocket.install(", src)
 
