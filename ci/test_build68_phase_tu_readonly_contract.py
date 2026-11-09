@@ -78,7 +78,7 @@ class NativeSignedIPAandStatusTests(unittest.TestCase):
             self.assertIn(token, NATIVE_IPA)
 
     def test_updates_ui_has_true_readonly_status_and_copy_action(self):
-        self.assertIn("if source == 3 { return 6 }", UI)
+        self.assertIn("if source == 3 { return 7 }", UI)
         for token in (
             "case (3, 0):", "case (3, 1):", "case (3, 2):",
             "case (3, 3):", "case (3, 4):",
