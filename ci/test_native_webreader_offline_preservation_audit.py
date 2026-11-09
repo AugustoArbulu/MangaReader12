@@ -28,9 +28,12 @@ import Foundation
 let support = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let mode = CommandLine.arguments[2]
 let os = OperatingSystemVersion(majorVersion: 12, minorVersion: 5, patchVersion: 8)
-let report = WebReaderOfflinePreservationAudit.report(
-    installedBuild: 69, ios: os, applicationSupportOverride: support
+let audit = WebReaderOfflinePreservationAudit.diagnostic(
+    installedBuild: 69, ios: os,
+    sampleOffset: mode == "second" ? 64 : (mode == "reset" ? 128 : 0),
+    applicationSupportOverride: support
 )
+let report = audit.report
 func check(_ ok: @autoclosure () -> Bool, _ message: String) {
     if !ok() { fatalError(message + " (" + mode + ") " + report) }
 }
@@ -47,12 +50,24 @@ if mode == "three" {
     check(report.contains("Legados sem recibo entre os válidos: 0"), "no legacy valid chapter")
     check(report.contains("Capítulos faltantes, incompletos ou inseguros: 2"), "sparse/empty")
     check(report.contains("Capítulos fora da amostra: 0"), "full first sample")
+    check(audit.nextOffset == 0, "single batch loops to first")
     check(report.contains("Arquivos de páginas presentes na amostra: 2"), "two valid pages")
     check(report.contains("NÃO comprova imagem íntegra"), "not a full image audit")
 } else if mode == "large" {
     check(report.contains("Capítulos completos no banco: 66"), "all DB records")
     check(report.contains("Capítulos da amostra inspecionados: 64"), "bounded sample")
     check(report.contains("Capítulos fora da amostra: 2"), "honest partial scan")
+    check(report.contains("Índice inicial deste lote: 0"), "first batch")
+    check(audit.nextOffset == 64, "next batch starts at 64")
+} else if mode == "second" {
+    check(report.contains("Capítulos completos no banco: 66"), "same total")
+    check(report.contains("Índice inicial deste lote: 64"), "second batch")
+    check(report.contains("Capítulos da amostra inspecionados: 2"), "two remaining")
+    check(audit.nextOffset == 0, "restarts when last batch completes")
+} else if mode == "reset" {
+    check(report.contains("Índice inicial deste lote: 0"), "invalid offset loops")
+    check(report.contains("Capítulos da amostra inspecionados: 64"), "first batch again")
+    check(audit.nextOffset == 64, "loop cycles through source")
 } else {
     check(report.contains("Banco: INDISPONÍVEL"), "schema/broken DB fails closed")
     check(!report.contains("Capítulos completos no banco: 0"), "missing DB never zero")
@@ -136,6 +151,8 @@ with tempfile.TemporaryDirectory(prefix="wr69-bi-privacy-") as temp:
             )
         db.commit()
     check_report("large")
+    check_report("second")
+    check_report("reset")
     with sqlite3.connect(dbfile) as db:
         db.execute("PRAGMA user_version=2")
         db.commit()
