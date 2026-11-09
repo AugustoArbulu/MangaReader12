@@ -486,6 +486,20 @@ final class ChapterDownloadManager {
         guard runningKey == job.key, job.state == "downloading" else { return }
         if job.nextIndex >= job.pages.count {
             do {
+                // A successful HTTP queue is not proof that all page files
+                // still exist. Check the exact sequence before recording a
+                // completed chapter in SQLite; preserve all files on failure.
+                let committed = try WebReaderOfflinePageInventory.inspect(
+                    directory: job.directory, fileManager: fileManager
+                )
+                guard committed.count == job.pages.count else {
+                    throw ChapterDownloadError.missingCompletedFiles
+                }
+                // New Build69 downloads carry an optional count-only
+                // receipt. Old Build68 chapters never require one.
+                try WebReaderOfflineCompletionReceipt.write(
+                    directory: job.directory, expectedPages: job.pages.count
+                )
                 try repository.setState(
                     sourceID: job.sourceID, manga: job.manga, chapter: job.chapter,
                     state: "completed", progress: 1,
@@ -645,6 +659,18 @@ final class ChapterDownloadManager {
         do {
             files = try WebReaderOfflinePageInventory.inspect(
                 directory: directory, fileManager: fileManager
+            )
+        } catch {
+            throw ChapterDownloadError.missingCompletedFiles
+        }
+
+        // Verify the expected total page count when this is a newly
+        // completed Build69 chapter. A legacy Build68 folder has no receipt
+        // and is still readable. Failure never changes the local files.
+        do {
+            try WebReaderOfflineCompletionReceipt.verifyIfPresent(
+                directory: directory, actualPages: files.count,
+                fileManager: fileManager
             )
         } catch {
             throw ChapterDownloadError.missingCompletedFiles
