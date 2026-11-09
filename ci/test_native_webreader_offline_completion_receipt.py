@@ -88,7 +88,7 @@ reject("directory masquerading as marker", {
     _ = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
         directory: current, actualPages: 3)
 })
-for invalid in (0, -1, 100000) {
+for invalid in [0, -1, 100000] {
     reject("invalid page count", {
         try WebReaderOfflineCompletionReceipt.write(
             directory: old, expectedPages: invalid)
