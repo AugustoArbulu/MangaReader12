@@ -20,8 +20,9 @@ CH preserva a arquitetura existente e fecha essa lacuna sem criar capacidades pr
 
 - `ci/test_native_webreader_signed_production_envelope_binding.py`: geração **efêmera** de P-256/OpenSSL em pasta temporária, manifesto v2 de produção, e execução da verificação Swift Security.framework real. Positivo para todos os claims e negativos: build, min. iOS, URL, size, SHA, timestamp, notas, provenance pública/local, assinatura adulterada, pin ausente/incorreto, build repetido, manifesto vazio. A função com root compilado, ainda `nil`, deve recusar até mesmo manifesto tecnicamente válido.
 - `ci/test_build70_signed_envelope_download_policy.py`: testes Linux para ordem de validação (assinatura antes de rede/arquivo), propagação até o downloader, rechecagem na exportação e controle do código de instalação desativado.
+- Harness Swift `ci/test_native_webreader_ipa_stager.py` e os harnesses isolados de importação/armazenamento local foram atualizados para compilar os três módulos nativos que o stager passou a utilizar. O teste Linux exige essa lista para detectar regressões futuras. A CI AC–CH anterior evidenciou dependência ausente num harness de importação local; corrigida antes da nova execução.
 - Harness Swift `ci/test_native_webreader_ipa_stager.py` recebeu as dependências reais do novo gate; teste da descoberta assinada exige que um canal sem chave não tenha bytes autenticados em cache.
-- Workflow integrado [AC–CH](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42721385045): Python/Linux, testes Swift/macOS e compilação completa iOS12 ARM64 Debug/Release **sem gerar uma IPA nova**.
+- Workflow integrado [AC–CH](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42722375067): Python/Linux, testes Swift/macOS e compilação completa iOS12 ARM64 Debug/Release **sem gerar uma IPA nova**.
 
 ## Limites e próximas dependências
 
