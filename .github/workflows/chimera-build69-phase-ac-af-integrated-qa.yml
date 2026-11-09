@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-AY — Verified Updates UX and Provenance iOS12
+name: WebReader Build69 Dev AC-AZ — Backup Safety and Upgrade Continuity iOS12
 
 on:
   push:
@@ -15,6 +15,10 @@ on:
       - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
       - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
       - 'MangaReader12/Core/WebReaderPhysicalQAChecklist.swift'
+      - 'MangaReader12/Core/BackupManager.swift'
+      - 'MangaReader12/UI/BackupViewController.swift'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'MangaReader12.xcodeproj/project.pbxproj'
       - 'ci/test_native_webreader_ipa_stager.py'
@@ -36,6 +40,11 @@ on:
       - 'ci/build69_owner_rotation_review.py'
       - 'ci/test_build69_phase_au_owner_rotation.py'
       - 'ci/test_build69_phase_av_aw_ax_ay_update_policy.py'
+      - 'ci/test_build69_az_backup_restore_consent.py'
+      - 'ci/test_build69_az_persisted_library_sqlite.py'
+      - 'ci/test_build53_backup_pins.py'
+      - 'ci/test_build65_offline_relocation.py'
+      - 'ci/test_native_webreader_physical_qa_checklist.py'
       - 'ci/test_native_webreader_update_verifier.py'
       - 'ci/test_native_webreader_update_checker.py'
       - 'ci/test_native_webreader_update_security_snapshot.py'
@@ -72,6 +81,8 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_phase_at_owner_bootstrap.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_au_owner_rotation.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_av_aw_ax_ay_update_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_backup_restore_consent.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_persisted_library_sqlite.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -92,7 +103,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AV-AY full metadata and provenance regressions; no release key, IPA or install'
+          echo 'PASS: Build69 AZ data preservation, restore warning and QA gates; no release key, IPA or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -113,6 +124,8 @@ jobs:
           python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 ci/test_build53_backup_pins.py
+          python3 ci/test_build65_offline_relocation.py
           python3 ci/test_native_webreader_ipa_stager.py
           python3 ci/test_native_webreader_local_ipa_review.py
           python3 ci/test_native_webreader_ipa_download_budget.py
@@ -146,4 +159,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-AY trusted updates and manual Filza export only; no key, IPA or install'
+          echo 'PASS: Build69 AC-AZ trust and in-place upgrade diagnostics only; no key, IPA or install'
