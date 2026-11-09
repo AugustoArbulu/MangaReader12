@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BF — End-to-End Library Continuity iOS12
+name: WebReader Build69 Dev AC-BG — Nonblocking Offline Continuity QA iOS12
 
 on:
   push:
@@ -57,6 +57,7 @@ on:
       - 'ci/test_build69_be_compare_upgrade_counts.py'
       - 'ci/build69_bf_portable_backup_baseline.py'
       - 'ci/test_build69_bf_portable_backup_baseline.py'
+      - 'ci/test_build69_bg_ui_nonblocking_snapshot.py'
       - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
       - 'ci/test_build69_az_candidate_readiness.py'
       - 'MangaReader12/Info.plist'
@@ -110,6 +111,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bd_upgrade_continuity_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_be_compare_upgrade_counts.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bf_portable_backup_baseline.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bg_ui_nonblocking_snapshot.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -130,7 +132,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AC-BF SQLite before/after, portable Build68 baseline, offline tests; no release or install'
+          echo 'PASS: Build69 AC-BG before/after, portable Build68 baseline and nonblocking UIKit snapshot; no release or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -208,4 +210,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BF native read-only SQLite snapshot and stable iOS12 build; no IPA distribution or install'
+          echo 'PASS: Build69 AC-BG native readonly SQLite snapshot and async UIKit iOS12 build; no IPA distribution or install'
