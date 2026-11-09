@@ -234,13 +234,11 @@ final class ChapterDownloadManager {
             manifest: job.manifest, queueOrder: job.queueOrder
         )
         let data = try JSONEncoder().encode(plan)
-        let url = planURL(for: job.directory)
-        try data.write(to: url, options: .atomic)
-        // This file can contain authentication headers; keep device file
-        // protection, while allowing the queue to restore after first unlock.
-        try? fileManager.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: url.path
+        // Match the BQ reader's maximum before touching any existing plan.
+        // The writer publishes a complete private 0600 temporary file via
+        // atomic rename, including when Prioritize changes queue order.
+        try WebReaderOfflineRecoveryPlanWriter.write(
+            data: data, to: planURL(for: job.directory)
         )
     }
 
