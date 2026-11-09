@@ -65,10 +65,7 @@ class DestructiveDownloadUIContract(unittest.TestCase):
         begin = UI.split("private func beginRetryDownload(", 1)[1].split(
             "private func resolveRetryDetails(", 1
         )[0]
-        self.assertIn('($0.state == "failed" || $0.state == "paused")', begin.replace(
-            '$0.state == "failed" || $0.state == "paused"',
-            '($0.state == "failed" || $0.state == "paused")'
-        ))
+        self.assertIn('$0.state == "failed" || $0.state == "paused"', begin)
         self.assertIn("retryInFlight.insert(key)", begin)
         self.assertIn("retryDownload(record)", UI.split(
             "private func resumeDownload(", 1
