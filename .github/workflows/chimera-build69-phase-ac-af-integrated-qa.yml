@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BC — Private QA Transfer Integrity iOS12
+name: WebReader Build69 Dev AC-BD — Pre/Post Upgrade Library Snapshot iOS12
 
 on:
   push:
@@ -16,6 +16,7 @@ on:
       - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
       - 'MangaReader12/Core/WebReaderPhysicalQAChecklist.swift'
       - 'MangaReader12/Core/BackupManager.swift'
+      - 'MangaReader12/Core/WebReaderUpgradeContinuitySnapshot.swift'
       - 'MangaReader12/UI/BackupViewController.swift'
       - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
@@ -51,6 +52,8 @@ on:
       - 'ci/test_build69_bb_private_qa_ipa_preflight.py'
       - 'ci/build69_bc_copied_ipa_recheck.py'
       - 'ci/test_build69_bc_copied_ipa_recheck.py'
+      - 'ci/test_build69_bd_upgrade_continuity_policy.py'
+      - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
       - 'ci/test_build69_az_candidate_readiness.py'
       - 'MangaReader12/Info.plist'
       - 'ci/test_build53_backup_pins.py'
@@ -99,6 +102,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_ba_unsigned_candidate_audit.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bc_copied_ipa_recheck.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bd_upgrade_continuity_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -141,6 +145,7 @@ jobs:
           python3 ci/test_native_webreader_owner_trust_readiness.py
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
           python3 ci/test_build53_backup_pins.py
           python3 ci/test_build65_offline_relocation.py
           python3 ci/test_native_webreader_ipa_stager.py
@@ -196,4 +201,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BC private transfer check is read-only, signed-fixture QA only; no install or IPA upload'
+          echo 'PASS: Build69 AC-BD source-only + native SQLite count snapshot; no install or IPA upload'
