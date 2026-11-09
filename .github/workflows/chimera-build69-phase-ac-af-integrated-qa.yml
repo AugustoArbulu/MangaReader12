@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BA — Isolated Unsigned Build69 Compile iOS12
+name: WebReader Build69 Dev AC-BB — Isolated Preview and Private QA Admission iOS12
 
 on:
   push:
@@ -45,6 +45,9 @@ on:
       - 'ci/build69_az_candidate_readiness.py'
       - 'ci/build69_ba_unsigned_candidate_audit.py'
       - 'ci/test_build69_ba_unsigned_candidate_audit.py'
+      - 'ci/build69_bb_private_qa_ipa_preflight.py'
+      - 'ci/test_build69_bb_private_qa_contract.py'
+      - 'ci/test_build69_bb_private_qa_ipa_preflight.py'
       - 'ci/test_build69_az_candidate_readiness.py'
       - 'MangaReader12/Info.plist'
       - 'ci/test_build53_backup_pins.py'
@@ -91,6 +94,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_az_candidate_readiness.py' -v
           python3 ci/build69_az_candidate_readiness.py
           python3 -m unittest discover -s ci -p 'test_build69_ba_unsigned_candidate_audit.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_contract.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -125,6 +129,7 @@ jobs:
       - name: Real Swift tests — protected local import, CDN transfer, forward-only Build and privacy
         run: |
           python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_ipa_preflight.py' -v
           python3 ci/test_native_webreader_update_verifier.py
           python3 ci/test_public_github_release_parser.py
           python3 ci/test_native_webreader_update_checker.py
@@ -187,4 +192,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BA stable source build56 + isolated unsigned preview69; no key, IPA or install'
+          echo 'PASS: Build69 AC-BB unsigned preview69 and temporary signed-fixture QA admission; no real IPA, key or install'
