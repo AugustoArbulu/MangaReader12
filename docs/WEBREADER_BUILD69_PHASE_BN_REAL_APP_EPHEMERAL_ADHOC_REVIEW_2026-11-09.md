@@ -23,7 +23,7 @@ Novo teste `ci/test_build69_bn_real_signed_app_preview_policy.py` valida os guar
 
 ## Provas e limites
 
-[CI AC–BN #42570725651](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42570725651) iniciada; confirmar conclusão no GitHub e corrigir quaisquer falhas antes de afirmar aprovado.
+[CI AC–BN #42570725651](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42570725651) **SUCCESS em 2/2 jobs**: todos os testes nativos, Xcode Debug/Release ARM64/iOS12, preview unsigned Build69 e auditoria ad hoc da cópia temporária do aplicativo REAL passaram. Nenhuma IPA foi produzida ou distribuída.
 
 **O que uma CI verde autoriza concluir:** o WebReader consegue compilar em iOS12/ARM64 com versionamento 69 isolado; uma cópia do app real aceita o selo ad hoc local e expõe o identificador de assinatura de teste esperado; nenhum pacote IPA foi criado ou distribuído.
 
