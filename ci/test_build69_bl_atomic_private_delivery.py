@@ -4,6 +4,7 @@
 Extracts the two-link publication step from owner-gated Bash script, never
 runs the actual packager, codesign, xcodebuild, or any installer.
 """
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -28,8 +29,9 @@ class AtomicPrivateDelivery(unittest.TestCase):
         self.source = self.stage / self.filename
         self.final = root / self.filename
         self.source.write_bytes(b"NOT-AN-IPA: synthetic staging bytes")
+        digest = hashlib.sha256(self.source.read_bytes()).hexdigest()
         Path(str(self.source) + ".sha256").write_bytes(
-            b"a" * 64 + b"  " + self.filename.encode() + b"\n"
+            digest.encode("ascii") + b"  " + self.filename.encode() + b"\n"
         )
         self.checksum = Path(str(self.final) + ".sha256")
 
@@ -95,6 +97,36 @@ os.link = fail_second_link
         self.assertFalse(self.checksum.exists())
         self.assertTrue(self.source.exists())
         self.assertTrue(Path(str(self.source) + ".sha256").exists())
+
+    def test_wrong_staged_checksum_blocks_publication(self):
+        Path(str(self.source) + ".sha256").write_bytes(
+            b"0" * 64 + b"  " + self.filename.encode() + b"\\n"
+        )
+        result = self.run_publisher()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("differs from checksum", result.stderr)
+        self.assertFalse(self.final.exists())
+        self.assertFalse(self.checksum.exists())
+
+    def test_final_link_mutation_triggers_rollback(self):
+        inject = """
+import os
+original_link = os.link
+calls = [0]
+def mutate_after_second_link(*args, **kwargs):
+    original_link(*args, **kwargs)
+    calls[0] += 1
+    if calls[0] == 2:
+        with open(args[1], "r+b") as stream:
+            stream.seek(0)
+            stream.write(b"INVALID")
+os.link = mutate_after_second_link
+"""
+        result = self.run_publisher(injected=inject)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("changed after linking", result.stderr)
+        self.assertFalse(self.final.exists())
+        self.assertFalse(self.checksum.exists())
 
     def test_source_script_guards_actual_archive_before_final_name(self):
         self.assertIn('STAGED_IPA="$TMP/$EXPECTED_NAME"', PACKAGE)
