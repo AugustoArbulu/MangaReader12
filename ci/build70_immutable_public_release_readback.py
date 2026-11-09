@@ -121,8 +121,8 @@ def review_public_readback(
     A positive receipt reflects consistency of *provided local files* only.
     It is NOT network proof nor a sufficient authorization to publish/install.
     """
-    if type(installed_build) is not int or installed_build < 70:
-        raise PublicReadbackRejected("Build70+ baseline mandatory")
+    if type(installed_build) is not int or installed_build < 69:
+        raise PublicReadbackRejected("Build69+ baseline mandatory; Build70 lab uses pre-upgrade Build69")
     if type(private_manifest) is not bytes or type(published_manifest) is not bytes:
         raise PublicReadbackRejected("exact manifest bytes required")
     if not private_manifest or private_manifest != published_manifest:
