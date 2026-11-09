@@ -39,8 +39,9 @@ enum WebReaderOfflinePreservationAudit {
     }
 
     private static func readSample(
-        databaseURL: URL, support: URL
-    ) -> (all: Int64, scanned: Int, valid: Int, sealed: Int, pages: Int)? {
+        databaseURL: URL, support: URL, requestedOffset: Int
+    ) -> (all: Int64, offset: Int64, nextOffset: Int64,
+          scanned: Int, valid: Int, sealed: Int, pages: Int)? {
         guard FileManager.default.fileExists(atPath: databaseURL.path) else { return nil }
         var db: OpaquePointer?
         let openedOK = sqlite3_open_v2(
@@ -69,7 +70,13 @@ enum WebReaderOfflinePreservationAudit {
             sqlite3_column_int64(versionQuery, 0) == 1 &&
             sqlite3_step(versionQuery) == SQLITE_DONE
         sqlite3_finalize(versionQuery)
-        guard schemaValid, let total = countCompleted(conn) else { return nil }
+        guard schemaValid, let total = countCompleted(conn),
+              requestedOffset >= 0, requestedOffset <= 1_000_000_000 else {
+            return nil
+        }
+        // When the last page was visited, begin a new bounded cycle.
+        let offset: Int64 = Int64(requestedOffset) < total ?
+            Int64(requestedOffset) : 0
 
         let query = """
             SELECT m.source_id, m.source_manga_id, c.source_chapter_id
@@ -77,7 +84,7 @@ enum WebReaderOfflinePreservationAudit {
             JOIN chapters AS c ON c.internal_id = d.chapter_id
             JOIN manga AS m ON m.internal_id = c.manga_id
             WHERE d.state = 'completed'
-            ORDER BY d.internal_id ASC LIMIT 64;
+            ORDER BY d.internal_id ASC LIMIT ? OFFSET ?;
             """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(conn, query, -1, &stmt, nil) == SQLITE_OK,
@@ -86,6 +93,10 @@ enum WebReaderOfflinePreservationAudit {
             return nil
         }
         defer { sqlite3_finalize(prepared) }
+        guard sqlite3_bind_int64(prepared, 1, Int64(sampleLimit)) == SQLITE_OK,
+              sqlite3_bind_int64(prepared, 2, offset) == SQLITE_OK else {
+            return nil
+        }
         var scanned = 0
         var valid = 0
         var sealed = 0
@@ -115,13 +126,16 @@ enum WebReaderOfflinePreservationAudit {
             }
         }
         guard Int64(scanned) <= total else { return nil }
-        return (total, scanned, valid, sealed, pages)
+        let nextOffset = offset + Int64(sampleLimit) < total ?
+            offset + Int64(sampleLimit) : 0
+        return (total, offset, nextOffset, scanned, valid, sealed, pages)
     }
 
-    static func report(
+    static func diagnostic(
         installedBuild: Int, ios: OperatingSystemVersion,
+        sampleOffset: Int = 0,
         applicationSupportOverride: URL? = nil
-    ) -> String {
+    ) -> (report: String, nextOffset: Int) {
         let build = installedBuild >= 1 && installedBuild <= 2_147_483_647
             ? String(installedBuild) : "desconhecida"
         let version = ios.majorVersion >= 0 && ios.majorVersion <= 99 &&
@@ -138,23 +152,28 @@ enum WebReaderOfflinePreservationAudit {
         guard let support = applicationSupportOverride ?? FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first else {
-            return (header + ["Banco: INDISPONÍVEL; nenhuma página foi modificada."])
-                .joined(separator: "\n")
+            return ((header + ["Banco: INDISPONÍVEL; nenhuma página foi modificada."])
+                .joined(separator: "\n"), 0)
         }
         let database = support
             .appendingPathComponent("MangaReader12", isDirectory: true)
             .appendingPathComponent("library.sqlite", isDirectory: false)
-        guard let sample = readSample(databaseURL: database, support: support) else {
-            return (header + [
+        guard let sample = readSample(
+            databaseURL: database, support: support,
+            requestedOffset: sampleOffset
+        ) else {
+            return ((header + [
                 "Banco: INDISPONÍVEL ou leitura interrompida.",
                 "Não significa que não existam capítulos offline.",
                 "Nenhuma página foi modificada."
-            ]).joined(separator: "\n")
+            ]).joined(separator: "\n"), 0)
         }
         let bad = sample.scanned - sample.valid
         let remaining = sample.all - Int64(sample.scanned)
-        return (header + [
+        return ((header + [
             "Capítulos completos no banco: " + String(sample.all),
+            "Índice inicial deste lote: " + String(sample.offset),
+            "Próximo índice da auditoria: " + String(sample.nextOffset),
             "Capítulos da amostra inspecionados: " + String(sample.scanned),
             "Capítulos com arquivos sequenciais e não vazios: " + String(sample.valid),
             "Com recibo de quantidade de páginas: " + String(sample.sealed),
@@ -166,6 +185,16 @@ enum WebReaderOfflinePreservationAudit {
             "Se houver falhas, não desinstale nem restaure backup automaticamente.",
             "Teste a leitura REAL sem Wi-Fi, inclusive após fechar e reabrir o app.",
             "Nenhuma página foi modificada; este diagnóstico não faz download."
-        ]).joined(separator: "\n")
+        ]).joined(separator: "\n"), Int(sample.nextOffset))
+    }
+
+    static func report(
+        installedBuild: Int, ios: OperatingSystemVersion,
+        applicationSupportOverride: URL? = nil
+    ) -> String {
+        return diagnostic(
+            installedBuild: installedBuild, ios: ios,
+            applicationSupportOverride: applicationSupportOverride
+        ).report
     }
 }
