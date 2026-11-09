@@ -1,4 +1,4 @@
-name: WebReader Build69 Dev AC-BQ — Bounded Recovery Plans + Offline QA iOS12
+name: WebReader Build69 Dev AC-BT — Atomic Recovery Metadata + Library Retention iOS12
 
 on:
   push:
@@ -24,6 +24,7 @@ on:
       - 'MangaReader12/Downloads/WebReaderOfflineCompletionReceipt.swift'
       - 'MangaReader12/Downloads/WebReaderOfflineResumePrefix.swift'
       - 'MangaReader12/Downloads/WebReaderOfflineRecoveryPlanReader.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflineRecoveryPlanWriter.swift'
       - 'MangaReader12/Core/WebReaderOfflinePreservationAudit.swift'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'MangaReader12.xcodeproj/project.pbxproj'
@@ -79,6 +80,10 @@ on:
       - 'ci/test_native_webreader_offline_resume_prefix.py'
       - 'ci/test_build69_bp_offline_paging_policy.py'
       - 'ci/test_build69_bq_recovery_plan_policy.py'
+      - 'ci/test_build69_br_atomic_recovery_plan_writer_policy.py'
+      - 'ci/test_native_webreader_offline_recovery_plan_writer.py'
+      - 'ci/test_build69_bs_bounded_download_admission.py'
+      - 'ci/test_build69_bt_completed_download_retention.py'
       - 'ci/test_native_webreader_offline_recovery_plan_reader.py'
       - 'MangaReader12/UI/DownloadsViewController.swift'
       - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
@@ -145,6 +150,9 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build69_bo_resume_prefix_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bp_offline_paging_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_bq_recovery_plan_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_br_atomic_recovery_plan_writer_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bs_bounded_download_admission.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bt_completed_download_retention.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
@@ -165,7 +173,7 @@ jobs:
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
           grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
           grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
-          echo 'PASS: Build69 AC-BQ safe resume, paged QA, bounded recovery plans and signed-app preview; no IPA or install'
+          echo 'PASS: Build69 AC-BT atomic bounded recovery metadata and completed legacy retention; no IPA or install'
 
   native-swift-arm64-ios12:
     runs-on: macos-15
@@ -192,6 +200,7 @@ jobs:
           python3 ci/test_native_webreader_offline_completion_receipt.py
           python3 ci/test_native_webreader_offline_resume_prefix.py
           python3 ci/test_native_webreader_offline_recovery_plan_reader.py
+          python3 ci/test_native_webreader_offline_recovery_plan_writer.py
           python3 ci/test_native_webreader_offline_preservation_audit.py
           python3 ci/test_build53_backup_pins.py
           python3 ci/test_build65_offline_relocation.py
@@ -255,4 +264,4 @@ jobs:
             "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
-          echo 'PASS: Build69 AC-BQ native recovery safety and iOS12 real app ad-hoc temporary review; no IPA or installation'
+          echo 'PASS: Build69 AC-BT native bounded plan writer and iOS12 app ad-hoc temporary review; no IPA or installation'
