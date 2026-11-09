@@ -38,6 +38,7 @@ enum ChapterDownloadError: Error, LocalizedError {
     case httpStatus(Int)
     case missingCompletedFiles
     case invalidImagePayload
+    case oversizedImagePayload
     case alreadyScheduled
     case alreadyCompleted
     case downloadInProgress
@@ -56,6 +57,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "O capítulo offline está incompleto: uma ou mais páginas estão ausentes, vazias ou inválidas. Nenhum arquivo foi apagado."
         case .invalidImagePayload:
             return "O servidor retornou uma página inválida ou um documento HTML em vez de uma imagem. O capítulo não foi marcado como completo."
+        case .oversizedImagePayload:
+            return "A página excede o limite de 20 MiB por imagem offline. O capítulo não foi marcado como completo e os arquivos existentes foram preservados."
         case .alreadyScheduled:
             return "Este capítulo já está na fila de downloads."
         case .alreadyCompleted:
@@ -600,6 +603,15 @@ final class ChapterDownloadManager {
                         return
                     }
 
+                    // The resume prefix accepts pages up to 20 MiB. Keep
+                    // the same ceiling at download time, or a page saved
+                    // successfully could become unrecoverable after restart.
+                    guard !response.data.isEmpty,
+                          Int64(response.data.count) <=
+                            WebReaderOfflineResumePrefix.maximumPageBytes else {
+                        self.fail(job, error: ChapterDownloadError.oversizedImagePayload)
+                        return
+                    }
                     guard ChapterDownloadImageValidator.canStore(
                         data: response.data, headers: response.headers
                     ) else {
