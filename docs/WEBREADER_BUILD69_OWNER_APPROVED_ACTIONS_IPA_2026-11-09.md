@@ -1,3 +1,15 @@
+## Resultado real do primeiro empacotamento (09/11/2026)
+
+- [GitHub Actions #42699330354](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42699330354): **SUCCESS**, job único completo, incluindo testes, Xcode 16.4, build real ARM64/iOS12, assinatura ad hoc, auditoria BB sobre os bytes finais e upload.
+- [Artifact QA #13709933178](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42699330354/artifacts/13709933178), nome `WebReader-Build69-OwnerApproved-iOS12-QA-Filza`, ZIP com IPA real, SHA-256 e recibos, retenção até **23/11/2026** segundo GitHub.
+- IPA interna `WebReader-Build69-iOS12-adhoc.ipa`, **17.838.738 bytes**; SHA-256 **`ba3e6e550fc91b447f489a63cb965166d14ee053c3d796b1c524bf40f5968085`**.
+- Bundle ID `com.example.MangaReader12`; build 69, iOS mínimo 12.0, thin ARM64; entitlement `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`. CodeDirectory CDHash `695bc5593ce3cf05816033de0dd1007729d9049a`; preflight nativo registra integridade ad hoc e compatibilidade estática com a identidade da Build68.
+- Commit de origem do artifact: `db393133a0a631e54259a94a5d0e53d24b2f7192`. Commit revisado anterior: `51d9c3713d0fb9477624aae4c8aa4b4683ad1f94`.
+- A IPA e o ZIP foram extraídos e o SHA-256 do arquivo verificado novamente após o download do artifact; `Info.plist` interno confirma Build69/iOS12.
+- **NENHUMA instalação física foi executada**; nenhum Release público, nenhum `main` merge, nenhum instalador Chimera ativado. O usuário deve instalar por cima da Build68 via Filza se decidir testar, e verificar biblioteca e capítulos offline. O backup portátil não inclui páginas.
+
+---
+
 # WebReader Build 69 — autorização para uma IPA de QA no GitHub Actions
 
 **Autorizado pelo proprietário em 09/11/2026:** produzir e disponibilizar **uma** IPA de teste da Build 69 por GitHub Actions. Autorização limitada a compilar, assinar ad hoc uma cópia, auditar e enviar um artifact de QA. NÃO concede autorização para instalar no iPad, alterar main, publicar GitHub Release de produção ou habilitar Chimera.
