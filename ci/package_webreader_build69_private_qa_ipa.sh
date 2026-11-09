@@ -18,6 +18,11 @@ if [[ "$EUID" -eq 0 ]]; then
   echo "BLOCKED: QA IPA packaging must not run as root." >&2
   exit 2
 fi
+# Never allow the automated GitHub runner to produce/distribute a real QA IPA.
+if [[ -n "${GITHUB_ACTIONS:-}" || -n "${CI:-}" ]]; then
+  echo "BLOCKED: private QA packaging is not permitted in automation." >&2
+  exit 2
+fi
 for tool in /usr/bin/ditto /usr/bin/codesign /usr/bin/zip; do
   if [[ ! -x "$tool" ]]; then
     echo "BLOCKED: native macOS signing tool unavailable." >&2
@@ -62,16 +67,17 @@ fi
 # The source branch remains at version56; only isolated xcodebuild override69
 # is permitted. This exact .app must already be produced by the owner.
 python3 "$ROOT/ci/build69_ba_unsigned_candidate_audit.py" "$APP_PATH" >/dev/null
-TMP="$(mktemp -d)"
+# Stage the archive in the DESTINATION filesystem. An interrupted archive
+# cannot appear under the final .ipa name. mktemp ensures a private directory.
+TMP="$(mktemp -d "$OUTPUT_DIR/.wr69-private-qa.XXXXXXXX")"
 cleanup() {
-  local rc=$?
   rm -rf "$TMP"
-  if [[ "$rc" -ne 0 ]]; then
-    rm -f "$OUTPUT" "$OUTPUT.sha256"
-  fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$TMP/Payload"
+STAGED_IPA="$TMP/$EXPECTED_NAME"
 /usr/bin/ditto "$APP_PATH" "$TMP/Payload/MangaReader12.app"
 APP="$TMP/Payload/MangaReader12.app"
 ENTITLEMENTS="$ROOT/ci/chimera_webreader_qa.entitlements"
@@ -100,12 +106,12 @@ PY
 
 (
   cd "$TMP"
-  /usr/bin/zip -qry "$OUTPUT" Payload
+  /usr/bin/zip -qry "$STAGED_IPA" Payload
 )
 
 # Verify exactly the final IPA bytes with the native ad-hoc code-seal auditor.
 # This is NOT an independent SHA channel or a production editor signature.
-PYTHONPATH="$ROOT/ci" python3 - "$OUTPUT" <<'PY'
+PYTHONPATH="$ROOT/ci" python3 - "$STAGED_IPA" <<'PY'
 from pathlib import Path
 import hashlib
 import sys
@@ -114,15 +120,24 @@ from build66_code_signature_gate import (
     audit_code_signature_snapshot, INSTALLED_APPLICATION_IDENTIFIER
 )
 ipa = Path(sys.argv[1])
-raw = ipa.read_bytes()
-digest = hashlib.sha256(raw).hexdigest()
+from build66_ipa_preflight import MAX_IPA_BYTES
+size = ipa.stat().st_size
+assert 0 < size <= MAX_IPA_BYTES, "QA IPA exceeds maximum size"
+with ipa.open("rb") as stream:
+    sha = hashlib.sha256()
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk:
+            break
+        sha.update(chunk)
+digest = sha.hexdigest()
 report = inspect_ipa(
-    ipa, digest, len(raw), 68,
+    ipa, digest, size, 68,
     require_exact_identity=True, return_snapshot=True
 )
 snapshot = report.pop("ipa_snapshot")
 assert report["build"] == 69 and report["minimum_ios"] == "12.0"
-seal = audit_code_signature_snapshot(snapshot, digest, len(raw))
+seal = audit_code_signature_snapshot(snapshot, digest, size)
 assert seal["adHocSignatureIntegrityVerified"]
 assert seal["installedApplicationIdentifierMatch"]
 assert seal["applicationIdentifier"] == INSTALLED_APPLICATION_IDENTIFIER
@@ -130,7 +145,34 @@ assert seal["thinArm64ExecutableVerified"]
 print("PASS: Build69 QA archive and ad-hoc CodeDirectory verified (host only).")
 print("LIMIT: no publisher authentication, distribution or installation approval.")
 PY
-/usr/bin/shasum -a 256 "$OUTPUT" > "$OUTPUT.sha256"
+(
+  cd "$TMP"
+  /usr/bin/shasum -a 256 "$EXPECTED_NAME" > "$EXPECTED_NAME.sha256"
+)
+# Publish in two phases using exclusive hard links on the same filesystem.
+# The final IPA name is created LAST, after SHA, ZIP and ad-hoc audits pass.
+# os.link fails if any destination already exists (no overwrite), including
+# symlinks; interrupted work leaves no partly written final .ipa.
+python3 - "$STAGED_IPA" "$OUTPUT" <<'PY'
+import os
+from pathlib import Path
+import sys
+staged, final = map(Path, sys.argv[1:3])
+checksum_staged = Path(str(staged) + ".sha256")
+checksum_final = Path(str(final) + ".sha256")
+created = []
+try:
+    if final.exists() or final.is_symlink() or checksum_final.exists() or checksum_final.is_symlink():
+        raise RuntimeError("QA output appeared after initial preflight")
+    os.link(checksum_staged, checksum_final)
+    created.append(checksum_final)
+    os.link(staged, final)
+    created.append(final)
+except BaseException:
+    for path in reversed(created):
+        path.unlink(missing_ok=True)
+    raise
+PY
 echo "PASS: private QA asset created only at caller's external local path."
 echo "IPA: $OUTPUT"
 echo "LOCAL_CHECKSUM: $OUTPUT.sha256 (verify through an independent channel)"
