@@ -55,3 +55,12 @@ O CI verifica invariantes técnicos e não é evidência de preservação físic
 ## Próxima etapa recomendada
 
 Concluir AC–AZ e, com o resultado verde, preparar critérios para **uma candidata QA de Build69 com versionamento correto, identidade idêntica e distribuição privada sob aprovação explícita**. Evitar ativar canal de produção antes de concluir custódia editorial da chave; não ligar automaticamente instalador Chimera.
+
+
+## Gate adicional de versionamento e pré-candidata (AZ)
+
+O `Info.plist` usa `$(CURRENT_PROJECT_VERSION)`; a configuração **real e atual** de Debug/Release em `MangaReader12.xcodeproj/project.pbxproj` ainda é **56 em ambas**, intencional enquanto não existe candidata QA Build69. Compilar código em desenvolvimento **não** produz automaticamente uma IPA com a versão pretendida. Publicar um arquivo rotulado `Build69` quando `CFBundleVersion=56` é erro.
+
+Adicionados `ci/build69_az_candidate_readiness.py` (diagnóstico somente leitura, sem artefato) e `ci/test_build69_az_candidate_readiness.py` (rejeita Debug/Release divergentes, bundle ID trocado, iOS13, versão zero ou projeto malformado). O relatório real esperado nesta fase é `SOURCE_REVIEW_ONLY_NOT_QA_IPA_READY`, `sourceBuildVersion=56`, `expectedQABuildVersion=69`, `targetVersionMatched=false`. Mesmo depois que um proprietário aprovar a mudança para 69 e a consistência ficar verdadeira, o relatório **nunca** passa a afirmar `qaIPACreated`, `physicalQAPassed`, `ownerDistributionApprovalRecorded`, `releasePublished` ou `installationAuthorized`.
+
+O CI AC–AZ atualizado inclui essa regra; [execução #42552255733](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42552255733). Um CI positivo é apenas evidência do código e dos contratos sintéticos, não aprovação para gerar, publicar ou instalar o arquivo. O teste físico da próxima IPA continua pendente.
