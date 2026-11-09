@@ -33,9 +33,9 @@ let old = root.appendingPathComponent("old", isDirectory: true)
 let current = root.appendingPathComponent("new", isDirectory: true)
 try fm.createDirectory(at: old, withIntermediateDirectories: true)
 try fm.createDirectory(at: current, withIntermediateDirectories: true)
-expect(try WebReaderOfflineCompletionReceipt.verifyIfPresent(
-    directory: old, actualPages: 2) == false,
-    "Build68 legacy directory must remain usable")
+let oldLegacy = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
+    directory: old, actualPages: 2)
+expect(oldLegacy == false, "Build68 legacy directory must remain usable")
 try WebReaderOfflineCompletionReceipt.write(
     directory: current, expectedPages: 3
 )
@@ -45,9 +45,9 @@ let receipt = current.appendingPathComponent(
 let onDisk = try Data(contentsOf: receipt)
 expect(String(data: onDisk, encoding: .utf8) == "WR-OFFLINE-COMPLETE-V1:3\n",
        "new receipt is a small count-only private text marker")
-expect(try WebReaderOfflineCompletionReceipt.verifyIfPresent(
-    directory: current, actualPages: 3) == true,
-    "valid new receipt")
+let validReceipt = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
+    directory: current, actualPages: 3)
+expect(validReceipt == true, "valid new receipt")
 reject("last page missing", {
     _ = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
         directory: current, actualPages: 2)
@@ -80,7 +80,8 @@ reject("symlinked marker", {
     _ = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
         directory: current, actualPages: 3)
 })
-expect(try Data(contentsOf: elsewhere).count > 0, "symlink target untouched")
+let targetData = try Data(contentsOf: elsewhere)
+expect(targetData.count > 0, "symlink target untouched")
 try fm.removeItem(at: receipt)
 try fm.createDirectory(at: receipt, withIntermediateDirectories: false)
 reject("directory masquerading as marker", {
@@ -93,9 +94,9 @@ for invalid in (0, -1, 100000) {
             directory: old, expectedPages: invalid)
     })
 }
-expect(try WebReaderOfflineCompletionReceipt.verifyIfPresent(
-    directory: old, actualPages: 2) == false,
-    "legacy chapter still has no receipt after failed writes")
+let legacyAfter = try WebReaderOfflineCompletionReceipt.verifyIfPresent(
+    directory: old, actualPages: 2)
+expect(legacyAfter == false, "legacy chapter still has no receipt after failed writes")
 print("PASS native Swift BM: optional legacy receipt, missing final page, malformed/symlink rejection")
 '''
 with tempfile.TemporaryDirectory(prefix="wr69-bm-completion-") as td:
