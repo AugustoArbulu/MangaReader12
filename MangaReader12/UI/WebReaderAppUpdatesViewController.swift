@@ -10,6 +10,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var signedChecker: WebReaderProductionSignedReleaseChecker?
     private var signedChannelBusy = false
     private var continuitySnapshotBusy = false
+    private var offlinePresenceBusy = false
     private var signedChannelStatus =
         "Chave editorial independente ainda não provisionada • sem requisições"
     private var checking = false
@@ -144,7 +145,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if source == 1 { return 5 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
-        if source == 3 { return 7 }
+        if source == 3 { return 8 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -383,6 +384,16 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 "Lendo somente os totais SQLite…" :
                 "Antes/depois da atualização • só totais SQLite, sem títulos ou caminhos"
             if !continuitySnapshotBusy {
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+
+        case (3, 7):
+            cell.textLabel?.text = "Conferir presença dos capítulos offline"
+            cell.detailTextLabel?.text = offlinePresenceBusy ?
+                "Conferindo até 64 capítulos, sem abrir imagens…" :
+                "Amostra local • identifica páginas ausentes, vazias ou fora de sequência"
+            if !offlinePresenceBusy {
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
             }
@@ -667,6 +678,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             copyUpgradeContinuitySnapshot()
             return
         }
+        if selectedSection == 3, indexPath.row == 7, !isIPCDiagnostic {
+            copyOfflinePresenceAudit()
+            return
+        }
         if selectedSection == 1, indexPath.row == 1 {
             let url = URL(string:
                 "https://github.com/AugustoArbulu/MangaReader12/releases"
@@ -749,6 +764,36 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
     }
 
+
+    /// Bounded physical-file presence metadata, not a full image integrity test.
+    private func copyOfflinePresenceAudit() {
+        guard !isIPCDiagnostic, !offlinePresenceBusy else { return }
+        offlinePresenceBusy = true
+        tableView.reloadData()
+        let currentBuild = installedBuild
+        let ios = ProcessInfo.processInfo.operatingSystemVersion
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let report = WebReaderOfflinePreservationAudit.report(
+                installedBuild: currentBuild, ios: ios
+            )
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.offlinePresenceBusy = false
+                self.tableView.reloadData()
+                guard self.view.window != nil else { return }
+                UIPasteboard.general.string = report
+                let alert = UIAlertController(
+                    title: "Presença offline copiada",
+                    message: "Amostra limitada a 64 capítulos. Arquivos " +
+                        "presentes não comprovam imagem legível: teste " +
+                        "páginas reais com Wi-Fi desligado antes de aprovar a IPA.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
+            }
+        }
+    }
 
     /// Read-only SQLite COUNTS, not a backup and not a scan of page files.
     private func copyUpgradeContinuitySnapshot() {
