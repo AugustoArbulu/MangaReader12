@@ -18,6 +18,8 @@ O workflow macOS isolado [Build70 CE — real signed IPA lab](https://github.com
 - rejeição nativa de canal default development, canal inválido, pin errado/ausente, assinatura alterada, IPA adulterada, arquivo symlink e versão não superior.
 - eliminação da chave privada ao fim, sem publish, sem envio do manifesto, sem download pelo app, sem Release e sem appinst.
 
+**Resultado confirmado da CI CE:** [run #42712666573](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42712666573) — **SUCCESS**. Log macOS: `PASS CE: authentic native production-v2 signed envelope and REAL Build70 QA IPA same-FD audit; all negatives denied; NO install`; SHA `526291cc77203c3881e5f3f1c75904e8863dbde3b3bd9df7e1185c3229fb4fc1`.
+
 A execução dessa CI **não confere nenhuma identidade editorial real**: seu pin é fornecido por um harness temporário e nunca inscrito no WebReader. Um sucesso do laboratório demonstra compatibilidade técnica do protocolo sobre uma IPA real e testes de negativas, não autorização de instalação nem garantia de que o usuário possa chegar ao asset privado sem autenticação.
 
 ## Gate de produção fail-closed (CF)
