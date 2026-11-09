@@ -143,7 +143,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if source == 1 { return 5 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
-        if source == 3 { return 6 }
+        if source == 3 { return 7 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -373,6 +373,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             cell.textLabel?.text = "Copiar roteiro de testes físicos"
             cell.detailTextLabel?.text =
                 "Biblioteca, Wi-Fi desligado, leitor, IPA e segurança • tudo não testado"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+
+        case (3, 6):
+            cell.textLabel?.text = "Copiar contagens da biblioteca para comparar"
+            cell.detailTextLabel?.text =
+                "Antes/depois da atualização • só totais SQLite, sem títulos ou caminhos"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -652,6 +659,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             present(alert, animated: true)
             return
         }
+        if selectedSection == 3, indexPath.row == 6, !isIPCDiagnostic {
+            copyUpgradeContinuitySnapshot()
+            return
+        }
         if selectedSection == 1, indexPath.row == 1 {
             let url = URL(string:
                 "https://github.com/AugustoArbulu/MangaReader12/releases"
@@ -734,6 +745,25 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
     }
 
+
+    /// Read-only SQLite COUNTS, not a backup and not a scan of page files.
+    private func copyUpgradeContinuitySnapshot() {
+        guard !isIPCDiagnostic else { return }
+        let report = WebReaderUpgradeContinuitySnapshot.report(
+            installedBuild: installedBuild,
+            ios: ProcessInfo.processInfo.operatingSystemVersion
+        )
+        UIPasteboard.general.string = report
+        let alert = UIAlertController(
+            title: "Contagens locais copiadas",
+            message: "Compare antes e depois da instalação por cima. " +
+                "São apenas totais do banco; capítulos offline exigem " +
+                "teste real com Wi-Fi desligado. Nenhum dado foi modificado.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
 
     /// Read-only owner trust report, never imports secrets or touches library.
     private func copySignedChannelReadinessReport() {
