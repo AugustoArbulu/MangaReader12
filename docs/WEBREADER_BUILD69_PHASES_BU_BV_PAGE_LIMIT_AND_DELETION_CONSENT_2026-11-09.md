@@ -37,7 +37,7 @@ Teste `ci/test_build69_bv_destructive_download_consent.py` verifica as duas rota
 
 Workflow `.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml` atualizado para **AC–BV**, incluindo os testes Linux BU/BV e mantendo toda a regressão AC–BT, testes Swift macOS, build Debug/Release ARM64 iOS12, preview unsigned 69 e auditoria ad hoc efêmera **sem produzir IPA**.
 
-[Execução AC–BV #42578090544](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42578090544): checar o resultado final antes de declarar esta rodada aprovada. Nenhum teste local/CI substitui os **16 testes físicos** no iPad.
+[Execução AC–BV #42578090544](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42578090544): **SUCCESS 2/2 jobs** — testes Linux, regressões Swift reais no macOS, Debug e Release ARM64/iOS12, preview isolada unsigned Build69 e auditoria ad hoc da cópia temporária do WebReader real passaram. Não foi gerada IPA. Nenhum teste local/CI substitui os **16 testes físicos** no iPad.
 
 ## Próxima etapa física quando houver aprovação
 
