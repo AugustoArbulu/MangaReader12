@@ -68,7 +68,7 @@ def _read_counts_from_sqlite(raw: bytes):
                     ).fetchone() != (0,)
                     or db.execute("SELECT COUNT(*) FROM sources").fetchone() != (0,)):
                 raise PortableBaselineRejected("backup was not safely sanitized")
-            results = {
+            results = {}
             for name, sql in zip(METRICS, QUERIES):
                 if sql is None:
                     results[name] = None
