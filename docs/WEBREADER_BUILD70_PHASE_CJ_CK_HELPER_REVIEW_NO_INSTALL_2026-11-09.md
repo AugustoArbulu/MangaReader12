@@ -4,9 +4,9 @@
 
 ## Diagnóstico encontrado em CJ — risco de TOCTOU
 
-O antigo `ci/webreader_appinst_bridge.c` trazia o comando de terminal `install-confirmed <IPA_PATH> <SHA256> I-CONFIRM-INSTALL`. Embora este nunca tenha sido acionado pela UI do WebReader, sua implementação conferia SHA de um arquivo e **fechava** esse descritor para depois passar **o pathname original** ao `posix_spawn(/usr/bin/appinst)`. Entre a auditoria e o processo instalador, outro processo com permissão sobre a pasta poderia trocar os bytes. Além disso, a frase fixa não comprova identidade de processo, assinatura editorial, consentimento no helper, nem autorização one-shot.
+O antigo `ci/webreader_appinst_bridge.c` trazia **dois caminhos que podiam invocar instalador**: o comando de terminal `install-confirmed <IPA_PATH> <SHA256> I-CONFIRM-INSTALL` **e o opcode de socket UNIX `WRINST1` no modo `serve-once`**. Embora nenhum fosse chamado pela UI do WebReader, ambos admitiam dados vindos de caminho mutável, verificavam SHA e **fechavam** o descritor antes de passar **o pathname original** ao `posix_spawn(/usr/bin/appinst)`. Entre auditoria e instalador, outro processo com permissão sobre a pasta poderia trocar os bytes. O check de mesmo UID no socket, o nome de pasta e a frase fixa não comprovam identidade de processo, assinatura editorial, consentimento no helper nem autorização one-shot.
 
-**Alteração:** o executável C padrão agora se limita a `selftest`, `inspect` e `serve-once` (PING/negação). O comando `install-confirmed` retorna `INSTALL_DISABLED` sem abrir a IPA ou iniciar instalador. Nem o caminho real `/usr/bin/appinst`, nem a confirmação estática, nem um símbolo externo `posix_spawn` devem aparecer no binário padrão. A implementação antiga é compilada **somente** no fixture macOS explicitamente optado `WEBREADER_FAKE_APPINST_QA`, com root sintético e comando fictício controlado pela CI. O compilador nega a opção no SDK iOS via `TARGET_OS_IPHONE`.
+**Alteração:** o executável C padrão agora se limita a `selftest`, `inspect` e `serve-once` (PING/negação). O comando `install-confirmed` retorna `INSTALL_DISABLED` sem abrir a IPA ou iniciar instalador. **O socket também recusa `WRINST1` com `WRFAIL1` até quando o peer tem UID igual**; apenas `WRPING1` recebe `WRPONG1`. Nem o caminho real `/usr/bin/appinst`, nem a confirmação estática, nem um símbolo externo `posix_spawn` devem aparecer no binário padrão. A implementação antiga é compilada **somente** no fixture macOS explicitamente optado `WEBREADER_FAKE_APPINST_QA`, com root sintético e comando fictício controlado pela CI. O compilador nega a opção no SDK iOS via `TARGET_OS_IPHONE`.
 
 **Isso NÃO altera a ferramenta `appinst` já instalada pelo proprietário** ou o Filza e não revoga o procedimento de instalação manual que funcionou nas Builds 69–70. A alteração afeta apenas o **código-fonte futuro do bridge próprio**. O PING-only permanece separado e incapaz de instalar.
 
@@ -14,6 +14,7 @@ O antigo `ci/webreader_appinst_bridge.c` trazia o comando de terminal `install-c
 
 - `ci/test_webreader_appinst_bridge.py` compila duas versões no macOS: read-only padrão e a opção de laboratório fake. A padrão é examinada com `nm -u` para garantir ausência de `posix_spawn`, e por bytes para garantir ausência de texto `/usr/bin/appinst` e frase de consentimento. `inspect` funciona, mas `install-confirmed` é negado com arquivo realmente presente, SHA correto e frase correta.
 - O fake exercita o antigo caso positivo, erros, troca de arquivo, symlink, hardlink e exit code da ferramenta falsa; nunca instala um app real.
+- O teste de socket cria um listener UNIX real como processo separado, confirma PING positivo, rejeição de `WRINST1` e encerramento sem executar a ferramenta falsa; o código-fonte mantém o antigo protocolo somente dentro do fixture macOS explicitamente optado.
 - Macros malformadas (sem diretório ou fake tool) são recusadas na compilação. `ci/test_build70_chimera_unsafe_cli_lock.py` exige o mesmo contrato estaticamente na CI Linux.
 
 ## CK — laboratório de cópia por descritores, somente revisão
@@ -41,4 +42,4 @@ As cinco condições ainda obrigatórias, antes de instalar diretamente:
 
 **Estado atual:** `WebReaderAppinstSocket.liveInstallationEnabled = false`; nem a UI nem esta fase chamam instalador. Nenhuma produção publicada e nenhuma nova IPA Build71 gerada. A Build70 física permanece intacta; biblioteca, favoritos, capítulos offline, backups e leitura não sofreram alterações.
 
-**CI AC–CK:** [execução](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42730988778). Confirmar resultado antes de marcar a fase validada.
+**CI AC–CK:** [execução](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42731621679). Confirmar resultado antes de marcar a fase validada.
