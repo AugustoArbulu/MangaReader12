@@ -38,3 +38,12 @@ Um processo com o **mesmo UID** pode alterar seus próprios arquivos 0400, e um 
 - Provisionamento editorial continua bloqueado até uma chave real criada exclusivamente pelo usuário em seu computador e pin público confirmado independentemente.
 
 **Hard stops:** `WebReaderAppinstSocket.liveInstallationEnabled=false`, `WebReaderUpdateChannel.productionPublicKeyX963=nil`, `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`. PR #90 continua Draft, nenhuma Release ou Build71.
+## CI e evidência final
+
+**GitHub Actions SUCCESS 2/2:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42764615647
+
+- Linux Ubuntu: **16 testes PASS**, execução de duas cópias sintéticas e contraexemplo de mutação tardia; gates Swift continuam bloqueados.
+- macOS 15: **16 testes PASS**, as mesmas verificações e o mesmo contraexemplo; não foi iniciado appinst nem IPA real.
+- Ambos os jobs mantiveram produção sem chave pública/pin provisionado e `liveInstallationEnabled=false`.
+
+**Decisão para a próxima fase:** preparar uma matriz de confiança e isolamento do helper **sem executar instalação**. A resposta segura é distinguir três propriedades separadas: (a) integridade verificada antes de entregar o objeto; (b) proteção de escrita durante a vida útil do consumidor final; (c) aprovação editorial + consentimento local + anti-replay, todos sob custódia independente do app. Nenhuma das três pode ser inferida exclusivamente de chmod, UID igual ou digest de um arquivo já fechado.
