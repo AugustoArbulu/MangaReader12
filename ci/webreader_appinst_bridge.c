@@ -7,11 +7,13 @@
  * Commands:
  *   selftest
  *   inspect <STAGED_IPA_PATH> <SHA256_LOWERCASE>
- *   install-confirmed <STAGED_IPA_PATH> <SHA256_LOWERCASE> I-CONFIRM-INSTALL
  *
- * install-confirmed is destructive: ONLY after user's explicit consent,
- * signed-off disposable-app QA and backup. No automatic call from the app.
- * Test macros below are compiled only for CI, never into production binary.
+ * PHASE CJ: the legacy install-confirmed verified a mutable pathname
+ * before handing that path to appinst (TOCTOU). A fixed consent phrase
+ * cannot authenticate a peer or user action. Standard builds are now
+ * READ-ONLY. The legacy command exists ONLY in a fake macOS CI binary.
+ * Never enable real installation without authenticated OS-bound peer,
+ * owner trust, immutable verified bytes, anti-replay and helper consent.
  */
 #if defined(__APPLE__)
 #define _DARWIN_C_SOURCE 1
@@ -34,7 +36,9 @@
 #include <netinet/in.h>
 #endif
 #include <signal.h>
+#if defined(WEBREADER_FAKE_APPINST_QA)
 #include <spawn.h>
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,7 +50,15 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(WEBREADER_FAKE_APPINST_QA)
+#if !defined(WEBREADER_TEST_ROOT) || !defined(WEBREADER_TEST_APPINST)
+#error "Fake appinst QA requires BOTH synthetic root and fake executable path"
+#endif
+#if defined(WEBREADER_PING_ONLY)
+#error "PING mode must never contain a fake or real installer"
+#endif
 extern char **environ;
+#endif
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -58,16 +70,17 @@ extern char **environ;
 #define O_NOFOLLOW 0
 #endif
 
-#ifndef WEBREADER_TEST_APPINST
-#define APPINST_BINARY "/usr/bin/appinst"
-#else
+/* Only explicitly compiled fake CI binary receives an appinst path. */
+#ifdef WEBREADER_FAKE_APPINST_QA
 #define APPINST_BINARY WEBREADER_TEST_APPINST
 #endif
 
 #define MAX_IPA_BYTES (512ULL * 1024ULL * 1024ULL)
 #define PREFIX "/Library/Application Support/WebReaderUpdates/"
 #define LEAF_PREFIX "WebReader-build"
+#ifdef WEBREADER_FAKE_APPINST_QA
 #define CONFIRMATION "I-CONFIRM-INSTALL"
+#endif
 #define SOCKET_NAME "wri.sock"
 /* PING-only diagnostic TCP on IPv4 loopback. NOT an installation transport. */
 #define PING_LOOPBACK_PORT 38971
@@ -216,6 +229,8 @@ cleanup:
     return ok;
 }
 
+#ifdef WEBREADER_FAKE_APPINST_QA
+/* Host-only legacy simulation, never reuse pathname after hash in production. */
 static int invoke_appinst(const char *path) {
     struct stat tool;
     pid_t child = -1;
@@ -253,6 +268,7 @@ static int invoke_appinst(const char *path) {
     fputs("appinst exceeded the maximum wait\n", stderr);
     return 9;
 }
+#endif /* WEBREADER_FAKE_APPINST_QA */
 
 
 #endif /* !WEBREADER_PING_ONLY */
@@ -708,15 +724,18 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "selftest") == 0) {
 #ifdef WEBREADER_PING_ONLY
         puts("WEBREADER_PING_ONLY: no IPA installation supported");
-#else
+#elif defined(WEBREADER_FAKE_APPINST_QA)
         struct stat installed;
-        puts("WEBREADER_APPINST_BRIDGE_PRESENT (non-root, no installation)");
+        puts("WEBREADER_FAKE_APPINST_BRIDGE_QA (non-root, test only)");
         if (lstat(APPINST_BINARY, &installed) == 0 &&
             S_ISREG(installed.st_mode) && (installed.st_mode & 0111)) {
-            puts("APPINST_PATH_PRESENT /usr/bin/appinst (not executed)");
+            puts("FAKE_APPINST_AVAILABLE (not executed)");
         } else {
-            puts("APPINST_PATH_UNAVAILABLE /usr/bin/appinst (not executed)");
+            puts("FAKE_APPINST_UNAVAILABLE (not executed)");
         }
+#else
+        puts("WEBREADER_APPINST_BRIDGE_READ_ONLY (non-root, no installation)");
+        puts("APPINST_CLI_DISABLED: helper peer and immutable IPA missing");
 #endif
         return 0;
     }
@@ -740,22 +759,34 @@ int main(int argc, char **argv) {
         puts("IPA_BYTES_MATCH_SHA256 (not a ZIP/app signature attestation)");
         return 0;
     }
+#ifdef WEBREADER_FAKE_APPINST_QA
     if (argc >= 2 && strcmp(argv[1], "install-confirmed") == 0 &&
         argc == 5 && strcmp(argv[4], CONFIRMATION) == 0) {
         if (!verified_file(argv[2], argv[3])) {
             fputs("IPA path or SHA-256 rejected; no installation\n", stderr);
             return 3;
         }
-        /* No installer request originates from this app, yet. This CLI is
-         * for a disposable-app validation after explicit user approval. */
+        /* Test-only simulation: fake appinst, never a real executable. */
         return invoke_appinst(argv[2]);
     }
+#else
+    if (argc >= 2 && strcmp(argv[1], "install-confirmed") == 0) {
+        fputs("INSTALL_DISABLED: unsafe legacy CLI removed; use Filza for manual QA\n", stderr);
+        return 3;
+    }
+#endif
 #endif
 #ifdef WEBREADER_PING_ONLY
     fputs("Usage: selftest | serve-once <app-container/WR> | serve-loopback-once | serve-pair-once (no installation)\n", stderr);
 #else
-    fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256> | "
-          "install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n", stderr);
+#ifdef WEBREADER_FAKE_APPINST_QA
+    fputs("Usage (fake QA only): selftest | serve-once <app-container/WR> | "
+          "inspect <ipa> <sha256> | install-confirmed <ipa> <sha256> I-CONFIRM-INSTALL\n",
+          stderr);
+#else
+    fputs("Usage: selftest | serve-once <app-container/WR> | inspect <ipa> <sha256>"
+          " (install disabled)\n", stderr);
+#endif
 #endif
     return 2;
 }
