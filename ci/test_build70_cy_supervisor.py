@@ -282,6 +282,38 @@ class CYHostSupervisorTests(unittest.TestCase):
         self.check(self.offer(a, 0), STARTED)
         self.check(self.offer(b, 0), STARTED)
 
+    def test_real_host_thread_must_exit_before_trusted_ack(self):
+        # A synthetic worker thread performs no network, install, or IO.
+        # It does not stop just because the watchdog marks its lease expired.
+        import threading
+        started = threading.Event()
+        release = threading.Event()
+        exited = threading.Event()
+        s = self.create()
+        ticket = self.offer(s, 100_000).trusted_worker_ticket
+
+        def worker():
+            started.set()
+            release.wait(timeout=5)
+            exited.set()
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(started.wait(timeout=2))
+            r = self.check(self.watchdog(s, 115_000), TIMEOUT, 0, True)
+            self.assertTrue(r.cancel_requested)
+            self.assertTrue(thread.is_alive())  # timeout did not interrupt worker
+            self.check(self.offer(s, 300_000), TIMEOUT, 0, True)
+            # Do NOT simulate ACK before worker actually stops.
+        finally:
+            release.set()
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(exited.is_set())
+        self.check(self.ack(s, ticket, 300_001), ACK, 0, False)
+        self.check(self.offer(s, 300_002), BACKOFF, 0, False)
+
     def test_no_network_install_process_or_file_api(self):
         source = (ROOT / "build70_cy_supervisor.c").read_text()
         for forbidden in ("posix_spawn(", "objc_msgSend(", "installApplication:",
