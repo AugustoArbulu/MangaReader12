@@ -1,0 +1,43 @@
+name: WebReader Build70 Phase CN Untrusted Check-Only Trigger Host Safety
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cn_untrusted_check_only_gate.py'
+      - 'ci/test_build70_cn_untrusted_check_only_gate.py'
+      - '.github/workflows/chimera-build70-phase-cn-untrusted-trigger.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cn_untrusted_check_only_gate.py'
+      - 'ci/test_build70_cn_untrusted_check_only_gate.py'
+      - '.github/workflows/chimera-build70-phase-cn-untrusted-trigger.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-cn-check-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hostile-untrusted-check-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify fixed-only request and no installation permission
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build70_cn_untrusted_check_only_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build71_cm_peer_reason_report.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          installer = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          trust = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert 'static let liveInstallationEnabled = false' in installer
+          assert 'static let productionPublicKeyX963: Data? = nil' in trust
+          print("PASS CN: no new IPA, no helper, no producer private key, no live installation")
+          PY
