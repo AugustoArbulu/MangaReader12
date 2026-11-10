@@ -7,6 +7,8 @@ on:
       - 'ci/package_chimera_signed_peer_cl.py'
       - 'ci/test_package_chimera_signed_peer_cl.py'
       - 'ci/test_chimera_signed_peer_cl_deb.py'
+      - 'ci/build71_cl_signed_peer_report.py'
+      - 'ci/test_build71_cl_signed_peer_report.py'
       - 'ci/build66_separate_signed_peer_lab.c'
       - 'ci/test_build66_separate_signed_peer_lab.py'
       - 'ci/build66_independent_peer_report.py'
@@ -31,6 +33,7 @@ jobs:
         run: |
           python3 -m compileall -q ci
           python3 -m unittest discover -s ci -p 'test_package_chimera_signed_peer_cl.py' -v
+          python3 -m unittest discover -s ci -p 'test_build71_cl_signed_peer_report.py' -v
           python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
           grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
           echo 'PASS: optional signed peer capability lab never authorizes installation'
