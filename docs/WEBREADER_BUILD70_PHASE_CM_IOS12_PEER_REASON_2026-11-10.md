@@ -45,7 +45,9 @@ Envie apenas as três linhas `OBSERVATION_a/b/c`, todas com `AUTHORIZATION=DENIE
 | `TRANSPORT_FAILED`, `SOCKET_UNAVAILABLE`, `CLIENT_FAILED` | Problema com o transporte/local IPC |
 | `MATCH_ONLY_NO_AUTH / MISMATCH_REJECTED / MATCH_ONLY_NO_AUTH` | Padrão de laboratório favorável, mas NÃO identidade do WebReader real |
 
-**GitHub Actions CM:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42749171758 — conferir conclusão antes de anunciar sucesso.
+**GitHub Actions CM final:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42749403094 — **SUCCESS 2/2** (Linux threat-model e macOS assinaturas ARM64/iOS12, auditoria DEB). A primeira execução teve falha puramente de codificação ASCII do campo de nome do pacote, corrigida antes desta execução aprovada.
+
+**Artefato auditado independentemente e recuperado:** `WebReader-Chimera-PhaseCM-PeerReason-iOS12.deb`, **14.200 bytes**, SHA-256 `6284e8eb85eeb54353d23a028053a3c5f51f6917f252bc332cb400a53f2c9587`; `.deb.sha256` bate com SHA real, somente `debian-binary`, `control.tar.gz` (apenas `./control`) e `data.tar.gz` (três CLI Mach-O ARM64 e script). Controle Debian versão `0.2.0`, pacote `com.example.webreader.peercl`; nenhum script pós-instalação, nenhum binário `appinst`, nenhum opcode `WRINST1`. [Artefato temporário CI CM](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42749403094), disponível até 24/11/2026. O testador físico **ainda não foi repetido** depois da correção.
 
 ## Restrições preservadas
 
