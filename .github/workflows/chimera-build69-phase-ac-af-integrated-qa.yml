@@ -261,6 +261,7 @@ jobs:
           python3 ci/test_build53_backup_pins.py
           python3 ci/test_build65_offline_relocation.py
           python3 -m unittest discover -s ci -p 'test_webreader_appinst_bridge.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_helper_review_snapshot.py' -v
           python3 ci/test_native_webreader_ipa_stager.py
           python3 ci/test_native_webreader_local_ipa_review.py
           python3 ci/test_native_webreader_ipa_download_budget.py
