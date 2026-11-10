@@ -15,13 +15,14 @@ struct WR_CY_Supervisor {
     bool stopped, clock_seen, active, cancel_requested, backoff_seen;
     uint64_t last_clock, active_since, active_ticket, failure_since, backoff_ms;
     uint8_t failures;
+    uint8_t pending_count;
 };
 
 static WR_CY_Receipt receipt(WR_CY_Supervisor *s, WR_CY_Status status) {
     WR_CY_Receipt r = {0}; /* all authority fields remain false */
     r.status = status;
     if (s) {
-        r.pending_count = s->queue ? 0 : 0;
+        r.pending_count = s->pending_count;
         r.trusted_worker_ticket = s->active ? s->active_ticket : 0;
         r.worker_may_still_be_running = s->active;
         r.cancel_requested = s->cancel_requested;
@@ -32,8 +33,8 @@ static WR_CY_Receipt receipt(WR_CY_Supervisor *s, WR_CY_Status status) {
 }
 static WR_CY_Receipt snapshot(WR_CY_Supervisor *s, WR_CY_Status status,
                                uint8_t pending) {
+    s->pending_count = pending;
     WR_CY_Receipt r = receipt(s, status);
-    r.pending_count = pending;
     return r;
 }
 static bool valid_clock(WR_CY_Supervisor *s, uint64_t now) {
@@ -47,6 +48,10 @@ static bool valid_frame(const uint8_t *packet, size_t n) {
         {'W','R','C','H','K','2','\n'};
     return packet && n == sizeof(exact) &&
            memcmp(packet, exact, sizeof(exact)) == 0;
+}
+static bool overdue(WR_CY_Supervisor *s, uint64_t now) {
+    return s->active && now >= s->active_since &&
+           now - s->active_since >= WR_CY_TIMEOUT_MS;
 }
 static bool backed_off(WR_CY_Supervisor *s, uint64_t now) {
     return s->backoff_seen &&
@@ -74,6 +79,7 @@ static WR_CY_Status translate(WR_CX_Status status) {
     }
 }
 static WR_CY_Receipt from_cx(WR_CY_Supervisor *s, WR_CX_Receipt q) {
+    s->pending_count = q.pending_count;
     if (q.status == WR_CX_STARTED) {
         s->active = true;
         s->active_ticket = q.local_worker_ticket;
@@ -101,6 +107,10 @@ WR_CY_Receipt wr_cy_offer(WR_CY_Supervisor *s, const uint8_t *frame,
     WR_CY_Receipt r;
     if (s->stopped) r = receipt(s, WR_CY_STOPPED);
     else if (!valid_clock(s, now)) r = receipt(s, WR_CY_STALE);
+    else if (overdue(s, now)) {
+        s->cancel_requested = true;
+        r = receipt(s, WR_CY_TIMEOUT_CANCEL_REQUESTED);
+    }
     else if (s->cancel_requested) r = receipt(s, WR_CY_WAITING_WORKER);
     else if (backed_off(s, now)) r = receipt(s, WR_CY_BACKOFF);
     else r = from_cx(s, wr_cx_offer(s->queue, frame, length, now));
@@ -112,6 +122,10 @@ WR_CY_Receipt wr_cy_poll(WR_CY_Supervisor *s, uint64_t now) {
     WR_CY_Receipt r;
     if (s->stopped) r = receipt(s, WR_CY_STOPPED);
     else if (!valid_clock(s, now)) r = receipt(s, WR_CY_STALE);
+    else if (overdue(s, now)) {
+        s->cancel_requested = true;
+        r = receipt(s, WR_CY_TIMEOUT_CANCEL_REQUESTED);
+    }
     else if (s->cancel_requested || s->active) r = receipt(s, WR_CY_WAITING_WORKER);
     else if (backed_off(s, now)) r = receipt(s, WR_CY_BACKOFF);
     else r = from_cx(s, wr_cx_poll(s->queue, now));
@@ -125,8 +139,7 @@ WR_CY_Receipt wr_cy_watchdog(WR_CY_Supervisor *s, uint64_t now) {
     else if (!valid_clock(s, now)) r = receipt(s, WR_CY_STALE);
     else if (!s->active) r = receipt(s, WR_CY_IDLE);
     else if (s->cancel_requested) r = receipt(s, WR_CY_WAITING_WORKER);
-    else if (now >= s->active_since &&
-             now - s->active_since >= WR_CY_TIMEOUT_MS) {
+    else if (overdue(s, now)) {
         s->cancel_requested = true;
         r = receipt(s, WR_CY_TIMEOUT_CANCEL_REQUESTED);
     } else r = receipt(s, WR_CY_WAITING_WORKER);
@@ -142,7 +155,7 @@ WR_CY_Receipt wr_cy_complete(WR_CY_Supervisor *s, uint64_t ticket,
     else if (!s->active || !ticket || ticket != s->active_ticket)
         r = receipt(s, WR_CY_STALE);
     else if (s->cancel_requested ||
-             (now >= s->active_since && now - s->active_since >= WR_CY_TIMEOUT_MS)) {
+             overdue(s, now)) {
         s->cancel_requested = true;
         r = receipt(s, WR_CY_TIMEOUT_CANCEL_REQUESTED);
     } else {
@@ -158,6 +171,7 @@ WR_CY_Receipt wr_cy_complete(WR_CY_Supervisor *s, uint64_t ticket,
                 r = snapshot(s, WR_CY_COMPLETED, q.pending_count);
             } else {
                 (void)wr_cx_cancel_pending(s->queue, now);
+                s->pending_count = 0;
                 record_failure(s, now);
                 r = receipt(s, WR_CY_FAILURE_RECORDED);
             }
@@ -181,6 +195,7 @@ WR_CY_Receipt wr_cy_ack_cancel(WR_CY_Supervisor *s, uint64_t ticket,
             s->active = false;
             s->active_ticket = 0;
             s->cancel_requested = false;
+            s->pending_count = 0;
             record_failure(s, now);
             r = receipt(s, WR_CY_CANCEL_ACKNOWLEDGED);
         }
@@ -202,6 +217,7 @@ WR_CY_Receipt wr_cy_shutdown(WR_CY_Supervisor *s) {
     s->stopped = true;
     /* A blocked worker is NOT automatically interrupted by shutdown. */
     (void)wr_cx_shutdown(s->queue);
+    s->pending_count = 0;
     WR_CY_Receipt r = receipt(s, WR_CY_STOPPED);
     if (pthread_mutex_unlock(&s->lock) != 0) return receipt(NULL, WR_CY_DENIED);
     return r;
