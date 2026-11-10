@@ -1,0 +1,103 @@
+name: WebReader Build70 Phase DD Full Host Ancestry Audit (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dd_full_ancestry.c'
+      - 'ci/build70_dd_full_ancestry.h'
+      - 'ci/test_build70_dd_full_ancestry.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DD_FULL_ANCESTRY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dd-full-ancestry.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dd_full_ancestry.c'
+      - 'ci/build70_dd_full_ancestry.h'
+      - 'ci/test_build70_dd_full_ancestry.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DD_FULL_ANCESTRY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dd-full-ancestry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-host-ancestry-negative:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Native full-ancestry walk and hostile directory substitution tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dd_full_ancestry.py' -v
+      - name: Enforce build70 production trust and installer hard stops
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          header = Path('ci/build70_dd_full_ancestry.h').read_text()
+          src = Path('ci/build70_dd_full_ancestry.c').read_text()
+          test = Path('ci/test_build70_dd_full_ancestry.py').read_text()
+          for field in ('ios12_client_identity_proven', 'ios12_helper_identity_proven',
+                        'ios12_app_write_access_denied',
+                        'independently_protected_storage_attested',
+                        'powerloss_or_rollback_safe',
+                        'post_review_immutability_proven',
+                        'installation_authorized', 'installation_performed'):
+              assert field in header, field
+          for required in ('openat(parent, component', 'O_DIRECTORY | O_NOFOLLOW',
+                           'AT_SYMLINK_NOFOLLOW', 'acceptable_host_ancestor',
+                           'WR_DD_QUARANTINED'):
+              assert required in src, required
+          for prohibited in ('O_CREAT', 'O_WRONLY', 'O_RDWR', 'unlink(',
+                             'rename(', 'chmod(', 'mkdir(', 'socket(',
+                             'connect(', 'appinst(', 'posix_spawn(',
+                             'objc_msgSend(', 'installApplication:'):
+              assert prohibited not in src, prohibited
+          assert 'test_symlinked_ancestor_is_denied' in test
+          assert 'test_ancestor_world_writable_is_denied_even_with_sticky_bit' in test
+          assert 'test_same_uid_can_rename_ancestor_after_review_counterexample' in test
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DD: host ancestry observation cannot authorize iOS12 installer')
+          PY
+
+  arm64-ios12-compile-only:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-compile DD read-only native source for iOS12, no execution
+        shell: bash
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_dd_full_ancestry.c \
+            -o "$RUNNER_TEMP/wr-dd-full-ancestry-ios12.o"
+          file "$RUNNER_TEMP/wr-dd-full-ancestry-ios12.o"
+          xcrun nm -g "$RUNNER_TEMP/wr-dd-full-ancestry-ios12.o" > "$RUNNER_TEMP/dd_symbols.txt"
+          xcrun nm -u "$RUNNER_TEMP/wr-dd-full-ancestry-ios12.o" > "$RUNNER_TEMP/dd_undefined.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          tmp = Path(os.environ['RUNNER_TEMP'])
+          defined = (tmp/'dd_symbols.txt').read_text()
+          undefined = (tmp/'dd_undefined.txt').read_text()
+          assert '_wr_dd_inspect_host_ancestors' in defined
+          for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork',
+                            '_execve', '_system', '_socket', '_connect',
+                            '_dlopen', '_unlink', '_rename', '_chmod', '_mkdir'):
+              assert forbidden not in undefined, forbidden
+          print('PASS DD: iOS12 ARM64 object only; no helper, IPA, DEB or install')
+          PY
