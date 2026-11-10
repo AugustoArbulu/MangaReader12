@@ -8,6 +8,14 @@ on:
       - 'ci/test_build70_cr_fd_alias_lab.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CR_FD_ALIAS_HOST_LAB_2026-11-10.md'
       - '.github/workflows/chimera-build70-phase-cr-fd-alias.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cr_fd_alias_lab.py'
+      - 'ci/test_build70_cr_fd_alias_lab.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CR_FD_ALIAS_HOST_LAB_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cr-fd-alias.yml'
   workflow_dispatch:
 
 permissions:
