@@ -1,0 +1,99 @@
+name: WebReader Build70 Phase CX Bounded Check Queue (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cx_bounded_scheduler.c'
+      - 'ci/build70_cx_bounded_scheduler.h'
+      - 'ci/test_build70_cx_bounded_scheduler.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CX_BOUNDED_CHECK_QUEUE_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cx-bounded-check-queue.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cx_bounded_scheduler.c'
+      - 'ci/build70_cx_bounded_scheduler.h'
+      - 'ci/test_build70_cx_bounded_scheduler.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CX_BOUNDED_CHECK_QUEUE_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cx-bounded-check-queue.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-only-scheduler-host:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Native bounded scheduler test suite, concurrency and cancellation
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cx_bounded_scheduler.py' -v
+      - name: Confirm no production trust, privileged action or installation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_cx_bounded_scheduler.c').read_text()
+          hdr = Path('ci/build70_cx_bounded_scheduler.h').read_text()
+          tests = Path('ci/test_build70_cx_bounded_scheduler.py').read_text()
+          for field in ('caller_authenticated', 'publisher_verified',
+                        'client_can_choose_artifact', 'immutable_installer_input_proven',
+                        'owner_consent_verified', 'installation_authorized',
+                        'installation_performed'):
+              assert field in hdr, field
+          assert 'WR_CX_MAX_PENDING 1u' in hdr
+          assert 'WR_CX_MIN_START_INTERVAL_MS UINT64_C(60000)' in hdr
+          assert 'range(512)' in tests
+          for forbidden in ('posix_spawn(', 'objc_msgSend(', 'installApplication:',
+                            'socket(', 'connect(', 'open(', 'appinst('):
+              assert forbidden not in src, forbidden
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS CX: bounded check-only queue, no release or installer authority')
+          PY
+
+  ios12-arm64-crosscompile-object-only:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS-capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Cross-compile pure scheduler to iOS12 ARM64 object only
+        shell: bash
+        run: |
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_cx_bounded_scheduler.c \
+            -o "$RUNNER_TEMP/webreader-cx-queue-ios12-arm64.o"
+          file "$RUNNER_TEMP/webreader-cx-queue-ios12-arm64.o"
+          xcrun nm -g "$RUNNER_TEMP/webreader-cx-queue-ios12-arm64.o" > "$RUNNER_TEMP/cx_symbols.txt"
+          xcrun nm -u "$RUNNER_TEMP/webreader-cx-queue-ios12-arm64.o" > "$RUNNER_TEMP/cx_undefined.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          tmp = Path(os.environ['RUNNER_TEMP'])
+          names = (tmp / 'cx_symbols.txt').read_text()
+          undefined = (tmp / 'cx_undefined.txt').read_text()
+          for expected in ('_wr_cx_new', '_wr_cx_offer', '_wr_cx_poll',
+                           '_wr_cx_finish', '_wr_cx_cancel_active',
+                           '_wr_cx_cancel_pending', '_wr_cx_shutdown'):
+              assert expected in names, expected
+          for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork',
+                            '_execve', '_system', '_socket', '_connect', '_open'):
+              assert forbidden not in undefined, forbidden
+          print('PASS CX: iOS12 ARM64 pure policy object only; NO helper daemon or executable')
+          PY
