@@ -40,9 +40,26 @@ O pacote **não inclui** `postinst`, `prerm`, `launchd`, serviço contínuo, bin
 
 **GitHub Actions:** [Fase CL, primeira compilação aprovada](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734601209): **SUCCESS 2/2**, com os 3 binários ARM64 assinados ad hoc e o DEB auditado. [CI final CL com parser de relatório adicional](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734874273): **SUCCESS 2/2**. Artifacts opcionais CLI-only com três Mach-O arm64 assinados, `.deb` + SHA-256, até **24/11/2026**. O arquivo opcional fica nos **artifacts temporários** (14 dias); não há Release nem publicação de IPA para uso diário.
 
+## Pacote compilado e segunda auditoria independente
+
+A [CI final CL #42734874273](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734874273) passou **SUCCESS 2/2**. O artifact temporário `WebReader-PhaseCL-ThreeSignedPeers-CLI-only-iOS12` contém o DEB e seu arquivo de hash, válido no GitHub Actions até 24/11/2026. Identificador do artifact: `13725764376`.
+
+O arquivo foi recuperado e inspecionado novamente, independentemente da auditoria CI:
+
+- `WebReader-Chimera-PhaseCL-SignedPeer-iOS12.deb`, **14.036 bytes**
+- SHA-256: `7bd2571a9cc4d9b093ddac4963eb859273f5e41238433070c4421101f58ec6cb`
+- O SHA corresponde **exatamente** à linha do arquivo `.deb.sha256`.
+- Estrutura ar: somente `debian-binary`, `control.tar.gz`, `data.tar.gz`; controle tem só `./control` — sem `postinst`, `prerm`, `preinst` ou `postrm`. O `data.tar.gz` contém exclusivamente três executáveis ARM64 e o runner em `/usr/local/bin/`, com os diretórios-pai explícitos.
+- Os binários têm cabeçalho Mach-O ARM64, não contêm `/usr/bin/appinst` nem `WRINST1`. Os dois CDHashes de cliente embutidos no runner são distintos, e o arquivo termina com a negação explícita de instalação.
+- **Limite:** essa inspeção local dos bytes é complementar à verificação Apple `codesign` executada no macOS Actions, não a substitui. A integridade do pacote não prova que executará no Chimera físico.
+
+Nenhum componente é instalado automaticamente quando se baixa o pacote, e a execução do comando não instala nenhuma IPA. Instalar o **próprio DEB** no sistema seria uma ação explícita do proprietário pelo gerenciador de pacotes.
+
 ## Fluxo de teste físico opcional e único (não requerido agora)
 
 Se algum dia for relevante medir o iOS12 real, o proprietário pode transferir e instalar **somente o DEB previamente auditado**, usando o gerenciador do jailbreak, e executar **manualmente** em NewTerm 2, como usuário `mobile`:
+
+O fluxo recomendado é transferir o DEB do Android/PC para o iPad usando o método de transferência já aprovado no Filza, abri-lo no Sileo, confirmar que o pacote se chama `com.example.webreader.peercl` e então executar o comando a seguir. **Não remover ou reinstalar o WebReader**; este laboratório é independente do app.
 
 ```sh
 webreader-peercl-report
