@@ -42,4 +42,4 @@ As cinco condições ainda obrigatórias, antes de instalar diretamente:
 
 **Estado atual:** `WebReaderAppinstSocket.liveInstallationEnabled = false`; nem a UI nem esta fase chamam instalador. Nenhuma produção publicada e nenhuma nova IPA Build71 gerada. A Build70 física permanece intacta; biblioteca, favoritos, capítulos offline, backups e leitura não sofreram alterações.
 
-**CI AC–CK:** [execução](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42731621679). Confirmar resultado antes de marcar a fase validada.
+**CI AC–CK:** [execução #42731621679](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42731621679) — **SUCCESS 2/2**. Testes Linux e macOS reais, incluindo compilação das versões default/fake do bridge C, recusa de WRINST1 via socket com mesmo UID, cópia protegida e cenários adversariais, compilações completas iOS12/ARM64 Debug + Release e preview isolado não assinado. Nenhuma IPA produzida ou instalada.
