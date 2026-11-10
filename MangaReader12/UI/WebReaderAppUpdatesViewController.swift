@@ -1,4 +1,5 @@
 import UIKit
+import Darwin
 
 /// In-app release discovery and manual IPA export; public GitHub metadata is
 /// NOT an independently signed publisher manifest.
@@ -149,7 +150,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         if source == 1 { return 5 }
         if source == 6 { return 8 }
         if source == 2 { return availableUpdate != nil ? 6 : 1 }
-        if source == 3 { return 8 }
+        if source == 3 { return 9 }
         if source == 4 {
             return 1 + httpsResults.count + (httpsResults.isEmpty ? 0 : 1)
         }
@@ -402,6 +403,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
             }
+
+        case (3, 8):
+            cell.textLabel?.text = "Copiar identidade do processo WebReader"
+            cell.detailTextLabel?.text =
+                "UID e GID do próprio app • leitura local • não autentica o helper"
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
 
         case (4, 0):
             cell.textLabel?.text = testingHTTPS ?
@@ -687,6 +695,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
         if selectedSection == 3, indexPath.row == 7, !isIPCDiagnostic {
             copyOfflinePresenceAudit()
+            return
+        }
+        if selectedSection == 3, indexPath.row == 8, !isIPCDiagnostic {
+            copyOwnProcessIdentityReport()
             return
         }
         if selectedSection == 1, indexPath.row == 1 {
@@ -1257,6 +1269,42 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             title: "Diagnóstico copiado",
             message: "O relatório é somente leitura e não executa instalação. " +
                 "Não inclui arquivos pessoais nem credenciais.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    /// Phase DG: measure only this app process, never an IPC peer or helper.
+    /// These local kernel identifiers do NOT authenticate a publisher or
+    /// confer permission to access a helper or install an IPA.
+    private func copyOwnProcessIdentityReport() {
+        guard !isIPCDiagnostic else { return }
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let lines: [String] = [
+            "WebReader • Diagnóstico de identidade do próprio app (DG)",
+            "Build: " + String(installedBuild),
+            "iOS: " + String(version.majorVersion) + "." +
+                String(version.minorVersion) + "." + String(version.patchVersion),
+            "APP_SELF_UID=" + String(Darwin.getuid()),
+            "APP_SELF_EUID=" + String(Darwin.geteuid()),
+            "APP_SELF_GID=" + String(Darwin.getgid()),
+            "APP_SELF_EGID=" + String(Darwin.getegid()),
+            "APP_SELF_IDENTITY_SCOPE=SELF_ONLY",
+            "HELPER_PROCESS_IDENTITY=NOT_TESTED",
+            "IPC_PEER_AUTHENTICATED=NO",
+            "IOS12_SANDBOX_SEPARATION_PROVEN=NO",
+            "APP_WRITE_DENIAL_TO_HELPER_VAULT_PROVEN=NO",
+            "PUBLISHER_TRUST_CONFIGURED=NO",
+            "INSTALLATION_AUTHORIZED=NO",
+            "INSTALLATION_ATTEMPTED=NO"
+        ]
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let alert = UIAlertController(
+            title: "Identidade do app copiada",
+            message: "São apenas UID/GID do processo WebReader. " +
+                "Não são identidade de um helper, autenticação de IPC ou " +
+                "permissão para instalar IPAs. Nenhum arquivo foi acessado.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
