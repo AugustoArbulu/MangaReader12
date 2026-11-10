@@ -1,0 +1,61 @@
+name: WebReader Build70 Phase CR FD Alias Feasibility (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cr_fd_alias_lab.py'
+      - 'ci/test_build70_cr_fd_alias_lab.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CR_FD_ALIAS_HOST_LAB_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cr-fd-alias.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-fd-alias-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Simulate malicious pathname replacement with inherited descriptor
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cr_fd_alias_lab.py' -v
+          python ci/build70_cr_fd_alias_lab.py
+      - name: Keep production release and installation disabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('NO production trust; NO real appinst; NO install')
+          PY
+
+  macos-fd-alias-lab:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check /dev/fd child alias semantics and negative inherited-FD case
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cr_fd_alias_lab.py' -v
+          python ci/build70_cr_fd_alias_lab.py
+      - name: Verify strictly no executable installer enabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bridge = Path('ci/build70_cr_fd_alias_lab.py').read_text()
+          assert '"/usr/bin/appinst"' not in bridge
+          assert 'subprocess.run(' in bridge and 'pass_fds=' in bridge
+          assert 'immutable_install_bytes_proven: bool = False' in bridge
+          assert 'installation_performed: bool = False' in bridge
+          print('macOS host-only FD alias observation; iOS/appinst unverified')
+          PY
