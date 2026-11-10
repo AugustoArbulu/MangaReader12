@@ -184,6 +184,46 @@ os._exit(0)  # deliberately bypass normal teardown, no user files involved
         self.assertTrue(h2)
         self.safe(ready, READY)
 
+    def test_independent_process_sees_busy_active_lock(self):
+        parent, result = self.open()
+        self.safe(result, READY)
+        snippet = r'''
+import ctypes, os, sys
+class R(ctypes.Structure):
+    _fields_ = [("status",ctypes.c_int)] + [
+        (name,ctypes.c_bool) for name in (
+            "crash_evidence_is_present","caller_authenticated","publisher_verified",
+            "editor_pin_provisioned","ipad_uid_isolation_proven",
+            "protected_against_same_uid_tamper","can_reconcile_pending_install",
+            "installation_authorized","installation_performed")]
+lib = ctypes.CDLL(sys.argv[1])
+lib.wr_da_open.argtypes = (ctypes.c_char_p,ctypes.POINTER(R))
+lib.wr_da_open.restype = ctypes.c_void_p
+obs = R()
+handle = lib.wr_da_open(os.fsencode(sys.argv[2]),ctypes.byref(obs))
+assert not handle and obs.status == 4  # advisory lock already taken
+'''
+        child = subprocess.run(
+            [sys.executable, "-c", snippet, str(self.library_path), str(self.directory)],
+            check=False, capture_output=True, timeout=15)
+        self.assertEqual(child.returncode, 0, child.stderr.decode(errors="replace"))
+        self.assertFalse((self.directory / MARKER).exists())
+        self.safe(self.offer(parent), MARKED)
+
+    def test_same_uid_lock_replacement_bypasses_flock_not_safe(self):
+        original, result = self.open()
+        self.safe(result, READY)
+        # Same owner can unlink the named lock inode while the original FD
+        # still holds its lock. This DOES NOT make the new inode locked.
+        (self.directory / LOCK).unlink()
+        replacement, result2 = self.open()
+        self.assertTrue(replacement)
+        self.safe(result2, READY)
+        # A protected, separately owned root is required before live use.
+        self.assertFalse(result2.protected_against_same_uid_tamper)
+        self.safe(self.offer(original), MARKED)
+        self.safe(self.offer(replacement), QUARANTINED)
+
     def test_128_threads_cannot_create_parallel_markers(self):
         h, r = self.open()
         self.safe(r, READY)
