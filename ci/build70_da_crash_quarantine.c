@@ -9,7 +9,15 @@
  *
  * No download, no URL, no socket, no appinst, no LSApplicationWorkspace.
  */
+/* Darwin requires the full Darwin feature namespace for O_NOFOLLOW
+ * and BSD flock declarations; strict POSIX mode hides them in Apple SDKs.
+ * Linux uses the original POSIX feature level. Do not emulate missing flags.
+ */
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE 1
+#else
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include "build70_da_crash_quarantine.h"
 #include <errno.h>
 #include <fcntl.h>
