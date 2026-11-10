@@ -7,6 +7,9 @@ on:
       - 'ci/build70_cw_checkonly_core.c'
       - 'ci/build70_cw_checkonly_core.h'
       - 'ci/test_build70_cw_checkonly_core.py'
+      - 'ci/build70_cw_shared_dispatch.c'
+      - 'ci/build70_cw_shared_dispatch.h'
+      - 'ci/test_build70_cw_shared_dispatch.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CW_NATIVE_CHECK_ONLY_2026-11-10.md'
       - '.github/workflows/chimera-build70-phase-cw-native-checkonly.yml'
   pull_request:
@@ -39,6 +42,7 @@ jobs:
       - name: Native C and Python CN cross-language security checks
         run: |
           python -m unittest discover -s ci -p 'test_build70_cw_checkonly_core.py' -v
+          python -m unittest discover -s ci -p 'test_build70_cw_shared_dispatch.py' -v
           python -m unittest discover -s ci -p 'test_build70_cn_untrusted_check_only_gate.py' -v
       - name: Audit no installer surfaces and preserve production hard stops
         run: |
@@ -77,8 +81,15 @@ jobs:
             -c ci/build70_cw_checkonly_core.c \
             -o "$RUNNER_TEMP/webreader-cw-checkonly-ios12-arm64.o"
           file "$RUNNER_TEMP/webreader-cw-checkonly-ios12-arm64.o"
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_cw_shared_dispatch.c \
+            -o "$RUNNER_TEMP/webreader-cw-shared-ios12-arm64.o"
+          file "$RUNNER_TEMP/webreader-cw-shared-ios12-arm64.o"
           xcrun nm -g "$RUNNER_TEMP/webreader-cw-checkonly-ios12-arm64.o" > "$RUNNER_TEMP/cw_symbols.txt"
+          xcrun nm -g "$RUNNER_TEMP/webreader-cw-shared-ios12-arm64.o" >> "$RUNNER_TEMP/cw_symbols.txt"
           xcrun nm -u "$RUNNER_TEMP/webreader-cw-checkonly-ios12-arm64.o" > "$RUNNER_TEMP/cw_undefined.txt"
+          xcrun nm -u "$RUNNER_TEMP/webreader-cw-shared-ios12-arm64.o" >> "$RUNNER_TEMP/cw_undefined.txt"
           python - <<'PY'
           from pathlib import Path
           import os
@@ -86,8 +97,9 @@ jobs:
           symbols = (root / 'cw_symbols.txt').read_text()
           undefined = (root / 'cw_undefined.txt').read_text()
           assert '_wr_cw_offer' in symbols
+          assert '_wr_cw_dispatch_offer' in symbols
           for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork', '_execve',
                             '_system', '_socket', '_connect', '_open', '_dlopen'):
               assert forbidden not in undefined, forbidden
-          print('PASS CW: iOS12 ARM64 policy object only; NO executable helper/IPA/install')
+          print('PASS CW: iOS12 ARM64 policy + serialized dispatcher objects; NO executable helper/IPA/install')
           PY
