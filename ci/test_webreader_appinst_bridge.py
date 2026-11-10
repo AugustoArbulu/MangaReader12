@@ -41,10 +41,23 @@ class BridgeTests(unittest.TestCase):
             "-Wno-deprecated-declarations",
             '-DWEBREADER_TEST_ROOT="' + str(cls.root) + '"',
             '-DWEBREADER_TEST_APPINST="' + str(cls.fake_appinst) + '"',
+            "-DWEBREADER_FAKE_APPINST_QA=1",
             str(SOURCE), "-o", str(cls.binary)
         ], capture_output=True, text=True, timeout=30)
         if result.returncode:
-            raise AssertionError("Bridge compile failed:\n" + result.stderr)
+            raise AssertionError("Fake-only QA bridge compile failed:\n" + result.stderr)
+
+        # Same C source, standard iOS-compatible build: NO installer API,
+        # not even with the correct path, SHA or confirmation word.
+        cls.read_only = cls.root / "webreader-bridge-readonly"
+        restricted = subprocess.run([
+            "xcrun", "clang", "-std=c11", "-Wall", "-Wextra", "-Werror",
+            "-Wno-deprecated-declarations",
+            '-DWEBREADER_TEST_ROOT="' + str(cls.root) + '"',
+            str(SOURCE), "-o", str(cls.read_only)
+        ], capture_output=True, text=True, timeout=30)
+        if restricted.returncode:
+            raise AssertionError("Read-only bridge compile failed:\n" + restricted.stderr)
 
     @classmethod
     def tearDownClass(cls):
@@ -73,8 +86,8 @@ class BridgeTests(unittest.TestCase):
     def test_selftest_inert(self):
         proc = self.cli("selftest")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("non-root, no installation", proc.stdout)
-        self.assertIn("APPINST_PATH_PRESENT /usr/bin/appinst (not executed)", proc.stdout)
+        self.assertIn("FAKE_APPINST_BRIDGE_QA", proc.stdout)
+        self.assertIn("FAKE_APPINST_AVAILABLE", proc.stdout)
         self.assertFalse(self.marker.exists())
 
     def test_inspect_checks_sha_without_installing(self):
@@ -93,6 +106,69 @@ class BridgeTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertNotEqual(self.cli(*args).returncode, 0)
                 self.assertFalse(self.marker.exists())
+
+    def test_standard_bridge_never_links_or_contains_installer(self):
+        # This is the critical safety boundary of Phase CJ. The test
+        # fixture's fake-only build is deliberately NOT a release binary.
+        path = self.read_only
+        binary = path.read_bytes()
+        self.assertNotIn(b"/usr/bin/appinst", binary)
+        self.assertNotIn(b"I-CONFIRM-INSTALL", binary)
+        self.assertNotIn(b"WEBREADER_FAKE_APPINST_QA", binary)
+        symbols = subprocess.run(
+            ["nm", "-u", str(path)], check=True,
+            capture_output=True, text=True, timeout=10
+        ).stdout
+        self.assertNotIn("posix_spawn", symbols)
+        self.assertNotIn("waitpid", symbols)
+
+        proc = subprocess.run(
+            [str(path), "selftest"], capture_output=True, text=True, timeout=5
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("APPINST_CLI_DISABLED", proc.stdout)
+
+        # Even a verified and legitimate-looking staging file does not
+        # make a fixed confirmation string into helper-local consent.
+        proc = subprocess.run(
+            [str(path), "inspect", str(self.ipa), self.digest],
+            capture_output=True, text=True, timeout=5
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        for args in (
+            ("install-confirmed", str(self.ipa), self.digest, "I-CONFIRM-INSTALL"),
+            ("install-confirmed", str(self.ipa), self.digest, "YES"),
+            ("install-confirmed", str(self.ipa), self.digest),
+        ):
+            with self.subTest(args=args):
+                result = subprocess.run(
+                    [str(path), *args],
+                    capture_output=True, text=True, timeout=5
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("INSTALL_DISABLED", result.stderr)
+                self.assertFalse(self.marker.exists())
+
+    def test_fake_installer_cannot_be_built_without_both_test_macros(self):
+        for extra in (
+            ["-DWEBREADER_FAKE_APPINST_QA=1"],
+            ["-DWEBREADER_FAKE_APPINST_QA=1",
+             '-DWEBREADER_TEST_ROOT="' + str(self.root) + '"'],
+            ["-DWEBREADER_FAKE_APPINST_QA=1",
+             '-DWEBREADER_TEST_APPINST="' + str(self.fake_appinst) + '"'],
+            ["-DWEBREADER_FAKE_APPINST_QA=1", "-DWEBREADER_PING_ONLY",
+             '-DWEBREADER_TEST_ROOT="' + str(self.root) + '"',
+             '-DWEBREADER_TEST_APPINST="' + str(self.fake_appinst) + '"'],
+        ):
+            with self.subTest(extra=extra):
+                out = self.root / "forbidden-fake-test"
+                attempt = subprocess.run(
+                    ["xcrun", "clang", "-std=c11", *extra,
+                     str(SOURCE), "-o", str(out)],
+                    capture_output=True, text=True, timeout=25
+                )
+                self.assertNotEqual(attempt.returncode, 0)
+                self.assertIn("error:", attempt.stderr)
 
     def test_explicit_install_calls_fake_fixed_appinst_once(self):
         proc = self.cli("install-confirmed", self.ipa, self.digest, "I-CONFIRM-INSTALL")
