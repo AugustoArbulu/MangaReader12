@@ -61,3 +61,15 @@ Quando executado em um ambiente autorizado, faz APENAS:
 **Hard stops:** `WebReaderAppinstSocket.liveInstallationEnabled=false`, `WebReaderUpdateChannel.productionPublicKeyX963=nil`, `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`. Build70 estável. PR #90 Draft, `main` intocada. Nenhuma Release, build de produção, IPA/DEB ou execução de instalação na Fase CV.
 
 **Resultado da CI:** a preencher somente após verificação dos jobs Linux/macOS. Não interpretar compilação cruzada como teste real de entitlement ou autorização do iPad.
+
+## 7. Resultado final da CI — 10/11/2026
+
+**GitHub Actions SUCCESS 2/2:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42766916615
+
+- Linux: **14 testes PASS**, incluindo a análise de relatórios host sintéticos e rejeição de autorizações falsificadas.
+- macOS 15: **14 testes PASS**. Xcode 16.4 compilou `build70_cv_lsworkspace_readonly_probe.c` como **Mach-O executável ARM64 para iOS12 mínimo**. O CI conferiu comandos de carga, símbolos e ausência de chamadas do instalador, e não executou o binário iOS no runner macOS.
+- Os dois jobs conservaram `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil` e `liveInstallationEnabled=false`. Nenhuma IPA/DEB, GitHub Release ou instalação foi produzida.
+
+**Interpretação:** existe agora **uma sondagem nativa que compila para iOS12**, mas ainda não sabemos se, no iPad, `LSApplicationWorkspace` e o selector estão disponíveis, se o método é invocável por um helper nem se a interface evita substituição dos bytes durante a instalação. Isso exigirá prova independente e consentida em um teste físico futuro. Uma execução de CI verde **não** altera a restrição de instalação.
+
+**Próxima decisão:** preparar especificação detalhada de um helper independente que use origem editorial fixada, staging controlado, aprovação explícita e uma interface de instalação cuidadosamente auditada, mantendo o fallback manual; não adicionar comandos instaladores ativos à Build70.
