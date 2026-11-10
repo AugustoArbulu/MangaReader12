@@ -35,6 +35,13 @@ Um `fsync` bem-sucedido no host é uma boa condição de durabilidade de gravaç
 
 Nenhum código de instalação, canal de rede, auto-download ou daemon foi adicionado. O diretório de laboratório não é nem deve ser compartilhado com um listener que aceite caminho do cliente; não existe interpretação de `WRCHK2\n` como consentimento.
 
+
+### Reforço de testes: flock entre processos e troca do próprio lock
+
+Foram adicionados dois casos adicionais, elevando a bateria para **23 testes**: (1) um subprocesso independente tenta abrir o mesmo journal enquanto outro processo mantém o lock, devendo receber **BUSY**; (2) o mesmo usuário do teste **desvincula o nome do arquivo de lock** enquanto o primeiro FD continua aberto e preso. Um novo processo/handle pode então criar **outro inode** com o mesmo nome e adquirir um lock independente. O teste exige que isso seja observado como **vulnerabilidade de custódia da pasta** e nunca seja convertido em permissão de instalação.
+
+Portanto, não basta manter `flock` entre processos cooperantes: a autoridade que mantém a pasta/nomes deve estar fora do alcance de escrita do aplicativo. Ainda não existe essa prova para o WebReader/iOS12; esta fase preserva todos os campos de autenticação/isolamento em `false`.
+
 ## Decisão para a próxima fase
 
 Depois dos testes DA, será necessário **projetar um journal com custódia real do helper**, protegido contra a escrita do próprio aplicativo e contra reinícios/rollback, mais uma reconciliação segura baseada em comprovação independente de que todos os workers anteriores morreram, com identidade do processo nativo e estados de release/editor verificados. Não conectar essa API de laboratório ao WebReader como autorização de instalação ou como mecanismo de resgate de quarentena. Também seguem independentes os bloqueios de chave editorial de produção, pin público, custódia exata da IPA até o serviço Apple e consentimento proprietário local.
