@@ -165,6 +165,28 @@ class DFStaticABIHostTests(unittest.TestCase):
             with self.subTest(symbol=symbol), self.assertRaises(DFMachORejected):
                 self.check({"undefined": d["undefined"] + " U " + symbol + "\n"})
 
+    def test_apple_nm_u_bare_symbols_use_exact_same_allowlist(self):
+        d = transcript()
+        # Some Apple versions print just names for -u instead of "U name".
+        lines = [
+            line.strip().removeprefix("U ")
+            for line in d["undefined"].splitlines()
+        ]
+        r = self.check({"undefined": "\n".join(lines) + "\n"})
+        self.assertEqual(r.imported_symbol_count, len(REQUIRED_SYMBOLS))
+        self.assert_unauthorized(r)
+
+    def test_bare_nm_symbols_cannot_smuggle_suffixes_or_new_imports(self):
+        d = transcript()
+        bare = "\n".join(REQUIRED_SYMBOLS) + "\n"
+        for injection in (
+            " _posix_spawn", "_posix_spawn", "_getuid (from libSystem)",
+            "_getuid;_socket", "_printf # comments", "/tmp/file:",
+            "_getuid_extra", "__debug__",
+        ):
+            with self.subTest(injection=injection), self.assertRaises(DFMachORejected):
+                self.check({"undefined": bare + injection + "\n"})
+
     def test_reject_unknown_undefined_symbol_and_duplicate(self):
         d = transcript()
         for value in (
