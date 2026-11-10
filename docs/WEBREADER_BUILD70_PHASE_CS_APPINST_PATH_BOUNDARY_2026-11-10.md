@@ -33,3 +33,9 @@ Solicitar permissão 0777 num diretório temporário também merece auditoria. I
 4. Criar chave editorial real apenas sob custódia do proprietário; provisionar pin público de forma independente; exigir manifesto v2, verificação nativa do code seal, anti-replay, consentimento local e recuperação.
 
 As constantes de produção permanecem nil e liveInstallationEnabled=false. O trigger local não autenticado continua CHECK_ONLY e não escolhe IPA/URL/versão. **Nenhuma Build71, IPA, .deb, release ou instalação nesta fase.**
+
+## Resultado integrado GitHub Actions
+
+**SUCCESS 2/2** em Linux e macOS, execução https://github.com/AugustoArbulu/MangaReader12/actions/runs/42763382912. Ambos os jobs verificaram a fonte upstream de revisão fixa com Git blob exato, passaram os nove testes host offline, reproduziram a cópia a partir do pathname já substituído no laboratório, e confirmaram que trust de produção e instalador continuam desativados.
+
+Esse resultado não identifica a versão do appinst instalada no iPad, não executa appinst, não testa LSApplicationWorkspace e não muda a decisão de autorização. Para identificar a versão binária, será necessário futuramente inspecionar o pacote efetivamente instalado por método somente leitura, sem alterar WebReader Build70.
