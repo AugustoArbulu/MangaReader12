@@ -72,7 +72,7 @@ def protected_review_snapshot(*, source_path: Path, staging_directory: Path,
             or type(requested_build) is not int
             or not 1 <= requested_build <= _MAX_BUILD):
         raise ReviewSnapshotRejected("invalid previously checked release facts")
-    if type(source_path) is not Path or type(staging_directory) is not Path:
+    if not isinstance(source_path, Path) or not isinstance(staging_directory, Path):
         raise ReviewSnapshotRejected("explicit filesystem paths required")
     if (not source_path.is_absolute() or not staging_directory.is_absolute()
             or ".." in source_path.parts or ".." in staging_directory.parts
