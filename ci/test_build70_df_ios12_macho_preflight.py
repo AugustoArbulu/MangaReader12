@@ -165,6 +165,31 @@ class DFStaticABIHostTests(unittest.TestCase):
             with self.subTest(symbol=symbol), self.assertRaises(DFMachORejected):
                 self.check({"undefined": d["undefined"] + " U " + symbol + "\n"})
 
+    def test_observed_darwin_getgroups_exact_abi_symbol_is_allowed(self):
+        d = transcript()
+        suffixed = d["undefined"].replace(
+            " U _getgroups\\n", " U _getgroups$DARWIN_EXTSN\\n"
+        )
+        r = self.check({"undefined": suffixed})
+        self.assertEqual(r.imported_symbol_count, len(REQUIRED_SYMBOLS))
+        self.assert_unauthorized(r)
+
+    def test_observed_darwin_getgroups_suffix_rejects_unreviewed_variants(self):
+        d = transcript()
+        variants = ("$OTHER", "$DARWIN_EXTSN_v2", "$DARWIN_EXTSN_extra",
+                    "$DARWIN_EXTSN$", "$DARWIN_EXTSN_32")
+        for suffix in variants:
+            with self.subTest(suffix=suffix), self.assertRaises(DFMachORejected):
+                self.check({"undefined": d["undefined"].replace(
+                    " U _getgroups\\n", " U _getgroups" + suffix + "\\n"
+                )})
+
+    def test_two_abi_spellings_together_are_rejected(self):
+        d = transcript()
+        with self.assertRaises(DFMachORejected):
+            self.check({"undefined": d["undefined"] +
+                        " U _getgroups$DARWIN_EXTSN\\n"})
+
     def test_apple_nm_u_bare_symbols_use_exact_same_allowlist(self):
         d = transcript()
         # Some Apple versions print just names for -u instead of "U name".
