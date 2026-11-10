@@ -38,7 +38,7 @@ A CI usa `xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=12.0`, a
 
 O pacote **não inclui** `postinst`, `prerm`, `launchd`, serviço contínuo, binário privilegiado, comando de instalação, extensão ou aplicativo. Apenas Sileo/Filza instalaria o próprio pacote se o proprietário optar futuramente; instalar esse DEB é ação separada e **não ocorre pela CI**.
 
-**GitHub Actions:** [Fase CL, primeira compilação aprovada](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734601209): **SUCCESS 2/2**, com os 3 binários ARM64 assinados ad hoc e o DEB auditado. [CI atual com parser de relatório adicional](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734874273) (verificar conclusão). O arquivo opcional fica nos **artifacts temporários** (14 dias); não há Release nem publicação de IPA para uso diário.
+**GitHub Actions:** [Fase CL, primeira compilação aprovada](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734601209): **SUCCESS 2/2**, com os 3 binários ARM64 assinados ad hoc e o DEB auditado. [CI final CL com parser de relatório adicional](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734874273): **SUCCESS 2/2**. Artifacts opcionais CLI-only com três Mach-O arm64 assinados, `.deb` + SHA-256, até **24/11/2026**. O arquivo opcional fica nos **artifacts temporários** (14 dias); não há Release nem publicação de IPA para uso diário.
 
 ## Fluxo de teste físico opcional e único (não requerido agora)
 
