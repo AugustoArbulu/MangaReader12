@@ -37,10 +37,21 @@ A função não abre arquivos, não cria listener, não acessa rede, não invoca
 
 Workflow `.github/workflows/chimera-build70-phase-cw-native-checkonly.yml` executa testes C/Python em Linux e macOS e compila o núcleo C para um **objeto Mach-O ARM64 iOS12** com Xcode 16.4, sem gerar executável de helper, IPA ou DEB e sem enviar artifacts. Também verifica ausência de símbolos de instalação ou IPC no objeto compilado e mantém as travas de produção.
 
+
+## Complemento CW: coordenador concorrente em um único processo
+
+Após o primeiro núcleo de protocolo, foram acrescentados:
+- `ci/build70_cw_shared_dispatch.h` e `ci/build70_cw_shared_dispatch.c`: um objeto opaco de dispatcher com **mutex pthread** e um único `WR_CW_Gate` compartilhado entre threads. Todas as chamadas são serializadas; erros de lock/unlock retornam somente rejeição, nunca autoridade. O núcleo continua sem socket, instalação, rede ou acesso a IPA.
+- `ci/test_build70_cw_shared_dispatch.py`: **6 testes** com biblioteca nativa descartável. Um burst de **128 chamadas concorrentes** no mesmo timestamp aceita só uma checagem e limita outras 127; 80 frames `WRINST1` concorrentes são rejeitados sem consumir a quota; verifica recuo de relógio, handle nulo e ausência de APIs privilegiadas.
+
+**Limites importantes:** um segundo dispatcher (ou um segundo processo) ainda pode aceitar outra checagem simultânea. A quota é compartilhada **somente entre threads que utilizam o mesmo objeto**; não é um serviço global de sistema, não persiste após reinício e não garante segurança contra corrida se o dispatcher for destruído enquanto houver threads ativas. O chamador precisa encerrar todas as threads antes de liberá-lo. Um futuro serviço deve impor fila e orçamento globais em sua única autoridade, em processo protegido e com monotonicidade do sistema, além de limites de rede e download.
+
+A CI CW agora inclui os testes concorrentes em Linux/macOS e compila **os dois módulos C** para objetos Mach-O ARM64 alvo iOS12, verificando símbolos e ausência de capacidades de instalação. Nenhum helper executável foi ativado ou distribuído.
+
 ## O que ainda NÃO foi implementado
 
 1. Nenhum serviço persistente, launchd, socket real, escuta TCP, operação em background ou atualização pelo WebReader foi criado. O núcleo C é um **componente puro de política**, e o testador Python não pode ser usado como uma autorização real.
-2. O limite de 60 segundos é **por instância de memória**, não persistente, nem compartilhado entre processos. O serviço futuro terá que impor um orçamento global, controle de fila, timeout, quotas e condições de falha, sem permitir spam/reinício deliberado.
+2. O limite de 60 segundos agora pode ser compartilhado por threads mediante o dispatcher CW, mas **não é persistente nem global entre processos**. O serviço futuro terá que impor um orçamento global, controle de fila, timeout, quotas e condições de falha, sem permitir spam/reinício deliberado.
 3. A solicitação não escolhe uma Release. A seleção de origem fixa, assinatura editorial production-v2, pin público sob custódia independente, SHA-256 da IPA, code seal Apple, antirreplay e antidowngrade continuam responsabilidades **independentes do helper**.
 4. O caminho de instalação não está comprovado: o appinst público de referência faz uma segunda cópia por pathname; o uso direto de LSApplicationWorkspace é API privada cujo entitlement e comportamento real iOS12 ainda não foram validados. Não podemos derivar autorização de uma assinatura de selector.
 5. O consentimento proprietário requer um **canal independente**. Nunca transformar `WRCHK2\n`, mesma UID, HMAC pareado, `LOCAL_PEERTOKEN` indisponível, ou um relatório de testes em permissão para instalar.
@@ -50,6 +61,6 @@ Workflow `.github/workflows/chimera-build70-phase-cw-native-checkonly.yml` execu
 
 `WebReaderAppinstSocket.liveInstallationEnabled=false`; `WebReaderUpdateChannel.productionPublicKeyX963=nil`; `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`; `main`, GitHub Releases, Build70, dados locais e appinst instalado não foram modificados.
 
-**Próximo trabalho útil:** integrar o núcleo C a um **harness macOS não privilegiado** com multiplexação de dois clientes e quota compartilhada, sem socket de iOS ou instalação, para demonstrar políticas de flood e cancelamento. Só depois projetar o boundary do helper real, incluindo origem de dados fixa e autorização independente. O runtime iOS12/Chimera e a identidade do binário instalado permanecem perguntas separadas para testes físicos futuros somente com aprovação.
+**Próximo trabalho útil:** especificar o boundary nativo de um helper independente, com orçamento e quota **globais** entre conexões, identidade e diretório protegidos no iOS 12, origem editorial fixa e autorização independente. A etapa concorrente entre threads deste laboratório está coberta, mas não substitui teste de múltiplos processos nem instalação física. O runtime iOS12/Chimera e a identidade do binário instalado permanecem perguntas separadas para testes físicos futuros somente com aprovação.
 
 **CI:** ainda não afirmar SUCCESS; atualizar este arquivo somente após checar os jobs Linux/macOS do commit atual. Não publicar IPA ou DEB nesta fase.
