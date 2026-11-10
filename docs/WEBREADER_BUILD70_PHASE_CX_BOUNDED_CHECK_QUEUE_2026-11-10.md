@@ -41,4 +41,15 @@ Antes de qualquer rede/download: escolher origem fixa no helper, provar limite g
 
 **Hard stops:** `WebReaderAppinstSocket.liveInstallationEnabled=false`; `WebReaderUpdateChannel.productionPublicKeyX963=nil`; `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`. Nenhuma IPA/DEB/Release, nenhum pedido físico ao usuário nesta fase.
 
-**CI:** confirmar a execução verde antes de registrar SUCCESS. Não inferir sucesso de compilação iOS12 como instalação no iPad.
+## Resultado de execução — CI verificada em 10/11/2026
+
+**SUCCESS 3/3:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42771220119
+
+- **Ubuntu:** 15/15 testes aprovados, incluindo 512 solicitações concorrentes (uma ativa, uma pendente, 510 coalescidas sem novos slots), replay de ticket vencido, cancelamento e monotonicidade.
+- **macOS 15:** 15/15 testes aprovados, a mesma bateria host, sem acesso privilegiado.
+- **Xcode 16.4:** objeto `Mach-O 64-bit object arm64` para target iOS 12.0 compilado e inspecionado, sem criação ou publicação de executável do helper e sem símbolos de instalação.
+- As validações estáticas também verificaram que `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil` e `liveInstallationEnabled=false`.
+
+**Significado preciso:** o scheduler nativo de *checagem somente leitura* é consistente nos laboratórios de host e compatível com a compilação de objeto ARM64/iOS12. Isso não comprova permissões, isolamento de helper, consumo da IPA pelo serviço Apple ou qualquer comportamento no iPad físico. Nenhuma autoridade de instalação foi concedida ou habilitada.
+
+**Próxima decisão:** limitar a implementação a um processo de serviço único e defensivo e especificar sua infraestrutura de supervisão (tempo de tarefa, cancelamento cooperativo, quotas globais, backoff, inicialização e recuperação). Separadamente, o projeto segue bloqueado pela cadeia editorial real + origem fixa + staging imutável até o consumidor + consentimento local seguro. Não ativar rede ou instalação até revisão independente e testes físicos.
