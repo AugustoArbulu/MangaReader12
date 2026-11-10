@@ -63,4 +63,14 @@ A CI CW agora inclui os testes concorrentes em Linux/macOS e compila **os dois m
 
 **Próximo trabalho útil:** especificar o boundary nativo de um helper independente, com orçamento e quota **globais** entre conexões, identidade e diretório protegidos no iOS 12, origem editorial fixa e autorização independente. A etapa concorrente entre threads deste laboratório está coberta, mas não substitui teste de múltiplos processos nem instalação física. O runtime iOS12/Chimera e a identidade do binário instalado permanecem perguntas separadas para testes físicos futuros somente com aprovação.
 
-**CI:** ainda não afirmar SUCCESS; atualizar este arquivo somente após checar os jobs Linux/macOS do commit atual. Não publicar IPA ou DEB nesta fase.
+## Resultado verificado — GitHub Actions
+
+**SUCCESS 3/3 em 10/11/2026:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42769876760
+
+- **Linux:** testes do núcleo nativo C e comparações Python CN + testes do coordenador compartilhado passaram.
+- **macOS 15:** mesma bateria de testes C/Python e concorrência nativa passou.
+- **Xcode16.4 / iOS12 ARM64 (somente compilação):** os dois arquivos C foram compilados para objetos `Mach-O 64-bit object arm64`. Inspeção de símbolos bloqueou chamadas de instalador e não foi criado executável de helper nem IPA/DEB.
+- Bateria específica CW: **8 testes de admissão + 6 testes de concorrência por plataforma**, incluindo 1.300 amostras CN↔CW, 128 solicitações paralelas e 80 frames inválidos concorrentes; os testes anteriores de CN também executaram.
+- Os testes **não são** autorização de instalação, nem execução no iPad e não são prova de isolamento entre processos ou de compatibilidade com serviços privados iOS12.
+
+**Decisão:** manter a política nativa como núcleo reutilizável sob análise, com ativação de serviço, rede, download e instalação bloqueados. Nenhuma chave editorial real ou binário instalador foi provisionado. `main`, Build70 no iPad, GitHub Releases e dados locais permanecem intocados.
