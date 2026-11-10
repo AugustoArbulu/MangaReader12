@@ -60,4 +60,15 @@ Workflow `.github/workflows/chimera-build70-phase-cy-cooperative-watchdog.yml`: 
 
 **Próxima decisão técnica:** concentrar-se numa arquitetura de **worker check-only com cancelamento cooperativo real em um harness de host**, com slot único, deadline controlado e resolução de falha/reinício; em paralelo registrar o design do helper com identidade/custódia independentemente verificáveis. Não instalar nada no iPad até todos os gates de segurança.
 
-**CI:** resultado final a acrescentar após validação dos três jobs. Não pressupor SUCCESS antes dos logs.
+## CI final — GitHub Actions verificado
+
+**SUCCESS 3/3:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42772484244
+
+- **Ubuntu:** 18/18 testes PASS, com simulação de 250 requisições concorrentes, deadlines, cancelamentos, backoff e uma thread host realmente ativa até o evento de parada.
+- **macOS 15:** 18/18 testes PASS, incluindo o mesmo teste de thread que só ACK após a thread ser liberada e `join()` retornar.
+- **Xcode 16.4 / iOS12:** `build70_cx_bounded_scheduler.c` e `build70_cy_supervisor.c` compilaram para objetos **Mach-O arm64** com mínimo iOS12.0, sem símbolos proibidos de instalação e sem criar helper executável/IPA/DEB.
+- Os jobs verificaram `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil` e `liveInstallationEnabled=false`.
+
+**Interpretação:** a CI evidencia a consistência da política nativa e seu comportamento host-only, mas não demonstra cancelamento de rede ou tarefa privilegiada, isolamento de identidade no iPad, nem consumo de IPA pelo instalador. A thread de teste está no mesmo processo e os cenários de tempo recebem relógio injetado; o dispositivo não foi tocado.
+
+**Próxima fase sugerida CZ:** definir e validar um worker de checagem sintético com cancelamento cooperativo fim a fim, quotas globais por instância protegida e recuperação *fail-closed* após reinício. O serviço real de atualização e instalação permanece bloqueado pelos gates editoriais, de consentimento e integridade do objeto.
