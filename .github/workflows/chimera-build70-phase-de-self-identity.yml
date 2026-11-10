@@ -71,7 +71,7 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
           xcodebuild -version
           for role in MOBILE HELPER; do
-            output="$RUNNER_TEMP/wr-de-${role,,}-ios12-arm64"
+            output="$RUNNER_TEMP/wr-de-${role}-ios12-arm64"
             xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
               -arch arm64 -miphoneos-version-min=12.0 \
               "-DWR_DE_${role}_ROLE" \
