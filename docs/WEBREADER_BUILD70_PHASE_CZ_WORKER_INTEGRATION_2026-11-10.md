@@ -37,4 +37,16 @@ Para a fase seguinte, definir uma política de recuperação **durável e indepe
 
 **Hard stops:** `WebReaderAppinstSocket.liveInstallationEnabled=false`, `WebReaderUpdateChannel.productionPublicKeyX963=nil`, `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`. PR #90 Draft, `main` intocada. Nenhum IPA, DEB, nova Build71 ou Release produzidos.
 
-**CI:** resultado pendente até confirmação dos jobs e logs. Não confundir testes Python host com execução no iOS12.
+## Evidência final — GitHub Actions
+
+**SUCCESS 3/3:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42774135947
+
+- **Ubuntu:** 14/14 testes de integração CZ aprovados, mais 18/18 testes de regressão CY.
+- **macOS15:** 14/14 testes CZ aprovados, mais 18/18 testes CY.
+- **Xcode16.4 / iOS12 ARM64:** dois objetos Mach-O arm64 das fases CX/CY compilados e inspecionados; não foram executados no iPad. Não houve geração de executável de helper, IPA, DEB ou asset de Release.
+- A CI também confirmou `liveInstallationEnabled=false`, `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil`.
+
+**O que o verde significa:** o harness host com thread sintética está funcionando nos dois sistemas e a parte C da política continua compilável para ARM64/iOS12. **Não** significa que o iOS12 tenha um serviço seguro, que o cliente esteja autenticado, que um download de rede possa ser cancelado ou que o instalador receba uma IPA imutável.
+
+**Decisão:** a futura implementação de serviço deve iniciar em quarentena em casos de reinício sem reconciliação independente de estado durável; não reutilizar `reconcile_quarantine_host_only()` como mecanismo produtivo. Em paralelo, demonstrar a custódia editorial e o consumo exato dos bytes pela instalação, com autorização local explícita antes de destravar qualquer caminho de instalação.
+
