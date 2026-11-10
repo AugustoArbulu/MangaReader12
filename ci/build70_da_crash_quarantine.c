@@ -13,6 +13,7 @@
 #include "build70_da_crash_quarantine.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
@@ -38,6 +39,7 @@
 #define WR_DA_PENDING_BODY "PENDING-READ-ONLY-CHECK\n"
 
 struct WR_DA_Journal {
+    pthread_mutex_t mutex;
     int directory_fd;
     int lock_fd;
     bool spent;
@@ -98,6 +100,10 @@ WR_DA_Journal *wr_da_open(const char *directory, WR_DA_Receipt *observation) {
     if (!observation || !safe_host_path(directory)) return NULL;
     WR_DA_Journal *j = calloc(1, sizeof(*j));
     if (!j) return NULL;
+    if (pthread_mutex_init(&j->mutex, NULL) != 0) {
+        free(j);
+        return NULL;
+    }
     j->directory_fd = -1;
     j->lock_fd = -1;
     j->directory_fd = open(directory, O_RDONLY | O_DIRECTORY |
@@ -138,12 +144,12 @@ reject:
         close(j->lock_fd);
     }
     if (j->directory_fd >= 0) close(j->directory_fd);
+    pthread_mutex_destroy(&j->mutex);
     free(j);
     return NULL;
 }
 
-WR_DA_Receipt wr_da_offer(WR_DA_Journal *j, const uint8_t *packet, size_t count) {
-    if (!j || !fixed_frame(packet, count)) return report(WR_DA_DENIED, false);
+static WR_DA_Receipt wr_da_offer_locked(WR_DA_Journal *j) {
     if (j->quarantined || j->spent) return report(WR_DA_QUARANTINED, true);
     int seen = marker_present(j->directory_fd);
     if (seen != 0) {
@@ -190,13 +196,24 @@ WR_DA_Receipt wr_da_offer(WR_DA_Journal *j, const uint8_t *packet, size_t count)
     return report(WR_DA_MARKED, true);
 }
 
+WR_DA_Receipt wr_da_offer(WR_DA_Journal *j, const uint8_t *packet, size_t count) {
+    if (!j || !fixed_frame(packet, count)) return report(WR_DA_DENIED, false);
+    if (pthread_mutex_lock(&j->mutex) != 0) return report(WR_DA_DENIED, false);
+    WR_DA_Receipt result = wr_da_offer_locked(j);
+    if (pthread_mutex_unlock(&j->mutex) != 0) return report(WR_DA_DENIED, true);
+    return result;
+}
+
 WR_DA_Receipt wr_da_observe(WR_DA_Journal *j) {
-    if (!j) return report(WR_DA_DENIED, false);
+    if (!j || pthread_mutex_lock(&j->mutex) != 0)
+        return report(WR_DA_DENIED, false);
     int seen = marker_present(j->directory_fd);
     if (seen != 0) j->quarantined = true;
-    return report(seen < 0 ? WR_DA_DENIED :
+    WR_DA_Receipt result = report(seen < 0 ? WR_DA_DENIED :
                   (j->quarantined || j->spent ? WR_DA_QUARANTINED : WR_DA_READY),
                   j->quarantined || j->spent);
+    if (pthread_mutex_unlock(&j->mutex) != 0) return report(WR_DA_DENIED, true);
+    return result;
 }
 
 void wr_da_close(WR_DA_Journal *j) {
@@ -206,5 +223,6 @@ void wr_da_close(WR_DA_Journal *j) {
         close(j->lock_fd);
     }
     if (j->directory_fd >= 0) close(j->directory_fd);
+    pthread_mutex_destroy(&j->mutex);
     free(j);
 }
