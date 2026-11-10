@@ -80,7 +80,7 @@ jobs:
             xcrun otool -hv "$output" > "$RUNNER_TEMP/wr-df-${role}-header.txt"
             xcrun otool -l "$output" > "$RUNNER_TEMP/wr-df-${role}-loads.txt"
             xcrun otool -L "$output" > "$RUNNER_TEMP/wr-df-${role}-dylibs.txt"
-            xcrun nm -u "$output" > "$RUNNER_TEMP/wr-df-${role}-imports.txt"
+            xcrun nm -j -u "$output" > "$RUNNER_TEMP/wr-df-${role}-imports.txt"
             echo "DEBUG DF: undefined-symbol lines, local runner executable only ($role)"
             sed -n '1,60p' "$RUNNER_TEMP/wr-df-${role}-imports.txt"
             python ci/build70_df_ios12_macho_preflight.py \
