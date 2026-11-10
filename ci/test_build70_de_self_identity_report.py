@@ -216,6 +216,35 @@ class DEHostReadOnlyReportTests(unittest.TestCase):
             with self.assertRaises(DEReportRejected):
                 parse_self_report(value)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"),
+                         "real distinct-UID subprocess only on Linux runner")
+    def test_real_host_distinct_uid_reports_remain_unattested(self):
+        sudo = shutil.which("sudo")
+        self.assertTrue(sudo, "Linux runner must support real different-UID probe")
+        with tempfile.TemporaryDirectory(prefix="wr-de-distinct-uid-") as d:
+            root = Path(d)
+            root.chmod(0o755)  # disposable fixture only
+            probe = root / "helper-labeled-self-only"
+            shutil.copy2(self.executables["helper"], probe)
+            probe.chmod(0o755)
+            subprocess.run([sudo, "-n", "-u", "nobody", "id"], check=True,
+                           capture_output=True, timeout=10)
+            run = subprocess.run([sudo, "-n", "-u", "nobody", str(probe)],
+                                 check=False, capture_output=True, timeout=15)
+            self.assertEqual(run.returncode, 0, run.stderr.decode(errors="replace"))
+            helper = parse_self_report(run.stdout)
+            mobile = self.mobile()
+            self.assertNotEqual(helper.euid, mobile.euid)
+            self.assertEqual(helper.binary_owner_uid, os.geteuid())
+            self.assertEqual(helper.role_label, "HELPER_CANDIDATE")
+            pair = assess_self_report_pair(mobile, helper)
+            self.assertEqual(pair.verdict, "DISTINCT_EUID_SELF_REPORTED_UNATTESTED")
+            self.assertTrue(pair.self_reported_euids_differ)
+            self.assertFalse(pair.actual_process_separation_proven_on_ios12)
+            self.assertFalse(pair.ipc_peer_identity_authenticated)
+            self.assertFalse(pair.installation_authorized)
+            self.assert_denied(helper)
+
     def test_no_network_or_installer_entry_points_in_probe(self):
         code = (ROOT / "build70_de_ios12_self_identity_probe.c").read_text()
         for forbidden in (
