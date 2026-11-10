@@ -79,8 +79,14 @@ def observe_swapped_path(*, forward_fd: bool = True) -> FdAliasObservation:
             first = os.fstat(fd)
             if not stat.S_ISREG(first.st_mode) or first.st_nlink != 1:
                 raise FdAliasLabRejected("invalid test fixture")
-            with os.fdopen(os.dup(fd), "rb") as review:
-                digest = hashlib.sha256(review.read()).hexdigest()
+            # A dup() shares the file offset with the original FD. On Darwin,
+            # opening /dev/fd/N can retain that same offset; use positional
+            # pread() for the audit, and rewind before passing to the child.
+            # Linux /proc/self/fd/N commonly reopens at position zero instead.
+            if not hasattr(os, "pread"):
+                raise FdAliasLabRejected("positional read required")
+            digest = hashlib.sha256(os.pread(fd, first.st_size, 0)).hexdigest()
+            os.lseek(fd, 0, os.SEEK_SET)
             if digest != expected:
                 raise FdAliasLabRejected("original descriptor digest mismatch")
             # Simulate an attacker replacing a *name*, not modifying the FD.
