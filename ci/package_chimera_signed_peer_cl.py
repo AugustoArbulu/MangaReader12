@@ -22,8 +22,8 @@ OUT = ROOT / "WebReader-Chimera-PhaseCL-SignedPeer-iOS12.deb"
 CHECKSUM = ROOT / (OUT.name + ".sha256")
 NAMES = {
     "server": "WebReader-CL-PeerServer-iOS12",
-    "allowed": "WebReader-CL-AllowedClient-iOS12",
-    "foreign": "WebReader-CL-ForeignClient-iOS12",
+    "allowed": "WebReader-CL-PeerAllowedClient-iOS12",
+    "foreign": "WebReader-CL-PeerForeignClient-iOS12",
 }
 INSTALL = {
     kind: "./usr/local/bin/webreader-peercl-" + kind
