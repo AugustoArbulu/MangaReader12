@@ -1,4 +1,4 @@
-name: WebReader Build70 Dev AC-CJ — Disable Legacy Chimera Install CLI and iOS12 Safety
+name: WebReader Build70 Dev AC-CK — Safe Helper Review Snapshot and iOS12 Safety
 
 on:
   push:
@@ -56,6 +56,8 @@ on:
       - 'ci/webreader_appinst_bridge.c'
       - 'ci/test_webreader_appinst_bridge.py'
       - 'ci/test_build70_chimera_unsafe_cli_lock.py'
+      - 'ci/webreader_helper_review_snapshot.py'
+      - 'ci/test_webreader_helper_review_snapshot.py'
       - 'ci/test_build70_real_ipa_signed_production_v2_lab.py'
       - 'ci/test_native_webreader_release_channel_separation.py'
       - 'ci/test_native_webreader_ipa_download_budget.py'
@@ -202,6 +204,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_build70_signed_envelope_download_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_immutable_public_release_readback.py' -v
           python3 -m unittest discover -s ci -p 'test_build70_chimera_unsafe_cli_lock.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_helper_review_snapshot.py' -v
           python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
           python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
           python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
