@@ -8,6 +8,7 @@ import hashlib
 import os
 from pathlib import Path
 import stat
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -59,6 +60,38 @@ class OwnerCeremonySafetyTests(unittest.TestCase):
         if os.name == "posix":
             for name in FILE_NAMES:
                 self.assertEqual(stat.S_IMODE((self.output/name).stat().st_mode), 0o600)
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required for existing public trust preview")
+    def test_generated_public_half_feeds_existing_ios12_trust_preview_only(self):
+        # The ceremony's public PEM and independently obtained fingerprint
+        # are byte/DER-compatible with already-reviewed Swift pin proposal.
+        # Existing patch is generated as data only; no source is edited.
+        from build68_release_public_key_handoff import prepare_public_key_handoff
+        from build70_owner_public_root_patch_preview import propose_public_root
+        from build66_release_key_pinning_gate import public_key_spki_sha256
+        receipt = create_owner_identity(
+            output_directory=self.output, passphrase=self.password
+        )
+        public_bytes = (self.output / PUBLIC_NAME).read_bytes()
+        recorded_pin = (self.output / FINGERPRINT_NAME).read_text().strip()
+        self.assertEqual(recorded_pin, receipt.public_spki_sha256)
+        self.assertEqual(public_key_spki_sha256(public_bytes), recorded_pin)
+        handoff = prepare_public_key_handoff(public_bytes, recorded_pin)
+        self.assertEqual(len(bytes.fromhex(handoff.x963_public_key_hex)), 65)
+        patch, preview = propose_public_root(
+            public_pem=public_bytes,
+            independently_verified_pin=recorded_pin,
+            installed_build=70
+        )
+        self.assertEqual(preview["canonicalSPKISHA256"], recorded_pin)
+        self.assertFalse(preview["proposedSourcePatchApplied"])
+        self.assertFalse(preview["productionTrustActivated"])
+        self.assertFalse(preview["installationAuthorized"])
+        self.assertIn("WebReaderProductionPublisherTrust.swift", patch)
+        self.assertIn("WebReaderUpdateChecker.swift", patch)
+        self.assertEqual(patch.count("--- a/"), 2)
+        self.assertNotIn("ENCRYPTED PRIVATE KEY", patch)
+        self.assertNotIn(self.password, patch)
 
     def test_can_never_overwrite_existing_private_key(self):
         payload = b"preexisting owner bytes must remain intact"
