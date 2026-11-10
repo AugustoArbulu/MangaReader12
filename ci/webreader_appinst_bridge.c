@@ -51,6 +51,12 @@
 #include <unistd.h>
 
 #if defined(WEBREADER_FAKE_APPINST_QA)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#error "Fake-appinst QA source must NEVER be compiled for iOS"
+#endif
+#endif
 #if !defined(WEBREADER_TEST_ROOT) || !defined(WEBREADER_TEST_APPINST)
 #error "Fake appinst QA requires BOTH synthetic root and fake executable path"
 #endif
