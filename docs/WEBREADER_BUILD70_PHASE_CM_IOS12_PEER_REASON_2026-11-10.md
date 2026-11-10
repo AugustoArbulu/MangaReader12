@@ -49,6 +49,24 @@ Envie apenas as três linhas `OBSERVATION_a/b/c`, todas com `AUTHORIZATION=DENIE
 
 **Artefato auditado independentemente e recuperado:** `WebReader-Chimera-PhaseCM-PeerReason-iOS12.deb`, **14.200 bytes**, SHA-256 `6284e8eb85eeb54353d23a028053a3c5f51f6917f252bc332cb400a53f2c9587`; `.deb.sha256` bate com SHA real, somente `debian-binary`, `control.tar.gz` (apenas `./control`) e `data.tar.gz` (três CLI Mach-O ARM64 e script). Controle Debian versão `0.2.0`, pacote `com.example.webreader.peercl`; nenhum script pós-instalação, nenhum binário `appinst`, nenhum opcode `WRINST1`. [Artefato temporário CI CM](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42749403094), disponível até 24/11/2026. O testador físico **ainda não foi repetido** depois da correção.
 
+## Resultado físico CM confirmado pelo proprietário — 10/11/2026
+
+O proprietário executou o diagnóstico **CM 0.2.0** no iPad com Chimera e informou que os casos **A, B e C retornaram**:
+
+~~~text
+OBSERVATION_a=TOKEN_UNAVAILABLE AUTHORIZATION=DENIED
+OBSERVATION_b=TOKEN_UNAVAILABLE AUTHORIZATION=DENIED
+OBSERVATION_c=TOKEN_UNAVAILABLE AUTHORIZATION=DENIED
+~~~
+
+A comunicação Unix local chegou ao servidor nativo e o servidor emitiu exatamente um código classificado, validado pelo wrapper CM. Isso elimina a hipótese de que o resultado CL era **apenas** o filtro genérico do script.
+
+**Cuidado técnico:** no código nativo `ci/build66_separate_signed_peer_lab.c`, `TOKEN_UNAVAILABLE` é **um único estado para quatro casos**: `getsockopt(SOL_LOCAL, LOCAL_PEERTOKEN)` falhou; comprimento retornado difere do `sizeof(audit_token_t)`; campo numérico do PID é zero; ou campo numérico de versão do PID é zero. Não foi coletado `errno` nem distinguida qual dessas verificações falhou. Portanto, **não** afirmar que o kernel iOS12 inteiro não suporta `LOCAL_PEERTOKEN`; também não afirmar que se obteve token com sucesso. A constante `LOCAL_PEERTOKEN=0x006` é a definida em `sys/un.h` Darwin, mas disponibilidade no iPad físico permanece não comprovada.
+
+Diante de falha idêntica nos três casos, esta rota de **autenticação de processo via audit token não pode ser usada como bloqueio ou autorização** do helper. Ausência de sinal útil não significa que o app seja falso; é simplesmente um gate NÃO PROVADO. `getpeereid`, `LOCAL_PEERPID`, TCP loopback e HMAC de pareamento também não bastam para demonstrar identidade editorial do processo. Nenhuma instalação foi realizada ou autorizada.
+
+**Direção revisada:** avançar com arquitetura de pedido não confiável `request-check-only`, no qual a ligação IPC não transporta parâmetros capazes de instalar, e um futuro helper só seria autorizado a agir depois de obter e verificar uma release **independentemente**, usando trust anchor do proprietário provisionado fora do app, bytes exatos, proteção contra replay/downgrade e confirmação confiável do usuário. Mesmo isso permanece apenas design até haver implementação e QA física. Evitar exigir novo DEB apenas para distinguir `errno` quando isso não desbloqueia o fluxo de atualização.
+
 ## Restrições preservadas
 
 O modo de instalação automática continua desativado (`WebReaderAppinstSocket.liveInstallationEnabled=false`). Mesmo resultados positivos não autenticam o aplicativo e não estabelecem custódia de chave editorial, consentimento local, ledger anti-replay nem consumo de bytes imutáveis pelo instalador. Build70 iPad, biblioteca, offline, backups, main e releases intactos. O pacote CM é um teste opcional externo; não gera IPA WebReader.
