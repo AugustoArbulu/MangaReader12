@@ -119,7 +119,8 @@ class DBHostUidBoundaryTests(unittest.TestCase):
         # when a real OS-owned identity comparison cannot run.
         command = [
             sudo, "-n", "-u", "nobody", sys.executable,
-            str(ROOT / "build70_db_host_uid_boundary.py"), str(self.private),
+            "-c", (ROOT / "build70_db_host_uid_boundary.py").read_text(),
+            str(self.private),
         ]
         child = subprocess.run(command, text=True, capture_output=True, timeout=15)
         self.assertEqual(child.returncode, 0, child.stderr)
@@ -144,7 +145,8 @@ class DBHostUidBoundaryTests(unittest.TestCase):
         self.private.chmod(0o777)
         child = subprocess.run([
             sudo, "-n", "-u", "nobody", sys.executable,
-            str(ROOT / "build70_db_host_uid_boundary.py"), str(self.private),
+            "-c", (ROOT / "build70_db_host_uid_boundary.py").read_text(),
+            str(self.private),
         ], text=True, capture_output=True, timeout=15)
         self.assertEqual(child.returncode, 0, child.stderr)
         observation = json.loads(child.stdout.strip())
