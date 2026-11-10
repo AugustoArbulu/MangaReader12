@@ -6,6 +6,8 @@ installation, no shell invoked by the bridge, no iPhone and no root access.
 """
 import hashlib
 import os
+import select
+import socket
 from pathlib import Path
 import subprocess
 import sys
@@ -148,6 +150,41 @@ class BridgeTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("INSTALL_DISABLED", result.stderr)
                 self.assertFalse(self.marker.exists())
+
+    def test_standard_unix_socket_accepts_ping_but_never_install(self):
+        folder = self.root / CONTAINER / "WR"
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        folder.chmod(0o700)
+        path = folder / "wri.sock"
+        for message, expected, exit_code in (
+            (b"WRPING1\\n", b"WRPONG1\\n", 0),
+            (b"WRINST1\\n", b"WRFAIL1\\n", 1),
+        ):
+            # Decode the escaped fixture newline into the fixed eight bytes.
+            wire = message.replace(b"\\n", b"\n")
+            response = expected.replace(b"\\n", b"\n")
+            with self.subTest(payload=wire):
+                proc = subprocess.Popen(
+                    [str(self.read_only), "serve-once", str(folder)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                try:
+                    ready, _, _ = select.select([proc.stdout], [], [], 5)
+                    self.assertTrue(ready, "socket server did not report READY")
+                    self.assertIn(b"WRAPPINST_READY", proc.stdout.readline())
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                        client.settimeout(3)
+                        client.connect(str(path))
+                        client.sendall(wire)
+                        self.assertEqual(client.recv(8), response)
+                    proc.wait(timeout=5)
+                    self.assertEqual(proc.returncode, exit_code)
+                    self.assertFalse(self.marker.exists())
+                    self.assertFalse(path.exists())
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.communicate(timeout=3)
 
     def test_fake_installer_cannot_be_built_without_both_test_macros(self):
         for extra in (
