@@ -22,7 +22,7 @@ CHECKSUM = ROOT / (OUT.name + ".sha256")
 PKG = "com.example.webreader.peercl"
 VERSION = "0.2.0"
 CONTROL = """Package: com.example.webreader.peercl
-Name: WebReader iOS12 Signed Peer Diagnostic — Reason Codes
+Name: WebReader iOS12 Signed Peer Diagnostic - Reason Codes
 Version: 0.2.0
 Architecture: iphoneos-arm
 Section: Development
