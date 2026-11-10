@@ -81,7 +81,18 @@ def _external_regular(path: Path, *, limit: int) -> bytes:
                                   s.st_ctime_ns)
             if len(content) != before.st_size or identity(before) != identity(after):
                 raise OwnerManifestRejected("input changed during read")
-            if identity(after) != identity(os.stat(path, follow_symlinks=False)):
+            named_after = os.stat(path, follow_symlinks=False)
+            # On Windows, stat(path) and fstat(open_fd) can expose different
+            # file IDs / ctime representations for the SAME NTFS file.
+            # Compare exact opened-handle identity before/after, but compare
+            # pathname only on size + last-write time when on Windows.
+            # This is owner-local signing QA, NOT immutable install proof.
+            if os.name == "nt":
+                if (after.st_size, after.st_mtime_ns) != (
+                    named_after.st_size, named_after.st_mtime_ns
+                ):
+                    raise OwnerManifestRejected("input name changed during read")
+            elif identity(after) != identity(named_after):
                 raise OwnerManifestRejected("input filename changed during read")
             return content
     except OSError as exc:
