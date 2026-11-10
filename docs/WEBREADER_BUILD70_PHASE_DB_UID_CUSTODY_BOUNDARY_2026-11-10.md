@@ -38,4 +38,14 @@ A chave editorial de produção P-256 e o pin independentemente verificado perma
 
 **Travas de produção inalteradas:** `WebReaderAppinstSocket.liveInstallationEnabled=false`; `WebReaderUpdateChannel.productionPublicKeyX963=nil`; `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`. PR #90 em Draft. `main`, Build70 física e Releases intactos. Nenhum appinst executado, nenhum IPA/DEB gerado, nenhum novo teste físico solicitado.
 
-**Resultado CI DB:** atualizar somente após confirmar os logs finais dos jobs Linux/macOS. Não confundir testes host com iOS12.
+## Resultado CI DB — validação final em 10/11/2026
+
+**GitHub Actions SUCCESS 2/2:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42899594792
+
+- **Ubuntu Linux:** **10 testes PASS**, sem skips. Inclui as duas execuções reais sob UID `nobody`: diretores 0700 bloqueiam todas as seis operações, mas diretório 0777 permite exclusão dos marcadores 0600.
+- **macOS 15:** **8 testes executados PASS, 2 testes Linux-only intencionalmente SKIPPED**. O sistema macOS confirmou as contraprovas do mesmo UID e os controles de caminho; **não** executamos teste de usuário `nobody` real nesta plataforma.
+- O primeiro CI DB falhou no Linux porque o runner não permitiu ao usuário `nobody` acessar o próprio checkout GitHub. Foi corrigido no commit `da98ec4495858bc383e995c403f9bcbdcd9c7a1a` passando o código idêntico da sondagem via `python -c`, para que apenas o diretório sintético privado seja objeto de comparação.
+- Nenhuma IPA/DEB, ferramenta de instalação, appinst, helper, assinatura real ou mudança no iPad foi executada. As travas Swift de produção permaneceram bloqueadas.
+
+**Conclusão:** kernel Linux pode negar alterações a cliente com UID distinto do proprietário em diretório 0700, mas isso **não prova** uma separação real de identidade no Chimera/iOS12, proteção contra root/rollback, reconciliação segura ou autorização do instalador. Próximo trabalho: especificar uma identidade de serviço com raiz não acessível pelo WebReader, incluindo prova real no iOS12 e um journal que não possa ser apagado pelo cliente. Manter instalação em modo manual até essas verificações e todos os demais gates editoriais.
+
