@@ -1,0 +1,61 @@
+name: WebReader Build70 Phase CS Appinst Upstream Path Boundary (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cs_appinst_path_boundary_audit.py'
+      - 'ci/test_build70_cs_appinst_path_boundary_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CS_APPINST_PATH_BOUNDARY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cs-appinst-source-audit.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cs_appinst_path_boundary_audit.py'
+      - 'ci/test_build70_cs_appinst_path_boundary_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CS_APPINST_PATH_BOUNDARY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cs-appinst-source-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-source-and-fake-copy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline negative tests and host-only replacement fixture
+        run: python -m unittest discover -s ci -p 'test_build70_cs_appinst_path_boundary_audit.py' -v
+      - name: Fetch only pinned public upstream source (not a binary)
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error --retry 2 --max-time 25 \
+            -o "$RUNNER_TEMP/appinst-upstream-235aca6c.m" \
+            "https://raw.githubusercontent.com/akemin-dayo/AppSync/235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a/appinst/appinst.m"
+      - name: Audit exact upstream git blob, path-reopen and synthetic TOCTOU
+        shell: bash
+        run: python ci/build70_cs_appinst_path_boundary_audit.py --source "$RUNNER_TEMP/appinst-upstream-235aca6c.m"
+      - name: Installation and editor trust remain disabled
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          a = Path("ci/build70_cs_appinst_path_boundary_audit.py").read_text()
+          assert "installation_authorized: bool = False" in a
+          assert "installation_performed: bool = False" in a
+          assert "exact_installed_appinst_binary_identified: bool = False" in a
+          assert "static let productionPublicKeyX963: Data? = nil" in Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          print("PASS CS: source-only, no installer, no production trust, no owner files")
+          PY
