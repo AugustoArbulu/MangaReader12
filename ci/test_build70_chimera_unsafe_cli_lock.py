@@ -22,6 +22,10 @@ class ChimeraUnsafeLegacyCLILock(unittest.TestCase):
         self.assertIn("#include <spawn.h>\n#endif", C)
         self.assertIn("INSTALL_DISABLED: unsafe legacy CLI removed", C)
         self.assertIn("APPINST_CLI_DISABLED", C)
+        self.assertIn('/* Both NORMAL and PING-only builds must be strictly non-installing.', C)
+        self.assertIn("#ifndef WEBREADER_FAKE_APPINST_QA", C)
+        self.assertIn('    (void)send_all(connection, SOCKET_FAILURE, 8);', C)
+        self.assertIn('if (memcmp(header, SOCKET_PING, 8) == 0)', C)
 
     def test_bad_macro_combinations_fail_at_compile_time(self):
         self.assertIn("#if !defined(WEBREADER_TEST_ROOT) || !defined(WEBREADER_TEST_APPINST)", C)
