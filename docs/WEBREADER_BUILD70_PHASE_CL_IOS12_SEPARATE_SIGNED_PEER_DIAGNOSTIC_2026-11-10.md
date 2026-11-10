@@ -28,6 +28,8 @@ Os dois CDHashes esperados são gerados por `codesign -d --verbose=4` **dos exec
 
 O programa só envia `WRHELLO1`, lê `R` de volta e encerra. Os relatórios exibem apenas palavras de status; **não incluem UID, PID, audit token, hashes, caminhos privados nem identidade pessoal**. `FINAL_INSTALL_AUTHORIZATION=DENIED` está sempre presente.
 
+O parser `ci/build71_cl_signed_peer_report.py` e seus testes `ci/test_build71_cl_signed_peer_report.py` exigem um relatório ASCII de exatamente 10 linhas, três observações a/b/c na ordem correta e `FINAL_INSTALL_AUTHORIZATION=DENIED`. Detectam manipulações de estados, duplicatas, campos de autorização injetados, outros caracteres e respostas que extrapolam limites. Mesmo a observação positiva retorna `webreader_process_authenticated=false`, `publisher_authenticated=false` e `install_authorized=false` — o texto é **um diagnóstico não confiável**, não uma credencial do kernel.
+
 Mesmo com o padrão esperado nas três linhas, isso seria **somente evidência de compatibilidade de um laboratório de CLI**, e **não** a autenticação do aplicativo WebReader por um helper. O App WebReader pode não conseguir acessar o mesmo socket por sandbox, como ocorreu com as primeiras sondagens UNIX; TCP loopback funcionando não possui o mesmo vínculo de audit token. A prova da identidade de assinatura editorial real exige a chave pública/pin de propriedade do usuário e teste com o processo do próprio app.
 
 ### Compatibilidade e segurança
@@ -36,7 +38,7 @@ A CI usa `xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=12.0`, a
 
 O pacote **não inclui** `postinst`, `prerm`, `launchd`, serviço contínuo, binário privilegiado, comando de instalação, extensão ou aplicativo. Apenas Sileo/Filza instalaria o próprio pacote se o proprietário optar futuramente; instalar esse DEB é ação separada e **não ocorre pela CI**.
 
-**GitHub Actions:** [Fase CL, build e auditoria](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734369610). Arquivo opcional fica nos **artifacts temporários** (14 dias) após sucesso; não há Release nem publicação para uso diário. No momento da escrita, testes Linux aprovados, macOS ainda pendente. Só marcar final após resultado final da CI.
+**GitHub Actions:** [Fase CL, primeira compilação aprovada](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734601209): **SUCCESS 2/2**, com os 3 binários ARM64 assinados ad hoc e o DEB auditado. [CI atual com parser de relatório adicional](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42734874273) (verificar conclusão). O arquivo opcional fica nos **artifacts temporários** (14 dias); não há Release nem publicação de IPA para uso diário.
 
 ## Fluxo de teste físico opcional e único (não requerido agora)
 
