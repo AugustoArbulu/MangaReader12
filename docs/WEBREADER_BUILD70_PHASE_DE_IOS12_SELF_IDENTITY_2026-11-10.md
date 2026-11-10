@@ -16,6 +16,16 @@ A validação física que poderia reduzir essa incerteza exige separar **identid
 - `ci/test_build70_de_self_identity_report.py`: testes host em Linux/macOS compilam e executam os dois perfis, comparam valores à própria execução, rejeitam opções e frames de instalação, inspecionam casos forjados, incompatibilidades de kernel, campos duplicados/extra/truncados, inteiros inválidos e executam **350 mutações determinísticas** sem permitir promoção de autoridade.
 - `.github/workflows/chimera-build70-phase-de-self-identity.yml`: CI Linux/macOS host e um job macOS/Xcode16.4 que **compila e linka dois executáveis CLI ARM64 com destino mínimo iOS12.0**, sem assiná-los para distribuição, sem gerar IPA/DEB, sem Release, sem instalação e sem disponibilizar os binários como artifacts. Este avanço é além de um simples objeto compilado: o código pode ser linkado para a plataforma-alvo, mas ainda não foi executado nem validado em um iPad.
 
+
+### Ensaio ampliado com dois UIDs reais no Linux
+
+Um teste Linux adicional (somente no runner) agora copia **apenas o executável sintético recém-compilado** para uma pasta temporária descartável, executa o perfil `HELPER_CANDIDATE` sob o UID real `nobody` com `sudo -n -u nobody` e compara o resultado ao perfil `MOBILE_CANDIDATE` executado pelo UID do runner. Ele verifica que:
+- `DE_SELF_EUID` do processo realmente difere; a propriedade `DE_SELF_BINARY_OWNER_UID` ainda pode apontar para o proprietário do **arquivo executável**, não para o UID efetivo da execução. Portanto, **dono do binário e identidade do processo são informações distintas**;
+- O comparador devolve `DISTINCT_EUID_SELF_REPORTED_UNATTESTED`, mantendo `actual_process_separation_proven_on_ios12=false`, `ipc_peer_identity_authenticated=false` e `installation_authorized=false`.
+- O teste não usa nenhum helper real do Chimera, não muda usuário no iPad e não executa instalação. O equivalente no iOS12 ainda depende de contextos de processos autênticos, supervisionados e autorizados.
+
+A suíte DE tem **16 testes no Linux** e **15 testes executáveis no macOS**, com um teste Linux-only intencionalmente ignorado na plataforma Apple. O número de testes aprovados só deve ser declarado após logs CI.
+
 ## Formato e interpretações proibidas
 
 O relatório contém campos como:
