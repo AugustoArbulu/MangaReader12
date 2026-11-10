@@ -303,9 +303,10 @@ static int recv_all(int fd, char *data, size_t len) {
     return 1;
 }
 
-/* The helper is started manually with an app-owned <container>/WR directory.
-   It cannot accept a staged IPA located in a DIFFERENT app container. */
-#ifndef WEBREADER_PING_ONLY
+/* Legacy app-container path admission exists only in the fake CI installer.
+ * UID/container agreement is NOT authenticated app identity in iOS12.
+ */
+#ifdef WEBREADER_FAKE_APPINST_QA
 static int same_app_container(const char *dir, const char *file) {
     char real_dir[PATH_MAX], real_file[PATH_MAX];
     const char *suffix = "/WR";
@@ -360,7 +361,7 @@ static int same_mobile_peer(int fd) {
 
 static int socket_request(int connection, const char *directory) {
     char header[8];
-#ifdef WEBREADER_PING_ONLY
+#ifndef WEBREADER_FAKE_APPINST_QA
     (void)directory;
 #else
     char two[2], path[MAX_REQUEST_PATH + 1], digest[65];
@@ -377,9 +378,11 @@ static int socket_request(int connection, const char *directory) {
                 ok ? "OK" : "FAILED", ok ? 0 : errno);
         return ok ? 0 : 1;
     }
-#ifdef WEBREADER_PING_ONLY
-    /* Device QA binary cannot execute installer even if a client sends
-       a formally valid INSTALL request. PING is the only allowed opcode. */
+#ifndef WEBREADER_FAKE_APPINST_QA
+    /* Both NORMAL and PING-only builds must be strictly non-installing.
+     * Same UID, a confirmation phrase, a verified SHA and a socket path
+     * cannot authenticate WebReader or authorize the installed bytes.
+     */
     WR_DIAG("request header not PING; refusing with WRFAIL1");
     (void)send_all(connection, SOCKET_FAILURE, 8);
     return 1;
