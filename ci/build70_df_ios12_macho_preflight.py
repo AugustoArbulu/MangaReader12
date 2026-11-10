@@ -45,7 +45,7 @@ class DFPreflight:
 
 ALLOWED_IMPORTS = frozenset({
     "_getuid", "_geteuid", "_getgid", "_getegid",
-    "_getpid", "_getppid", "_getgroups",
+    "_getpid", "_getppid", "_getgroups", "_getgroups$DARWIN_EXTSN",
     "_stat", "_uname",
     "_printf", "_puts", "_putchar",
     "__NSGetExecutablePath",
@@ -155,9 +155,13 @@ def inspect_static_macho(*, file_summary: str, header: str,
         raise DFMachORejected("unreviewed Mach-O dylib dependency")
     symbols = _imports(u)
     essential = {"_getuid", "_geteuid", "_getgid", "_getegid",
-                 "_getpid", "_getppid", "_getgroups", "_uname", "_stat",
+                 "_getpid", "_getppid", "_uname", "_stat",
                  "_printf", "_puts", "_putchar", "__NSGetExecutablePath"}
-    if not essential.issubset(symbols):
+    groups_symbols = symbols.intersection({"_getgroups", "_getgroups$DARWIN_EXTSN"})
+    # The observed iOS12/Xcode16.4 variant is the exact decorated
+    # _getgroups$DARWIN_EXTSN import. Accept exactly one of two specific
+    # spellings; do NOT normalize arbitrary $suffixes or allow both.
+    if len(groups_symbols) != 1 or not essential.issubset(symbols):
         raise DFMachORejected("missing required self-identity imports")
     return DFPreflight(
         verdict="HOST_STATIC_ABI_ONLY_NOT_DEVICE_AUTHORIZED",
