@@ -196,7 +196,7 @@ class DFStaticABIHostTests(unittest.TestCase):
     def test_success_receipt_never_claims_device_or_installer_authority(self):
         r = self.check()
         self.assert_unauthorized(r)
-        self.assertNotIn("AUTHORIZED", asdict(r)["verdict"].split("_")[-1:])
+        self.assertEqual(asdict(r)["verdict"], "HOST_STATIC_ABI_ONLY_NOT_DEVICE_AUTHORIZED")
 
     def test_cli_reads_only_fixture_text_and_does_not_execute_target_binary(self):
         d = transcript()
