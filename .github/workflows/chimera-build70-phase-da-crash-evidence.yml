@@ -1,0 +1,94 @@
+name: WebReader Build70 Phase DA Crash Evidence Quarantine (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_da_crash_quarantine.c'
+      - 'ci/build70_da_crash_quarantine.h'
+      - 'ci/test_build70_da_crash_quarantine.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DA_CRASH_EVIDENCE_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-da-crash-evidence.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_da_crash_quarantine.c'
+      - 'ci/build70_da_crash_quarantine.h'
+      - 'ci/test_build70_da_crash_quarantine.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DA_CRASH_EVIDENCE_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-da-crash-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-locked-quarantine:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile POSIX C with strict warnings, run crash and tamper tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_da_crash_quarantine.py' -v
+      - name: Verify hard stops and no in-product quarantine bypass
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('ci/build70_da_crash_quarantine.c').read_text()
+          header = Path('ci/build70_da_crash_quarantine.h').read_text()
+          tests = Path('ci/test_build70_da_crash_quarantine.py').read_text()
+          assert 'WR_DA_FRAME_BYTES 7u' in header
+          assert 'WR_DA_QUARANTINED' in header
+          assert 'fsync(j->directory_fd)' in source
+          assert 'O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC' in source
+          assert 'flock(j->lock_fd, LOCK_EX | LOCK_NB)' in source
+          assert 'test_same_uid_can_delete_marker_this_is_not_tamper_proof' in tests
+          assert 'test_child_process_crash_retains_pending_marker' in tests
+          for banned in ('posix_spawn(', 'objc_msgSend(', 'installApplication:',
+                         'socket(', 'connect(', 'appinst(', 'unlink(', 'rename('):
+              assert banned not in source, banned
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DA: quarantine without editor trust, installer or bypass')
+          PY
+
+  ios12-arm64-compile-only:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-compile C quarantine evidence for iOS12 ARM64, no execution
+        shell: bash
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_da_crash_quarantine.c \
+            -o "$RUNNER_TEMP/webreader-da-crash-evidence-ios12.o"
+          file "$RUNNER_TEMP/webreader-da-crash-evidence-ios12.o"
+          xcrun nm -g "$RUNNER_TEMP/webreader-da-crash-evidence-ios12.o" > "$RUNNER_TEMP/da-symbols.txt"
+          xcrun nm -u "$RUNNER_TEMP/webreader-da-crash-evidence-ios12.o" > "$RUNNER_TEMP/da-undefined.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          defined = (root / 'da-symbols.txt').read_text()
+          undefined = (root / 'da-undefined.txt').read_text()
+          for expected in ('_wr_da_open', '_wr_da_offer', '_wr_da_observe', '_wr_da_close'):
+              assert expected in defined, expected
+          for banned in ('_objc_msgSend', '_posix_spawn', '_fork', '_execve',
+                         '_system', '_socket', '_connect', '_dlopen'):
+              assert banned not in undefined, banned
+          print('PASS DA: ARM64/iOS12 object only, no daemon, IPA, DEB, appinst or installation')
+          PY
