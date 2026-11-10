@@ -63,9 +63,9 @@ Esse comando existente depende também de OpenSSL instalado e é exemplo ilustra
 
 ## Testes e limites honestos
 
-- `ci/test_webreader_owner_key_ceremony.py`: utiliza **somente chaves descartáveis de laboratório** em diretórios temporários, não chaves de produção. Verifica que PEM privado permanece criptografado, senha errada é recusada, public key e SPKI fingerprint conferem, arquivos pré-existentes nunca são substituídos, symlinks e diretório do repositório são recusados, permissão POSIX é restrita, `--check` não gera chave, e `--create` falha sem terminal interativo.
+- `ci/test_webreader_owner_key_ceremony.py`: utiliza **somente chaves descartáveis de laboratório** em diretórios temporários, não chaves de produção. Inclui um **teste integrado de ponta a ponta**: gera identidade efêmera apenas no teste, confere fingerprint P-256 via OpenSSL independente, alimenta o verificador público `build68_release_public_key_handoff.py` e o gerador de patch público CG sem aplicar mudanças de produção. Verifica que PEM privado permanece criptografado, senha errada é recusada, public key e SPKI fingerprint conferem, arquivos pré-existentes nunca são substituídos, symlinks e diretório do repositório são recusados, permissão POSIX é restrita, `--check` não gera chave, e `--create` falha sem terminal interativo.
 - `.github/workflows/chimera-build70-phase-co-owner-ceremony.yml`: CI Windows e Linux, sem artefatos que contenham chave; também verifica `productionPublicKeyX963 = nil`, `independentlyProvisionedSPKISHA256 = nil` e `liveInstallationEnabled = false`.
-- [GitHub Actions Fase CO — 2/2 SUCCESS](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42756711143).
+- [GitHub Actions Fase CO final, integração CG/AT — 2/2 SUCCESS](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42756942830).
 - A biblioteca Python e a senha são geridas pelo proprietário. A linguagem Python não assegura zeroização física de todos os buffers de senha na RAM; o script evita logs, linha de comando e arquivos com chave privada sem criptografia.
 - Esta ferramenta **não** basta para atualizar automaticamente o WebReader: o serviço instalador ainda requer origem fixa, validação independente da versão publicada, bytes idênticos auditados e consumidos no instalador, autorização local inequívoca, proteção contra rollback/replay e teste físico iOS 12.
 
