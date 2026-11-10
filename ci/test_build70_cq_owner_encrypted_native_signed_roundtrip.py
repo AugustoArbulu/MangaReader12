@@ -173,7 +173,10 @@ def main():
     opts = p.parse_args()
     if sys.platform != "darwin":
         raise SystemExit("CQ requires macOS, native codesign and Swift")
-    with tempfile.TemporaryDirectory(prefix="wr-cq-synthetic-not-release-") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="wr-cq-synthetic-not-release-",
+        dir=Path(tempfile.gettempdir()).resolve(strict=True)
+    ) as tmp:
         directory = Path(tmp)
         secret_dir = directory / "throwaway-owner-identity"
         secret_dir.mkdir(mode=0o700)
