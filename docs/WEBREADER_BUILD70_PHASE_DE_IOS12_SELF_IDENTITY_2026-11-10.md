@@ -49,6 +49,15 @@ DE_INSTALLATION_ATTEMPTED=NO
 
 O par de relatórios pode ajudar a priorizar inspeção posterior, mas não é código para autenticar IPAs, liberar instalação nem transformar HMAC/UID em credenciais. O teste físico prévio `LOCAL_PEERTOKEN` continuou `TOKEN_UNAVAILABLE AUTHORIZATION=DENIED`; nenhuma descoberta em host altera esse diagnóstico.
 
+### Evidência pública e implicação de ciclo de vida
+
+O guia de instalação do Chimera confirma que se trata de um jailbreak **semi-untethered**: após reiniciar o dispositivo é necessário reativar o jailbreak. Fonte: https://ios.cfw.guide/installing-chimera/. Logo, **um helper dependente de Chimera não pode ser presumido disponível imediatamente após todo reboot**. Um futuro WebReader deve reconhecer `helper indisponível/jailbreak inativo` e permanecer em modo somente leitura, sem instruções de instalação. Não prometer atualização persistente independente da reativação do jailbreak.
+
+A documentação da comunidade sobre daemons iOS descreve `LaunchDaemons` e as chaves de plist `UserName`/`GroupName` (https://theapplewiki.com/wiki/Dev:Daemons). Essas chaves são **pistas para um projeto futuro**, não prova de que um helper instalado efetivamente roda com o UID indicado, nem de que o sandbox iOS12/Chimera permite a operação. A documentação de segurança da Apple (https://support.apple.com/pt-br/guide/security/sec15bfe098e/web) descreve apps terceiros isolados por sandbox e normalmente executados como `mobile`, reforçando por que a diferença entre UID de processo, permissões POSIX e política de sandbox precisa ser medida no dispositivo. Um daemon com UID root teria privilégios excessivos caso aceite comandos de um app não autenticado, portanto a presente fase **não cria nem testa um daemon root**.
+
+**Sequência para eventual ensaio físico autorizado:** confirmar Build70/data intacta; executar somente o CLI read-only dentro do contexto **real** de cada processo em estudo (não presumir que o rótulo compilado demonstra esse contexto); verificar UID/EUID/GID/grupos e metadados do próprio executável; verificar de modo independente entitlements e acesso do app ao futuro vault; classificar indisponibilidade após reboot como falha fechada. Não há CLI assinado/distribuído nem autorização para instalar na DE.
+
+
 ## Proibições e gates
 
 `WRCHK2\n` permanece aviso de checagem não autenticado e nunca aceita path, versão, URL, SHA, PID, UID ou autorização vinda do cliente. O CLI DE também não aceita argumentos. Não foi introduzido serviço em background, socket, launchd, conta nova, alteração de entitlements ou helper instalador.
