@@ -125,7 +125,7 @@ def package(allowed: str, foreign: str) -> tuple[bytes, str]:
             raise ValueError("not ARM64 binary")
         for marker in (
             b"FINAL_INSTALL_AUTHORIZATION=DENIED",
-            b"LOCAL_PEERTOKEN", b"csops_audittoken",
+            b"TOKEN_UNAVAILABLE", b"csops_audittoken",
             b"MATCH_ONLY_NO_AUTH", b"MISMATCH_REJECTED"
         ):
             if marker not in binary:
