@@ -121,7 +121,7 @@ def _imports(value: str) -> frozenset[str]:
         # "_name" (one undefined name per line). Both are parsed using
         # an anchored grammar and the SAME small symbol allowlist.
         # Never strip arbitrary suffixes, comments, or library names.
-        match = re.fullmatch(r"(?:U\\s+)?([A-Za-z_][A-Za-z0-9_$]*)", line)
+        match = re.fullmatch(r"(?:U\s+)?([A-Za-z_][A-Za-z0-9_$]*)", line)
         if not match:
             raise DFMachORejected("unexpected undefined-symbol line")
         symbol = match.group(1)
