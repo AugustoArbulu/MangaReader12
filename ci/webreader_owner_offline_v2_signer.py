@@ -187,7 +187,7 @@ def sign_owner_candidate(*, owner_directory: Path, ipa_path: Path,
     if output.name != "channel-production-v2.json":
         raise OwnerManifestRejected("production channel output name must be exact")
     if (not isinstance(published_at, str) or
-            not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z", published_at)):
+            not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", published_at)):
         raise OwnerManifestRejected("exact owner-supplied UTC publishedAt required")
     try:
         datetime.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ")
