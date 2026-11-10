@@ -28,7 +28,7 @@ O programa é **offline**, não possui URLSession/urllib/requests, não pede tok
 
 - [**CI real CE estendida #42724518479**](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42724518479): **SUCCESS**. Reutilizou a IPA70 real e auditada, SHA `526291cc77203c3881e5f3f1c75904e8863dbde3b3bd9df7e1185c3229fb4fc1`, duas cópias distintas e um manifesto assinado com chave P-256 **efêmera**. O campo `immutable:true` e demais metadados do Release foram **simulados localmente**. Ambas as cópias passaram na auditoria real de assinatura nativa macOS; **nenhuma publicação, nenhuma chave editorial cadastrada**.
 - `ci/test_build70_immutable_public_release_readback.py`: assinatura ECDSA efêmera genuína e mutações de `draft`, `prerelease`, `immutable`, tag, URL, tamanho, digest, estado do asset, tipo, duplicates, JSON malformado, canal e baseline. Os testes de controle de fluxo Linux empregam mock do verificador nativo **apenas na parte de contrato**; teste separado confirma que a IPA sintética real é recusada pelo auditor nativo.
-- [**CI AC–CI**](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42724564434): testes Python/Linux, Swift nativo/macOS e compilação iOS12 ARM64 Debug/Release, sem produzir uma IPA.
+- [**CI AC–CI**](https://github.com/AugustoArbulu/MangaReader12/actions/runs/42724564434): **SUCCESS 2/2** — testes Python/Linux e Swift nativo/macOS, compilação iOS12 ARM64 Debug/Release e preview isolado, **sem produzir uma IPA**.
 
 ## Procedimento de lançamento real — futuro, condicionado à aprovação
 
