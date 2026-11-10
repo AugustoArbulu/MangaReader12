@@ -49,3 +49,14 @@ Para avançar rumo à instalação direta, a próxima decisão deve comparar alt
 A criação da chave editorial real continua uma ação futura, local e exclusivamente do proprietário, sem importar segredo ao GitHub, CI, chat ou ao WebReader. O pin público permanece `nil`, o instalador do app `liveInstallationEnabled=false`, e a PR segue em rascunho, sem merge.
 
 **Nenhuma nova Build71, IPA, DEB, GitHub Release, instalação ou mudança de arquivos do usuário nesta fase.**
+## Resultado final da CI — Linux/macOS
+
+**SUCCESS 2/2:** https://github.com/AugustoArbulu/MangaReader12/actions/runs/42765506041
+
+- Linux: **15 testes PASS** e verificação explícita das constantes de segurança em produção.
+- macOS 15: **15 testes PASS** e a mesma execução host-only do auditor por descritores.
+- Os logs confirmam que o teste usa somente arquivo sintético, sem appinst/IPA e sem prova de confiança do iOS.
+
+Não promover os campos negativos do recibo a verdadeiros por aprovação da CI. A validação comprou certeza sobre comportamento do **harness de revisão**, não sobre a identidade do helper, permissão do iPad, imutabilidade após fechar o FD ou consumo final do pacote.
+
+**Decisão após CU:** manter instalação manual e a Build70 como fallback; próximo investimento técnico deve testar/identificar as interfaces efetivas do instalador iOS12 em superfície controlada e depois especificar consentimento local durável, sem habilitar o instalador na Build70.
