@@ -168,7 +168,7 @@ class DFStaticABIHostTests(unittest.TestCase):
     def test_observed_darwin_getgroups_exact_abi_symbol_is_allowed(self):
         d = transcript()
         suffixed = d["undefined"].replace(
-            " U _getgroups\\n", " U _getgroups$DARWIN_EXTSN\\n"
+            " U _getgroups\n", " U _getgroups$DARWIN_EXTSN\n"
         )
         r = self.check({"undefined": suffixed})
         self.assertEqual(r.imported_symbol_count, len(REQUIRED_SYMBOLS))
@@ -181,14 +181,14 @@ class DFStaticABIHostTests(unittest.TestCase):
         for suffix in variants:
             with self.subTest(suffix=suffix), self.assertRaises(DFMachORejected):
                 self.check({"undefined": d["undefined"].replace(
-                    " U _getgroups\\n", " U _getgroups" + suffix + "\\n"
+                    " U _getgroups\n", " U _getgroups" + suffix + "\n"
                 )})
 
     def test_two_abi_spellings_together_are_rejected(self):
         d = transcript()
         with self.assertRaises(DFMachORejected):
             self.check({"undefined": d["undefined"] +
-                        " U _getgroups$DARWIN_EXTSN\\n"})
+                        " U _getgroups$DARWIN_EXTSN\n"})
 
     def test_apple_nm_u_bare_symbols_use_exact_same_allowlist(self):
         d = transcript()
