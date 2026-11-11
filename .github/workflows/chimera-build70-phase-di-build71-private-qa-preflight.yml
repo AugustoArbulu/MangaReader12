@@ -1,0 +1,74 @@
+name: WebReader Build70 Phase DI Build71 Signed QA Preflight (no package)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_di_build71_private_qa_preflight.py'
+      - 'ci/test_build70_di_build71_private_qa_host.py'
+      - 'ci/test_build70_di_build71_private_qa_native.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DI_PRIVATE_QA_70_TO_71_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-di-build71-private-qa-preflight.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_di_build71_private_qa_preflight.py'
+      - 'ci/test_build70_di_build71_private_qa_host.py'
+      - 'ci/test_build70_di_build71_private_qa_native.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DI_PRIVATE_QA_70_TO_71_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-di-build71-private-qa-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-linux-ipa-snapshot-negative-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate hash, versions, architecture, real ZIP snapshot and no authority
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_host.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dh_unsigned_build71_preview.py' -v
+      - name: Ensure no publishing, packaging, appinst, or hard-stop changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_di_build71_private_qa_preflight.py').read_text()
+          assert 'PHYSICAL_BASELINE_BUILD = 70' in src
+          assert 'QA_BUILD = 71' in src
+          assert 'QA_FILENAME = "WebReader-Build71-iOS12-adhoc.ipa"' in src
+          assert 'ownerQADistributionApprovalRecorded' in src
+          assert 'readyForPrivateQADistribution' in src
+          assert 'finalInstallerConsumedSameBytesProven' in src
+          assert 'physicalBuild70AppIdentityNewlyAttested' in src
+          assert 'inspectionAuthorized' not in src
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DI: Build71 host receipt only; no owner consent, upload or install.')
+          PY
+
+  native-macos-temporary-ad-hoc-fixtures:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select iOS 12 compatible Xcode compiler
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Run native Apple codesign on synthetic temporary IPA fixtures
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_host.py' -v
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_native.py' -v
+          echo 'PASS DI: native ad-hoc seal smoke test and malicious fixtures; no IPA distribution'
