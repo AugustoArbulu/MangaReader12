@@ -1,0 +1,91 @@
+name: WebReader Build70 Phase DZ Full App Build71 DY Packager Disposable Rehearsal
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build71_dz_qa_packaging_rehearsal.py'
+      - 'ci/test_build71_dz_qa_packaging_rehearsal.py'
+      - '.github/workflows/chimera-build70-phase-dz-build71-package-rehearsal.yml'
+      - 'docs/WEBREADER_BUILD70_PHASE_DZ_DY_PACKAGER_REHEARSAL_2026-11-11.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webreader-build70-dz-full-app-rehearsal
+  cancel-in-progress: true
+
+jobs:
+  source-security-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test absence of any owner trigger and no package leakage
+        run: |
+          python -m unittest discover -s ci -p 'test_build71_dz_qa_packaging_rehearsal.py' -v
+          python -m unittest discover -s ci -p 'test_build71_dy_owner_approved_qa_contract.py' -v
+
+  native-macos-fully-disposable-delivery-rehearsal:
+    if: github.repository == 'AugustoArbulu/MangaReader12' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check reviewed source and permanent no-install gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "AugustoArbulu/MangaReader12"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+      - name: Select Xcode 16.4 native Apple code-signing toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Create independent reviewed source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wr71-dz-reviewed"
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$RUNNER_TEMP/wr71-dz-reviewed"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - name: Prepare webreader icons and pinned webp from reviewed source
+        working-directory: ${{ runner.temp }}/wr71-dz-reviewed
+        run: |
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+      - name: Compile COMPLETE iOS12 ARM64 WebReader Build71 unsigned
+        working-directory: ${{ runner.temp }}/wr71-dz-reviewed
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr71-dz-build" \
+            CURRENT_PROJECT_VERSION=71 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr71-dz-compile.log" 2>&1 \
+            || { tail -n 160 "$RUNNER_TEMP/wr71-dz-compile.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr71-dz-compile.log"
+          test -d "$RUNNER_TEMP/wr71-dz-build/Build/Products/Release-iphoneos/MangaReader12.app"
+      - name: Run REAL DY packager behind TEMPORARY MOCK GUARD and delete all output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/build71_dz_qa_packaging_rehearsal.py \
+            --unsigned-app "$RUNNER_TEMP/wr71-dz-build/Build/Products/Release-iphoneos/MangaReader12.app"
+          test ! -e "$RUNNER_TEMP/wr71-dz-output.ipa"
+          echo 'PASS DZ: disposable Build71 QA package rehearsal, no upload, no Release'
