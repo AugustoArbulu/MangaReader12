@@ -12,7 +12,7 @@ A DY prepara o próximo passo operacional: um **workflow de entrega de QA privad
 
 - `ci/build71_owner_approved_actions_qa_package.py`: motor do empacotamento, identidade histórica de instalação, contrato de versão 70→71, assinatura nativa, verificação de bytes finais, relatórios de proveniência e rollback em falha.
 - `.github/workflows/chimera-build71-owner-approved-one-shot-qa.yml`: **único gatilho** é push que altera `ci/build71_owner_approved_qa_trigger.txt`. Arquivo deliberadamente **ausente na árvore atual**. Não aceita evento PR nem `workflow_dispatch`.
-- `ci/test_build71_dy_owner_approved_qa_contract.py`: 17 testes de host para bloquear execução comum, contexto GitHub falso, branch/repositório diferente, marcador ausente/forjado, symlink, SHA de checkout inconsistente, mudança adicional no commit, hashes e flags elevadas, ausência de app e comandos de instalação.
+- `ci/test_build71_dy_owner_approved_qa_contract.py`: 18 testes de host para bloquear execução comum, contexto GitHub falso, branch/repositório diferente, marcador ausente/forjado, symlink, SHA de checkout inconsistente, mudança adicional no commit, hashes e flags elevadas, ausência de app e comandos de instalação.
 - `.github/workflows/chimera-build70-phase-dy-build71-delivery-readiness.yml`: roda os testes de segurança em Linux, mais regressões DI/DV, e exige a ausência do marcador. Não gera artifact ou imagem.
 - Este documento é o handoff que deve ser lido antes de eventual trigger autorizado.
 
@@ -28,12 +28,13 @@ WEBREADER_BUILD71_OWNER_APPROVED_ONE_SHOT_ACTIONS_QA_IPA_NO_INSTALL
 O workflow também exige:
 
 1. O evento ser `push` na branch exata do projeto, do repositório exato, com `GITHUB_WORKFLOW_REF` e `GITHUB_SHA` coerentes.
-2. O commit de trigger alterar **somente** esse arquivo, e a segunda linha coincidir byte a byte com `HEAD^`.
-3. Checkout sem modificações, projeto fonte com `CURRENT_PROJECT_VERSION = 56` como era, e travas de confiança e instalador inalteradas.
-4. Compilação da fonte revisada em snapshot temporário com `CURRENT_PROJECT_VERSION=71`, Release ARM64, SDK iPhoneOS e mínimo efetivo iOS12.
-5. Assinatura Apple ad hoc temporária com entitlement histórico exato `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`, e verificação `codesign --verify`.
-6. Pacote IPA e SHA256 imutável; preflight DI 70→71 sobre os bytes exatos, cruzamento host-only DS com relatórios **fictícios** DQ/SQLite/offline, rehash após cada auditoria e segunda auditoria independente pós-empacotamento.
-7. Upload **apenas** de artifact privado do GitHub Actions: `WebReader-Build71-OwnerApproved-iOS12-ManualQA`, retenção 14 dias, com os arquivos `WebReader-Build71-iOS12-adhoc.ipa`, `.sha256`, preflights, proveniência e resumo. Sem publicar Release, update feed, IPA pública, DEB ou executar `appinst`.
+2. O commit de trigger alterar **somente** esse arquivo, e a segunda linha coincidir byte a byte com `HEAD^`. O marcador precisa conter exatamente duas linhas ASCII terminadas em LF.
+3. `GITHUB_RUN_ATTEMPT=1`: um rerun de um workflow antigo é recusado; uma nova entrega requer um novo gatilho e revisão de autorização.
+4. Checkout sem modificações, projeto fonte com `CURRENT_PROJECT_VERSION = 56` como era, e travas de confiança e instalador inalteradas.
+5. Compilação da fonte revisada em snapshot temporário com `CURRENT_PROJECT_VERSION=71`, Release ARM64, SDK iPhoneOS e mínimo efetivo iOS12.
+6. Assinatura Apple ad hoc temporária com entitlement histórico exato `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`, e verificação `codesign --verify`.
+7. Pacote IPA e SHA256 imutável; preflight DI 70→71 sobre os bytes exatos, cruzamento host-only DS com relatórios **fictícios** DQ/SQLite/offline, rehash após cada auditoria e segunda auditoria independente pós-empacotamento.
+8. Upload **apenas** de artifact privado do GitHub Actions: `WebReader-Build71-OwnerApproved-iOS12-ManualQA`, retenção 14 dias, com os arquivos `WebReader-Build71-iOS12-adhoc.ipa`, `.sha256`, preflights, proveniência e resumo. Sem publicar Release, update feed, IPA pública, DEB ou executar `appinst`.
 
 **Este marcador é uma medida operacional, NÃO autenticação criptográfica do proprietário.** Um colaborador com acesso de escrita à branch pode forjar um commit. A autorização efetiva deve ser decidida e conferida fora do repositório, na conversa com o proprietário; o assistente não deve inferi-la de `continue` nem de um resultado de CI.
 

@@ -25,6 +25,7 @@ def context(root: Path, temp: Path, **change):
                                "@refs/heads/" + dy.BRANCH,
         "GITHUB_SHA": "a" * 40,
         "GITHUB_RUN_ID": "123456",
+        "GITHUB_RUN_ATTEMPT": "1",
         "RUNNER_TEMP": str(temp),
     }
     env.update(change)
@@ -103,6 +104,9 @@ class DYOwnerOnlyQATests(unittest.TestCase):
             {"GITHUB_SHA": "z"*40},
             {"GITHUB_SHA": ""},
             {"GITHUB_RUN_ID": "bad"},
+            {"GITHUB_RUN_ATTEMPT": "2"},
+            {"GITHUB_RUN_ATTEMPT": "0"},
+            {"GITHUB_RUN_ATTEMPT": ""},
             {"RUNNER_TEMP": ""},
         ):
             with self.subTest(different=different), self.assertRaises(dy.DYRejected):
@@ -116,6 +120,18 @@ class DYOwnerOnlyQATests(unittest.TestCase):
         ):
             with self.subTest(marker=marker[-16:], parent=parent[:5]):
                 self.write_trigger(marker, parent)
+                with self.assertRaises(dy.DYRejected):
+                    self.admitted()
+
+    def test_marker_format_must_have_exact_two_lf_terminated_lines(self):
+        samples = (
+            (dy.MARKER + "\n" + "b"*40).encode("ascii"),
+            (dy.MARKER + "\r\n" + "b"*40 + "\r\n").encode("ascii"),
+            (dy.MARKER + "\n" + "b"*40 + "\n\n").encode("ascii"),
+        )
+        for value in samples:
+            with self.subTest(size=len(value)):
+                self.trigger.write_bytes(value)
                 with self.assertRaises(dy.DYRejected):
                     self.admitted()
 

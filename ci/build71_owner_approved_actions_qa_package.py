@@ -107,12 +107,16 @@ def require_explicit_single_commit_trigger() -> tuple[str, str, Path]:
             or re.fullmatch(r"[0-9a-f]{40}", lines[1]) is None):
         raise DYRejected("invalid owner-authorization marker format")
     parent = lines[1]
+    if data != (MARKER + "\n" + parent + "\n").encode("ascii"):
+        raise DYRejected("marker must be exactly two LF-terminated ASCII lines")
     if _git("rev-parse", "HEAD^") != parent:
         raise DYRejected("trigger commit parent differs from reviewed commit")
     if _git("diff", "--name-only", "HEAD^", "HEAD") != TRIGGER:
         raise DYRejected("trigger commit must change ONLY authorization marker")
     if re.fullmatch(r"[0-9]{1,20}", env.get("GITHUB_RUN_ID", "")) is None:
         raise DYRejected("missing exact GitHub Actions run ID")
+    if env.get("GITHUB_RUN_ATTEMPT") != "1":
+        raise DYRejected("rerunning an old owner-approved delivery is forbidden")
 
     raw_temp = env.get("RUNNER_TEMP", "")
     root = Path(raw_temp)

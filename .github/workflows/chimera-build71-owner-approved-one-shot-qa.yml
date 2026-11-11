@@ -33,6 +33,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = "AugustoArbulu/MangaReader12"
           test "$GITHUB_EVENT_NAME" = "push"
           test "$GITHUB_REF" = "refs/heads/feat/chimera-updater-phase1-protocol-audit"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git diff --name-only HEAD^ HEAD)" = "ci/build71_owner_approved_qa_trigger.txt"
           test ! -L ci/build71_owner_approved_qa_trigger.txt
