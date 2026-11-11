@@ -15,9 +15,9 @@ case "$app" in
     /*/MangaReader12.app) ;;
     *) fail ;;
 esac
-parent=\${app%/*}
-uuid=\${parent##*/}
-base=\${parent%/*}
+parent=${app%/*}
+uuid=${parent##*/}
+base=${parent%/*}
 case "$base" in
     /var/containers/Bundle/Application|\
     /private/var/containers/Bundle/Application|\
@@ -85,7 +85,7 @@ fi
 # Restrict any parsed value before exposing it. Never evaluate input.
 safe_string() {
     value=$1
-    if [ -z "$value" ] || [ "\${#value}" -gt 256 ]; then
+    if [ -z "$value" ] || [ "${#value}" -gt 256 ]; then
         printf '%s' UNAVAILABLE
         return
     fi
