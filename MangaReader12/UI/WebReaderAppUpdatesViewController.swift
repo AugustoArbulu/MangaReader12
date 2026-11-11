@@ -1,6 +1,5 @@
 import UIKit
 import Darwin
-import Security
 
 /// In-app release discovery and manual IPA export; public GitHub metadata is
 /// NOT an independently signed publisher manifest.
@@ -1279,9 +1278,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     /// Phase DG: measure only this app process, never an IPC peer or helper.
     /// These local kernel identifiers do NOT authenticate a publisher or
     /// confer permission to access a helper or install an IPA.
-    /// Read only the current app's own running task metadata. SecTask may
-    /// legitimately be unavailable under iOS 12 / Chimera. Never fall back
-    /// to a hard-coded application-identifier or claim peer authenticity.
+    /// The public iPhoneOS 12 Swift SDK cannot expose SecTask's signing
+    /// entitlement APIs. Report only bundle metadata and Unix SELF UID/GID.
+    /// Never synthesize the historical application-identifier as a result.
     private func copyOwnProcessIdentityReport() {
         guard !isIPCDiagnostic else { return }
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -1295,18 +1294,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return input
         }
         let bundleID = safeIdentity(Bundle.main.bundleIdentifier ?? "")
-        var signingID = "UNAVAILABLE"
-        var applicationID = "UNAVAILABLE"
-        if let task = SecTaskCreateFromSelf(nil) {
-            if let returnedID = SecTaskCopySigningIdentifier(task, nil) {
-                signingID = safeIdentity(String(describing: returnedID))
-            }
-            if let value = SecTaskCopyValueForEntitlement(
-                task, "application-identifier" as CFString, nil
-            ), CFGetTypeID(value) == CFStringGetTypeID() {
-                applicationID = safeIdentity(String(describing: value))
-            }
-        }
         let lines: [String] = [
             "WebReader • Diagnóstico de identidade do próprio app (DG/DP)",
             "Build: " + String(installedBuild),
@@ -1317,8 +1304,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             "APP_SELF_GID=" + String(Darwin.getgid()),
             "APP_SELF_EGID=" + String(Darwin.getegid()),
             "APP_SELF_BUNDLE_ID=" + bundleID,
-            "APP_SELF_SIGNING_ID=" + signingID,
-            "APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=" + applicationID,
+            "APP_SELF_SIGNING_ID=UNAVAILABLE_IOS12_PUBLIC_SDK",
+            "APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=UNAVAILABLE_IOS12_PUBLIC_SDK",
             "APP_SELF_IDENTITY_SCOPE=SELF_ONLY",
             "APP_SELF_SIGNING_CLAIM_SCOPE=OBSERVATION_ONLY_NOT_VERIFIED",
             "INSTALLED_PREVIOUS_BUILD_IDENTITY_ATTESTED=NO",
@@ -1333,9 +1320,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         UIPasteboard.general.string = lines.joined(separator: "\n")
         let alert = UIAlertController(
             title: "Identidade do app copiada",
-            message: "UID/GID, Bundle ID e dados de assinatura do próprio WebReader. " +
-                "Valores de assinatura podem estar indisponíveis no iOS 12. " +
-                "Isto não autentica helper, editor, nem autoriza instalar IPA.",
+            message: "UID/GID e Bundle ID do próprio processo. " +
+                "O iOS12 SDK não expõe os entitlements assinados à opção. " +
+                "Isto não autentica helper, editor nem autoriza instalar IPA.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
