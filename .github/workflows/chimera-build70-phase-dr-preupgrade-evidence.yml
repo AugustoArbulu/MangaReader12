@@ -1,0 +1,73 @@
+name: WebReader Build70 Phase DR Readonly Cross-Evidence and DQ End-to-End (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dr_preupgrade_crosscheck.py'
+      - 'ci/test_build70_dr_preupgrade_crosscheck.py'
+      - 'ci/test_build70_dq_shell_parser_e2e.py'
+      - 'ci/build70_dq_installed_bundle_readonly.sh'
+      - 'ci/build70_dq_installed_bundle_report.py'
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DR_PREUPGRADE_EVIDENCE_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dr-preupgrade-evidence.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ci/build70_dr_preupgrade_crosscheck.py'
+      - 'ci/test_build70_dr_preupgrade_crosscheck.py'
+      - 'ci/test_build70_dq_shell_parser_e2e.py'
+      - 'ci/build70_dq_installed_bundle_readonly.sh'
+      - 'ci/build70_dq_installed_bundle_report.py'
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DR_PREUPGRADE_EVIDENCE_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dr-preupgrade-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-only-dq-shell-and-dr-evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: DQ POSIX shell / parser real-output contract (temporary synthetic app)
+        run: |
+          /bin/sh -n ci/build70_dq_installed_bundle_readonly.sh
+          python -m unittest discover -s ci -p 'test_build70_dq_shell_parser_e2e.py' -v
+      - name: DQ strict parser and DR cross-evidence regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dq_installed_bundle_report.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dr_preupgrade_crosscheck.py' -v
+          python -m unittest discover -s ci -p 'test_build70_do_preupgrade_baseline_audit.py' -v
+      - name: Ensure production/install safety gates remain disabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          checker = Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          trust = Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          socket = Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in trust
+          assert 'static let liveInstallationEnabled = false' in socket
+          dr = Path('ci/build70_dr_preupgrade_crosscheck.py').read_text()
+          for needed in (
+              '"installationAuthorized": False',
+              '"readyToInstallIPA": False',
+              '"automaticUpdaterEnabled": False',
+              '"installedBuild70NativeSignatureValidated": False',
+              '"sameDeviceAndSameMomentProven": False',
+          ):
+              assert needed in dr
+          print('PASS DR: synthetic readonly evidence only; no IPA or installation')
+          PY
