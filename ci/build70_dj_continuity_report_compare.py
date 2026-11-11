@@ -92,7 +92,7 @@ def parse_continuity_report(source: bytes, *, expected_build: int) -> DJCounts:
         if not value.startswith(prefix):
             raise DJRejected("missing/reordered SQLite count label")
         raw = value[len(prefix):]
-        if re.fullmatch(r"(?:0|[1-9][0-9]{0,17})", raw, flags=re.ASCII) is None:
+        if re.fullmatch(r"(?:0|[1-9][0-9]{0,18})", raw, flags=re.ASCII) is None:
             raise DJRejected("invalid count integer")
         number = int(raw)
         if number > 9_223_372_036_854_775_807:
