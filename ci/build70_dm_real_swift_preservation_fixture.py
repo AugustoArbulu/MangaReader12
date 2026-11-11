@@ -123,7 +123,7 @@ SWIFT_TEST = r'''
 enum DMFixtureError: Error { case assertion(String) }
 
 func dmCheck(_ condition: Bool, _ message: String) throws {
-    guard condition() else { throw DMFixtureError.assertion(message) }
+    guard condition else { throw DMFixtureError.assertion(message) }
 }
 
 func dmExec(_ db: SQLiteDatabase, _ sql: String) throws {
