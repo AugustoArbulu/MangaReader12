@@ -57,6 +57,15 @@ class DQShellParserIntegrationTests(unittest.TestCase):
             "for tool in /usr/bin/ldid /bin/ldid /usr/local/bin/ldid; do",
             f"for tool in {self.tools / 'ldid'}; do",
         )
+        # Ubuntu's /usr/bin/awk is normally a symlink; the production
+        # script deliberately rejects such tools. Resolve the HOST binary
+        # in this temporary fixture ONLY; leave iOS allowlists unchanged.
+        self.awk_host_path = Path("/usr/bin/awk").resolve(strict=True)
+        source = only_replace(
+            source,
+            "for tool in /usr/bin/awk /bin/awk; do",
+            f"for tool in {self.awk_host_path}; do",
+        )
         self.shell.write_text(source, encoding="utf-8")
         self.write_stub("plutil", self.plutil_lines())
         self.write_stub("ldid", self.ldid_lines())
