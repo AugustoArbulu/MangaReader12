@@ -1,0 +1,74 @@
+name: WebReader Build70 Phase DM Real Swift SQLite and Offline Fixture (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dm_real_swift_preservation_fixture.py'
+      - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dm-swift-preservation.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dm_real_swift_preservation_fixture.py'
+      - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dm-swift-preservation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-source-data-and-safety-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real database/offline Swift source schema and destructive-backup guards
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dm_real_swift_preservation_fixture.py' -v
+          python ci/build70_dm_real_swift_preservation_fixture.py
+      - name: Previous approved offline migration and reader-policy regression
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dj_continuity_report_compare.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_bridge.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('ci/build70_dm_real_swift_preservation_fixture.py').read_text()
+          assert '"realAppUpgradePreservationProven": False' in src
+          assert '"installationAuthorized": False' in src
+          assert '"readyToDistributeIPA": False' in src
+          assert '"ownerDistributionApprovalRecorded": False' in src
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DM: zero entitlement, install or distribution privileges')
+          PY
+
+  macos-native-real-swift-sqlite-offline-host-fixture:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select supported Xcode16.4 macOS Swift toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk macosx --find swiftc
+      - name: Check actual unchanged Swift code boundaries and negative source rules
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dm_real_swift_preservation_fixture.py' -v
+      - name: Compile verbatim WebReader Swift database/offline code and verify synthetic reopen
+        run: |
+          python ci/build70_dm_real_swift_preservation_fixture.py --native-swift-test
+          echo 'PASS DM: all test records and page files were synthetic and local to the runner.'
+          echo 'No IPA, Filza, appinst, device storage, app bundle or user backup was accessed.'
