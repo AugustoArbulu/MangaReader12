@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""WebReader Build70 / DP — parse untrusted FUTURE Build71 self-SecTask text.
+"""WebReader Build70 / DP — parse untrusted FUTURE Build71 iOS12 self report.
 
-The currently installed Build70 does NOT contain DP. A DP readout from a
-future Build71 could only describe its OWN running task, never re-attest
+The currently installed Build70 does NOT contain DP. The iPhoneOS12 SDK
+DOES NOT expose SecTask signing APIs to this Swift app. A future Build71
+readout of Bundle ID / UID can only describe its OWN running task, never re-attest
 the previous installed Build70, a helper peer, publisher or a safe upgrade.
 
 The report is copied to the clipboard, not signed. DO NOT use this as
@@ -21,7 +22,7 @@ MAX_TEXT_BYTES = 2048
 EXPECTED_BUILD = 71
 EXPECTED_IOS = "12.5.8"
 EXPECTED_BUNDLE_ID = "com.example.MangaReader12"
-HISTORICAL_APPLICATION_ID = "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+SIGNING_UNAVAILABLE = "UNAVAILABLE_IOS12_PUBLIC_SDK"
 HEADER = "WebReader • Diagnóstico de identidade do próprio app (DG/DP)"
 IDENTITY_RE = re.compile(r"[A-Za-z0-9._-]{1,256}\Z", re.ASCII)
 DECIMAL_RE = re.compile(r"(?:0|[1-9][0-9]{0,9})\Z", re.ASCII)
@@ -85,16 +86,17 @@ def parse_dp_report(blob: bytes) -> dict:
     entitlement = _identity(lines[9], "APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT")
     if tuple(lines[10:]) != STATIC_LINES:
         raise DPRejected("DP report missing negative authority gates")
-    if bundle != EXPECTED_BUNDLE_ID:
-        status = "DP_REPORTED_BUNDLE_MISMATCH_REVIEW_NO_INSTALL"
-    elif signing == "UNAVAILABLE" or entitlement == "UNAVAILABLE":
-        status = "DP_SELF_SIGNING_API_UNAVAILABLE_REVIEW_NO_INSTALL"
-    elif entitlement != HISTORICAL_APPLICATION_ID:
-        status = "DP_REPORTED_ENTITLEMENT_MISMATCH_REVIEW_NO_INSTALL"
-    elif signing != EXPECTED_BUNDLE_ID:
-        status = "DP_REPORTED_SIGNING_ID_DIFFERENT_REVIEW_NO_INSTALL"
-    else:
-        status = "DP_REPORTED_SELF_IDENTITY_TEXT_MATCHES_NOT_ATTESTED"
+    # The source report must NEVER claim a signed entitlement was read.
+    # Importing Apple's SecTask symbols failed with the actual iPhoneOS SDK.
+    # Accept only an explicit unavailable status; forged "present" values
+    # are rejected rather than promoted to a notion of authorization.
+    if signing != SIGNING_UNAVAILABLE or entitlement != SIGNING_UNAVAILABLE:
+        raise DPRejected("unsigned self report cannot claim signing entitlements")
+    status = (
+        "DP_REPORTED_BUNDLE_MISMATCH_NO_SIGNING_ATTESTATION"
+        if bundle != EXPECTED_BUNDLE_ID
+        else "DP_IOS12_SIGNING_ENTITLEMENT_UNAVAILABLE_NO_INSTALL"
+    )
 
     return {
         "status": status,
@@ -107,8 +109,7 @@ def parse_dp_report(blob: bytes) -> dict:
         "bundleIdentifierText": bundle,
         "signingIdentifierText": signing,
         "applicationIdentifierEntitlementText": entitlement,
-        "historicalEntitlementTextComparisonMatches":
-            entitlement == HISTORICAL_APPLICATION_ID,
+        "historicalEntitlementTextComparisonMatches": False,
         "sourceIsUserSuppliedClipboardText": True,
         "sourceCryptographicallyAuthenticated": False,
         "secTaskSuccessfulOnActualiPadProvenByParser": False,
