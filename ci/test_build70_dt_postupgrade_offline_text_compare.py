@@ -176,7 +176,7 @@ class DTPostupgradeTextTests(unittest.TestCase):
             with self.subTest(version=version), self.assertRaises(DTRejected):
                 self.compare(after_offline=[b])
         with self.assertRaises(DTRejected):
-            self.compare(after_counts=after(continuity()).replace(NEW, b"Build observada: 72 • iOS: 12.5.8"))
+            self.compare(after_counts=after(continuity()).replace(NEW, "Build observada: 72 • iOS: 12.5.8".encode("utf-8")))
 
     def test_duplicate_or_extra_after_rows_are_rejected(self):
         samples = (
