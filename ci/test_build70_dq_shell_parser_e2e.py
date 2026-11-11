@@ -114,6 +114,7 @@ class DQShellParserIntegrationTests(unittest.TestCase):
         receipt = inspect_dq_text(proc.stdout)
         self.assertEqual(
             receipt["status"], "DQ_REPORTED_MATCH_HISTORICAL_METADATA_NOT_ATTESTED",
+            proc.stdout.decode("utf-8", errors="replace"),
         )
         self.assert_no_install(receipt)
         self.assertEqual((self.app / "Info.plist").read_bytes(), original_info)
