@@ -87,6 +87,32 @@ class DVFullAppSignedShadowHostTests(unittest.TestCase):
             "Arquivos de páginas presentes na amostra: 6".encode(),
             "Arquivos de páginas presentes na amostra: 0".encode(),
         )
+        # Zero pages with three valid complete downloads contradicts
+        # the strict DO algebra and MUST be rejected, not categorized as
+        # a well-formed report containing unsafe pages.
+        with self.assertRaises(DRRejected):
+            audit_dr_preupgrade(
+                _synthetic_dq_installed_claim(),
+                _synthetic_library_with_three_downloads(),
+                [bad],
+            )
+
+    def test_well_formed_but_missing_offline_chapter_is_review_required(self):
+        # The same number of completed SQLite rows, but one missing
+        # local chapter: DO can parse the evidence and report a failure.
+        bad = _synthetic_offline_three_downloads()
+        changes = (
+            ("Capítulos com arquivos sequenciais e não vazios: 3",
+             "Capítulos com arquivos sequenciais e não vazios: 2"),
+            ("Com recibo de quantidade de páginas: 3",
+             "Com recibo de quantidade de páginas: 2"),
+            ("Capítulos faltantes, incompletos ou inseguros: 0",
+             "Capítulos faltantes, incompletos ou inseguros: 1"),
+            ("Arquivos de páginas presentes na amostra: 6",
+             "Arquivos de páginas presentes na amostra: 4"),
+        )
+        for original, replacement in changes:
+            bad = bad.replace(original.encode(), replacement.encode())
         receipt = audit_dr_preupgrade(
             _synthetic_dq_installed_claim(),
             _synthetic_library_with_three_downloads(),
