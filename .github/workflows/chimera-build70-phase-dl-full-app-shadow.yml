@@ -1,0 +1,122 @@
+name: WebReader Build70 Phase DL Full App Signed QA Shadow Validation (no distribution)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dl_full_app_signed_shadow.py'
+      - 'ci/test_build70_dl_full_app_signed_shadow.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DL_REAL_APP_SHADOW_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dl-full-app-shadow.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webreader-phase-dl-ephemeral-full-app-shadow
+  cancel-in-progress: false
+
+jobs:
+  host-negative-security-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test provenance guards, fake reports and permanent authority denial
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dl_full_app_signed_shadow.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_bridge.py' -v
+      - name: Check production hard stops and no distribution workflow action
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          src=Path('ci/build70_dl_full_app_signed_shadow.py').read_text()
+          wf=Path('.github/workflows/chimera-build70-phase-dl-full-app-shadow.yml').read_text()
+          assert 'TemporaryDirectory(prefix="wr-dl-full-app-shadow-"' in src
+          assert 'GITHUB_WORKFLOW_REF' in src
+          assert '"readyToDistributeIPA": False' in src
+          assert '"installationAuthorized": False' in src
+          assert '"persistentIPAProduced": False' in src
+          assert '"artifactUploaded": False' in src
+          assert '"baselineReportWasSynthetic": True' in src
+          assert 'actions/upload-artifact' not in wf
+          assert 'gh release' not in wf
+          assert 'appinst' not in wf
+          assert 'CURRENT_PROJECT_VERSION=71' in wf
+          assert 'CODE_SIGNING_ALLOWED=NO' in wf
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DL: isolated signed-shadow CI, no retained IPA and all gates closed')
+          PY
+
+  macos-build-sign-audit-discard-full-webreader:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify branch and reviewed SHA without modifying source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'AugustoArbulu/MangaReader12'
+          test "$GITHUB_REF" = 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+      - name: Select tested macOS Xcode toolchain for iOS12
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Make separate reviewed source snapshot in ephemeral runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wr-dl-reviewed-src"
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$RUNNER_TEMP/wr-dl-reviewed-src"
+          test -f "$RUNNER_TEMP/wr-dl-reviewed-src/ci/build70_dl_full_app_signed_shadow.py"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - name: Generate original icon and pinned libwebp in temporary source
+        working-directory: ${{ runner.temp }}/wr-dl-reviewed-src
+        run: |
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+      - name: Compile complete UNSIGNED WebReader Build71 Release for ARM64/iOS12
+        shell: bash
+        working-directory: ${{ runner.temp }}/wr-dl-reviewed-src
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr-dl-shadow-build" \
+            CURRENT_PROJECT_VERSION=71 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr-dl-build.log" 2>&1 \
+            || { tail -n 150 "$RUNNER_TEMP/wr-dl-build.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr-dl-build.log"
+          test -d "$RUNNER_TEMP/wr-dl-shadow-build/Build/Products/Release-iphoneos/MangaReader12.app"
+      - name: Verify actual unsigned full application from reviewed original checkout
+        shell: bash
+        run: |
+          python3 ci/build70_dh_unsigned_build71_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr-dl-shadow-build/Build/Products/Release-iphoneos/MangaReader12.app"
+      - name: Sign isolated copy, inspect exact IPA bytes with DI/DK, destroy temporary IPA
+        shell: bash
+        run: |
+          python3 ci/build70_dl_full_app_signed_shadow.py \
+            --unsigned-app "$RUNNER_TEMP/wr-dl-shadow-build/Build/Products/Release-iphoneos/MangaReader12.app"
+          echo 'PASS DL: full app signed only inside TemporaryDirectory; no artifact uploaded'
