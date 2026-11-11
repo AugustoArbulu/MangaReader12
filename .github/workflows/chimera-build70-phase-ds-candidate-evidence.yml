@@ -1,18 +1,5 @@
 name: WebReader Build70 Phase DS Signed Build71 + DQ/DO Host Chain (NO install)
 on:
-  push:
-    branches:
-      - feat/chimera-updater-phase1-protocol-audit
-    paths:
-      - 'ci/build70_ds_candidate_evidence_gate.py'
-      - 'ci/test_build70_ds_candidate_evidence_gate.py'
-      - 'ci/test_build70_ds_candidate_evidence_native.py'
-      - 'ci/build70_dr_preupgrade_crosscheck.py'
-      - 'ci/build70_dq_installed_bundle_report.py'
-      - 'ci/build70_do_preupgrade_baseline_audit.py'
-      - 'ci/build70_di_build71_private_qa_preflight.py'
-      - 'docs/WEBREADER_BUILD70_PHASE_DS_SIGNED_CANDIDATE_AND_BASELINE_2026-11-11.md'
-      - '.github/workflows/chimera-build70-phase-ds-candidate-evidence.yml'
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +13,11 @@ on:
       - 'docs/WEBREADER_BUILD70_PHASE_DS_SIGNED_CANDIDATE_AND_BASELINE_2026-11-11.md'
       - '.github/workflows/chimera-build70-phase-ds-candidate-evidence.yml'
   workflow_dispatch:
+
+concurrency:
+  # PR-only: drop superseded commits, keep latest HEAD and its macOS gate.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

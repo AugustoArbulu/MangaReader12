@@ -1,15 +1,5 @@
 name: WebReader Build70 Phase DQ Local Installed Bundle Readonly Preflight (no install)
 on:
-  push:
-    branches:
-      - feat/chimera-updater-phase1-protocol-audit
-    paths:
-      - 'ci/build70_dq_installed_bundle_readonly.sh'
-      - 'ci/test_build70_dq_installed_bundle_readonly.py'
-      - 'ci/build70_dq_installed_bundle_report.py'
-      - 'ci/test_build70_dq_installed_bundle_report.py'
-      - 'docs/WEBREADER_BUILD70_PHASE_DQ_PHYSICAL_BUNDLE_IDENTITY_2026-11-11.md'
-      - '.github/workflows/chimera-build70-phase-dq-installed-bundle-readonly.yml'
   pull_request:
     branches:
       - main
@@ -21,6 +11,11 @@ on:
       - 'docs/WEBREADER_BUILD70_PHASE_DQ_PHYSICAL_BUNDLE_IDENTITY_2026-11-11.md'
       - '.github/workflows/chimera-build70-phase-dq-installed-bundle-readonly.yml'
   workflow_dispatch:
+
+concurrency:
+  # PR-only: drop superseded commits, keep latest HEAD and its macOS gate.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
