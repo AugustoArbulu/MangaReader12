@@ -22,7 +22,9 @@ class DWArchivedQAContractTests(unittest.TestCase):
     def test_archived_artifact_is_immutable_reference_not_latest(self):
         self.assertIn("run-id: 42705903886", self.source)
         self.assertIn("WebReader-Build70-OwnerApproved-iOS12-QA-Filza", self.source)
-        self.assertNotIn("latest", self.source.lower())
+        # ubuntu-latest is a runner label, not a mutable artifact selector.
+        self.assertNotIn("run-id: latest", self.source.lower())
+        self.assertNotIn("run-id: $", self.source.lower())
 
     def test_actual_historical_ipa_hash_and_cdhash_pinned(self):
         for fact in (
