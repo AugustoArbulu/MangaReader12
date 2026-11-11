@@ -44,9 +44,9 @@ jobs:
           assert '"persistentIPAProduced": False' in src
           assert '"artifactUploaded": False' in src
           assert '"baselineReportWasSynthetic": True' in src
-          assert 'actions/upload-artifact' not in wf
-          assert 'gh release' not in wf
-          assert 'appinst' not in wf
+          assert 'actions/' + 'upload-artifact' not in wf
+          assert 'gh ' + 'release' not in wf
+          assert 'app' + 'inst' not in wf
           assert 'CURRENT_PROJECT_VERSION=71' in wf
           assert 'CODE_SIGNING_ALLOWED=NO' in wf
           assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
