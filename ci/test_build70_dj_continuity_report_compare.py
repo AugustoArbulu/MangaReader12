@@ -154,7 +154,7 @@ class DJHostContinuityAuditTests(unittest.TestCase):
         for changed in (
             self.before.replace(b"Obras na biblioteca", b"Obras total"),
             self.before.replace("Wi-Fi DESLIGADO".encode(), b"ONLINE"),
-            self.before.replace("NÃO páginas verificadas".encode(), b"páginas OK"),
+            self.before.replace("NÃO páginas verificadas".encode(), "páginas OK".encode()),
             self.before.replace("restaurar apaga Downloads".encode(), b"restore safe"),
         ):
             with self.assertRaises(DJRejected):
