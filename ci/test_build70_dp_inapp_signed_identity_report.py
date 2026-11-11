@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DP host-only tests: copied self-SecTask evidence is NOT trusted authority."""
+"""DP host-only tests: iOS12 self Bundle ID can NEVER expose signed entitlements."""
 import json
 from pathlib import Path
 import random
@@ -10,7 +10,7 @@ import unittest
 
 from build70_dp_inapp_signed_identity_report import (
     DPRejected, parse_dp_report, HEADER, STATIC_LINES, EXPECTED_BUNDLE_ID,
-    HISTORICAL_APPLICATION_ID,
+    SIGNING_UNAVAILABLE,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,7 +18,7 @@ UI = ROOT / "MangaReader12/UI/WebReaderAppUpdatesViewController.swift"
 
 
 def example(*, build=71, ios="12.5.8", bundle=EXPECTED_BUNDLE_ID,
-            signing=EXPECTED_BUNDLE_ID, entitlement=HISTORICAL_APPLICATION_ID,
+            signing=SIGNING_UNAVAILABLE, entitlement=SIGNING_UNAVAILABLE,
             uid="501", euid="501", gid="501", egid="501") -> bytes:
     return "\n".join([
         HEADER, f"Build: {build}", f"iOS: {ios}",
@@ -48,42 +48,37 @@ class DPSelfSignedIdentityHostTests(unittest.TestCase):
         ):
             self.assertIs(report[name], False, name)
 
-    def test_matching_self_observation_is_not_authority(self):
+    def test_self_bundle_is_observed_but_signed_entitlement_is_unavailable(self):
         report = parse_dp_report(example())
         self.assertEqual(report["status"],
-                         "DP_REPORTED_SELF_IDENTITY_TEXT_MATCHES_NOT_ATTESTED")
+                         "DP_IOS12_SIGNING_ENTITLEMENT_UNAVAILABLE_NO_INSTALL")
         self.assertEqual(report["futureBuildObservedInText"], 71)
         self.assertEqual(report["currentProcessUIDText"], 501)
-        self.assertTrue(report["historicalEntitlementTextComparisonMatches"])
+        self.assertFalse(report["historicalEntitlementTextComparisonMatches"])
+        self.assertEqual(report["signingIdentifierText"], SIGNING_UNAVAILABLE)
+        self.assertEqual(report["applicationIdentifierEntitlementText"], SIGNING_UNAVAILABLE)
         self.assert_no_authority(report)
 
-    def test_missing_security_api_returns_unavailable_not_false_match(self):
+    def test_forged_available_entitlement_is_rejected_not_promoted(self):
         for signing, entitlement in (
-            ("UNAVAILABLE", HISTORICAL_APPLICATION_ID),
-            (EXPECTED_BUNDLE_ID, "UNAVAILABLE"),
+            ("com.example.MangaReader12", SIGNING_UNAVAILABLE),
+            (SIGNING_UNAVAILABLE,
+             "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"),
             ("UNAVAILABLE", "UNAVAILABLE"),
+            ("FAKE", "FAKE"),
         ):
-            with self.subTest(signing=signing,entitlement=entitlement):
-                report = parse_dp_report(example(signing=signing,entitlement=entitlement))
-                self.assertEqual(report["status"],
-                                 "DP_SELF_SIGNING_API_UNAVAILABLE_REVIEW_NO_INSTALL")
-                self.assert_no_authority(report)
+            with self.subTest(signing=signing, entitlement=entitlement):
+                with self.assertRaises(DPRejected):
+                    parse_dp_report(example(signing=signing, entitlement=entitlement))
 
-    def test_changed_entitlement_must_stop_even_if_bundle_matches(self):
-        report = parse_dp_report(example(entitlement="FORGED.id"))
-        self.assertEqual(report["status"],
-                         "DP_REPORTED_ENTITLEMENT_MISMATCH_REVIEW_NO_INSTALL")
-        self.assert_no_authority(report)
-
-    def test_changed_signing_identifier_never_authorizes(self):
-        report = parse_dp_report(example(signing="MangaReader12"))
-        self.assertEqual(report["status"],
-                         "DP_REPORTED_SIGNING_ID_DIFFERENT_REVIEW_NO_INSTALL")
-        self.assert_no_authority(report)
+    def test_changed_signing_identifier_is_rejected(self):
+        with self.assertRaises(DPRejected):
+            parse_dp_report(example(signing="MangaReader12"))
 
     def test_wrong_bundle_id_never_authorizes(self):
         report = parse_dp_report(example(bundle="com.other.WebReader"))
-        self.assertEqual(report["status"], "DP_REPORTED_BUNDLE_MISMATCH_REVIEW_NO_INSTALL")
+        self.assertEqual(report["status"],
+                         "DP_REPORTED_BUNDLE_MISMATCH_NO_SIGNING_ATTESTATION")
         self.assert_no_authority(report)
 
     def test_exact_build_and_ios_required(self):
@@ -154,32 +149,36 @@ class DPSelfSignedIdentityHostTests(unittest.TestCase):
             self.assert_no_authority(report)
             self.assertEqual(source.read_bytes(),before)
 
-    def test_new_security_apis_query_current_process_only(self):
-        ui=UI.read_text(encoding="utf-8")
-        self.assertIn("import UIKit\nimport Darwin\nimport Security\n",ui)
-        method=ui.split("private func copyOwnProcessIdentityReport() {",1)[1].split(
-            "// MARK: - Release download cache",1)[0]
+    def test_ios12_supported_self_apis_without_private_sectask(self):
+        ui = UI.read_text(encoding="utf-8")
+        self.assertIn("import UIKit\nimport Darwin\n", ui)
+        self.assertNotIn("import Security\n", ui)
+        method = ui.split("private func copyOwnProcessIdentityReport() {", 1)[1].split(
+            "// MARK: - Release download cache", 1)[0]
         for token in (
             "guard !isIPCDiagnostic else { return }",
-            "SecTaskCreateFromSelf(nil)",
-            "SecTaskCopySigningIdentifier(task, nil)",
-            "SecTaskCopyValueForEntitlement(",
-            '"application-identifier" as CFString',
-            "CFGetTypeID(value) == CFStringGetTypeID()",
             'Bundle.main.bundleIdentifier ?? ""',
-            "APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=",
-            "APP_SELF_BUNDLE_ID=", "APP_SELF_SIGNING_ID=",
+            '"APP_SELF_SIGNING_ID=UNAVAILABLE_IOS12_PUBLIC_SDK"',
+            '"APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=UNAVAILABLE_IOS12_PUBLIC_SDK"',
+            "APP_SELF_BUNDLE_ID=",
             "INSTALLED_PREVIOUS_BUILD_IDENTITY_ATTESTED=NO",
-            'UIPasteboard.general.string = lines.joined(separator: "\\n")'
+            'UIPasteboard.general.string = lines.joined(separator: "\\n")',
         ):
-            with self.subTest(token=token):self.assertIn(token,method)
+            with self.subTest(token=token):
+                self.assertIn(token, method)
         for banned in (
-            "getpeereid(", "socket(", "URLSession", "FileManager",
-            "contentsOf:", "appinst", "posix_spawn", "SecTaskCreateWithAuditToken",
-            "SecTaskCreateWithPID", "SecCodeCheckValidity",
+            "SecTask", "getpeereid(", "socket(", "URLSession", "FileManager",
+            "contentsOf:", "appinst", "posix_spawn", "SecCodeCheckValidity",
             "installApplication", "write(", "setuid(", "chmod("
         ):
-            with self.subTest(banned=banned):self.assertNotIn(banned,method)
+            with self.subTest(banned=banned):
+                if banned == "SecTask":
+                    # A negative comment may mention why the SDK API was removed.
+                    self.assertNotIn("SecTaskCreateFromSelf(", method)
+                    self.assertNotIn("SecTaskCopyValueForEntitlement(", method)
+                    self.assertNotIn("SecTaskCopySigningIdentifier(", method)
+                else:
+                    self.assertNotIn(banned, method)
 
     def test_dp_ui_report_has_same_20_lines_in_parser(self):
         source=UI.read_text(encoding="utf-8")
