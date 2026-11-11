@@ -13,6 +13,8 @@ import unittest
 from build70_dq_installed_bundle_report import (
     DQReportRejected, inspect_dq_text,
 )
+from build70_dr_preupgrade_crosscheck import audit_dr_preupgrade
+from test_build70_do_preupgrade_baseline_audit import continuity, offline
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "build70_dq_installed_bundle_readonly.sh"
@@ -128,6 +130,29 @@ class DQShellParserIntegrationTests(unittest.TestCase):
         self.assert_no_install(receipt)
         self.assertEqual((self.app / "Info.plist").read_bytes(), original_info)
         self.assertEqual((self.app / "MangaReader12").read_bytes(), original_exe)
+
+    def test_real_shell_output_dr_dq_do_full_chain_is_non_authorizing(self):
+        proc = self.execute()
+        self.assertEqual(proc.returncode, 0)
+        result = audit_dr_preupgrade(proc.stdout, continuity(), [offline()])
+        self.assertEqual(
+            result["status"],
+            "DR_PREUPGRADE_TEXT_COHERENT_NOT_ATTESTED_NOT_INSTALLABLE",
+        )
+        self.assertTrue(result["bothReportFormatsTextuallyCoherent"])
+        self.assertIs(result["sameDeviceAndSameMomentProven"], False)
+        self.assertIs(result["readyToDistributeIPA"], False)
+        self.assertIs(result["readyToInstallIPA"], False)
+        self.assertIs(result["installationAuthorized"], False)
+
+    def test_real_shell_wrong_build_makes_dr_stop_qa(self):
+        self.write_stub("plutil", self.plutil_lines(build="71"))
+        proc = self.execute()
+        self.assertEqual(proc.returncode, 0)
+        result = audit_dr_preupgrade(proc.stdout, continuity(), [offline()])
+        self.assertEqual(result["status"], "DR_REPORTED_IDENTITY_MISMATCH_STOP_QA")
+        self.assertIs(result["bothReportFormatsTextuallyCoherent"], False)
+        self.assertIs(result["installationAuthorized"], False)
 
     def test_missing_ldid_is_explicit_unavailable(self):
         (self.tools / "ldid").unlink()
