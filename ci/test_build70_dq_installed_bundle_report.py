@@ -63,6 +63,23 @@ class DQInstalledBundleTextTests(unittest.TestCase):
         r=inspect_dq_text(synthetic(bundle="UNAVAILABLE",build="71"))
         self.assertEqual(r["status"],"DQ_REPORTED_BUNDLE_VERSION_OR_ENTITLEMENT_MISMATCH_STOP_QA")
         self.no_authority(r)
+    def test_shell_printf_final_newline_accepted_without_authority(self):
+        # The real POSIX shell script prints a newline after its final line.
+        cases=(
+            (synthetic(),"DQ_REPORTED_MATCH_HISTORICAL_METADATA_NOT_ATTESTED"),
+            (synthetic(bundle="UNAVAILABLE"),"DQ_REPORTED_INSTALLED_IDENTITY_FIELDS_UNAVAILABLE"),
+            (synthetic(build="71"),"DQ_REPORTED_BUNDLE_VERSION_OR_ENTITLEMENT_MISMATCH_STOP_QA"),
+        )
+        for fixture, expected in cases:
+            with self.subTest(status=expected):
+                r=inspect_dq_text(fixture+b"\\n")
+                self.assertEqual(r["status"],expected)
+                self.no_authority(r)
+    def test_extra_trailing_blank_lines_rejected(self):
+        fixture=synthetic()
+        for data in (fixture+b"\\n\\n",fixture+b"\\n \\n",fixture+b"\\nEXTRA\\n"):
+            with self.subTest(data=data[-16:]),self.assertRaises(DQReportRejected):
+                inspect_dq_text(data)
     def test_duplicated_reordered_or_extra_lines_rejected(self):
         v=synthetic().decode().split("\n")
         for data in ("\n".join(v[:-1]),"\n".join(v+[v[-1]]),
@@ -90,7 +107,7 @@ class DQInstalledBundleTextTests(unittest.TestCase):
     def test_command_line_parses_readonly_fixture_file(self):
         with tempfile.TemporaryDirectory(prefix="wr-dq-text-") as temp:
             path=Path(temp)/"output.txt"
-            path.write_bytes(synthetic())
+            path.write_bytes(synthetic()+b"\n")
             unchanged=path.read_bytes()
             result=subprocess.run([sys.executable,str(ROOT/"build70_dq_installed_bundle_report.py"),
                                    "--report",str(path)],

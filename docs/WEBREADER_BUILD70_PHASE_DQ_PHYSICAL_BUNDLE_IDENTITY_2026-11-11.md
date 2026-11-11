@@ -34,13 +34,13 @@ Workflow `.github/workflows/chimera-build70-phase-dq-installed-bundle-readonly.y
 
 ## Interpretador local do relatório (não autentica sua origem)
 
-Adicionados `ci/build70_dq_installed_bundle_report.py` e `ci/test_build70_dq_installed_bundle_report.py`, com **10 testes adversariais**. O parser consome exclusivamente o texto da ferramenta shell, em arquivo regular de até 2 KiB, e exige todos os cabeçalhos e negativas de privilégio.
+Adicionados `ci/build70_dq_installed_bundle_report.py` e `ci/test_build70_dq_installed_bundle_report.py`, com **12 testes adversariais**. O parser consome exclusivamente o texto da ferramenta shell, em arquivo regular de até 2 KiB, e exige todos os cabeçalhos e negativas de privilégio.
 
 O status `DQ_REPORTED_MATCH_HISTORICAL_METADATA_NOT_ATTESTED` significa **somente** que as strings digitadas/lidas coincidem com Bundle ID `com.example.MangaReader12`, Build `70` e application-identifier histórico `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`. O conteúdo não tem assinatura autenticadora; `ldid -e` também não verifica a integridade da assinatura Mach-O. O parser mantém `inputProvenToComeFromCurrentPhysicalIPad=false`, `nativeCodeSignatureCryptographicallyValidated=false`, `installedBuild70IndependentEntitlementAttested=false` e `installationAuthorized=false`.
 
 Se qualquer um dos três campos estiver `UNAVAILABLE`, retorna `DQ_REPORTED_INSTALLED_IDENTITY_FIELDS_UNAVAILABLE`, sem inventar metadados. Se algum valor informado **divergir**, retorna `DQ_REPORTED_BUNDLE_VERSION_OR_ENTITLEMENT_MISMATCH_STOP_QA`, exigindo revisão. Relatórios truncados, adulterados, com caracteres de shell, campos extras ou uma permissão que não seja negativa são recusados. A ferramenta host também não escreve nem instala nada.
 
-A CI DQ agora executa em Linux/macOS os **12 testes do script shell + 10 testes do parser**, além da checagem `/bin/sh -n` e das três travas editoriais/instalação. Os resultados físicos no iPad continuam pendentes.
+A CI DQ agora executa em Linux/macOS os **12 testes do script shell + 12 testes do parser**, além da checagem `/bin/sh -n` e das três travas editoriais/instalação. Uma revisão da integração corrigiu uma falha que os fixtures anteriores não cobriam: o shell termina a saída com um único LF, enquanto o parser aceitava apenas texto sem LF final. O parser agora aceita zero ou um LF final, mantém a rejeição de linhas extras/duplas e exercita o formato real nos testes de CLI. **Nenhuma declaração de autenticação ou autorização foi promovida.** Os resultados físicos no iPad continuam pendentes.
 
 ## Relação com as fases já aprovadas
 

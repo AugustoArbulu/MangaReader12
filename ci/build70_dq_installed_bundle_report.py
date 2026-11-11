@@ -49,8 +49,11 @@ def inspect_dq_text(data):
         raise DQReportRejected("unavailable/oversized report")
     if b"\x00" in data or b"\r" in data:
         raise DQReportRejected("control characters in report")
+    # printf in the physical shell probe emits one final LF. Accept exactly
+    # one terminal LF (or no LF for pasted reports), not extra blank lines.
+    canonical = data[:-1] if data.endswith(b"\n") else data
     try:
-        rows=data.decode("utf-8").split("\n")
+        rows=canonical.decode("utf-8").split("\n")
     except UnicodeError as exc:
         raise DQReportRejected("invalid encoding") from exc
     if len(rows)!=4+len(FIXED) or rows[0]!=HEADER or tuple(rows[4:])!=FIXED:
