@@ -1,54 +1,41 @@
-# WebReader Build70 — Fase DP: identificação da assinatura do próprio processo com SecTask (iOS12)
+# WebReader Build70 — Fase DP: descoberta de limite do SDK iOS12, relatório autoidentificação honesto
 
-**11/11/2026.** Repositório `AugustoArbulu/MangaReader12`, branch `feat/chimera-updater-phase1-protocol-audit`, PR #90 Draft. A Build70 já instalada no iPad iOS12.5.8, sua biblioteca, histórico, favoritos e capítulos baixados **não foram acessados nem modificados**. `main` não foi alterada; nenhum IPA/DEB ou Release foi criado.
+**11/11/2026.** Branch `feat/chimera-updater-phase1-protocol-audit`; PR #90 Draft. `main` preservada. A Build70 instalada no iPad iOS12.5.8 e seus dados de biblioteca/offline não foram alterados. Nenhuma IPA distribuída ou instalada.
 
-## Motivo da fase
+## Objetivo e descoberta concreta
 
-A nova Fase DO verificou por testes Linux/macOS os relatórios existentes da Build70 — nove contagens SQLite e até 64 capítulos offline por lote — sem acessar páginas, banco real ou identificar o app instalado. A Fase DL demonstrou a assinatura ad-hoc de **uma cópia completa** da futura Build71 em CI, mas não a compatibilidade real da assinatura com o bundle atualmente instalado no iPad.
+A Build70 física já consegue gerar relatórios somente leitura de **nove contagens SQLite** e de presença de capítulos offline em lotes de até **64** (Fase DO, SUCCESS 2/2). Para atualizar por cima sem perder o contêiner, também precisamos confirmar o **application-identifier efetivamente assinado** da versão instalada. A Fase DG tinha adicionado um relatório de UID/GID do próprio processo para uma futura Build71, mas essa informação não atesta a assinatura.
 
-A Fase DG adicionara uma opção de relatório do **próprio processo**, contendo UID/EUID/GID/EGID, porém isso não mede o `application-identifier` presente nos entitlements assinados.
+Investigamos uma rota via framework Security: `SecTaskCreateFromSelf`, `SecTaskCopySigningIdentifier` e `SecTaskCopyValueForEntitlement` aparecem nas referências de Code Signing Services da Apple. **O teste real no SDK `iphoneos` Xcode 16.4 falhou na compilação Swift**: `cannot find 'SecTaskCreateFromSelf' in scope`, assim como as outras duas funções. Execução: https://github.com/AugustoArbulu/MangaReader12/actions/runs/42970050984 (job macOS, falha inicial observada, não promoção). Documentação genérica Apple não basta para inferir disponibilidade dessas APIs na plataforma iOS.
 
-A Fase DP amplia **somente a opção DG**, ainda na branch experimental, para consultar os metadados da própria tarefa via `SecTask` do framework Security. Essas funções são documentadas pela Apple:
-- [SecTaskCreateFromSelf](https://developer.apple.com/documentation/security/sectaskcreatefromself(_:)) cria uma referência à tarefa atual;
-- [SecTaskCopySigningIdentifier](https://developer.apple.com/documentation/security/sectaskcopysigningidentifier(_:_:)) lê o signing identifier da tarefa;
-- [SecTaskCopyValueForEntitlement](https://developer.apple.com/documentation/security/sectaskcopyvalueforentitlement(_:_:_:)) consulta um único entitlement.
+**Decisão:** remover inteiramente as chamadas `SecTask` da futura Build71. Não importar símbolo de forma privada, usar `@_silgen_name`, `dlsym` ou fazer fallback que invente o entitlement histórico. A implementação ajustada usa somente `Bundle.main.bundleIdentifier` e `Darwin.getuid/geteuid/getgid/getegid` — disponíveis no app — e escreve explicitamente:
 
-**Importante:** mesmo quando uma futura Build71 estiver instalada, consultar seu `SecTask` confirma **somente uma observação daquele processo**, não uma assinatura editorial confiável, não a identidade da Build70 anterior, não a autenticidade da conexão IPC, não a preservação do contêiner e não permissão de instalação. No iOS12/Chimera as APIs podem retornar `nil`; o código usa `UNAVAILABLE` e não presume sucesso.
+```text
+APP_SELF_SIGNING_ID=UNAVAILABLE_IOS12_PUBLIC_SDK
+APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=UNAVAILABLE_IOS12_PUBLIC_SDK
+APP_SELF_SIGNING_CLAIM_SCOPE=OBSERVATION_ONLY_NOT_VERIFIED
+INSTALLED_PREVIOUS_BUILD_IDENTITY_ATTESTED=NO
+```
 
-## Implementação concreta
+Isso é uma **observação de metadados locais**, não conferência da assinatura. A futura Build71 não está instalada; ainda falta confirmar os dados no iPad.
 
-Em `MangaReader12/UI/WebReaderAppUpdatesViewController.swift`:
-- Mantida a nona linha **Atualizações → Segurança → Copiar identidade do processo WebReader**; sem nova linha de UI, tabela ou arquivo Swift adicional.
-- Adicionado `import Security` e ampliado `copyOwnProcessIdentityReport()`. **Só depois do toque** em uma tela de app normal, coleta UID/EUID/GID/EGID, `Bundle.main.bundleIdentifier`, signing identifier retornado por `SecTaskCopySigningIdentifier`, e apenas o entitlement `application-identifier` do próprio processo.
-- Todos os IDs são limitados a ASCII alfanumérico, ponto, hífen e underscore, até 256 bytes. Qualquer erro, tipo inesperado, caractere indevido ou `SecTask` indisponível produz `UNAVAILABLE`. Não há caminhos privados, nomes de obras, páginas, IP, arquivo, pasta, lista de outros processos ou dados de assinatura secreta.
-- Relatório **DG/DP** deixa explícitos `APP_SELF_IDENTITY_SCOPE=SELF_ONLY`, `APP_SELF_SIGNING_CLAIM_SCOPE=OBSERVATION_ONLY_NOT_VERIFIED`, `INSTALLED_PREVIOUS_BUILD_IDENTITY_ATTESTED=NO`, `HELPER_PROCESS_IDENTITY=NOT_TESTED`, `IPC_PEER_AUTHENTICATED=NO`, `INSTALLATION_AUTHORIZED=NO` e `INSTALLATION_ATTEMPTED=NO`.
-- A UI só usa a área de transferência por solicitação do usuário; não dispara rede, escrita de arquivo, instalação de IPA, `appinst`, ativação de helper, `codesign`, `posix_spawn`, troca de UID ou chamada para qualquer processo externo.
+## Implementação
 
-## Analisador estrito do texto — apenas após eventual Build71 física
+1. `MangaReader12/UI/WebReaderAppUpdatesViewController.swift`: conserva exatamente a **nona linha** em `Atualizações → Segurança → Copiar identidade do processo WebReader`. Após toque explícito, copia o relatório UID/GID, versão, Bundle ID da tarefa atual e os campos de indisponibilidade de assinatura. Não executa nada no helper, não faz requisição HTTP, não lê imagens, banco, caminhos privados, chaves, senhas ou arquivos de terceiro e não instala IPA. A tela de probe descartável continua sem a linha.
+2. `ci/build70_dp_inapp_signed_identity_report.py`: parser estrito do texto gerado por futura Build71 em iOS12.5.8. Requer todas as frases de negativa de privilégio/instalação e **rejeita** qualquer texto que passe a declarar um signing identifier ou entitlement real a partir da API pública inexistente. Compara somente o **Bundle ID textual** com o esperado; nunca retorna sinal de distribuição aprovada.
+3. `ci/test_build70_dp_inapp_signed_identity_report.py`: regressões host contra valores alterados, adulteração de UID/GID, versão, mensagens de autorização e falsificação do entitlement, além de 250 mutações determinísticas sem autoridade. Reexecuta testes DG da UI e regressão do painel de atualizações.
+4. `.github/workflows/chimera-build70-phase-dp-sectask-self-identity.yml`: nome histórico de arquivo mantido por estabilidade, com teste Linux e compilação macOS **Release Build71 unsigned para `generic/platform=iOS`**, sem codesign, IPA, publicação ou instalação. O nome de apresentação do workflow foi ajustado para refletir a implementação pública realmente suportada.
 
-`ci/build70_dp_inapp_signed_identity_report.py` consome somente o **texto não autenticado** de uma futura Build71 em iOS 12.5.8 e verifica o formato canônico de todos os 20 campos. Valida números Unix de 32 bits, Bundle ID, string de signing identifier e `application-identifier`, comparando **textualmente** com a referência histórica `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`.
+## Resultado interpretado corretamente
 
-Resultados possíveis (todos sem autorização):
-- `DP_REPORTED_SELF_IDENTITY_TEXT_MATCHES_NOT_ATTESTED`: texto do app reporta bundle, signing identifier e entitlement que coincidem com o esperado. **Não prova nem autenticidade do relatório nem identidade física da Build70 anterior.**
-- `DP_SELF_SIGNING_API_UNAVAILABLE_REVIEW_NO_INSTALL`: `SecTask` não expôs os dados; **não usar valor histórico no lugar**;
-- `DP_REPORTED_BUNDLE_MISMATCH_REVIEW_NO_INSTALL`, `DP_REPORTED_ENTITLEMENT_MISMATCH_REVIEW_NO_INSTALL` e `DP_REPORTED_SIGNING_ID_DIFFERENT_REVIEW_NO_INSTALL`: texto declara identidade diferente; revisar antes de qualquer atualização.
+`DP_IOS12_SIGNING_ENTITLEMENT_UNAVAILABLE_NO_INSTALL` significa apenas que um **texto não autenticado** reportou o Bundle ID esperado e que não foi possível obter os entitlements com essas APIs públicas. `DP_REPORTED_BUNDLE_MISMATCH_NO_SIGNING_ATTESTATION` exige revisão mesmo se a UI continuar funcionando. Uma tentativa de forjar `APP_SELF_SIGNING_ID` ou `APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT` com outro valor é **rejeitada**, não convertida em teste aprovado.
 
-`ci/test_build70_dp_inapp_signed_identity_report.py` testa relatórios sintéticos, `UNAVAILABLE`, identidades divergentes, campos duplicados/invertidos, formatação/Unicode inválidos, números fora dos limites, ações de UI acionadas somente por toque e negativas de autoridade; 250 mutações de bytes não podem promover autenticação, distribuição ou instalação.
+Todos os campos de autenticação de editor, integridade do código, identidade da versão física anterior, helper, preservação de biblioteca, offline, consentimento e instalação são permanentemente **false**. Um relatório do próprio aplicativo não é atestado criptograficamente e não pode autorizar distribuição ou instalação automática.
 
-## Testes de build iOS12 e limites
+## Bloqueio físico ainda existente
 
-`.github/workflows/chimera-build70-phase-dp-sectask-self-identity.yml` inclui:
-1. Ubuntu — testes DP, regressão DG e `ci/test_app_updates_screen.py` antigo; hard stops verificados;
-2. macOS Xcode16.4 — prepara libwebp 1.6.0 SHA-pinado e ícone original, executa build completo WebReader **Build71 Release** para `generic/platform=iOS` com `CODE_SIGNING_ALLOWED=NO`, audita o `.app` unsigned via preflight DH. **Nenhum IPA, assinatura, distribuição, Release ou instalação.**
+Para obter o **application-identifier da Build70 instalada agora**, a próxima etapa útil deverá ser uma **inspeção externa somente leitura dos bytes de assinatura do aplicativo instalado no iPad**. Como o ambiente usa jailbreak Chimera, poderá ser avaliado um diagnóstico específico, sem root e sem modificar o app, mas **não presumir** que `ldid`, `plutil` ou outra ferramenta esteja instalada nem que a leitura seja permitida. O instrumento deverá comprovar seus próprios pré-requisitos e aceitar `UNAVAILABLE` como resultado seguro. Não executar scripts invasivos ou transferir documentos pessoais.
 
-O teste de compilação valida a disponibilidade das APIs no SDK da versão selecionada e sua vinculação. **Não verifica** se `SecTask` retorna um entitlement legível no iPad com Chimera; isso exige execução física futura e aceite separado do proprietário para uma IPA de QA. Mesmo a execução futura não reatesta a identidade da versão 70 que existia *antes* de instalar 71.
+Mesmo após obter o entitlement físico, ainda seriam necessários consentimento explícito do proprietário para preparar/distribuir IPA Build71, checksum SHA-256 e code seal da **IPA final**, backup externo, atualização por cima manual e teste offline do mesmo capítulo antes/depois. O `.mr12backup` não contém imagens e restaurá-lo pode apagar os downloads.
 
-## Escopo restante da atualização 70→71
-
-A Build70 física já contém os botões de contagens e de presença offline e o roteiro físico; pode-se estabelecer sua linha de base sem atualizar. Para a identidade de assinatura **da Build70 instalada agora**, ainda é necessário um método externo **somente leitura** no próprio dispositivo (por exemplo, inspeção do binário instalado/entitlements via ferramenta de jailbreak verificada e disponível), ou outro recibo independente autorizado, **antes** de qualquer substituição. A DP sozinha é um diagnóstico da versão futura; nenhum dos relatórios é um passe de instalação.
-
-Continuam faltando: aprovação do proprietário para preparar/distribuir a IPA Build71, SHA/CDHash e entitlement da IPA final, comparação da identidade física da Build70, plano de backup que **não restaure** sobre Downloads, testes de capítulo previamente baixado com Wi-Fi desligado antes e depois, instalação por cima e validação do contêiner. Para o instalador automático faltam ainda identidade de helper/IPC autenticada, vault/journal imutáveis, chave pública editorial independente e consentimento local.
-
-**Travas inalteradas:** `WebReaderUpdateChannel.productionPublicKeyX963=nil`; `WebReaderProductionPublisherTrust.independentlyProvisionedSPKISHA256=nil`; `WebReaderAppinstSocket.liveInstallationEnabled=false`.
-
-**CI DP:** não afirmar aprovação até conferir os jobs e logs finais do GitHub Actions.
+**Hard stops de produção mantidos:** `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil`, `liveInstallationEnabled=false`; PR #90 continua em rascunho. **CI DP corrigida:** verificar jobs e logs finais antes de afirmar aprovação; a execução de falha inicial não deve ser ocultada.
