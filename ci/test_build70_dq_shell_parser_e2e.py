@@ -136,6 +136,22 @@ class DQShellParserIntegrationTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "DQ_REPORTED_INSTALLED_IDENTITY_FIELDS_UNAVAILABLE")
         self.assert_no_install(receipt)
 
+    def test_missing_awk_is_explicit_unavailable(self):
+        # The production script refuses symlinked awk executables; it
+        # must report unknown metadata rather than silently trusting them.
+        source = self.shell.read_text(encoding="utf-8")
+        source = only_replace(
+            source,
+            f"for tool in {self.awk_host_path}; do",
+            f"for tool in {self.tools / 'missing-awk'}; do",
+        )
+        self.shell.write_text(source, encoding="utf-8")
+        receipt = inspect_dq_text(self.execute().stdout)
+        self.assertEqual(receipt["reportedBundleID"], "UNAVAILABLE")
+        self.assertEqual(receipt["reportedInstalledBuild"], "UNAVAILABLE")
+        self.assertEqual(receipt["reportedApplicationIdentifierEntitlement"], "UNAVAILABLE")
+        self.assert_no_install(receipt)
+
     def test_missing_plutil_is_explicit_unavailable(self):
         (self.tools / "plutil").unlink()
         receipt = inspect_dq_text(self.execute().stdout)
