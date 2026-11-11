@@ -31,6 +31,15 @@ from build70_di_build71_private_qa_preflight import (
     QA_FILENAME, preflight_di_build71_private_qa,
 )
 from build70_dk_qa_evidence_bridge import audit_dk_qa_evidence
+from build70_ds_candidate_evidence_gate import (
+    DSRejected, inspect_ds_preupgrade_candidate,
+)
+from build70_dq_installed_bundle_report import (
+    HEADER as DQ_HEADER, FIXED as DQ_NEGATIVE_FIELDS,
+)
+from build70_do_preupgrade_baseline_audit import (
+    OFFLINE_INTRO, OFFLINE_FOOTER, FIELDS as OFFLINE_FIELDS,
+)
 from build70_dj_continuity_report_compare import (
     COUNT_LABELS, HEADER, NOTE, DB_HEALTH, FOOTER, IOS_VERSION
 )
@@ -98,6 +107,45 @@ def _synthetic_baseline() -> bytes:
         HEADER, "Build observada: 70 • iOS: " + IOS_VERSION, NOTE,
         DB_HEALTH,
     ] + [name + ": 0" for name in COUNT_LABELS] + list(FOOTER)
+    return "\n".join(lines).encode("utf-8")
+
+
+def _synthetic_dq_installed_claim() -> bytes:
+    """FICTIONAL metadata; NOT observed from an iPad or installed bundle."""
+    lines = [
+        DQ_HEADER,
+        "BUNDLE_IDENTIFIER_TEXT=com.example.MangaReader12",
+        "BUNDLE_VERSION_TEXT=70",
+        "APPLICATION_IDENTIFIER_ENTITLEMENT_TEXT=" +
+            INSTALLED_APPLICATION_IDENTIFIER,
+        *DQ_NEGATIVE_FIELDS,
+    ]
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def _synthetic_library_with_three_downloads() -> bytes:
+    """FICTIONAL DJ fixture, never a physical Build70 SQLite reading."""
+    counters = (2, 5, 2, 1, 1, 3, 2, 1, 1)
+    lines = [HEADER, "Build observada: 70 • iOS: " + IOS_VERSION,
+             NOTE, DB_HEALTH]
+    lines += [
+        name + ": " + str(value)
+        for name, value in zip(COUNT_LABELS, counters)
+    ]
+    return "\n".join(lines + list(FOOTER)).encode("utf-8")
+
+
+def _synthetic_offline_three_downloads() -> bytes:
+    """FICTIONAL DO fixture with three receipts; no user pages are opened."""
+    values = (3, 0, 0, 3, 3, 3, 0, 0, 0, 6)
+    lines = [
+        *OFFLINE_INTRO,
+        *[
+            name + ": " + str(value)
+            for name, value in zip(OFFLINE_FIELDS, values)
+        ],
+        *OFFLINE_FOOTER,
+    ]
     return "\n".join(lines).encode("utf-8")
 
 
@@ -214,6 +262,43 @@ def run_shadow_validation(unsigned_app: Path) -> dict:
         ):
             raise DLShadowRejected("full-app signed snapshot rejected by DK")
 
+        # Phase DV: the SAME disposable full-app IPA is now also evaluated
+        # by the strict DS chain, not only by DI/DK independently.
+        # DQ/DO inputs are deliberately FICTIONAL host text and cannot
+        # establish a physical Build70 identity or offline preservation.
+        try:
+            integrated = inspect_ds_preupgrade_candidate(
+                dq_report=_synthetic_dq_installed_claim(),
+                sqlite_count_report=_synthetic_library_with_three_downloads(),
+                offline_reports=[_synthetic_offline_three_downloads()],
+                ipa_path=ipa,
+                checksum_data=checksum,
+            )
+        except (DSRejected, OSError) as exc:
+            raise DLShadowRejected(
+                "full-app DS evidence chain refused host-only synthetic fixture"
+            ) from exc
+        if (
+            integrated.get("status") !=
+                "DS_HOST_TEXT_AND_SIGNED_CANDIDATE_COHERENT_NOT_INSTALLABLE"
+            or integrated.get("candidateIPAStaticSHA256") != digest
+            or integrated.get("candidateIPABytes") != size
+            or integrated.get("candidateStaticCDHash") !=
+                package.get("staticCodeDirectoryCDHash")
+            or integrated.get("ipaAdHocSealCheckedOnHost") is not True
+            or integrated.get("physicalDeviceAndReportOriginAuthenticated") is not False
+            or integrated.get("physicalInstalledBuild70IdentityCryptographicallyVerified") is not False
+            or integrated.get("localAppDataContainerRetentionProven") is not False
+            or integrated.get("readyToDistributeIPA") is not False
+            or integrated.get("readyToInstallIPA") is not False
+            or integrated.get("installationAuthorized") is not False
+        ):
+            raise DLShadowRejected("DS would promote untrusted synthetic evidence")
+        # Repeat the digest after each separate host audit; this is a
+        # stability check of the ephemeral file, not installer byte custody.
+        if hashlib.sha256(ipa.read_bytes()).hexdigest() != digest:
+            raise DLShadowRejected("shadow IPA changed between host audits")
+
         # Only a technical receipt survives. All actual IPA bytes and
         # temporary code-signing output disappear before this function returns.
         return {
@@ -231,6 +316,11 @@ def run_shadow_validation(unsigned_app: Path) -> dict:
             "realFullWebReaderUICompiled": True,
             "staticSourceHardStopsVerified": True,
             "baselineReportWasSynthetic": True,
+            "phaseDVFullAppDSIntegratedHostOnly": True,
+            "phaseDVInstalledIdentityTextWasSynthetic": True,
+            "phaseDVOfflineInventoryTextWasSynthetic": True,
+            "phaseDVPhysicalDataPreservationAttested": False,
+            "phaseDVSameBytesConsumedByInstallerProven": False,
             "physicalLibraryCountsCaptured": False,
             "physicalOfflineReadingVerified": False,
             "physicalBuild70AppIdentifierReattested": False,

@@ -6,6 +6,9 @@ on:
     paths:
       - 'ci/build70_dl_full_app_signed_shadow.py'
       - 'ci/test_build70_dl_full_app_signed_shadow.py'
+      - 'ci/test_build70_dv_shadow_ds_integration.py'
+      - 'ci/build70_ds_candidate_evidence_gate.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DV_FULL_APP_DS_SHADOW_2026-11-11.md'
       - 'docs/WEBREADER_BUILD70_PHASE_DL_REAL_APP_SHADOW_2026-11-11.md'
       - '.github/workflows/chimera-build70-phase-dl-full-app-shadow.yml'
   workflow_dispatch:
@@ -14,8 +17,9 @@ permissions:
   contents: read
 
 concurrency:
+  # Retain only the latest temporary full-app validation for this branch.
   group: webreader-phase-dl-ephemeral-full-app-shadow
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   host-negative-security-contract:
@@ -29,6 +33,7 @@ jobs:
       - name: Test provenance guards, fake reports and permanent authority denial
         run: |
           python -m unittest discover -s ci -p 'test_build70_dl_full_app_signed_shadow.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dv_shadow_ds_integration.py' -v
           python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_bridge.py' -v
       - name: Check production hard stops and no distribution workflow action
         run: |
@@ -44,6 +49,10 @@ jobs:
           assert '"persistentIPAProduced": False' in src
           assert '"artifactUploaded": False' in src
           assert '"baselineReportWasSynthetic": True' in src
+          assert '"phaseDVInstalledIdentityTextWasSynthetic": True' in src
+          assert '"phaseDVOfflineInventoryTextWasSynthetic": True' in src
+          assert '"phaseDVPhysicalDataPreservationAttested": False' in src
+          assert 'inspect_ds_preupgrade_candidate(' in src
           assert 'actions/' + 'upload-artifact' not in wf
           assert 'gh ' + 'release' not in wf
           assert 'app' + 'inst' not in wf
