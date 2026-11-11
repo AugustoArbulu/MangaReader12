@@ -122,7 +122,7 @@ def audited_swift_sources(base: Path = ROOT) -> tuple[str, str, str, str]:
 SWIFT_TEST = r'''
 enum DMFixtureError: Error { case assertion(String) }
 
-func dmCheck(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+func dmCheck(_ condition: Bool, _ message: String) throws {
     guard condition() else { throw DMFixtureError.assertion(message) }
 }
 
@@ -260,20 +260,10 @@ func dmMain() throws {
     try dmCheck(try WebReaderOfflineCompletionReceipt.verifyIfPresent(
         directory: directory, actualPages: 2), "reopened completion receipt")
 
-    // Negative safety check on ONLY the disposable fixture: a missing page
-    // is rejected, not silently accepted as a "completed" two-page chapter.
+    // Negative safety check on ONLY the disposable fixture: a missing
+    // *final* page still leaves a valid sequential prefix; the original
+    // two-page count receipt must reject the shortened directory.
     try FileManager.default.removeItem(at: pageB)
-    do {
-        _ = try WebReaderOfflinePageInventory.inspect(directory: directory)
-        throw DMFixtureError.assertion("missing page was accepted")
-    } catch WebReaderOfflinePageInventory.AuditError.incompletePages {
-        // Expected fail-closed for page-00000 present, page-00001 absent.
-        // As the existing implementation sees a single page 0, the count
-        // receipt must detect the missing final page.
-    } catch {
-        // An incomplete inventory may still have a sequential prefix.
-        // The receipt is the required protection for a missing *last* page.
-    }
     let shortened = try WebReaderOfflinePageInventory.inspect(directory: directory)
     try dmCheck(shortened.count == 1, "fixture shortened to one page")
     do {
