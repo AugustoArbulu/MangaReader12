@@ -72,12 +72,12 @@ class DQInstalledBundleTextTests(unittest.TestCase):
         )
         for fixture, expected in cases:
             with self.subTest(status=expected):
-                r=inspect_dq_text(fixture+b"\\n")
+                r=inspect_dq_text(fixture+b"\n")
                 self.assertEqual(r["status"],expected)
                 self.no_authority(r)
     def test_extra_trailing_blank_lines_rejected(self):
         fixture=synthetic()
-        for data in (fixture+b"\\n\\n",fixture+b"\\n \\n",fixture+b"\\nEXTRA\\n"):
+        for data in (fixture+b"\n\n",fixture+b"\n \n",fixture+b"\nEXTRA\n"):
             with self.subTest(data=data[-16:]),self.assertRaises(DQReportRejected):
                 inspect_dq_text(data)
     def test_duplicated_reordered_or_extra_lines_rejected(self):
