@@ -75,6 +75,14 @@ def _deny_destructive_calls(section: str, context: str) -> None:
 def audit_upgrade_launch_safety(root: Path = ROOT) -> dict:
     app = _read(root, APP)
     tabs = _read(root, TABS)
+    # MainTabBarController.swift defines many additional view controllers,
+    # each with a viewDidLoad. Isolate ONLY the first root tab controller
+    # instead of misclassifying unrelated lifecycle methods as duplicates.
+    tab_start = "final class MainTabBarController: UITabBarController {"
+    tab_end = "\nfinal class PlaceholderViewController: UIViewController {"
+    if tabs.count(tab_start) != 1 or tabs.count(tab_end) != 1:
+        raise DNRejected("main tab controller boundaries changed")
+    tabs = tabs.split(tab_start, 1)[1].split(tab_end, 1)[0]
     updates = _read(root, UPDATES)
     backup_ui = _read(root, BACKUP_UI)
     storage_ui = _read(root, STORAGE_UI)
