@@ -43,6 +43,8 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_dq_installed_bundle_report.py' -v
           python -m unittest discover -s ci -p 'test_build70_dr_preupgrade_crosscheck.py' -v
           python -m unittest discover -s ci -p 'test_build70_do_preupgrade_baseline_audit.py' -v
+      - name: Check newest-only PR scheduling for DQ DR DS DT
+        run: python -m unittest discover -s ci -p 'test_build70_du_workflow_queue_contract.py' -v
       - name: Ensure production/install safety gates remain disabled
         run: |
           python - <<'PY'
