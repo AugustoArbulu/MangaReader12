@@ -4,6 +4,7 @@
 Never packages a signed IPA or invokes appinst. Fake Mach-O bundles below
 are ONLY tests of bounded metadata parsing; not real device executables.
 """
+import ast
 import os
 from pathlib import Path
 import plistlib
@@ -258,11 +259,37 @@ class DHBuild71UnsignedPreviewTests(unittest.TestCase):
 
     def test_no_automatic_install_qa_packaging_or_release_entrypoint(self):
         text = (ROOT / "ci/build70_dh_unsigned_build71_preview.py").read_text()
-        for needle in ("posix_spawn(", "subprocess.run(", "socket(", "appinst(",
-                       "codesign(", "zipfile.ZipFile(", "shutil.make_archive(",
-                       "upload_artifact(", "publish_release(", "installApplication:"):
-            with self.subTest(needle=needle):
-                self.assertNotIn(needle, text)
+        tree = ast.parse(text)
+        # Scan actual call nodes, not string literals describing DENIED APIs.
+        banned_calls = {
+            "posix_spawn", "run", "Popen", "socket", "appinst",
+            "codesign", "ZipFile", "make_archive", "upload_artifact",
+            "publish_release", "installApplication", "system", "execve",
+            "fork", "subprocess",
+        }
+        observed = [
+            node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and
+            (isinstance(node.func, ast.Name) or isinstance(node.func, ast.Attribute))
+        ]
+        for name in banned_calls:
+            with self.subTest(call=name):
+                self.assertNotIn(name, observed)
+        # This preflight imports no subprocess, networking or installer module.
+        forbidden_modules = {"subprocess", "socket", "requests", "urllib",
+                             "zipfile", "shutil", "ctypes"}
+        imported = {
+            alias.name.split(".")[0]
+            for node in ast.walk(tree) if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        imported.update(
+            node.module.split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+        )
+        self.assertFalse(imported.intersection(forbidden_modules))
 
 
 if __name__ == "__main__":
