@@ -1,0 +1,79 @@
+name: WebReader Build70 Phase DS Signed Build71 + DQ/DO Host Chain (NO install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ds_candidate_evidence_gate.py'
+      - 'ci/test_build70_ds_candidate_evidence_gate.py'
+      - 'ci/test_build70_ds_candidate_evidence_native.py'
+      - 'ci/build70_dr_preupgrade_crosscheck.py'
+      - 'ci/build70_dq_installed_bundle_report.py'
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'ci/build70_di_build71_private_qa_preflight.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DS_SIGNED_CANDIDATE_AND_BASELINE_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-ds-candidate-evidence.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ci/build70_ds_candidate_evidence_gate.py'
+      - 'ci/test_build70_ds_candidate_evidence_gate.py'
+      - 'ci/test_build70_ds_candidate_evidence_native.py'
+      - 'ci/build70_dr_preupgrade_crosscheck.py'
+      - 'ci/build70_dq_installed_bundle_report.py'
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'ci/build70_di_build71_private_qa_preflight.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DS_SIGNED_CANDIDATE_AND_BASELINE_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-ds-candidate-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-linux-host-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate DS mocked receipt authority, real DI host negatives, DR text
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ds_candidate_evidence_gate.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dr_preupgrade_crosscheck.py' -v
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_host.py' -v
+      - name: Check unmodified production trust and installation hard stops
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          gate = Path('ci/build70_ds_candidate_evidence_gate.py').read_text()
+          assert '"installationAuthorized": False' in gate
+          assert '"readyToDistributeIPA": False' in gate
+          assert '"sameIPABytesConsumedByInstallerProven": False' in gate
+          assert '"physicalInstalledBuild70IdentityCryptographicallyVerified": False' in gate
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DS: readonly host consistency only; no physical admission or install')
+          PY
+
+  native-macos-synthetic-signed-ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select Xcode 16.4 with iOS 12 target SDK
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Validate DS with signed disposable IPA and typed DQ/DO reports
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ds_candidate_evidence_gate.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ds_candidate_evidence_native.py' -v
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_native.py' -v
+          echo 'PASS DS native: ephemeral ad-hoc fixture only, not a real WebReader IPA'
