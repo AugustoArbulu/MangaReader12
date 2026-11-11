@@ -32,6 +32,16 @@ Uma nova instalação poderia ter Bundle ID idêntico e ainda diferir em entitle
 
 Workflow `.github/workflows/chimera-build70-phase-dq-installed-bundle-readonly.yml`: Linux e macOS, somente leitura, sem pacotes de teste distribuíveis e sem dispositivo físico. **O CI não certifica a disponibilidade de `plutil` ou `ldid` dentro do Chimera**; essas dependências permanecem condicionais.
 
+## Interpretador local do relatório (não autentica sua origem)
+
+Adicionados `ci/build70_dq_installed_bundle_report.py` e `ci/test_build70_dq_installed_bundle_report.py`, com **10 testes adversariais**. O parser consome exclusivamente o texto da ferramenta shell, em arquivo regular de até 2 KiB, e exige todos os cabeçalhos e negativas de privilégio.
+
+O status `DQ_REPORTED_MATCH_HISTORICAL_METADATA_NOT_ATTESTED` significa **somente** que as strings digitadas/lidas coincidem com Bundle ID `com.example.MangaReader12`, Build `70` e application-identifier histórico `AR5SFJC432.com.example.MangaReader12.AR5SFJC432`. O conteúdo não tem assinatura autenticadora; `ldid -e` também não verifica a integridade da assinatura Mach-O. O parser mantém `inputProvenToComeFromCurrentPhysicalIPad=false`, `nativeCodeSignatureCryptographicallyValidated=false`, `installedBuild70IndependentEntitlementAttested=false` e `installationAuthorized=false`.
+
+Se qualquer um dos três campos estiver `UNAVAILABLE`, retorna `DQ_REPORTED_INSTALLED_IDENTITY_FIELDS_UNAVAILABLE`, sem inventar metadados. Se algum valor informado **divergir**, retorna `DQ_REPORTED_BUNDLE_VERSION_OR_ENTITLEMENT_MISMATCH_STOP_QA`, exigindo revisão. Relatórios truncados, adulterados, com caracteres de shell, campos extras ou uma permissão que não seja negativa são recusados. A ferramenta host também não escreve nem instala nada.
+
+A CI DQ agora executa em Linux/macOS os **12 testes do script shell + 10 testes do parser**, além da checagem `/bin/sh -n` e das três travas editoriais/instalação. Os resultados físicos no iPad continuam pendentes.
+
 ## Relação com as fases já aprovadas
 
 - **DO**: confronta os nove indicadores SQLite e lotes de presença offline já gerados na Build70.
