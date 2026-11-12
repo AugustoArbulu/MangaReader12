@@ -117,3 +117,88 @@ def copied_database(root):
     db.execute("PRAGMA trusted_schema=OFF")
     return db, db_path, before
 
+def compare_portable_to_copy(snapshot, portable_bytes):
+    if type(portable_bytes) is not bytes or not 0 < len(portable_bytes) <= MAX_BACKUP_BYTES:
+        stop("ED_STOP_PORTABLE_INVALID")
+    try:
+        audit_snapshot(snapshot)
+    except AuditRejected:
+        stop("ED_STOP_EXTERNAL_COPY_INVALID")
+    portable = portable_database(portable_bytes)
+    try:
+        try:
+            copied, path, initial = copied_database(snapshot)
+        except (AuditRejected, OSError, sqlite3.Error):
+            stop("ED_STOP_EXTERNAL_COPY_INVALID")
+        try:
+            mismatches = []
+            equal = rows = 0
+            for table in COLS:
+                a = digest_rows(copied, table)
+                b = digest_rows(portable, table)
+                rows += a[0]
+                if rows > MAX_ROWS:
+                    stop("ED_STOP_ROW_LIMIT")
+                if a == b:
+                    equal += 1
+                else:
+                    mismatches.append(table)
+            if digest_file(path, MAX_DATABASE_BYTES) != initial:
+                stop("ED_STOP_COPY_CHANGED")
+        finally:
+            copied.close()
+    except (AuditRejected, sqlite3.Error, OSError, UnicodeError):
+        stop("ED_STOP_DATABASE_UNREADABLE")
+    finally:
+        portable.close()
+    return {
+        "status": ("ED_LIBRARY_ROWS_EQUAL_NOT_ATTESTED" if not mismatches
+                   else "ED_STOP_LIBRARY_ROWS_DIFFER"),
+        "tablesCompared": len(COLS),
+        "matchingTables": equal,
+        "mismatchedTableNames": mismatches,
+        "copiedRowsAcrossTables": rows,
+        "portableBackupExcludesOfflinePages": True,
+        "downloadedFlagAndDownloadRowsExcluded": True,
+        "installedSourcesExcludedByPortableSanitizer": True,
+        "preferencesNotComparedToUserDefaults": True,
+        "physicalDeviceIdentityAttested": False,
+        "backupAndCopyFromSameMomentProven": False,
+        "portableOriginAuthenticated": False,
+        "externalCopyOriginAuthenticated": False,
+        "offlineImageDecodingVerified": False,
+        "fullBackupRestorabilityProven": False,
+        "readyToDistributeIPA": False,
+        "readyToInstallIPA": False,
+        "installationAuthorized": False,
+        "restorationAuthorized": False,
+        "automaticUpdaterEnabled": False,
+    }
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--backup", type=Path, required=True)
+    p.add_argument("--snapshot", type=Path, required=True)
+    args = p.parse_args(argv)
+    try:
+        result = compare_portable_to_copy(
+            args.snapshot, _read_external_regular(args.backup, MAX_BACKUP_BYTES))
+    except (EDRejected, OSError, ValueError) as exc:
+        result = {
+            "status": exc.code if isinstance(exc, EDRejected)
+                      else "ED_STOP_INPUT_UNREADABLE",
+            "installationAuthorized": False,
+            "restorationAuthorized": False,
+            "readyToInstallIPA": False,
+            "readyToDistributeIPA": False,
+            "automaticUpdaterEnabled": False,
+        }
+        print(json.dumps(result, sort_keys=True))
+        return 2
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
