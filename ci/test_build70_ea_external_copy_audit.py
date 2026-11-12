@@ -150,6 +150,42 @@ class ExternalBackupCopyAuditTests(unittest.TestCase):
         (self.app / "library.sqlite-wal").write_bytes(b"unfinished WAL")
         self.fail_code("EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT")
 
+    def test_nonempty_rollback_journal_refused_without_writes(self):
+        self.add_completed()
+        journal = self.app / "library.sqlite-journal"
+        original = b"copied journal could need rollback"
+        journal.write_bytes(original)
+        self.fail_code("EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT")
+        self.assertEqual(journal.read_bytes(), original)
+
+    def test_symlinked_rollback_journal_refused(self):
+        self.add_completed()
+        (self.app / "library.sqlite-journal").symlink_to("library.sqlite")
+        self.fail_code("EA_STOP_SYMLINK")
+
+    def test_empty_rollback_journal_does_not_modify_copy(self):
+        self.add_completed()
+        journal = self.app / "library.sqlite-journal"
+        journal.touch()
+        result = self.run_audit()
+        self.assertEqual(result["completedChapters"], 1)
+        self.assertEqual(journal.stat().st_size, 0)
+        self.assert_denied(result)
+
+    def test_same_length_page_change_alters_digest_without_attesting_origin(self):
+        folder = self.add_completed()
+        before = self.run_audit()
+        page = folder / "page-00000.bin"
+        original = page.read_bytes()
+        page.write_bytes(b"X" + original[1:])
+        after = self.run_audit()
+        self.assertNotEqual(before["offlineContentSHA256"], after["offlineContentSHA256"])
+        self.assertEqual(before["sqliteSHA256"], after["sqliteSHA256"])
+        # A hash without an external trusted baseline does not detect
+        # malicious alteration by itself or prove image decodability.
+        self.assertEqual(before["status"], after["status"])
+        self.assert_denied(after)
+
     def test_future_database_schema_refused(self):
         with sqlite3.connect(self.db) as conn:
             conn.execute("PRAGMA user_version=2")
@@ -195,6 +231,7 @@ class ExternalBackupCopyAuditTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         self.assertIn("immutable=1", source)
         self.assertIn("EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT", source)
+        self.assertIn("EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT", source)
 
 
 if __name__ == "__main__":

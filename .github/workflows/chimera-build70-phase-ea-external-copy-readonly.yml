@@ -53,6 +53,7 @@ jobs:
           assert 'page-%05d.bin' in Path('MangaReader12/Downloads/WebReaderOfflinePageInventory.swift').read_text()
           assert 'WR-OFFLINE-COMPLETE-V1:' in receipt
           assert 'EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
+          assert 'EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
           assert 'mode=ro&immutable=1' in script
           assert 'installationAuthorized": False' in script
           assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()

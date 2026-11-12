@@ -169,6 +169,11 @@ def audit_snapshot(snapshot: Path):
         # immutable=1 would IGNORE uncheckpointed transactions. Never fake a
         # complete snapshot by disregarding a copied nonempty WAL.
         reject("EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT")
+    journal = safe_child(app, "library.sqlite-journal", required=False)
+    if journal is not None and no_link(journal).st_size != 0:
+        # Rollback-journal recovery may still be pending. Never ignore its
+        # potentially necessary transactions in immutable mode.
+        reject("EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT")
     # Fingerprint the exact DB file examined; reject in-place mutation.
     db_hash = digest_file(db_path, MAX_DATABASE_BYTES)
     uri = "file:" + quote(str(db_path), safe="/") + "?mode=ro&immutable=1"
