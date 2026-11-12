@@ -173,7 +173,8 @@ class EFPayloadTriageTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(script), "--snapshot", str(self.root)],
             check=False, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["status"], "EF_STOP_HTML_OR_TRUNCATED_OFFLINE_FILES")
         self.assertNotIn(str(self.root), result.stdout)
         self.assertNotIn("fiction1", result.stdout)
         self.assertFalse(json.loads(result.stdout)["installationAuthorized"])

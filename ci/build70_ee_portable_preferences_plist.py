@@ -178,7 +178,9 @@ def main(argv=None):
         print(json.dumps(result, sort_keys=True))
         return 2
     print(json.dumps(result, sort_keys=True))
-    return 0
+    # A structured STOP result is a failed preflight even when the input is
+    # syntactically parseable. Do not let shell/CI treat it as success.
+    return 2 if result["status"].startswith("EE_STOP_") else 0
 
 if __name__ == "__main__":
     sys.exit(main())
