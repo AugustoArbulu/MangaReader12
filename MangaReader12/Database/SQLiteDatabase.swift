@@ -32,6 +32,12 @@ final class SQLiteDatabase {
         try queue.sync {
             try openIfNeeded()
             try executeUnlocked("PRAGMA foreign_keys = ON;")
+            // Refuse a newer database BEFORE enabling WAL or attempting writes.
+            // Existing schema-v1 databases retain the original open path.
+            let foundVersion = try userVersionUnlocked()
+            guard foundVersion <= Self.currentSchemaVersion else {
+                throw SQLiteDatabaseError.unsupportedSchemaVersion(foundVersion)
+            }
             try executeUnlocked("PRAGMA journal_mode = WAL;")
             try migrateUnlocked()
         }
@@ -94,6 +100,9 @@ final class SQLiteDatabase {
 
     private func migrateUnlocked() throws {
         let version = try userVersionUnlocked()
+        guard version <= Self.currentSchemaVersion else {
+            throw SQLiteDatabaseError.unsupportedSchemaVersion(version)
+        }
         guard version < Self.currentSchemaVersion else { return }
 
         try executeUnlocked("BEGIN IMMEDIATE TRANSACTION;")
@@ -265,6 +274,7 @@ final class SQLiteDatabase {
 enum SQLiteDatabaseError: Error, LocalizedError {
     case applicationSupportUnavailable
     case connectionUnavailable
+    case unsupportedSchemaVersion(Int)
     case openFailed(code: Int32)
     case executionFailed(code: Int32, message: String)
 
@@ -274,6 +284,8 @@ enum SQLiteDatabaseError: Error, LocalizedError {
             return "Application Support directory is unavailable."
         case .connectionUnavailable:
             return "SQLite connection is unavailable."
+        case .unsupportedSchemaVersion(let version):
+            return "Library schema version \(version) is newer than this WebReader build. The database was not migrated. Do not restore or downgrade automatically."
         case .openFailed(let code):
             return "Could not open SQLite database (code \(code))."
         case .executionFailed(let code, let message):

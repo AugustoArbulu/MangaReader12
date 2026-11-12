@@ -54,3 +54,12 @@ A CI da DM está pendente da confirmação dos logs; não confundir teste host v
 Confirmar identidade e entitlement atual da Build70 no iPad, consentimento explícito para **produzir e entregar** uma IPA privada de QA, checksum/CDHash da versão final e backup externo. Após uma instalação manual consentida por cima da Build70, comparar relatórios DJ, conferir biblioteca/favoritos/progresso e **abrir o mesmo capítulo previamente baixado inteiro com Wi-Fi desligado**, incluindo fechar/reabrir o app offline. Se algum capítulo exigir re-download, isso não é preservação offline; não usar restauração de backup como correção automática.
 
 O objetivo final de atualização automática tem exigências adicionais: autenticação independente do helper em iOS12/Chimera, vault/journal protegidos, confiança editorial production-v2 com chave/SPKI provisionados, cadeia do conteúdo da IPA até o instalador e consentimento local. Os hard stops continuam exatamente `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil`, `liveInstallationEnabled=false`.
+
+
+## Proteção de esquema desconhecido após a DZ (12/11/2026)
+
+Revisão preventiva de continuidade: a versão original de `SQLiteDatabase.migrateUnlocked()` retornava silenciosamente para qualquer `PRAGMA user_version >= 1`, inclusive versões **futuras e incompatíveis**. O código foi reforçado para rejeitar explicitamente versões maiores do que `currentSchemaVersion=1` antes de configurar `journal_mode=WAL` ou executar migrações. Erro informativo `unsupportedSchemaVersion(Int)`; não faz downgrade, restauração nem exclusão. Bancos v1 preservam a mesma abertura e dados.
+
+A fixture DM nativa Swift agora marca **somente o banco sintético temporário** como `user_version=2`, tenta abrir por `openAndMigrate()`, exige a rejeição de esquema desconhecido, verifica que os registros de biblioteca, favoritos, capítulos, histórico e downloads ainda coincidem e restaura a fixture para v1. Arquivos offline sintéticos são conferidos também. O CI DM foi configurado para rodar em mudanças do próprio `SQLiteDatabase.swift`, e o workflow DL recompila o aplicativo inteiro iOS12 para detectar regressões no binário.
+
+Esta mudança exige **reaprovação das CIs macOS nativas**. Não comprova atualização física nem altera a Build70 instalada. As flags de instalador/publicador permanecem desabilitadas.

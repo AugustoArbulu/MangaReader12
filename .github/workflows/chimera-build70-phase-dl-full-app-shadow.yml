@@ -4,6 +4,7 @@ on:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
     paths:
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'ci/build70_dl_full_app_signed_shadow.py'
       - 'ci/test_build70_dl_full_app_signed_shadow.py'
       - 'ci/test_build70_dv_shadow_ds_integration.py'

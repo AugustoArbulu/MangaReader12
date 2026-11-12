@@ -55,6 +55,10 @@ def audited_swift_sources(base: Path = ROOT) -> tuple[str, str, str, str]:
         'try executeUnlocked("PRAGMA foreign_keys = ON;")',
         'try executeUnlocked("PRAGMA journal_mode = WAL;")',
         "try migrateUnlocked()",
+        "guard foundVersion <= Self.currentSchemaVersion else {",
+        "throw SQLiteDatabaseError.unsupportedSchemaVersion(foundVersion)",
+        "guard version <= Self.currentSchemaVersion else {",
+        "throw SQLiteDatabaseError.unsupportedSchemaVersion(version)",
         "guard version < Self.currentSchemaVersion else { return }",
         'try executeUnlocked("BEGIN IMMEDIATE TRANSACTION;")',
         "try executeUnlocked(Self.schemaV1)",
@@ -252,6 +256,28 @@ func dmMain() throws {
     let after = try dmSnapshot(reopened)
     try dmCheck(after == before, "existing chapter/bookmark/library data changed")
     reopened.close()
+
+    // A database with a FUTURE schema must fail closed and preserve all
+    // fictional contents: this is never a physical user's database.
+    let preparation = SQLiteDatabase(path: sqlite.path)
+    try dmExec(preparation, "PRAGMA user_version = 2;")
+    preparation.close()
+    let incompatible = SQLiteDatabase(path: sqlite.path)
+    do {
+        try incompatible.openAndMigrate()
+        throw DMFixtureError.assertion("future SQLite schema 2 accepted by v1 reader")
+    } catch SQLiteDatabaseError.unsupportedSchemaVersion(let version) {
+        try dmCheck(version == 2, "wrong rejected future schema version")
+    }
+    incompatible.close()
+    let afterRejected = SQLiteDatabase(path: sqlite.path)
+    let preserved = try dmSnapshot(afterRejected)
+    try dmCheck(preserved[0] == "2", "future version marker was overwritten")
+    try dmCheck(Array(preserved.dropFirst()) == Array(before.dropFirst()),
+                "future schema rejection changed library/favorites/progress")
+    try dmExec(afterRejected, "PRAGMA user_version = 1;")
+    afterRejected.close()
+
     try dmCheck(try Data(contentsOf: pageA) == first &&
                 Data(contentsOf: pageB) == second,
                 "offline page bytes changed after DB reopen")
@@ -277,7 +303,7 @@ func dmMain() throws {
     try second.write(to: pageB)
     try dmCheck(try WebReaderOfflineCompletionReceipt.verifyIfPresent(
         directory: directory, actualPages: 2), "restored synthetic fixture")
-    print("PASS DM: production Swift SQLite v1 reopen preserved fictional records, read-state, bookmarks, historical path and 2 offline files; missing final page detected")
+    print("PASS DM: production Swift SQLite v1 reopen preserved fictional records, read-state, bookmarks, historical path and 2 offline files; future v2 schema rejected without data loss; missing final page detected")
 }
 
 do {
@@ -351,6 +377,7 @@ def run_native_swift_fixture() -> dict:
         "fictionalReaderProgressAndFavoritesPreservedOnMac": True,
         "fictionalOfflineFileBytesPreservedOnMac": True,
         "syntheticMissingLastPageDetected": True,
+        "syntheticFutureSchemaRejectedWithoutRowLoss": True,
         "realDeviceIOS12ExecutionProven": False,
         "realAppUpgradePreservationProven": False,
         "actualUserLibraryVerified": False,

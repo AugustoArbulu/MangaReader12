@@ -84,6 +84,27 @@ class DMSourceAndNoDeviceAuthorityTests(unittest.TestCase):
         with self.assertRaises(DMRejected):
             audited_swift_sources(src)
 
+    def test_database_future_schema_gate_refuses_unsupported_versions(self):
+        root = self.fixture()
+        self.change(root, DB,
+                    "throw SQLiteDatabaseError.unsupportedSchemaVersion(foundVersion)",
+                    "// future schema gate bypassed")
+        with self.assertRaises(DMRejected):
+            audited_swift_sources(root)
+        root = self.fixture()
+        self.change(root, DB,
+                    "throw SQLiteDatabaseError.unsupportedSchemaVersion(version)",
+                    "// future schema migration is incorrectly skipped")
+        with self.assertRaises(DMRejected):
+            audited_swift_sources(root)
+
+    def test_native_swift_fixture_rejects_future_schema_without_data_loss(self):
+        self.assertIn('PRAGMA user_version = 2;', SWIFT_TEST)
+        self.assertIn('catch SQLiteDatabaseError.unsupportedSchemaVersion(let version)', SWIFT_TEST)
+        self.assertIn('Array(preserved.dropFirst()) == Array(before.dropFirst())', SWIFT_TEST)
+        self.assertIn('PRAGMA user_version = 1;', SWIFT_TEST)
+        self.assertIn('future SQLite schema 2 accepted by v1 reader', SWIFT_TEST)
+
     def test_database_migration_must_remain_transactional(self):
         src = self.fixture()
         self.change(src, DB, 'try executeUnlocked("BEGIN IMMEDIATE TRANSACTION;")',

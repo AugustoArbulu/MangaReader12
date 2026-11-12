@@ -4,6 +4,7 @@ on:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
     paths:
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'ci/build70_dm_real_swift_preservation_fixture.py'
       - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
@@ -12,6 +13,7 @@ on:
     branches:
       - main
     paths:
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'ci/build70_dm_real_swift_preservation_fixture.py'
       - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
