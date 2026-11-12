@@ -20,6 +20,10 @@ concurrency:
 jobs:
   compile-audit-one-shot-owner-manual-qa-ipa:
     runs-on: macos-15
+    # The signed owner-only path rechecks git status AFTER Python host tests.
+    # Suppress pyc files rather than weakening the strict source cleanliness gate.
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     timeout-minutes: 75
     steps:
       - name: Checkout immutable trigger commit and reviewed parent

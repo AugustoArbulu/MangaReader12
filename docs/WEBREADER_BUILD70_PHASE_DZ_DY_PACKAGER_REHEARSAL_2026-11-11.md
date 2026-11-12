@@ -39,3 +39,12 @@ Só registrar Fase DZ como concluída depois que ambos os jobs **Linux e macOS**
 O sucesso não autentica proprietário/editor, nem certifica que o iPad está usando o mesmo entitlement; não verifica a biblioteca real, a integridade de todas as páginas offline, a sobrevivência do contêiner após atualização nem concede permissão para instalar. `productionPublicKeyX963=nil`; `independentlyProvisionedSPKISHA256=nil`; `liveInstallationEnabled=false`.
 
 Não criar nem acionar `ci/build71_owner_approved_qa_trigger.txt` com base em `continue`; somente após um pedido explícito futuro para preparar e entregar uma IPA71 privada de teste.
+
+
+## Diagnóstico de CI e correção da revisão seguinte
+
+O primeiro ensaio real DZ executou `xcodebuild` e obteve `BUILD SUCCEEDED`, mas o script foi recusado **antes de assinar**, com `DZRejected: source checkout not clean`. O checkout não tem um `.gitignore`; as importações Python em `ci/` criam entradas `__pycache__` não rastreadas. Esta condição é causada pelo próprio executor durante a tentativa de diagnóstico, não por uma modificação de código revisado.
+
+A correção é **`PYTHONDONTWRITEBYTECODE: "1"` nos jobs macOS DZ e DY**. O Python não grava `.pyc` ou `__pycache__` no checkout; a verificação `git status --porcelain=v1 --untracked-files=all` permanece **estrita e sem exceções**. Não criar um `.gitignore` geral, não remover arquivos de checkout antes de verificar integridade e não desabilitar a verificação.
+
+Os testes DZ/DY de contrato verificam a presença dessa configuração nos dois workflows. A aprovação completa do ensaio de empacotamento ainda depende da **nova execução macOS**. A execução anterior falhou e não publicou IPA.

@@ -61,3 +61,8 @@ A resposta do packager ainda registra `installationAuthorized=false`, `installat
 A CI de prontidão DY não cria IPA; exige que o arquivo de trigger esteja ausente. **Não declarar DY aprovada antes de conferir esse run.** O caminho de assinatura/empacotamento de uma IPA71 real dentro desse novo workflow não foi executado nesta fase — sua validação Apple **deva acontecer na execução autorizada**, utilizando DI/DS nativos. A DV anterior demonstra a capacidade técnica do mesmo projeto de compilar/assinar uma sombra descartável, mas não substitui a auditoria do artifact final.
 
 **Estado final esperado da DY:** pronto para solicitar aprovação específica e executar o gatilho em um turno futuro, não pronto para instalar automaticamente.
+
+
+## Compatibilidade da limpeza de fonte no workflow de entrega
+
+Durante a preparação do ensaio DZ, foi encontrado um risco operacional no workflow DY: a suíte Python roda sobre o checkout antes de invocar a empacotadora, e este repositório não usa `.gitignore`; logo, `ci/__pycache__` pode fazer o gate de Git falhar após a compilação. Para preservar a verificação estrita, o job macOS de entrega define `PYTHONDONTWRITEBYTECODE: "1"` em todo o job. Assim o Python não gera bytecode no checkout e não é necessário ignorar ou limpar arquivos suspeitos. O workflow DZ de ensaio recebe a mesma proteção. Não muda consentimento, uso único, ausência do gatilho, assinatura e travas de produção.

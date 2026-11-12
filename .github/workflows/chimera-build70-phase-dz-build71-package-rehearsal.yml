@@ -34,6 +34,10 @@ jobs:
   native-macos-fully-disposable-delivery-rehearsal:
     if: github.repository == 'AugustoArbulu/MangaReader12' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
     runs-on: macos-15
+    # Python imports must not create untracked ci/__pycache__ in checkout.
+    # Keep strict clean-checkout gate; never broadly ignore unexpected files.
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4

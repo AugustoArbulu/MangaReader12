@@ -77,6 +77,17 @@ class DZRehearsalContractTests(unittest.TestCase):
         for forbidden in ("upload-artifact", "gh release", "appinst ", "curl -X POST"):
             self.assertNotIn(forbidden, source)
 
+    def test_python_imports_do_not_dirty_macos_checkout(self):
+        workflow = (
+            ROOT/".github/workflows/chimera-build70-phase-dz-build71-package-rehearsal.yml"
+        ).read_text()
+        self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', workflow)
+        source = (ROOT/"ci/build71_dz_qa_packaging_rehearsal.py").read_text()
+        self.assertIn('git", "-C", str(ROOT)', source)
+        self.assertIn('"status", "--porcelain=v1", "--untracked-files=all"', source)
+        self.assertNotIn("git clean -fd", workflow)
+        self.assertNotIn("git clean -fd", source)
+
     def test_mocked_owner_cannot_be_confused_with_real_trigger(self):
         source = (ROOT/"ci/build71_dz_qa_packaging_rehearsal.py").read_text()
         self.assertIn('"temporaryMockOwnerContextUsed": True', source)

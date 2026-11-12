@@ -283,6 +283,14 @@ class DYOwnerOnlyQATests(unittest.TestCase):
         self.assertNotIn("  pull_request:\n", source)
         self.assertIn("    paths:\n      - 'ci/build71_owner_approved_qa_trigger.txt'", source)
 
+    def test_python_bytecode_disabled_for_owner_triggered_checkout(self):
+        workflow = WF.read_text(encoding="utf-8")
+        self.assertIn('PYTHONDONTWRITEBYTECODE: "1"', workflow)
+        source = (ROOT/"ci/build71_owner_approved_actions_qa_package.py").read_text()
+        self.assertIn('"status", "--porcelain=v1", "--untracked-files=all"', source)
+        self.assertNotIn("git clean -fd", workflow)
+        self.assertNotIn("git clean -fd", source)
+
     def test_actions_artifact_is_private_qa_not_release_or_installer(self):
         source = WF.read_text(encoding="utf-8")
         self.assertIn("actions/upload-artifact@v4", source)
