@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""EC: compare all files in two EXTRACTED off-device data-container copies.
+"""EC: compare two EXTRACTED external iOS data-container copies, read-only.
 
-Read-only host tool. Agreement is not device attestation or backup proof.
+Descriptors anchor directory traversal; no children are followed via symlinks.
+Two identical local copies do NOT attest origin, capture time or recoverability.
 """
 import argparse
 import hashlib
@@ -10,79 +11,165 @@ import os
 from pathlib import Path
 import stat
 import sys
-from build70_ea_external_copy_audit import audit_snapshot, digest_file, AuditRejected
 
-MAX_FILES = 250000
-MAX_DIRS = 100000
+from build70_ea_external_copy_audit import audit_snapshot, AuditRejected
+
+MAX_FILES = 250_000
+MAX_DIRS = 100_000
 MAX_BYTES = 128 * 1024**3
 MAX_DEPTH = 64
 MAX_FILE = 1024**3
+CHUNK = 1024 * 1024
+DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+
 
 class ECRejected(Exception):
     def __init__(self, code):
         self.code = code
         super().__init__(code)
 
+
 def fail(code):
     raise ECRejected(code)
 
-def audit_tree(root):
-    root = Path(os.path.abspath(root))
-    if root.is_symlink() or not root.is_dir():
+
+def _directory_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_mtime_ns,
+            info.st_ctime_ns)
+
+
+def _file_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink,
+            info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _open_root(root):
+    declared = os.path.abspath(root)
+    if stat.S_ISLNK(os.lstat(declared).st_mode):
         fail("EC_STOP_UNSAFE_ROOT")
-    h = hashlib.sha256(b"WEBREADER-EC-FULL-COPY-V1\x00")
-    stats = {"files": 0, "dirs": 0, "bytes": 0}
-    def walk(folder, parts, depth):
+    # macOS /var is often a system symlink; normalize trusted ancestors.
+    # The canonical path is opened component by component, anchored to FDs.
+    resolved = os.path.realpath(declared)
+    fd = os.open("/", DIR_FLAGS)
+    try:
+        for segment in Path(resolved).parts[1:]:
+            entry = os.stat(segment, dir_fd=fd, follow_symlinks=False)
+            if not stat.S_ISDIR(entry.st_mode):
+                fail("EC_STOP_UNSAFE_ROOT")
+            child_fd = os.open(segment, DIR_FLAGS, dir_fd=fd)
+            opened = os.fstat(child_fd)
+            if (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino):
+                os.close(child_fd)
+                fail("EC_STOP_DIRECTORY_CHANGED")
+            os.close(fd)
+            fd = child_fd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _hash_file(directory_fd, name, initial, remaining):
+    if not stat.S_ISREG(initial.st_mode) or initial.st_nlink != 1:
+        fail("EC_STOP_UNSAFE_HARDLINK_OR_FILE")
+    size = initial.st_size
+    if size < 0 or size > MAX_FILE or size > remaining:
+        fail("EC_STOP_FILE_OR_SIZE_LIMIT")
+    fd = os.open(name, FILE_FLAGS, dir_fd=directory_fd)
+    try:
+        if _file_identity(os.fstat(fd)) != _file_identity(initial):
+            fail("EC_STOP_FILE_CHANGED")
+        h = hashlib.sha256()
+        actual = 0
+        while True:
+            data = os.read(fd, CHUNK)
+            if not data:
+                break
+            actual += len(data)
+            if actual > size or actual > remaining:
+                fail("EC_STOP_FILE_CHANGED")
+            h.update(data)
+        if actual != size or _file_identity(os.fstat(fd)) != _file_identity(initial):
+            fail("EC_STOP_FILE_CHANGED")
+        # A pathname replacement after open must not be silently accepted.
+        if _file_identity(os.stat(name, dir_fd=directory_fd,
+                                  follow_symlinks=False)) != _file_identity(initial):
+            fail("EC_STOP_FILE_CHANGED")
+        return h.digest(), actual
+    finally:
+        os.close(fd)
+
+
+def audit_tree(root):
+    """Hash every regular file, including empty/hidden files, via anchored FDs."""
+    h = hashlib.sha256(b"WEBREADER-EC-FULL-COPY-V2\x00")
+    totals = {"files": 0, "dirs": 0, "bytes": 0}
+
+    def walk(directory_fd, path_parts, depth):
         if depth > MAX_DEPTH:
             fail("EC_STOP_DEPTH_LIMIT")
-        before = folder.lstat()
-        if not stat.S_ISDIR(before.st_mode):
+        initial = os.fstat(directory_fd)
+        if not stat.S_ISDIR(initial.st_mode):
             fail("EC_STOP_UNSAFE_DIRECTORY")
-        stats["dirs"] += 1
-        if stats["dirs"] > MAX_DIRS:
+        totals["dirs"] += 1
+        if totals["dirs"] > MAX_DIRS:
             fail("EC_STOP_DIRECTORY_LIMIT")
-        rel = b"/".join(parts)
+        rel = b"/".join(path_parts)
         h.update(b"D" + len(rel).to_bytes(4, "big") + rel)
-        with os.scandir(folder) as entries:
-            names = sorted((e.name for e in entries), key=os.fsencode)
+        with os.scandir(directory_fd) as entries:
+            names = sorted((entry.name for entry in entries), key=os.fsencode)
+        if len(names) > MAX_FILES + MAX_DIRS:
+            fail("EC_STOP_ENTRY_LIMIT")
         for name in names:
-            item = folder / name
             raw = os.fsencode(name)
-            if not raw or b"/" in raw or b"\x00" in raw or len(raw) > 255:
+            if not raw or len(raw) > 255 or b"/" in raw or b"\x00" in raw:
                 fail("EC_STOP_UNSAFE_NAME")
-            entry = item.lstat()
+            parts = path_parts + (raw,)
+            path = b"/".join(parts)
+            if len(path) > 4096:
+                fail("EC_STOP_PATH_LIMIT")
+            entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
             if stat.S_ISLNK(entry.st_mode):
                 fail("EC_STOP_SYMLINK")
-            child = parts + (raw,)
-            if len(b"/".join(child)) > 4096:
-                fail("EC_STOP_PATH_LIMIT")
             if stat.S_ISDIR(entry.st_mode):
-                walk(item, child, depth + 1)
+                child_fd = os.open(name, DIR_FLAGS, dir_fd=directory_fd)
+                try:
+                    if (os.fstat(child_fd).st_dev, os.fstat(child_fd).st_ino) != (
+                        entry.st_dev, entry.st_ino
+                    ):
+                        fail("EC_STOP_DIRECTORY_CHANGED")
+                    walk(child_fd, parts, depth + 1)
+                    after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    if _directory_identity(after) != _directory_identity(entry):
+                        fail("EC_STOP_DIRECTORY_CHANGED")
+                finally:
+                    os.close(child_fd)
             elif stat.S_ISREG(entry.st_mode):
-                stats["files"] += 1
-                size = entry.st_size
-                if stats["files"] > MAX_FILES or size > MAX_FILE or stats["bytes"] + size > MAX_BYTES:
+                totals["files"] += 1
+                if totals["files"] > MAX_FILES:
                     fail("EC_STOP_FILE_OR_SIZE_LIMIT")
-                if entry.st_nlink != 1:
-                    fail("EC_STOP_UNSAFE_HARDLINK")
-                digest = (hashlib.sha256(b"").digest() if size == 0
-                          else digest_file(item, MAX_FILE))
-                stats["bytes"] += size
-                relpath = b"/".join(child)
-                h.update(b"F" + len(relpath).to_bytes(4, "big") + relpath)
+                digest, size = _hash_file(
+                    directory_fd, name, entry, MAX_BYTES - totals["bytes"]
+                )
+                totals["bytes"] += size
+                h.update(b"F" + len(path).to_bytes(4, "big") + path)
                 h.update(size.to_bytes(8, "big") + digest)
             else:
                 fail("EC_STOP_UNSAFE_ENTRY")
-        after = folder.lstat()
-        if (before.st_dev, before.st_ino, before.st_mtime_ns) != (
-            after.st_dev, after.st_ino, after.st_mtime_ns
-        ):
+        if _directory_identity(os.fstat(directory_fd)) != _directory_identity(initial):
             fail("EC_STOP_DIRECTORY_CHANGED")
+
     try:
-        walk(root, (), 0)
+        fd = _open_root(root)
+        try:
+            walk(fd, tuple(), 0)
+        finally:
+            os.close(fd)
     except (OSError, AuditRejected, OverflowError, UnicodeError):
         fail("EC_STOP_UNREADABLE_OR_CHANGED")
-    return {"sha256": h.hexdigest(), **stats}
+    return {"sha256": h.hexdigest(), **totals}
+
 
 def compare_copies(first, second):
     a = os.path.realpath(os.path.abspath(first))
@@ -126,6 +213,7 @@ def compare_copies(first, second):
         "automaticUpdaterEnabled": False,
     }
 
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--first", type=Path, required=True)
@@ -146,6 +234,7 @@ def main():
         return 2
     print(json.dumps(result, sort_keys=True))
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
