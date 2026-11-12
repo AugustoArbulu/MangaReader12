@@ -63,7 +63,10 @@ def audit_tree(root):
                 size = entry.st_size
                 if stats["files"] > MAX_FILES or size > MAX_FILE or stats["bytes"] + size > MAX_BYTES:
                     fail("EC_STOP_FILE_OR_SIZE_LIMIT")
-                digest = digest_file(item, MAX_FILE)
+                if entry.st_nlink != 1:
+                    fail("EC_STOP_UNSAFE_HARDLINK")
+                digest = (hashlib.sha256(b"").digest() if size == 0
+                          else digest_file(item, MAX_FILE))
                 stats["bytes"] += size
                 relpath = b"/".join(child)
                 h.update(b"F" + len(relpath).to_bytes(4, "big") + relpath)
