@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from build70_ed_portable_vs_external_library import (
     compare_portable_to_copy, EDRejected,
@@ -178,6 +179,34 @@ class EDPortableLibraryTests(unittest.TestCase):
         with self.assertRaises(EDRejected) as caught:
             self.compare(bogus)
         self.assertEqual(caught.exception.code, "ED_STOP_PORTABLE_INVALID")
+
+    def test_sqlite_changed_between_ea_and_memory_copy_is_rejected(self):
+        from build69_production_release_preflight import (
+            _read_external_regular as real_read)
+        modified = [False]
+
+        def tamper_before_read(path, limit):
+            if Path(path) == self.db and not modified[0]:
+                modified[0] = True
+                with sqlite3.connect(self.db) as conn:
+                    conn.execute("UPDATE manga SET title='tampered-after-audit'")
+            return real_read(path, limit)
+
+        with mock.patch(
+            "build70_ed_portable_vs_external_library._read_external_regular",
+            side_effect=tamper_before_read,
+        ):
+            with self.assertRaises(EDRejected) as caught:
+                self.compare()
+        self.assertTrue(modified[0])
+        self.assertEqual(caught.exception.code, "ED_STOP_COPY_CHANGED")
+
+    def test_sqlite_reads_are_bound_to_memory_copy(self):
+        source = (Path(__file__).resolve().parent /
+                  "build70_ed_portable_vs_external_library.py").read_text()
+        self.assertIn('db.deserialize(raw)', source)
+        self.assertIn('hashlib.sha256(raw).hexdigest()', source)
+        self.assertNotIn('sqlite3.connect(uri', source)
 
     def test_offline_page_missing_rejected(self):
         page = self.app / "Downloads" / "asura" / "fiction1" / "chap1" / "page-00000.bin"
