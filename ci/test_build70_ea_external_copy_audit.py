@@ -158,6 +158,7 @@ class ExternalBackupCopyAuditTests(unittest.TestCase):
     def test_join_mismatch_cannot_silently_skip_completed_record(self):
         with sqlite3.connect(self.db) as conn:
             conn.execute("INSERT INTO downloads VALUES(1,999,'completed')")
+        self.downloads.mkdir()
         self.fail_code("EA_STOP_COMPLETED_ROW_JOIN_MISMATCH")
 
     def test_sanitized_path_collisions_rejected(self):
