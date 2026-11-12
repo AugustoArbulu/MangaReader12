@@ -11,7 +11,6 @@ from pathlib import Path
 import sqlite3
 import struct
 import sys
-from urllib.parse import quote
 from build70_ea_external_copy_audit import (
     audit_snapshot, digest_file, AuditRejected, MAX_DATABASE_BYTES,
 )
@@ -108,27 +107,35 @@ def portable_database(raw):
         stop("ED_STOP_PORTABLE_INVALID")
 
 
-def copied_database(root):
+def copied_database(root, expected_sha256):
     db_path = Path(os.path.abspath(root)) / "Library" / "Application Support" / "MangaReader12" / "library.sqlite"
-    before = digest_file(db_path, MAX_DATABASE_BYTES)
-    uri = "file:" + quote(str(db_path), safe="/") + "?mode=ro&immutable=1"
-    db = sqlite3.connect(uri, uri=True, timeout=0.1)
-    db.execute("PRAGMA query_only=ON")
-    db.execute("PRAGMA trusted_schema=OFF")
-    return db, db_path, before
+    # Bind all SQLite queries to exact bytes already checked by EA. Never
+    # let SQLite reopen a potentially swapped path.
+    raw = _read_external_regular(db_path, MAX_DATABASE_BYTES)
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        stop("ED_STOP_COPY_CHANGED")
+    db = sqlite3.connect(":memory:")
+    try:
+        db.deserialize(raw)
+        db.execute("PRAGMA query_only=ON")
+        db.execute("PRAGMA trusted_schema=OFF")
+        return db, db_path, bytes.fromhex(expected_sha256)
+    except BaseException:
+        db.close()
+        raise
 
 def compare_portable_to_copy(snapshot, portable_bytes):
     if type(portable_bytes) is not bytes or not 0 < len(portable_bytes) <= MAX_BACKUP_BYTES:
         stop("ED_STOP_PORTABLE_INVALID")
     try:
-        audit_snapshot(snapshot)
+        observed = audit_snapshot(snapshot)
     except AuditRejected:
         stop("ED_STOP_EXTERNAL_COPY_INVALID")
     portable = portable_database(portable_bytes)
     try:
         try:
-            copied, path, initial = copied_database(snapshot)
-        except (AuditRejected, OSError, sqlite3.Error):
+            copied, path, initial = copied_database(snapshot, observed["sqliteSHA256"])
+        except (AuditRejected, OSError, ValueError, sqlite3.Error):
             stop("ED_STOP_EXTERNAL_COPY_INVALID")
         try:
             mismatches = []
