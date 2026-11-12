@@ -9,19 +9,16 @@ on:
       - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
       - '.github/workflows/chimera-build70-phase-dm-swift-preservation.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'MangaReader12/Database/SQLiteDatabase.swift'
-      - 'ci/build70_dm_real_swift_preservation_fixture.py'
-      - 'ci/test_build70_dm_real_swift_preservation_fixture.py'
-      - 'docs/WEBREADER_BUILD70_PHASE_DM_REAL_SWIFT_PRESERVATION_2026-11-11.md'
-      - '.github/workflows/chimera-build70-phase-dm-swift-preservation.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  # One scoped version of these expensive Swift tests per branch; no duplicate
+  # push+PR runs and no stale macOS job for a superseded same-branch revision.
+  group: wr70-dm-native-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux-source-data-and-safety-contract:
