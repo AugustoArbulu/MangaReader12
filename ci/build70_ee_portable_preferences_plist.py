@@ -12,7 +12,7 @@ from pathlib import Path
 import plistlib
 import sys
 
-from build70_ea_external_copy_audit import AuditRejected, audit_snapshot
+from build70_ea_external_copy_audit import AuditRejected, audit_snapshot, safe_child, no_link
 from build69_bf_portable_backup_baseline import (
     PortableBaselineRejected, read_build68_portable_baseline, MAX_BACKUP_BYTES,
 )
@@ -147,11 +147,14 @@ def review_external_preferences(snapshot, portable_bytes):
         audit_snapshot(snapshot)
     except AuditRejected:
         stop("EE_STOP_EXTERNAL_COPY_INVALID")
-    prefs = (Path(os.path.abspath(snapshot)) / "Library" / "Preferences"
-             / (BUNDLE_ID + ".plist"))
     try:
+        root = Path(os.path.abspath(snapshot))
+        no_link(root, directory=True)
+        library = safe_child(root, "Library", directory=True)
+        directory = safe_child(library, "Preferences", directory=True)
+        prefs = safe_child(directory, BUNDLE_ID + ".plist")
         data = _read_external_regular(prefs, MAX_PLIST_BYTES)
-    except (OSError, ValueError):
+    except (AuditRejected, OSError, ValueError):
         stop("EE_STOP_EXTRACTED_PREFERENCES_UNAVAILABLE")
     return compare_preferences(portable_bytes, data)
 
