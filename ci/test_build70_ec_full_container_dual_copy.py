@@ -2,6 +2,8 @@
 """EC tests: synthetic whole-tree copies, never real user content."""
 from pathlib import Path
 import hashlib
+import os
+from unittest import mock
 import shutil
 import sqlite3
 import tempfile
@@ -82,8 +84,7 @@ class ECDualCopyTests(unittest.TestCase):
         p.symlink_to(self.second / "Library" / "Preferences" / "app.plist")
         with self.assertRaises(ECRejected) as caught:
             compare_copies(self.first, self.second)
-        self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_ENTRY") if False else self.assertEqual(
-            caught.exception.code, "EC_STOP_SYMLINK")
+        self.assertEqual(caught.exception.code, "EC_STOP_SYMLINK")
 
     def test_symlinked_directory_never_followed(self):
         (self.second / "Documents" / "link").symlink_to(self.prefs, target_is_directory=True)
@@ -126,6 +127,70 @@ class ECDualCopyTests(unittest.TestCase):
         (self.second / "Documents" / ".hidden-empty").write_bytes(b"x")
         r = compare_copies(self.first, self.second)
         self.assertEqual(r["status"], "EC_STOP_EXTERNAL_COPIES_DIFFER")
+
+    def test_root_symlink_rejected_even_with_valid_target(self):
+        link = self.first.parent / "alias"
+        link.symlink_to(self.first, target_is_directory=True)
+        with self.assertRaises(ECRejected) as caught:
+            audit_tree(link)
+        self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_ROOT")
+
+    def test_in_place_empty_file_swap_is_detected(self):
+        target = self.first / "Documents" / ".hidden-empty"
+        actual_open = os.open
+        exchanged = [False]
+
+        def swap_before_fd_open(name, flags, *args, **kwargs):
+            if name == ".hidden-empty" and kwargs.get("dir_fd") is not None and not exchanged[0]:
+                exchanged[0] = True
+                target.rename(target.with_name(".old-hidden-empty"))
+                target.write_bytes(b"")
+            return actual_open(name, flags, *args, **kwargs)
+
+        with mock.patch("build70_ec_full_container_dual_copy.os.open",
+                        side_effect=swap_before_fd_open):
+            with self.assertRaises(ECRejected) as caught:
+                audit_tree(self.first)
+        self.assertTrue(exchanged[0])
+        self.assertEqual(caught.exception.code, "EC_STOP_FILE_CHANGED")
+
+    def test_file_size_change_before_open_is_detected(self):
+        target = self.first / "Library" / "Preferences" / "app.plist"
+        actual_open = os.open
+        swapped = [False]
+
+        def change_before_fd_open(name, flags, *args, **kwargs):
+            if name == "app.plist" and kwargs.get("dir_fd") is not None and not swapped[0]:
+                swapped[0] = True
+                target.write_bytes(b"new")
+            return actual_open(name, flags, *args, **kwargs)
+
+        with mock.patch("build70_ec_full_container_dual_copy.os.open",
+                        side_effect=change_before_fd_open):
+            with self.assertRaises(ECRejected) as caught:
+                audit_tree(self.first)
+        self.assertTrue(swapped[0])
+        self.assertEqual(caught.exception.code, "EC_STOP_FILE_CHANGED")
+
+    def test_special_file_rejected(self):
+        import socket
+        path = self.second / "Documents" / "special.sock"
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            listener.bind(str(path))
+            with self.assertRaises(ECRejected) as caught:
+                audit_tree(self.second)
+            self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_ENTRY")
+        finally:
+            listener.close()
+
+    def test_fd_code_anchors_children_and_hashes_zero_bytes(self):
+        source = (Path(__file__).resolve().parent /
+                  "build70_ec_full_container_dual_copy.py").read_text()
+        for token in ("os.scandir(directory_fd)", "dir_fd=directory_fd",
+                      'getattr(os, "O_NOFOLLOW", 0)', "_hash_file(", "os.fstat(fd)"):
+            self.assertIn(token, source)
+        self.assertEqual(audit_tree(self.first)["sha256"], audit_tree(self.first)["sha256"])
 
     def test_static_no_write_install_or_network(self):
         source = (Path(__file__).resolve().parent /
