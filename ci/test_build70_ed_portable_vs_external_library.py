@@ -29,6 +29,8 @@ class EDPortableLibraryTests(unittest.TestCase):
         self.assertIsNotNone(schema)
         with sqlite3.connect(self.db) as con:
             con.executescript(schema.group(1))
+            con.execute("PRAGMA user_version=1")
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (1,))
             con.executescript("""
                 INSERT INTO manga(internal_id,source_id,source_manga_id,
                     title,status,date_added) VALUES(1,'asura','fiction1','Obra fictícia','ongoing',1);
