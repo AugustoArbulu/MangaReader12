@@ -173,16 +173,11 @@ class ECDualCopyTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "EC_STOP_FILE_CHANGED")
 
     def test_special_file_rejected(self):
-        import socket
-        path = self.second / "Documents" / "special.sock"
-        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            listener.bind(str(path))
-            with self.assertRaises(ECRejected) as caught:
-                audit_tree(self.second)
-            self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_ENTRY")
-        finally:
-            listener.close()
+        path = self.second / "Documents" / "special.fifo"
+        os.mkfifo(path)
+        with self.assertRaises(ECRejected) as caught:
+            audit_tree(self.second)
+        self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_ENTRY")
 
     def test_fd_code_anchors_children_and_hashes_zero_bytes(self):
         source = (Path(__file__).resolve().parent /
