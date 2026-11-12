@@ -31,7 +31,13 @@ jobs:
           python-version: '3.12'
       - name: Check external copy auditor syntax and adversarial fixtures
         run: |
-          python -m py_compile ci/build70_ea_external_copy_audit.py ci/test_build70_ea_external_copy_audit.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in ('ci/build70_ea_external_copy_audit.py', 'ci/test_build70_ea_external_copy_audit.py'):
+              ast.parse(Path(name).read_text(encoding='utf-8'), filename=name)
+          print('PASS EA: Python syntax (no bytecode emitted)')
+          PY
           python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
       - name: Verify source compatibility and ineligible installer
         run: |
@@ -43,7 +49,7 @@ jobs:
           receipt = Path('MangaReader12/Downloads/WebReaderOfflineCompletionReceipt.swift').read_text()
           assert 'CREATE TABLE IF NOT EXISTS downloads' in database
           assert 'FROM downloads d' in script and 'JOIN chapters c' in script
-          assert 'source_manga_id' in downloader
+          assert '.appendingPathComponent("Downloads"' in downloader
           assert 'page-%05d.bin' in Path('MangaReader12/Downloads/WebReaderOfflinePageInventory.swift').read_text()
           assert 'WR-OFFLINE-COMPLETE-V1:' in receipt
           assert 'EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
