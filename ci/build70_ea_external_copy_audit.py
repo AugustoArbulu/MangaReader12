@@ -14,7 +14,6 @@ import re
 import sqlite3
 import stat
 import sys
-from urllib.parse import quote
 
 MAX_DATABASE_BYTES = 256 * 1024 * 1024
 MAX_CHAPTERS = 100_000
@@ -107,6 +106,50 @@ def digest_file(path: Path, byte_limit: int):
     return h.digest()
 
 
+
+def read_database_bytes(path: Path, expected_sha: bytes):
+    """Read a bounded, no-follow SQLite copy and bind bytes to prior digest.
+
+    Never open the external DB by SQLite pathname; deserialize these verified
+    bytes in memory to eliminate the separate-path-open TOCTOU window.
+    """
+    before = no_link(path)
+    if (before.st_size < 1 or before.st_size > MAX_DATABASE_BYTES
+            or before.st_nlink != 1):
+        reject("EA_STOP_DATABASE_SIZE")
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(path, flags)
+        try:
+            opened = os.fstat(fd)
+            identity = lambda v: (
+                v.st_dev, v.st_ino, v.st_size, v.st_nlink,
+                v.st_mtime_ns, v.st_ctime_ns,
+            )
+            if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before):
+                reject("EA_STOP_DATABASE_CHANGED")
+            raw = bytearray()
+            while True:
+                chunk = os.read(fd, CHUNK)
+                if not chunk:
+                    break
+                raw.extend(chunk)
+                if len(raw) > MAX_DATABASE_BYTES or len(raw) > before.st_size:
+                    reject("EA_STOP_DATABASE_CHANGED")
+            if (len(raw) != before.st_size
+                    or identity(os.fstat(fd)) != identity(before)
+                    or identity(no_link(path)) != identity(before)):
+                reject("EA_STOP_DATABASE_CHANGED")
+            data = bytes(raw)
+            if hashlib.sha256(data).digest() != expected_sha:
+                reject("EA_STOP_DATABASE_CHANGED")
+            return data
+        finally:
+            os.close(fd)
+    except OSError:
+        reject("EA_STOP_DATABASE_UNREADABLE_OR_CHANGED")
+
+
 def inspect_pages(folder: Path, content_hash):
     names = []
     try:
@@ -174,12 +217,16 @@ def audit_snapshot(snapshot: Path):
         # Rollback-journal recovery may still be pending. Never ignore its
         # potentially necessary transactions in immutable mode.
         reject("EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT")
-    # Fingerprint the exact DB file examined; reject in-place mutation.
+    # Fingerprint an already-extracted copy, then bind SQLite's queries to
+    # EXACTLY those bytes, not a pathname that could be swapped later.
+    # Earlier versions used mode=ro&immutable=1, which can ignore WAL and
+    # reopened the path after hashing; sidecars remain fail-closed above.
     db_hash = digest_file(db_path, MAX_DATABASE_BYTES)
-    uri = "file:" + quote(str(db_path), safe="/") + "?mode=ro&immutable=1"
+    raw = read_database_bytes(db_path, db_hash)
     try:
-        db = sqlite3.connect(uri, uri=True, timeout=0.1)
+        db = sqlite3.connect(":memory:")
         try:
+            db.deserialize(raw)
             db.execute("PRAGMA query_only=ON")
             db.execute("PRAGMA trusted_schema=OFF")
             if db.execute("PRAGMA user_version").fetchone() != (1,):
