@@ -84,6 +84,9 @@ class NativeSocketIntegration(unittest.TestCase):
         commands = [
             ["xcrun", "clang", "-std=c11", "-Wall", "-Wextra", "-Werror",
              "-Wno-deprecated-declarations",
+             # Activate FAKE mode only in this synthetic macOS test binary.
+             # The production server must continue to refuse WRINST1.
+             "-DWEBREADER_FAKE_APPINST_QA",
              '-DWEBREADER_TEST_ROOT="' + str(cls.root) + '"',
              '-DWEBREADER_TEST_APPINST="' + str(cls.fake) + '"',
              str(BRIDGE_C), "-o", str(cls.server)],
@@ -157,6 +160,22 @@ class NativeSocketIntegration(unittest.TestCase):
             [str(self.client), operation, str(self.socket_dir), *map(str, params)],
             capture_output=True, text=True, timeout=15
         )
+
+    def test_host_fake_mode_never_applies_to_real_ios_target(self):
+        # The fake install branch is enabled only by this test compiler
+        # invocation, never by an app build or iOS helper workflow.
+        script = Path(__file__).read_text()
+        self.assertIn('"-DWEBREADER_FAKE_APPINST_QA",', script)
+        bridge = BRIDGE_C.read_text()
+        self.assertIn("#ifndef WEBREADER_FAKE_APPINST_QA", bridge)
+        self.assertIn("#ifdef WEBREADER_FAKE_APPINST_QA", bridge)
+        self.assertIn("Fake appinst QA requires BOTH", bridge)
+        project = (HERE.parent / "MangaReader12.xcodeproj" /
+                   "project.pbxproj").read_text()
+        self.assertNotIn("WEBREADER_FAKE_APPINST_QA", project)
+        workflow = (HERE.parent / ".github/workflows" /
+                    "chimera-mobile-ping.yml").read_text()
+        self.assertNotIn("WEBREADER_FAKE_APPINST_QA", workflow)
 
     def test_swift_app_client_installs_only_fake_verified_archive(self):
         server = self._server()
