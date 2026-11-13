@@ -58,3 +58,9 @@ Os status bem-sucedidos só descrevem os arquivos sintéticos de CI ou uma cópi
 6. Após uma instalação devidamente autorizada, comparar a biblioteca, favoritos, progresso, preferências e mesmos arquivos offline e repetir a leitura do MESMO capítulo sem Wi-Fi. Só então discutir habilitar um canal de atualização assinado.
 
 A branch main não deve ser alterada. O gatilho de build71 continua ausente e as flags de publisher/installer continuam bloqueadas.
+
+## Auditoria complementar na mesma continuação — falso arquivo contabilizado como página
+
+Identificado caso concreto na EI: um arquivo regular qualquer sob o capítulo de um registro conhecido, ainda que não fosse page-xxxxx.bin, recibo ou _download-plan.json, era incluído nos totais sem disparar status de revisão. Agora EI contabiliza unrecognizedChapterLeafFiles e unrecognizedLeafFilesInRecordedChapters e retorna EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES (exit 2) para conteúdo com nome desconhecido. Novos testes adversariais cobrem arquivos extras em capítulos completed e paused, nomes falsos de páginas, preservação de plan/receipt esperados, privacidade dos relatórios e exit code 2. A EK foi ajustada para respeitar esse bloqueio antecipado: nesses casos não declara que analisou um prefixo completo.
+
+A aprovação Linux do run 43341167810 com 203 testes refere-se à revisão ANTERIOR a esse endurecimento. Verificar uma execução nova antes de declarar sucesso para a versão atual; macOS continua pendente quando não houver job concluído. A Build70 física continua intocada; nenhuma IPA71 autorizada.
