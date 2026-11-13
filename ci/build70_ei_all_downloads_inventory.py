@@ -13,7 +13,7 @@ import stat
 import sys
 
 from build70_ea_external_copy_audit import (
-    AuditRejected, audit_snapshot, swift_component,
+    AuditRejected, audit_snapshot, swift_component, PAGE, RECEIPT,
 )
 from build70_ed_portable_vs_external_library import copied_database, EDRejected
 
@@ -45,7 +45,8 @@ def _collect_download_tree(root):
                "filesByChapter": {}, "bytesByChapter": {},
                "unexpectedDepthFiles": 0, "unexpectedDepthDirectories": 0,
                "unexpectedDepthBytes": 0,
-               "chapterDirectoryPaths": set(), "prefixDirectoryPaths": set()}
+               "chapterDirectoryPaths": set(), "prefixDirectoryPaths": set(),
+               "unrecognizedLeafFilesByChapter": {}}
     if not root.exists() and not root.is_symlink():
         return summary
     # Check root is not a symlink before any traversal.
@@ -127,6 +128,14 @@ def _collect_download_tree(root):
                             summary["bytesByChapter"][key] = (
                                 summary["bytesByChapter"].get(key, 0) + info.st_size
                             )
+                            # Merely sitting in a known chapter directory is
+                            # not evidence that this file belongs to its pages.
+                            # Preserve unknown leaves but require owner review.
+                            if (not PAGE.fullmatch(name)
+                                    and name not in (RECEIPT, "_download-plan.json")):
+                                summary["unrecognizedLeafFilesByChapter"][key] = (
+                                    summary["unrecognizedLeafFilesByChapter"].get(key, 0) + 1
+                                )
                         else:
                             summary["unexpectedDepthFiles"] += 1
                             summary["unexpectedDepthBytes"] += info.st_size
@@ -210,6 +219,11 @@ def audit_noncompleted_and_orphans(snapshot):
             orphan_files += num
             orphan_bytes += tree["bytesByChapter"][folder]
     unclassified = tree["unexpectedDepthFiles"]
+    unrecognized_leaf = sum(tree["unrecognizedLeafFilesByChapter"].values())
+    unrecognized_in_known = sum(
+        count for folder, count in tree["unrecognizedLeafFilesByChapter"].items()
+        if folder in wanted
+    )
     # Directories are evidence too: a zero-byte / empty chapter tree can
     # represent an interrupted job. Never call an orphaned empty hierarchy
     # fully accounted merely because there are no files to classify.
@@ -224,7 +238,8 @@ def audit_noncompleted_and_orphans(snapshot):
     )
     missing_recorded_dirs = sum(1 for key in wanted if key not in chapter_dirs)
     flagged = (orphan_files or unclassified or unreferenced_chapter_dirs
-               or unreferenced_prefix_dirs or tree["unexpectedDepthDirectories"])
+               or unreferenced_prefix_dirs or tree["unexpectedDepthDirectories"]
+               or unrecognized_leaf)
     if flagged:
         status = "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES"
     elif incomplete_rows or non_ascii:
@@ -251,6 +266,8 @@ def audit_noncompleted_and_orphans(snapshot):
         "orphanChapterFiles": orphan_files,
         "orphanChapterBytes": orphan_bytes,
         "unclassifiedFileCount": unclassified,
+        "unrecognizedChapterLeafFiles": unrecognized_leaf,
+        "unrecognizedLeafFilesInRecordedChapters": unrecognized_in_known,
         "unclassifiedFileBytes": tree["unexpectedDepthBytes"],
         "nestedUnexpectedDirectoryCount": tree["unexpectedDepthDirectories"],
         "totalRegularFilesWithinDownloads": tree["files"],
