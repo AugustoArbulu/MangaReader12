@@ -73,6 +73,108 @@ enum WebReaderOfflineCanonicalOwnership {
 }
 // END BUILD70_EQ_CANONICAL_OWNERSHIP
 
+// BEGIN BUILD70_ER_DELETION_PREFLIGHT
+// User consent alone does not authorize recursively deleting unrelated
+// material that happens to reside in the canonical offline chapter folder.
+// Admission is metadata-only: no file contents, network or SQLite mutation.
+enum WebReaderOfflineDeletionPreflight {
+    enum Verdict: Equatable {
+        case absent
+        case allowed
+        case unsafe
+    }
+
+    private static func stable(_ a: stat, _ b: stat) -> Bool {
+        return a.st_dev == b.st_dev && a.st_ino == b.st_ino &&
+            a.st_mode == b.st_mode && a.st_nlink == b.st_nlink &&
+            a.st_size == b.st_size &&
+            a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec &&
+            a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec &&
+            a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
+    }
+
+    static func inspect(
+        directory: URL,
+        fileManager: FileManager = .default
+    ) -> Verdict {
+        var before = stat()
+        if Darwin.lstat(directory.path, &before) != 0 {
+            return errno == ENOENT ? .absent : .unsafe
+        }
+        guard (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            return .unsafe
+        }
+
+        // Reject symlinked parent components from the chapter directory
+        // up through the app's MangaReader12 directory. Checking only the
+        // leaf misses a substituted manga/source/Downloads parent.
+        var ancestors: [(String, stat)] = []
+        var parent = directory.deletingLastPathComponent()
+        for _ in 0..<4 {
+            var info = stat()
+            guard Darwin.lstat(parent.path, &info) == 0,
+                  (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+                return .unsafe
+            }
+            ancestors.append((parent.path, info))
+            parent.deleteLastPathComponent()
+        }
+
+        let fd = Darwin.open(
+            directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard fd >= 0 else { return .unsafe }
+        defer { _ = Darwin.close(fd) }
+        var opened = stat()
+        guard Darwin.fstat(fd, &opened) == 0,
+              stable(before, opened) else { return .unsafe }
+
+        guard let names = try? fileManager.contentsOfDirectory(
+            atPath: directory.path
+        ), names.count <= 100_001 else { return .unsafe }
+        for name in names {
+            let maximumBytes: Int64
+            if name == "_download-plan.json" {
+                maximumBytes = 16 * 1024 * 1024
+            } else if name == WebReaderOfflineCompletionReceipt.filename {
+                maximumBytes = 64
+            } else {
+                guard name.range(
+                    of: "^page-[0-9]{5}\\.bin$",
+                    options: .regularExpression
+                ) != nil,
+                let index = Int(name.dropFirst(5).prefix(5)),
+                index < WebReaderOfflinePageInventory.maximumPages else {
+                    return .unsafe
+                }
+                maximumBytes = 20 * 1024 * 1024
+            }
+
+            var item = stat()
+            guard Darwin.fstatat(fd, name, &item, AT_SYMLINK_NOFOLLOW) == 0,
+                  (item.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+                  item.st_nlink == 1,
+                  item.st_size > 0,
+                  item.st_size <= maximumBytes else { return .unsafe }
+        }
+
+        var afterFD = stat()
+        var afterPath = stat()
+        guard Darwin.fstat(fd, &afterFD) == 0,
+              Darwin.lstat(directory.path, &afterPath) == 0,
+              stable(before, afterFD),
+              stable(before, afterPath) else { return .unsafe }
+        for (path, original) in ancestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) == 0,
+                  stable(original, current) else { return .unsafe }
+        }
+        return .allowed
+    }
+}
+// END BUILD70_ER_DELETION_PREFLIGHT
+
 // BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
 // Normal chapter/batch downloads must preserve any preexisting local data.
 // The Downloads retry flow supplies the explicit user-confirmed override.
@@ -163,6 +265,7 @@ enum ChapterDownloadError: Error, LocalizedError {
     case existingLocalDataRequiresReview
     case unsafeExistingLocalData
     case ambiguousOfflineChapterPath
+    case unsafeOfflineDeletionContents
     case downloadInProgress
 
     var errorDescription: String? {
@@ -191,6 +294,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "A pasta offline contém arquivos inesperados ou inseguros. Nenhum arquivo foi apagado. Preserve a pasta para revisão."
         case .ambiguousOfflineChapterPath:
             return "Duas obras ou capítulos podem compartilhar a mesma pasta offline. Operação bloqueada para proteger os arquivos. Nenhuma página foi apagada."
+        case .unsafeOfflineDeletionContents:
+            return "A pasta contém arquivos não reconhecidos, links ou metadados inesperados. Exclusão bloqueada. Faça uma cópia externa antes de revisar; nenhuma página foi apagada."
         case .downloadInProgress:
             return "Pause o download antes de removê-lo."
         }
@@ -937,16 +1042,27 @@ final class ChapterDownloadManager {
             ) else {
                 throw ChapterDownloadError.ambiguousOfflineChapterPath
             }
-            let removedJob = jobs.removeValue(forKey: key)
-            pending.removeAll { $0 == key }
-            // An explicit user deletion may remove only this app's own
-            // current chapter directory; never an obsolete SQLite path.
+            // Validate the exact current chapter folder *before* changing
+            // the in-memory queue or deleting any database row. Unknown
+            // leaves, nested directories, symlinks, hardlinks and swapped
+            // parent folders are not ours to remove, even with consent.
             let current = try chapterDirectory(
                 sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
             )
-            if fileManager.fileExists(atPath: current.path) {
+            let verdict = WebReaderOfflineDeletionPreflight.inspect(
+                directory: current, fileManager: fileManager
+            )
+            guard verdict != .unsafe else {
+                throw ChapterDownloadError.unsafeOfflineDeletionContents
+            }
+            if verdict == .allowed {
                 try fileManager.removeItem(at: current)
             }
+            // Only after filesystem removal succeeds may the local queue
+            // and persisted record be retired. Missing folder is a separate
+            // metadata-only removal for an exact, unambiguous DB identity.
+            let removedJob = jobs.removeValue(forKey: key)
+            pending.removeAll { $0 == key }
             try repository.remove(
                 sourceID: sourceID,
                 sourceMangaID: mangaID,

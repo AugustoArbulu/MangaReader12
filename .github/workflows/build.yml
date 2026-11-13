@@ -145,6 +145,9 @@ jobs:
       - name: Test EQ canonical offline path ownership (synthetic host)
         run: python3 -m unittest discover -s ci -p 'test_build70_eq_canonical_path_ownership.py' -v
 
+      - name: Test ER confirmed-delete preflight (synthetic host)
+        run: python3 -m unittest discover -s ci -p 'test_build70_er_deletion_preflight.py' -v
+
       - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
         run: python3 ci/test_webreader_update_manifest.py
 
