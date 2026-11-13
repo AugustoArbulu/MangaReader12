@@ -209,7 +209,9 @@ def audit_noncompleted_and_orphans(snapshot):
     if flagged:
         status = "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES"
     elif incomplete_rows or non_ascii:
-        status = "EI_NONCOMPLETED_DOWNLOADS_OR_UNICODE_REQUIRE_OWNER_REVIEW"
+        # A paused/failed/Unicode-path copy is not necessarily corrupt,
+        # but must NOT be mistaken for unattended upgrade readiness.
+        status = "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW"
     elif baseline["completedChapters"] == 0:
         status = "EI_ZERO_COMPLETED_DOWNLOADS_NOT_DEVICE_PROOF"
     else:
