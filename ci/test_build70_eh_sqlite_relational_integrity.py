@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """EH fixture tests: SQLite v1 from production Swift, synthetic downloads."""
 import json
+import re
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -42,6 +43,46 @@ class EHRelationalTests(unittest.TestCase):
                   "restorationAuthorized", "automaticUpdaterEnabled",
                   "iOS12OfflineReadingVerified"):
             self.assertIs(r[k], False, k)
+
+    def test_removed_all_fk_constraints_is_detected_even_without_orphans(self):
+        swift = (Path(__file__).resolve().parent.parent /
+                 "MangaReader12" / "Database" / "SQLiteDatabase.swift").read_text()
+        fragment = re.search(r'private static let schemaV1 = """(.*?)"""',
+                             swift, re.S)
+        self.assertIsNotNone(fragment)
+        schema = fragment.group(1)
+        # Reproduce a damaged or forged schema that retains every column and
+        # row but silently omits its FOREIGN KEY declarations.
+        regex = (r",\s*FOREIGN KEY\([^)]*\)\s+REFERENCES\s+\w+"
+                 r"\([^)]*\)\s+ON DELETE\s+(?:CASCADE|SET NULL)")
+        without_constraints = re.sub(regex, "", schema)
+        self.assertNotIn("FOREIGN KEY(", without_constraints)
+        temp_db = self.db.with_suffix(".no-foreign-keys.sqlite")
+        tables = (
+            "manga", "library", "chapters", "categories", "manga_categories",
+            "history", "downloads", "sources", "repositories",
+            "source_settings", "migration_map"
+        )
+        with sqlite3.connect(self.db) as original:
+            with sqlite3.connect(temp_db) as altered:
+                altered.executescript(without_constraints)
+                altered.execute("PRAGMA user_version=1")
+                for table in tables:
+                    rows = original.execute('SELECT * FROM "' + table + '"').fetchall()
+                    if rows:
+                        params = ",".join("?" for _ in rows[0])
+                        altered.executemany(
+                            'INSERT INTO "' + table + '" VALUES (' + params + ")",
+                            rows
+                        )
+        self.db.unlink()
+        temp_db.rename(self.db)
+        with sqlite3.connect(self.db) as damaged:
+            self.assertEqual(damaged.execute("PRAGMA quick_check").fetchone(), ("ok",))
+            self.assertEqual(damaged.execute("PRAGMA foreign_key_check").fetchall(), [])
+        with self.assertRaises(EHRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EH_STOP_FOREIGN_KEY_SCHEMA_MISMATCH")
 
     def test_orphan_library_fk_detected_despite_sqlite_quick_check_ok(self):
         self.mutate("UPDATE library SET manga_id=999")
