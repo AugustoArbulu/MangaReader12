@@ -15,3 +15,7 @@ A PR #90 Draft apresenta **650 caminhos alterados**, inclusive **86 workflows**,
 `ci/test_build70_ci_scope.py` exerce sete cenários de gatilhos, escopo de paths, botão manual, matriz Linux/macOS, grupos isolados e flags de produção desabilitadas. É incluído na regressão integrada. São testes ESTÁTICOS; não comprovam cotas, latência dos runners, ou a implementação do filtro de path pelo GitHub. A conferência final depende dos futuros workflow runs no GitHub.
 
 A mudança reduz execuções futuras que não fazem sentido. Não cancela necessariamente jobs históricos enfileirados. Não cria, publica, distribui ou instala IPA71; o `ci/build71_owner_approved_qa_trigger.txt` deve seguir ausente. PR #90 continua Draft e main intacta. Uma eventual compilação de IPA diagnóstica por trabalho nativo é distinta de IPA71 de produção; não utilizar nenhum artefato de CI como autorização física de instalação.
+
+## Ajuste de concorrência manual
+
+O agrupamento de `build.yml` passou a usar `github.run_id` quando a execução foi iniciada deliberadamente via workflow_dispatch. Isso impede que um push automático posterior da mesma branch cancele o build MANUAL do proprietário. Os eventos automáticos continuam usando o identificador da PR/branch, de modo que uma execução nova cancela a anterior obsoleta. A validação estática de CI protege esta distinção; não há autorização implícita para distribuir ou instalar qualquer IPA gerada.

@@ -19,7 +19,9 @@ on:
 
 # Superseded macOS builds of the same branch/PR are not useful.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Never cancel a deliberate owner-triggered manual build just because
+  # unrelated audit pushes arrive on the same branch.
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:

@@ -112,6 +112,9 @@ class TriggerScopeTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: true", workflow)
         self.assertIn("github.workflow", workflow)
         self.assertIn("github.event.pull_request.number || github.ref", workflow)
+        self.assertIn(
+            "github.event_name == 'workflow_dispatch' && github.run_id", workflow
+        )
         self.assertNotIn("github.workflow", text_of("chimera-build70-phase-eg-cli-failclosed.yml"))
 
     def test_no_owner_build71_trigger_or_automatic_install_activation(self):
