@@ -222,7 +222,9 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         def mutate_after_tree_walk(root):
             result = original_scan(root)
             with sqlite3.connect(self.fx.db) as db:
-                db.execute("UPDATE chapters SET bookmarked=1")
+                db.execute(
+                    "UPDATE manga SET title = title || '-mutated' WHERE internal_id=1"
+                )
             return result
 
         with mock.patch.object(ei, "_collect_download_tree",
@@ -269,14 +271,17 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(result["status"],
                          "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
 
-    def test_stray_page_like_filename_is_not_silently_accounted(self):
-        chapter = self.base / "asura" / "fiction1" / "chap1"
+    def test_stray_page_like_filename_in_partial_chapter_is_not_silently_accounted(self):
+        # EA already rejects an invalid "page-" prefix inside a COMPLETED
+        # chapter. Use an incomplete row to exercise the EI-specific gap.
+        chapter = self.add_noncompleted(state="paused")
         unexpected = chapter / "page-extra.bin"
         unexpected.write_bytes(b"synthetic")
         result = self.audit()
         self.assertEqual(result["status"],
                          "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
         self.assertEqual(result["unrecognizedChapterLeafFiles"], 1)
+        self.assertEqual(result["unrecognizedLeafFilesInRecordedChapters"], 1)
         self.assertTrue(unexpected.exists())
 
     def test_unrecognized_leaf_cli_exits_nonzero_without_name_leak(self):
