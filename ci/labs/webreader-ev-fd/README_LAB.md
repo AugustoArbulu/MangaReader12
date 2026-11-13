@@ -18,7 +18,8 @@ python3 -m unittest discover -s ci -p 'test_build70_*.py' -q
 | FA | 42 | Schema v1 integral em fixture, três rotas não destrutivas |
 | FB | 52 | Plano/recibo no Swift + journal copy-only no shadow v2 integral |
 | FC | 20 | Compatibilidade Codable do modelo, bloqueio de cabeçalhos privados e pré-flight nativo |
-| FD | 27 | Snapshot estrito completed-only, sem duplicar planos que podem conter segredos |\n| **Total** | **250** | **Revalidados em Linux a partir da extração limpa; CI completo Linux/macOS configurado** |
+| FD | 27 | Snapshot estrito completed-only, sem duplicar planos que podem conter segredos |
+| **Total** | **250** | **Revalidados em Linux a partir da extração limpa; CI completo Linux/macOS configurado** |
 
 Leia `docs/WEBREADER_BUILD70_PHASE_FD_SEALED_COMPLETED_SNAPSHOT_2026-11-13.md` e o relatório FC. Os 41 arquivos deste laboratório estão versionados em `ci/labs/webreader-ev-fd/` na branch Draft do PR #90. O workflow raiz `.github/workflows/chimera-build70-phase-fe-evfd-full-lab.yml` testa os mesmos arquivos em Ubuntu/macOS, sem gerar IPA nem instalar nada.
 
