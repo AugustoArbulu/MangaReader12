@@ -2340,50 +2340,74 @@ final class DownloadRepository {
         try database.openAndMigrate()
 
         try database.withConnection { handle in
-            let find = try prepareStatement(
-                """
-                SELECT c.internal_id
-                FROM chapters c
-                JOIN manga m ON m.internal_id = c.manga_id
-                WHERE m.source_id = ?
-                  AND m.source_manga_id = ?
-                  AND c.source_chapter_id = ?
-                LIMIT 1;
-                """,
-                handle: handle
-            )
-            defer { sqlite3_finalize(find) }
+            // Keep the download row and chapters.downloaded flag in the
+            // same SQLite transaction. If either statement fails, both
+            // changes roll back; no half-retired metadata survives.
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+            do {
+                var selectedChapterID: Int64?
+                do {
+                    let find = try prepareStatement(
+                        """
+                        SELECT c.internal_id
+                        FROM chapters c
+                        JOIN manga m ON m.internal_id = c.manga_id
+                        WHERE m.source_id = ?
+                          AND m.source_manga_id = ?
+                          AND c.source_chapter_id = ?
+                        LIMIT 1;
+                        """,
+                        handle: handle
+                    )
+                    defer { sqlite3_finalize(find) }
 
-            try bindText(sourceID, index: 1, statement: find)
-            try bindText(sourceMangaID, index: 2, statement: find)
-            try bindText(sourceChapterID, index: 3, statement: find)
+                    try bindText(sourceID, index: 1, statement: find)
+                    try bindText(sourceMangaID, index: 2, statement: find)
+                    try bindText(sourceChapterID, index: 3, statement: find)
+                    let step = sqlite3_step(find)
+                    if step == SQLITE_ROW {
+                        selectedChapterID = sqlite3_column_int64(find, 0)
+                    } else if step != SQLITE_DONE {
+                        throw sqliteError(handle)
+                    }
+                }
 
-            guard sqlite3_step(find) == SQLITE_ROW else { return }
-            let chapterID = sqlite3_column_int64(find, 0)
+                if let chapterID = selectedChapterID {
+                    // Each statement is finalized before COMMIT rather than
+                    // leaving an active SELECT cursor open during commit.
+                    do {
+                        let delete = try prepareStatement(
+                            "DELETE FROM downloads WHERE chapter_id = ?;",
+                            handle: handle
+                        )
+                        defer { sqlite3_finalize(delete) }
+                        guard sqlite3_bind_int64(delete, 1, chapterID) == SQLITE_OK,
+                              sqlite3_step(delete) == SQLITE_DONE else {
+                            throw sqliteError(handle)
+                        }
+                    }
 
-            let delete = try prepareStatement(
-                "DELETE FROM downloads WHERE chapter_id = ?;",
-                handle: handle
-            )
-            defer { sqlite3_finalize(delete) }
+                    do {
+                        let mark = try prepareStatement(
+                            "UPDATE chapters SET downloaded = 0 WHERE internal_id = ?;",
+                            handle: handle
+                        )
+                        defer { sqlite3_finalize(mark) }
+                        guard sqlite3_bind_int64(mark, 1, chapterID) == SQLITE_OK,
+                              sqlite3_step(mark) == SQLITE_DONE else {
+                            throw sqliteError(handle)
+                        }
+                    }
+                }
 
-            guard sqlite3_bind_int64(delete, 1, chapterID) == SQLITE_OK,
-                  sqlite3_step(delete) == SQLITE_DONE else {
-                throw sqliteError(handle)
-            }
-
-            let mark = try prepareStatement(
-                "UPDATE chapters SET downloaded = 0 WHERE internal_id = ?;",
-                handle: handle
-            )
-            defer { sqlite3_finalize(mark) }
-
-            guard sqlite3_bind_int64(mark, 1, chapterID) == SQLITE_OK,
-                  sqlite3_step(mark) == SQLITE_DONE else {
-                throw sqliteError(handle)
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
             }
         }
     }
+
 }
 
 private func ensureReadingRows(

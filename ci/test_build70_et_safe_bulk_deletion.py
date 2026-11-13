@@ -5,6 +5,7 @@ No iPad, network, appinst, real SQLite, real user pages or Build71.
 """
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANAGER = (ROOT / "MangaReader12/Downloads/ChapterDownloadManager.swift").read_text()
 STORAGE = (ROOT / "MangaReader12/Core/StorageManager.swift").read_text()
 UI = (ROOT / "MangaReader12/UI/DataStorageViewController.swift").read_text()
+DATABASE = (ROOT / "MangaReader12/Database/SQLiteDatabase.swift").read_text()
 
 
 class BulkDeletionSafetyTests(unittest.TestCase):
@@ -93,11 +95,80 @@ class BulkDeletionSafetyTests(unittest.TestCase):
             "didSelectRowAt indexPath: IndexPath", 1)[1].split(
             "private func performMaintenance(", 1)[0])
 
+    def test_sqlite_failure_keeps_single_download_in_memory(self):
+        single = MANAGER.split("    func remove(\n", 1)[1].split(
+            "// BEGIN BUILD70_ET_BOUNDED_BULK_DELETE", 1
+        )[0]
+        self.assertIn("try repository.remove(", single)
+        self.assertIn("let removedJob = jobs.removeValue(forKey: key)", single)
+        self.assertLess(single.index("try repository.remove("),
+                        single.index("jobs.removeValue(forKey: key)"))
+        self.assertLess(single.index("try repository.remove("),
+                        single.index("pending.removeAll"))
+        self.assertLess(single.index("try fileManager.removeItem(at: current)"),
+                        single.index("try repository.remove("))
+
+    def test_download_repository_remove_is_atomic_on_sqlite_errors(self):
+        source = DATABASE.split(
+            "    func remove(\n        sourceID: String,\n"
+            "        sourceMangaID: String,\n"
+            "        sourceChapterID: String\n    ) throws {", 1
+        )[1].split("\n}\n\nprivate func ensureReadingRows(", 1)[0]
+        self.assertIn('executeSQLite("BEGIN IMMEDIATE TRANSACTION;"', source)
+        self.assertIn('executeSQLite("COMMIT;"', source)
+        self.assertIn('executeSQLite("ROLLBACK;"', source)
+        self.assertIn("} else if step != SQLITE_DONE {", source)
+        self.assertLess(source.index('executeSQLite("BEGIN IMMEDIATE TRANSACTION;"'),
+                        source.index("DELETE FROM downloads WHERE chapter_id"))
+        self.assertLess(source.index("DELETE FROM downloads WHERE chapter_id"),
+                        source.index("UPDATE chapters SET downloaded = 0"))
+        self.assertLess(source.index("UPDATE chapters SET downloaded = 0"),
+                        source.index('executeSQLite("COMMIT;"'))
+        self.assertIn("defer { sqlite3_finalize(find) }", source)
+        self.assertIn("defer { sqlite3_finalize(delete) }", source)
+        self.assertIn("defer { sqlite3_finalize(mark) }", source)
+
+    def test_sqlite_trigger_failure_rolls_back_both_download_metadata_changes(self):
+        # Model the same SQL transaction with an injected error on the
+        # second statement, without writing into the real app database.
+        connection = sqlite3.connect(":memory:", isolation_level=None)
+        try:
+            connection.executescript(
+                "CREATE TABLE chapters(internal_id INTEGER PRIMARY KEY,"
+                " downloaded INTEGER NOT NULL);"
+                "CREATE TABLE downloads(chapter_id INTEGER PRIMARY KEY);"
+                "INSERT INTO chapters VALUES(1, 1);"
+                "INSERT INTO downloads VALUES(1);"
+                "CREATE TRIGGER reject_download_state BEFORE UPDATE ON chapters"
+                " BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END;"
+            )
+            connection.execute("BEGIN IMMEDIATE TRANSACTION;")
+            connection.execute("DELETE FROM downloads WHERE chapter_id = 1;")
+            with self.assertRaises(sqlite3.DatabaseError):
+                connection.execute(
+                    "UPDATE chapters SET downloaded = 0 WHERE internal_id = 1;"
+                )
+            connection.execute("ROLLBACK;")
+            self.assertEqual(
+                connection.execute("SELECT chapter_id FROM downloads").fetchall(),
+                [(1,)]
+            )
+            self.assertEqual(
+                connection.execute("SELECT downloaded FROM chapters").fetchall(),
+                [(1,)]
+            )
+        finally:
+            connection.close()
+
     @unittest.skipUnless(sys.platform == "darwin", "real Swift execution macOS only")
     def test_real_swift_bulk_deletion_orchestration_with_disposable_data(self):
         swiftc = shutil.which("swiftc")
         self.assertIsNotNone(swiftc)
         actual = self.body()
+        single_remove = MANAGER.split("    func remove(\n", 1)[1].split(
+            "    // BEGIN BUILD70_ET_BOUNDED_BULK_DELETE", 1
+        )[0]
+        single_remove = "    func remove(\n" + single_remove
         path = MANAGER.split("// BEGIN OFFLINE_PATH_RELOCATION\n", 1)[1].split(
             "// END OFFLINE_PATH_RELOCATION", 1)[0]
         owner = MANAGER.split("// BEGIN BUILD70_EQ_CANONICAL_OWNERSHIP\n", 1)[1].split(
@@ -118,6 +189,7 @@ enum ChapterDownloadError: Error {
     case unsafeOfflineDeletionContents
 }
 enum HTTPClientError: Error { case cancelled }
+enum SimulatedSQLiteFailure: Error { case injected }
 final class FakeJob {
     let completion: (Result<[String], Error>) -> Void
     init(_ callback: @escaping (Result<[String], Error>) -> Void = { _ in }) {
@@ -127,10 +199,12 @@ final class FakeJob {
 final class DownloadRepository {
     var rows: [DownloadListRecord]
     var deleted: [String] = []
+    var rejectRemove = false
     init(_ rows: [DownloadListRecord]) { self.rows = rows }
     func listDownloads() throws -> [DownloadListRecord] { rows }
     func remove(sourceID: String, sourceMangaID: String,
                 sourceChapterID: String) throws {
+        if rejectRemove { throw SimulatedSQLiteFailure.injected }
         deleted.append(sourceChapterID)
         rows.removeAll {
             $0.sourceID == sourceID && $0.sourceMangaID == sourceMangaID &&
@@ -175,7 +249,8 @@ final class ChapterDownloadManager {
             mangaID: mangaID, chapterID: chapterID
         )
     }
-''' + actual + '\n}\n'
+    func startNextIfNeeded() {}
+''' + single_remove + '\n' + actual + '\n}\n'
         fixture = r'''
 import Foundation
 let fm = FileManager.default
@@ -198,6 +273,41 @@ func put(_ id: String, filename: String = "page-00000.bin") throws {
 let orphan = root.appendingPathComponent("MangaReader12/Downloads/unknown-owner")
 try fm.createDirectory(at: orphan, withIntermediateDirectories: true)
 try Data("PRESERVE".utf8).write(to: orphan.appendingPathComponent("orphan-data.bin"))
+
+// The exact production single-delete method must retain in-memory jobs
+// if SQLite fails after the file-system removal. The disk loss is still
+// disclosed as a limitation; it is not falsely treated as rolled back.
+try put("database-failure")
+let failingStore = DownloadRepository([row("database-failure")])
+let individual = ChapterDownloadManager(root, failingStore)
+let staleKey = individual.jobKey(
+    sourceID: "asura", mangaID: "series", chapterID: "database-failure"
+)
+individual.jobs[staleKey] = FakeJob()
+individual.pending = [staleKey]
+failingStore.rejectRemove = true
+do {
+    try individual.remove(
+        sourceID: "asura", mangaID: "series", chapterID: "database-failure"
+    )
+    fatalError("simulated SQLite rejection did not stop deletion")
+} catch SimulatedSQLiteFailure.injected {}
+precondition(individual.jobs[staleKey] != nil,
+             "SQLite failure must not silently discard the in-memory job")
+precondition(individual.pending.contains(staleKey),
+             "SQLite failure must retain queue status")
+precondition(failingStore.rows.count == 1 && failingStore.deleted.isEmpty,
+             "failed SQLite delete must leave record")
+precondition(!fm.fileExists(atPath: chapter("database-failure").path),
+             "test must distinguish disk deletion from SQLite rollback")
+try put("database-failure")
+failingStore.rejectRemove = false
+try individual.remove(
+    sourceID: "asura", mangaID: "series", chapterID: "database-failure"
+)
+precondition(individual.pending.isEmpty && individual.jobs[staleKey] == nil,
+             "successful repeat must retire the pending job")
+precondition(failingStore.rows.isEmpty, "recovered remove retires DB identity")
 
 try put("first")
 try put("second", filename: "private-note.txt")

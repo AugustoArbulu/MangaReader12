@@ -83,6 +83,20 @@ class DeletionPreflightTests(unittest.TestCase):
                         body.index("jobs.removeValue(forKey: key)"))
         self.assertIn("ChapterDownloadError.downloadInProgress", body)
 
+    def test_absent_chapter_requires_safe_and_stable_parent_chain(self):
+        helper = self.helper()
+        self.assertIn("private static func absentWithSafeAncestors(", helper)
+        self.assertIn("return absentWithSafeAncestors(directory: directory)", helper)
+        self.assertIn("existingAncestors.append((parent.path, info))", helper)
+        self.assertIn("absentAncestors.append(parent.path)", helper)
+        self.assertIn("stable(original, current)", helper)
+        self.assertIn("Darwin.lstat(directory.path, &leaf) != 0", helper)
+        self.assertNotIn("return errno == ENOENT ? .absent : .unsafe", helper)
+        self.assertLess(
+            helper.index("absentWithSafeAncestors(directory: directory)"),
+            helper.index("let fd = Darwin.open(")
+        )
+
     def test_provenance_rejects_foreign_or_corrupt_plan_and_receipt(self):
         helper = self.helper()
         for token in (
@@ -119,7 +133,7 @@ class DeletionPreflightTests(unittest.TestCase):
         self.assertIn("try repository.remove(", body)
         self.assertIn("guard rows.contains(where: {", body)
         self.assertIn("verdict != .unsafe", body)
-        self.assertIn("return errno == ENOENT ? .absent : .unsafe", self.helper())
+        self.assertIn("return absentWithSafeAncestors(directory: directory)", self.helper())
 
     def test_ui_requires_destructive_confirmation_unchanged(self):
         block = UI.split("private func confirmRemoveDownload(", 1)[1].split(
@@ -173,6 +187,25 @@ func verify(_ actual: WebReaderOfflineDeletionPreflight.Verdict,
 }
 let absent = root.appendingPathComponent("absent")
 verify(verdict(absent), .absent, "missing directory only metadata")
+
+let safeMissingParent = try mk("safe-ancestors/MangaReader12/Downloads/source/manga")
+verify(verdict(safeMissingParent.appendingPathComponent("missing")),
+       .absent, "missing leaf under real ancestors stays metadata-only")
+let safeMissingTree = root.appendingPathComponent(
+    "not-created/MangaReader12/Downloads/source/manga/chapter")
+verify(verdict(safeMissingTree), .absent, "fully missing internal tree")
+
+let linkedAncestorTarget = try mk("linked-ancestor-target/MangaReader12/Downloads")
+let aliasedMissing = root.appendingPathComponent("aliased-missing")
+try fm.createSymbolicLink(at: aliasedMissing,
+                          withDestinationURL: linkedAncestorTarget)
+verify(verdict(aliasedMissing.appendingPathComponent("source/manga/missing")),
+       .unsafe, "missing leaf cannot bypass symlink ancestor check")
+
+let fileParent = root.appendingPathComponent("parent-is-file")
+try Data([7, 7, 7]).write(to: fileParent)
+verify(verdict(fileParent.appendingPathComponent("source/manga/missing")),
+       .unsafe, "file ancestor cannot be treated as missing chapter")
 let chapter = try mk("app/MangaReader12/Downloads/source/manga/chapter")
 try put(chapter, "page-00000.bin")
 let plan: [String: Any] = [

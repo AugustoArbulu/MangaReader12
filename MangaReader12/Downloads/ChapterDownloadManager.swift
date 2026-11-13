@@ -94,6 +94,46 @@ enum WebReaderOfflineDeletionPreflight {
             a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
     }
 
+    // An absent chapter directory is metadata-only, not proof that the
+    // ancestor chain is safe. A source/manga symlink with a missing child
+    // must never be treated as permission to retire a SQLite download row.
+    private static func absentWithSafeAncestors(directory: URL) -> Bool {
+        var existingAncestors: [(String, stat)] = []
+        var absentAncestors: [String] = []
+        var parent = directory.deletingLastPathComponent()
+        for _ in 0..<4 {
+            var info = stat()
+            if Darwin.lstat(parent.path, &info) == 0 {
+                guard (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+                    return false
+                }
+                existingAncestors.append((parent.path, info))
+            } else if errno == ENOENT {
+                absentAncestors.append(parent.path)
+            } else {
+                return false
+            }
+            parent.deleteLastPathComponent()
+        }
+
+        // Recheck both absent and existing path states before allowing
+        // metadata-only cleanup; no file or SQLite operations happen here.
+        var leaf = stat()
+        guard Darwin.lstat(directory.path, &leaf) != 0,
+              errno == ENOENT else { return false }
+        for (path, original) in existingAncestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) == 0,
+                  stable(original, current) else { return false }
+        }
+        for path in absentAncestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) != 0,
+                  errno == ENOENT else { return false }
+        }
+        return true
+    }
+
     static func inspect(
         directory: URL,
         sourceID: String,
@@ -103,7 +143,8 @@ enum WebReaderOfflineDeletionPreflight {
     ) -> Verdict {
         var before = stat()
         if Darwin.lstat(directory.path, &before) != 0 {
-            return errno == ENOENT ? .absent : .unsafe
+            guard errno == ENOENT else { return .unsafe }
+            return absentWithSafeAncestors(directory: directory) ? .absent : .unsafe
         }
         guard (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
             return .unsafe
@@ -1095,16 +1136,17 @@ final class ChapterDownloadManager {
             if verdict == .allowed {
                 try fileManager.removeItem(at: current)
             }
-            // Only after filesystem removal succeeds may the local queue
-            // and persisted record be retired. Missing folder is a separate
-            // metadata-only removal for an exact, unambiguous DB identity.
-            let removedJob = jobs.removeValue(forKey: key)
-            pending.removeAll { $0 == key }
+            // Only after filesystem removal succeeds may SQLite and
+            // in-memory queue state be retired. If SQLite rejects deletion,
+            // leave pending/jobs untouched instead of silently losing the
+            // only retained completion callback on this app session.
             try repository.remove(
                 sourceID: sourceID,
                 sourceMangaID: mangaID,
                 sourceChapterID: chapterID
             )
+            let removedJob = jobs.removeValue(forKey: key)
+            pending.removeAll { $0 == key }
             // If a queued/paused job is explicitly removed, release its
             // retained caller closure instead of leaving it waiting forever.
             if let job = removedJob {
