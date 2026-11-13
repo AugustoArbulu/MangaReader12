@@ -54,7 +54,9 @@ jobs:
           assert 'WR-OFFLINE-COMPLETE-V1:' in receipt
           assert 'EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
           assert 'EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
-          assert 'mode=ro&immutable=1' in script
+          assert 'read_database_bytes(db_path, db_hash)' in script
+          assert 'db.deserialize(raw)' in script
+          assert 'sqlite3.connect(uri' not in script
           assert 'installationAuthorized": False' in script
           assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
           assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
