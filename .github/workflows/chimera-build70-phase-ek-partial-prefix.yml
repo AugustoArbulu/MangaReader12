@@ -1,0 +1,57 @@
+name: WebReader Build70 Phase EK Partial Page Prefix (host only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ek_partial_prefix_metadata.py'
+      - 'ci/test_build70_ek_partial_prefix_metadata.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EK_PARTIAL_PREFIX_2026-11-13.md'
+      - '.github/workflows/chimera-build70-phase-ek-partial-prefix.yml'
+permissions:
+  contents: read
+jobs:
+  partial-prefix-host-audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test EA, ED, EI, EJ and EK synthetic partial download audit
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ed_portable_vs_external_library.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ei_all_downloads_inventory.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ej_recovery_plan_metadata.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ek_partial_prefix_metadata.py' -v
+      - name: No IPA build, owner trigger, restoration or installation authority
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('ci/build70_ek_partial_prefix_metadata.py').read_text()
+          native = Path('MangaReader12/Downloads/WebReaderOfflineResumePrefix.swift').read_text()
+          for token in (
+              'EK_STOP_PARTIAL_PAGES_OR_PLANS_REQUIRE_REVIEW',
+              '"readyToDistributeIPA": False',
+              '"readyToInstallIPA": False',
+              '"installationAuthorized": False',
+              '"restorationAuthorized": False',
+              '"automaticUpdaterEnabled": False',
+          ):
+              assert token in source, token
+          assert 'MAX_PAGE_BYTES = 20 * 1024 * 1024' in source
+          assert 'maximumPageBytes: Int64 = 20 * 1024 * 1024' in native
+          assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS EK: prefix metadata only, no iPad access, no IPA/install authority')
+          PY
