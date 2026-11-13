@@ -195,6 +195,67 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(r["nestedUnexpectedDirectoryCount"], 1)
         self.assertTrue(r["status"].startswith("EI_STOP_"))
 
+    def test_unrecognized_regular_file_in_completed_chapter_blocks(self):
+        chapter = self.base / "asura" / "fiction1" / "chap1"
+        payload = chapter / "hidden-recoverable-data"
+        payload.write_bytes(b"synthetic-extra-bytes")
+        result = self.audit()
+        self.assertEqual(result["status"],
+                         "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(result["unrecognizedChapterLeafFiles"], 1)
+        self.assertEqual(result["unrecognizedLeafFilesInRecordedChapters"], 1)
+        self.assertEqual(result["orphanChapterFiles"], 0)
+        self.assertTrue(payload.exists())
+        self.denied(result)
+        self.assertNotIn(payload.name, str(result))
+
+    def test_unrecognized_regular_file_in_paused_chapter_blocks(self):
+        chapter = self.add_noncompleted(state="paused")
+        extra = chapter / ".wr69-plan-aborted.tmp"
+        extra.write_bytes(b"synthetic-incomplete-plan")
+        result = self.audit()
+        self.assertEqual(result["status"],
+                         "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(result["unrecognizedChapterLeafFiles"], 1)
+        self.assertEqual(result["unrecognizedLeafFilesInRecordedChapters"], 1)
+        self.assertEqual(result["partialJobFiles"], 1)
+        self.assertTrue(extra.exists())
+        self.denied(result)
+
+    def test_expected_plan_and_receipt_are_not_unknown_leaves(self):
+        chapter = self.add_noncompleted(state="paused")
+        (chapter / "_download-plan.json").write_bytes(b"{ }")
+        result = self.audit()
+        self.assertEqual(result["unrecognizedChapterLeafFiles"], 0)
+        self.assertEqual(result["unrecognizedLeafFilesInRecordedChapters"], 0)
+        self.assertEqual(result["status"],
+                         "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+
+    def test_stray_page_like_filename_is_not_silently_accounted(self):
+        chapter = self.base / "asura" / "fiction1" / "chap1"
+        unexpected = chapter / "page-extra.bin"
+        unexpected.write_bytes(b"synthetic")
+        result = self.audit()
+        self.assertEqual(result["status"],
+                         "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(result["unrecognizedChapterLeafFiles"], 1)
+        self.assertTrue(unexpected.exists())
+
+    def test_unrecognized_leaf_cli_exits_nonzero_without_name_leak(self):
+        chapter = self.base / "asura" / "fiction1" / "chap1"
+        secret_name = "private-unknown-name-a1"
+        (chapter / secret_name).write_bytes(b"private-fixture")
+        script = Path(__file__).resolve().parent / "build70_ei_all_downloads_inventory.py"
+        proc = subprocess.run(
+            [sys.executable, str(script), "--snapshot", str(self.root)],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(proc.returncode, 2)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["unrecognizedLeafFilesInRecordedChapters"], 1)
+        self.assertNotIn(secret_name, proc.stdout + proc.stderr)
+        self.assertNotIn(str(self.root), proc.stdout + proc.stderr)
+
     def test_symlinked_orphan_folder_is_refused(self):
         link = self.base / "link"
         link.symlink_to(self.base / "asura", target_is_directory=True)
