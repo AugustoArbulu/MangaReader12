@@ -25,11 +25,32 @@ class SafePartialRetryContract(unittest.TestCase):
             "throw ChapterDownloadError.unsafeExistingLocalData",
         ):
             self.assertIn(required, body)
-            self.assertLess(body.index(required), body.index("removeItem(at: directory)"))
+            self.assertLess(body.index(required), body.index("self.savePlan(for: job)"))
         self.assertIn('existing.state == "completed"', body)
-        self.assertEqual(body.count("removeItem(at: directory)"), 1)
+        self.assertNotIn("removeItem(at: directory)", body)
+        self.assertIn("let existingDirectory = self.fileManager.fileExists(", body)
+        self.assertIn("if existingDirectory {", body)
+        self.assertIn("} else {\n                    try self.fileManager.createDirectory(", body)
+        self.assertLess(body.index("WebReaderPartialRetryFolderAudit.canReplace("),
+                        body.index("self.savePlan(for: job)"))
         self.assertIn("manager.download(", BROWSER)
         self.assertNotIn("existingDataPolicy:", BROWSER)
+
+    def test_in_place_retry_does_not_destroy_previous_pages_before_network(self):
+        body = MANAGER.split("    func download(\n", 1)[1].split(
+            "    // Returns false for a job left over", 1)[0]
+        req = MANAGER.split("private func performPageRequest(", 1)[1].split(
+            "private func fail(", 1)[0]
+        self.assertNotIn("removeItem(at: directory)", body)
+        self.assertNotIn("removeItem(at: directory)", req)
+        self.assertIn("try response.data.write(to: destination, options: .atomic)", req)
+        self.assertIn("ChapterDownloadImageValidator.canStore(", req)
+        self.assertLess(req.index("ChapterDownloadImageValidator.canStore("),
+                        req.index("try response.data.write(to: destination"))
+        self.assertIn("let existingDirectory =", body)
+        self.assertIn("if existingDirectory {", body)
+        self.assertLess(body.index("if existingDirectory {"),
+                        body.index("self.savePlan(for: job)"))
 
     def test_only_confirmed_downloads_ui_supplies_replacement_policy(self):
         prompt = DOWNLOADS.split("private func retryDownload(", 1)[1].split(

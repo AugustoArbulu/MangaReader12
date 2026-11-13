@@ -18,3 +18,9 @@ Antes da EL, downloads normais, downloads em lote e repetição confirmada chega
 Executar regressão EL em Linux/macOS e compilação da aplicação iOS 12 em runner macOS. Nenhum resultado sintético deve ser tratado como autorização de instalação. A PR #90 continua Draft e main intocada. O acionador de Build71 não será criado e productionPublicKeyX963, independentlyProvisionedSPKISHA256 e liveInstallationEnabled seguem desativados.
 
 Antes de qualquer Build71 física, exigir prova separada da cópia externa integral, identidade da aplicação instalada e leitura do mesmo capítulo com rede desligada, seguida de autorização explícita de entrega e instalação.
+
+## Complemento EM — substituição em etapas, sem apagar a pasta na admissão
+
+A Fase EL inicialmente exigia confirmação e auditoria, mas ainda excluía a pasta inteira **antes** de salvar o novo plano. A correção EM elimina essa remoção por completo no método de download: pastas existentes e explicitamente admitidas são mantidas; a repetição recomeça do índice zero e só sobrescreve cada página conforme a nova imagem passa pela validação de conteúdo e é gravada atomicamente. Se a obtenção de novas páginas, codificação de plano ou abertura da fila falhar, as páginas previamente armazenadas permanecem no lugar. Pastas com conteúdo inesperado continuam recusadas.
+
+**Limites:** após uma tentativa parcialmente bem-sucedida, a pasta pode conter uma mistura de páginas antigas e novas; somente a auditoria final da contagem pode marcar o capítulo como completo. O plano de recuperação pode ser atualizado mesmo quando o SQLite falha. A opção de repetição ainda exige confirmação humana e não substitui backup externo verificado. A integridade real de imagem, ausência completa de corridas no filesystem e persistência no iPad continuam sem prova física. Em nenhum caso o app apaga automaticamente a pasta pré-existente só para iniciar um retry.

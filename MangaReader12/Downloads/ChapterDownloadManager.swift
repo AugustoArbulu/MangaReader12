@@ -473,9 +473,14 @@ final class ChapterDownloadManager {
                     sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id
                 )
                 // No implicit overwrite on chapter taps or batch queues.
-                // A destructive user prompt in Downloads is required, and
-                // unknown/unsafe contents block replacement even then.
-                if self.fileManager.fileExists(atPath: directory.path) {
+                // The explicit Downloads retry may replace *individual* pages
+                // via later validated atomic writes, but it must never erase
+                // the existing chapter folder as a preparation step. If source
+                // resolution, plan encoding or SQLite fails, old page bytes stay.
+                let existingDirectory = self.fileManager.fileExists(
+                    atPath: directory.path
+                )
+                if existingDirectory {
                     guard existingDataPolicy == .replaceAfterExplicitUserConfirmation,
                           let previous = try self.repository.record(
                               sourceID: sourceID,
@@ -491,11 +496,12 @@ final class ChapterDownloadManager {
                     ) else {
                         throw ChapterDownloadError.unsafeExistingLocalData
                     }
-                    try self.fileManager.removeItem(at: directory)
+                } else {
+                    try self.fileManager.createDirectory(
+                        at: directory, withIntermediateDirectories: true,
+                        attributes: nil
+                    )
                 }
-                try self.fileManager.createDirectory(
-                    at: directory, withIntermediateDirectories: true, attributes: nil
-                )
                 let job = ChapterDownloadJob(
                     key: key, sourceID: sourceID, manga: manga,
                     chapter: chapter, pages: pages, directory: directory,

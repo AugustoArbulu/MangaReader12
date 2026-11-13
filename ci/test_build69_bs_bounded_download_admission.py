@@ -17,8 +17,10 @@ class MaxPagesAdmission(unittest.TestCase):
         self.assertIn(guard, body)
         self.assertIn("ChapterDownloadError.tooManyPages", body)
         self.assertLess(body.index(guard), body.index("worker.async {"))
-        self.assertLess(body.index(guard), body.index("removeItem(at: directory)"))
+        # Existing partial chapters are never pre-deleted by admission.
+        self.assertNotIn("removeItem(at: directory)", body)
         self.assertLess(body.index(guard), body.index("createDirectory("))
+        self.assertLess(body.index(guard), body.index("WebReaderPartialRetryFolderAudit.canReplace("))
         self.assertIn("maximumPlannedPages = 5_000", RESUME)
 
     def test_defense_in_depth_before_encoding_plan(self):

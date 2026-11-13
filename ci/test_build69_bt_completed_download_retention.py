@@ -8,7 +8,7 @@ MANAGER = (ROOT / "MangaReader12/Downloads/ChapterDownloadManager.swift").read_t
 
 
 class CompletedChapterRetention(unittest.TestCase):
-    def test_completed_download_guard_before_any_folder_removal(self):
+    def test_completed_download_guard_before_any_folder_creation_or_page_replacement(self):
         body = MANAGER.split("    func download(\n", 1)[1].split(
             "    // Returns false for a job left over", 1
         )[0]
@@ -18,11 +18,14 @@ class CompletedChapterRetention(unittest.TestCase):
             "sourceChapterID: chapter.id",
             'existing.state == "completed"',
             "throw ChapterDownloadError.alreadyCompleted",
-            "removeItem(at: directory)",
+            "existingDataPolicy == .replaceAfterExplicitUserConfirmation",
+            "WebReaderPartialRetryFolderAudit.canReplace(",
         ):
             self.assertIn(token, body)
+        # Folder removal is not a prerequisite for any new download.
+        self.assertNotIn("removeItem(at: directory)", body)
         self.assertLess(body.index('existing.state == "completed"'),
-                        body.index("removeItem(at: directory)"))
+                        body.index("WebReaderPartialRetryFolderAudit.canReplace("))
         self.assertLess(body.index("throw ChapterDownloadError.alreadyCompleted"),
                         body.index("createDirectory("))
         self.assertIn("job.state == \"completed\"", MANAGER.replace(
