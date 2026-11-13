@@ -111,9 +111,38 @@ def audited_swift_sources(base: Path = ROOT) -> tuple[str, str, str, str]:
             "try clearExcludedDownloadFiles()" not in backup or
             "try fileManager.removeItem(at: downloads)" not in backup):
         raise DMRejected("backup destructive behavior changed: re-review required")
-    if ('func clearAllDownloads() throws' not in storage or
-            'try downloadsRepository.clearAll()' not in storage):
+    # Fase ET: "Apagar todos" can only delegate to the synchronized
+    # chapter-scoped, preflighted bulk path. Never accept the obsolete
+    # recursive Downloads-root erase or unconditional SQLite clearAll.
+    marker = "func clearAllDownloads() throws {"
+    if storage.count(marker) != 1 or "func reindexDownloads()" not in storage:
         raise DMRejected("download erasure API moved: re-review required")
+    clear_body = storage.split(marker, 1)[1].split("func reindexDownloads()", 1)[0]
+    if ("ChapterDownloadManager.defaultManager().removeAllConfirmed()" not in clear_body
+            or "removeItem(" in clear_body
+            or "downloadsRepository.clearAll()" in clear_body):
+        raise DMRejected("unsafe bulk download erasure: re-review required")
+
+    bulk_start = "// BEGIN BUILD70_ET_BOUNDED_BULK_DELETE"
+    bulk_end = "// END BUILD70_ET_BOUNDED_BULK_DELETE"
+    if downloads.count(bulk_start) != 1 or downloads.count(bulk_end) != 1:
+        raise DMRejected("bounded bulk deletion source unavailable")
+    bulk = downloads.split(bulk_start, 1)[1].split(bulk_end, 1)[0]
+    for required in (
+        "func removeAllConfirmed() throws -> Int",
+        "guard runningKey == nil, pending.isEmpty else {",
+        "WebReaderOfflineCanonicalOwnership.collides(",
+        "WebReaderOfflineDeletionPreflight.inspect(",
+        "guard actual == item.verdict else {",
+        "try fileManager.removeItem(at: item.directory)",
+        "try repository.remove(",
+    ):
+        if required not in bulk:
+            raise DMRejected("unsafe bulk download guard changed")
+    if ("removeItem(at: downloadsDirectory()" in bulk
+            or "downloadsRepository.clearAll()" in bulk
+            or 'executeSQLite("DELETE FROM downloads;' in bulk):
+        raise DMRejected("unbounded download erasure reintroduced")
     if not re.search(r"private static let schemaV1 = \"\"\"", top):
         raise DMRejected("cannot isolate schema-v1 SQL")
     return top, path_fragment, inventory, receipt

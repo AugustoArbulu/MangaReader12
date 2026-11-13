@@ -152,9 +152,40 @@ class DMSourceAndNoDeviceAuthorityTests(unittest.TestCase):
     def test_storage_clear_downloads_method_cannot_move_silently(self):
         src = self.fixture()
         self.change(src, STORAGE,
-                    "try downloadsRepository.clearAll()", "// no operation")
+                    "ChapterDownloadManager.defaultManager().removeAllConfirmed()",
+                    "downloadsRepository.clearAll()")
         with self.assertRaises(DMRejected):
             audited_swift_sources(src)
+
+    def test_unbounded_recursive_bulk_removal_cannot_return(self):
+        src = self.fixture()
+        self.change(src, STORAGE,
+                    "_ = try ChapterDownloadManager.defaultManager().removeAllConfirmed()",
+                    "try fileManager.removeItem(at: downloadsDirectory())")
+        with self.assertRaises(DMRejected):
+            audited_swift_sources(src)
+
+    def test_bulk_preflight_and_identity_guards_cannot_be_removed(self):
+        for guard in (
+            "guard runningKey == nil, pending.isEmpty else {",
+            "WebReaderOfflineCanonicalOwnership.collides(",
+            "WebReaderOfflineDeletionPreflight.inspect(",
+            "guard actual == item.verdict else {",
+        ):
+            with self.subTest(guard=guard):
+                src = self.fixture()
+                file = src / DOWNLOADS
+                content = file.read_text(encoding="utf-8")
+                start = content.index("// BEGIN BUILD70_ET_BOUNDED_BULK_DELETE")
+                end = content.index("// END BUILD70_ET_BOUNDED_BULK_DELETE", start)
+                bulk = content[start:end]
+                self.assertIn(guard, bulk)
+                file.write_text(
+                    content[:start] + bulk.replace(guard, "// unsafe guard removed", 1)
+                    + content[end:], encoding="utf-8"
+                )
+                with self.assertRaises(DMRejected):
+                    audited_swift_sources(src)
 
     def test_linked_swift_fixture_is_fictional_and_not_real_user_data(self):
         self.assertIn("Fictional title", SWIFT_TEST)
