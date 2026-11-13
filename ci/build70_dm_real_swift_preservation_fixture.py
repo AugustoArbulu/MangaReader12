@@ -139,6 +139,11 @@ def audited_swift_sources(base: Path = ROOT) -> tuple[str, str, str, str]:
     ):
         if required not in bulk:
             raise DMRejected("unsafe bulk download guard changed")
+    # The ET worker intentionally audits twice: all rows before any write,
+    # then the selected folder again immediately before its actual removal.
+    # A single remaining call must not satisfy the security contract.
+    if bulk.count("WebReaderOfflineDeletionPreflight.inspect(") != 2:
+        raise DMRejected("first-pass or final deletion preflight removed")
     if ("removeItem(at: downloadsDirectory()" in bulk
             or "downloadsRepository.clearAll()" in bulk
             or 'executeSQLite("DELETE FROM downloads;' in bulk):
