@@ -195,7 +195,7 @@ let oversized = try mk("oversized/a/b/c/d")
 let huge = oversized.appendingPathComponent("page-00000.bin")
 fm.createFile(atPath: huge.path, contents: Data([1]))
 let handle = try FileHandle(forWritingTo: huge)
-try handle.truncateFile(atOffset: UInt64(20 * 1024 * 1024 + 1))
+handle.truncateFile(atOffset: UInt64(20 * 1024 * 1024 + 1))
 handle.closeFile()
 verify(verdict(oversized), .unsafe, "oversized page")
 verify(try Data(contentsOf: outside) == Data([9, 8, 7]),
@@ -206,10 +206,10 @@ print("PASS ER native Swift: admissible deletion scoped; suspicious files retain
         # byte-conservation assertions to avoid conflating two result types.
         fixture = fixture.replace(
             'verify(try Data(contentsOf: chapter.appendingPathComponent("page-00000.bin"))\n    == Data([1, 2, 3]), .allowed == .allowed, "audit does not mutate bytes")',
-            'precondition(try Data(contentsOf: chapter.appendingPathComponent("page-00000.bin")) == Data([1, 2, 3]), "audit does not mutate bytes")'
+            'let originalPageBytes = try Data(contentsOf: chapter.appendingPathComponent("page-00000.bin"))\nprecondition(originalPageBytes == Data([1, 2, 3]), "audit does not mutate bytes")'
         ).replace(
             'verify(try Data(contentsOf: outside) == Data([9, 8, 7]),\n       .allowed == .allowed, "outside bytes remain unchanged")',
-            'precondition(try Data(contentsOf: outside) == Data([9, 8, 7]), "outside bytes remain unchanged")'
+            'let originalOutsideBytes = try Data(contentsOf: outside)\nprecondition(originalOutsideBytes == Data([9, 8, 7]), "outside bytes remain unchanged")'
         )
         with tempfile.TemporaryDirectory(prefix="wr-er-safe-delete-") as tmp:
             folder = Path(tmp)
