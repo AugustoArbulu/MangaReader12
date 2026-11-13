@@ -22,6 +22,8 @@ on:
       - 'ci/test_build70_eg_cli_fail_closed.py'
       - 'ci/test_build70_ci_scope.py'
       - 'ci/test_build70_el_safe_partial_retry.py'
+      - 'ci/build70_eo_two_copy_review.py'
+      - 'ci/test_build70_eo_two_copy_review.py'
       - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
       - 'MangaReader12/UI/DownloadsViewController.swift'
       - 'docs/WEBREADER_BUILD70_PHASE_EG_FAIL_CLOSED_CLI_2026-11-12.md'
@@ -64,6 +66,7 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_ek_partial_prefix_metadata.py' -v
           python -m unittest discover -s ci -p 'test_build70_ci_scope.py' -v
           python -m unittest discover -s ci -p 'test_build70_el_safe_partial_retry.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eo_two_copy_review.py' -v
       - name: No owner IPA QA trigger or publisher/installer authority
         run: |
           python - <<'PY'
