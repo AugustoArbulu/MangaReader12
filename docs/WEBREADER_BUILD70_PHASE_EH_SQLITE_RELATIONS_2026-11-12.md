@@ -17,7 +17,7 @@ A implementação em produção DownloadRepository.setState() marca chapters.dow
 ## Verificações
 
 1. PRAGMA user_version=1 e PRAGMA integrity_check completo devem ser válidos.
-2. PRAGMA foreign_key_check não deve retornar nenhuma violação, sem expor valores de chaves ou IDs.
+2. As próprias declarações FOREIGN KEY de todas as 11 tabelas da schema v1 precisam corresponder ao contrato definido no SQLiteDatabase.swift, incluindo tabela/coluna pai, coluna filha, ação ON DELETE e comportamento ON UPDATE. Ausência ou alteração dessas regras é EH_STOP_FOREIGN_KEY_SCHEMA_MISMATCH. Depois, PRAGMA foreign_key_check não deve retornar nenhuma violação, sem expor valores de chaves ou IDs.
 3. chapters.downloaded deve ser estritamente 0/1 e corresponder à existência de downloads.state=completed para aquele chapter_id.
 4. Qualquer registro completed deve possuir progress=1 (conforme o setState de produção).
 5. is_read e bookmarked devem estar em 0/1, e last_page_read não pode ser negativo.
@@ -27,7 +27,7 @@ O relatório devolve apenas contagens agregadas, nomes de campos e um status; n�
 
 ## Limites importantes
 
-PRAGMA foreign_key_check testa relações definidas no schema v1 da cópia; um banco adulterado com esquema sem FKs pode necessitar validação adicional. A cópia pode ter sido obtida de fonte incorreta, e pode ter sido modificada antes da auditoria; uma verificação host bem-sucedida não atesta o iPad físico. Alguns estados históricos legítimos podem exigir análise manual se não correspondem às invariantes atuais — a EH não apaga nem reclassifica esses registros.
+A EH confere também a presença do contrato das chaves estrangeiras para impedir um falso verde se o banco tiver sido recriado sem FKs. Os testes simulam um SQLite com todas as linhas e colunas preservadas, mas sem qualquer FK, que passa em quick_check e em foreign_key_check vazio e ainda assim DEVE ser recusado pela EH. A cópia pode ter sido obtida de fonte incorreta, e pode ter sido modificada antes da auditoria; uma verificação host bem-sucedida não atesta o iPad físico. Alguns estados históricos legítimos podem exigir análise manual se não correspondem às invariantes atuais — a EH não apaga nem reclassifica esses registros.
 
 A ferramenta não confirma que as imagens decodificam no iOS 12, que todos os dados foram retidos fora do aparelho ou que uma atualização preservará o sandbox. O .mr12backup continua sem bytes das páginas e restaurá-lo remove Downloads.
 
