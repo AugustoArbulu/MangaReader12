@@ -26,6 +26,9 @@ on:
       - 'ci/test_build70_eo_two_copy_review.py'
       - 'ci/test_build70_eq_canonical_path_ownership.py'
       - 'ci/test_build70_er_deletion_preflight.py'
+      - 'ci/test_build70_et_safe_bulk_deletion.py'
+      - 'MangaReader12/Core/StorageManager.swift'
+      - 'MangaReader12/UI/DataStorageViewController.swift'
       - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
       - 'MangaReader12/UI/DownloadsViewController.swift'
@@ -72,6 +75,7 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_eo_two_copy_review.py' -v
           python -m unittest discover -s ci -p 'test_build70_eq_canonical_path_ownership.py' -v
           python -m unittest discover -s ci -p 'test_build70_er_deletion_preflight.py' -v
+          python -m unittest discover -s ci -p 'test_build70_et_safe_bulk_deletion.py' -v
       - name: No owner IPA QA trigger or publisher/installer authority
         run: |
           python - <<'PY'

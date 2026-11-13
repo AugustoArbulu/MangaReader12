@@ -148,6 +148,9 @@ jobs:
       - name: Test ER confirmed-delete preflight (synthetic host)
         run: python3 -m unittest discover -s ci -p 'test_build70_er_deletion_preflight.py' -v
 
+      - name: Test ET bounded bulk-download deletion (synthetic host)
+        run: python3 -m unittest discover -s ci -p 'test_build70_et_safe_bulk_deletion.py' -v
+
       - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
         run: python3 ci/test_webreader_update_manifest.py
 

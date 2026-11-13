@@ -48,19 +48,12 @@ final class StorageManager {
     }
 
     func clearAllDownloads() throws {
-        let directory = downloadsDirectory()
-
-        if fileManager.fileExists(atPath: directory.path) {
-            try fileManager.removeItem(at: directory)
-        }
-
-        try fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-
-        try downloadsRepository.clearAll()
+        // A destructive tap is NOT permission to recursively erase the
+        // entire Downloads tree. Orphaned/unrecognized content may include
+        // valuable offline pages from an interrupted or older installation.
+        // Coordinate with the active chapter worker and its per-chapter
+        // identity, file-integrity, consent and retry safety guards.
+        _ = try ChapterDownloadManager.defaultManager().removeAllConfirmed()
     }
 
     func reindexDownloads() throws -> Int {

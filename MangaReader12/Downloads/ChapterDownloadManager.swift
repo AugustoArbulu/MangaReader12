@@ -1116,6 +1116,116 @@ final class ChapterDownloadManager {
         }
     }
 
+    // BEGIN BUILD70_ET_BOUNDED_BULK_DELETE
+    // Called only from the separately confirmed Data/Storage destructive UI.
+    // Do not remove the entire Downloads tree: unknown and orphan content
+    // is not necessarily owned by our database and must be preserved.
+    // Every known chapter is reviewed BEFORE the first deletion.
+    func removeAllConfirmed() throws -> Int {
+        return try worker.sync {
+            guard runningKey == nil, pending.isEmpty else {
+                throw ChapterDownloadError.downloadInProgress
+            }
+
+            let rows = try repository.listDownloads()
+            var planned: [(
+                record: DownloadListRecord,
+                directory: URL,
+                verdict: WebReaderOfflineDeletionPreflight.Verdict
+            )] = []
+            var seenKeys = Set<String>()
+
+            for record in rows {
+                guard record.state == "completed" ||
+                      record.state == "failed" ||
+                      record.state == "paused" else {
+                    throw ChapterDownloadError.downloadInProgress
+                }
+                let key = jobKey(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                // Never merge duplicate database identities or ambiguous
+                // queue key encodings into a single destructive operation.
+                guard seenKeys.insert(key).inserted,
+                      !WebReaderOfflineCanonicalOwnership.collides(
+                          sourceID: record.sourceID,
+                          mangaID: record.sourceMangaID,
+                          chapterID: record.sourceChapterID,
+                          recorded: rows
+                      ) else {
+                    throw ChapterDownloadError.ambiguousOfflineChapterPath
+                }
+
+                let directory = try chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                let verdict = WebReaderOfflineDeletionPreflight.inspect(
+                    directory: directory,
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID,
+                    fileManager: fileManager
+                )
+                guard verdict != .unsafe else {
+                    throw ChapterDownloadError.unsafeOfflineDeletionContents
+                }
+                planned.append((
+                    record: record, directory: directory, verdict: verdict
+                ))
+            }
+
+            // If a live in-memory job no longer has a matching database
+            // record, abort instead of leaving it capable of writing pages
+            // into a chapter the bulk command just deleted.
+            guard Set(jobs.keys).isSubset(of: seenKeys) else {
+                throw ChapterDownloadError.downloadInProgress
+            }
+
+            // Re-check each entry immediately before deletion. A changed
+            // folder or an unknown file must never trigger recursive root
+            // removal. Directory ancestors may be left empty intentionally.
+            for item in planned {
+                let actual = WebReaderOfflineDeletionPreflight.inspect(
+                    directory: item.directory,
+                    sourceID: item.record.sourceID,
+                    mangaID: item.record.sourceMangaID,
+                    chapterID: item.record.sourceChapterID,
+                    fileManager: fileManager
+                )
+                guard actual == item.verdict else {
+                    throw ChapterDownloadError.unsafeOfflineDeletionContents
+                }
+                if actual == .allowed {
+                    try fileManager.removeItem(at: item.directory)
+                }
+                try repository.remove(
+                    sourceID: item.record.sourceID,
+                    sourceMangaID: item.record.sourceMangaID,
+                    sourceChapterID: item.record.sourceChapterID
+                )
+
+                let key = jobKey(
+                    sourceID: item.record.sourceID,
+                    mangaID: item.record.sourceMangaID,
+                    chapterID: item.record.sourceChapterID
+                )
+                if let job = jobs.removeValue(forKey: key) {
+                    DispatchQueue.main.async {
+                        job.completion(.failure(HTTPClientError.cancelled))
+                    }
+                }
+            }
+            // No file-system root erase, no SQLite DELETE FROM downloads,
+            // and no bulk removal of unknown/orphan folders at any point.
+            return planned.count
+        }
+    }
+    // END BUILD70_ET_BOUNDED_BULK_DELETE
+
     private func chapterDirectory(
         sourceID: String,
         mangaID: String,

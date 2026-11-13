@@ -132,7 +132,7 @@ final class DataStorageViewController: UITableViewController {
 
         default:
             cell.textLabel?.text = "Apagar todos os downloads"
-            cell.detailTextLabel?.text = "Remove todos os capítulos salvos offline."
+            cell.detailTextLabel?.text = "Exclui apenas capítulos registrados; arquivos desconhecidos são preservados."
             cell.textLabel?.textColor = .red
         }
 
@@ -231,9 +231,12 @@ final class DataStorageViewController: UITableViewController {
         let alert = UIAlertController(
             title: "Apagar todos os downloads?",
             message: "Todos os capítulos offline e suas imagens serão removidos. " +
-                "O backup .mr12backup não contém essas páginas; restaurá-lo " +
-                "não recupera os downloads. Biblioteca, progresso e " +
-                "histórico não serão apagados.",
+                "Somente downloads registrados e seguros serão excluídos; " +
+                "pastas desconhecidas ou órfãs serão preservadas. " +
+                "Se ocorrer erro durante a operação, alguns capítulos podem " +
+                "já ter sido removidos. O backup .mr12backup não contém essas " +
+                "páginas; restaurá-lo não recupera os downloads. " +
+                "Biblioteca, progresso e histórico não serão apagados.",
             preferredStyle: .alert
         )
 
@@ -246,7 +249,8 @@ final class DataStorageViewController: UITableViewController {
                 title: "Downloads apagados"
             ) { manager in
                 try manager.clearAllDownloads()
-                return nil
+                return "Capítulos registrados removidos. Pastas órfãs ou arquivos " +
+                    "desconhecidos foram preservados para revisão."
             }
         })
 
