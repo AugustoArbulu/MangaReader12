@@ -69,12 +69,17 @@ def _collect_download_tree(root):
                 if depth > 3:
                     summary["unexpectedDepthDirectories"] += 1
                 try:
+                    names = []
                     with os.scandir(folder_fd) as directory:
-                        names = sorted((e.name for e in directory), key=os.fsencode)
+                        for entry in directory:
+                            names.append(entry.name)
+                            # Reject adversarially huge directories BEFORE
+                            # allocating an unbounded sorted name list.
+                            if len(names) > MAX_FILES + MAX_DIRS:
+                                stop("EI_STOP_ENTRY_LIMIT")
+                    names.sort(key=os.fsencode)
                 except OSError:
                     stop("EI_STOP_DIRECTORY_UNREADABLE")
-                if len(names) > MAX_FILES + MAX_DIRS:
-                    stop("EI_STOP_ENTRY_LIMIT")
                 for name in names:
                     raw = os.fsencode(name)
                     if (not raw or len(raw) > 255 or b"/" in raw or
