@@ -79,7 +79,7 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(r["downloadRows"], 2)
         self.assertEqual(r["noncompletedDownloadRows"], 1)
         self.assertEqual(r["partialJobFiles"], 2)
-        self.assertEqual(r["partialJobBytes"], 24)
+        self.assertEqual(r["partialJobBytes"], 26)
         self.assertEqual(r["orphanChapterFiles"], 0)
         self.denied(r)
         self.assertNotIn("fictitious2", str(r))
@@ -161,8 +161,18 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertTrue(r["status"].startswith("EI_STOP_"))
 
     def test_mixed_completed_and_paused_sanitized_collision_is_refused(self):
-        self.add_noncompleted(state="paused", source="asura",
-                              title="fiction1", chapter="ch1", ident=2)
+        completed = self.add_noncompleted(
+            state="paused", source="a?b", title="fiction2", chapter="ch2", ident=2
+        )
+        (completed / "page-00000.bin").write_bytes(b"fictitious-page")
+        (completed / ".webreader-completion-v1").write_bytes(
+            b"WR-OFFLINE-COMPLETE-V1:1\\n".replace(b"\\n", b"\n")
+        )
+        self.mutate("UPDATE downloads SET state='completed',progress=1 WHERE chapter_id=2")
+        self.mutate("UPDATE chapters SET downloaded=1 WHERE internal_id=2")
+        self.add_noncompleted(
+            state="paused", source="a/b", title="fiction2", chapter="ch2", ident=3
+        )
         with self.assertRaises(EIRejected) as caught:
             self.audit()
         self.assertEqual(caught.exception.code, "EI_STOP_SANITIZED_PATH_COLLISION")
