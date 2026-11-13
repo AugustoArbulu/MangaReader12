@@ -19,3 +19,7 @@ A mudança reduz execuções futuras que não fazem sentido. Não cancela necess
 ## Ajuste de concorrência manual
 
 O agrupamento de `build.yml` passou a usar `github.run_id` quando a execução foi iniciada deliberadamente via workflow_dispatch. Isso impede que um push automático posterior da mesma branch cancele o build MANUAL do proprietário. Os eventos automáticos continuam usando o identificador da PR/branch, de modo que uma execução nova cancela a anterior obsoleta. A validação estática de CI protege esta distinção; não há autorização implícita para distribuir ou instalar qualquer IPA gerada.
+
+## Revisão do evento Ready for Review (13/11/2026)
+
+O `pull_request` padrão do GitHub não inclui o evento `ready_for_review`. Sem uma declaração explícita, uma PR que deixa de ser Draft pode não disparar o build nativo ao ser promovida (até um novo synchronize). `.github/workflows/build.yml` agora declara `types: [opened, synchronize, reopened, ready_for_review]`, preserva o gate `draft == false` no job e mantém `workflow_dispatch`. O contrato estático ganhou um oitavo teste de governança. Isso não transforma a PR atual em Ready, não dispensa revisão humana e NÃO comprova que um runner macOS esteja disponível. O `paths-ignore` da PR continua sujeito ao diff acumulado; uma transição só executa se o GitHub considerar o workflow aplicável.

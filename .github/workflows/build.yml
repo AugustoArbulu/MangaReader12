@@ -10,6 +10,9 @@ on:
       - 'ci/test_build70_e*.py'
       - '.github/workflows/chimera-build70-phase-e*.yml'
   pull_request:
+    # GitHub's default pull_request events omit ready_for_review.
+    # Run the full native validation when the owner promotes the Draft PR.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - 'docs/**'
       - 'ci/build70_e*.py'

@@ -57,6 +57,19 @@ class TriggerScopeTests(unittest.TestCase):
         self.assertIn("runs-on: macos-14", workflow)
         self.assertIn("workflow_dispatch:", workflow)
 
+    def test_ready_for_review_transition_can_request_native_validation(self):
+        workflow = text_of("build.yml")
+        pr = yaml_event_body(workflow, "pull_request", "workflow_dispatch")
+        self.assertIn(
+            "types: [opened, synchronize, reopened, ready_for_review]", pr
+        )
+        self.assertIn(
+            "if: github.event_name != 'pull_request' || "
+            "github.event.pull_request.draft == false", workflow
+        )
+        self.assertIn("runs-on: macos-14", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+
     def test_ignore_patterns_cover_only_audit_changes_not_native_code(self):
         ignored = (
             "docs/HANDOFF_WEBREADER_FASES_EA_EK_2026-11-13.md",
