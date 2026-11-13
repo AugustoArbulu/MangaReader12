@@ -44,7 +44,8 @@ def _collect_download_tree(root):
     summary = {"files": 0, "directories": 0, "totalBytes": 0,
                "filesByChapter": {}, "bytesByChapter": {},
                "unexpectedDepthFiles": 0, "unexpectedDepthDirectories": 0,
-               "unexpectedDepthBytes": 0}
+               "unexpectedDepthBytes": 0,
+               "chapterDirectoryPaths": set(), "prefixDirectoryPaths": set()}
     if not root.exists() and not root.is_symlink():
         return summary
     # Check root is not a symlink before any traversal.
@@ -68,6 +69,12 @@ def _collect_download_tree(root):
                     stop("EI_STOP_DIRECTORY_LIMIT")
                 if depth > 3:
                     summary["unexpectedDepthDirectories"] += 1
+                elif depth == 3:
+                    # Even an EMPTY orphan chapter may contain valuable
+                    # interrupted download metadata in other snapshots.
+                    summary["chapterDirectoryPaths"].add(tuple(parts))
+                elif depth in (1, 2):
+                    summary["prefixDirectoryPaths"].add(tuple(parts))
                 try:
                     names = []
                     with os.scandir(folder_fd) as directory:
@@ -203,9 +210,21 @@ def audit_noncompleted_and_orphans(snapshot):
             orphan_files += num
             orphan_bytes += tree["bytesByChapter"][folder]
     unclassified = tree["unexpectedDepthFiles"]
-    # Empty dirs may represent an interrupted job; retain them even if no
-    # pages have yet been written. This scan flags content, not empty dirs.
-    flagged = orphan_files or unclassified
+    # Directories are evidence too: a zero-byte / empty chapter tree can
+    # represent an interrupted job. Never call an orphaned empty hierarchy
+    # fully accounted merely because there are no files to classify.
+    chapter_dirs = tree["chapterDirectoryPaths"]
+    unreferenced_chapter_dirs = chapter_dirs - wanted.keys()
+    orphan_empty_chapter_dirs = sum(
+        1 for key in unreferenced_chapter_dirs if key not in known
+    )
+    expected_prefixes = {key[:length] for key in wanted for length in (1, 2)}
+    unreferenced_prefix_dirs = sum(
+        1 for key in tree["prefixDirectoryPaths"] if key not in expected_prefixes
+    )
+    missing_recorded_dirs = sum(1 for key in wanted if key not in chapter_dirs)
+    flagged = (orphan_files or unclassified or unreferenced_chapter_dirs
+               or unreferenced_prefix_dirs or tree["unexpectedDepthDirectories"])
     if flagged:
         status = "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES"
     elif incomplete_rows or non_ascii:
@@ -226,6 +245,9 @@ def audit_noncompleted_and_orphans(snapshot):
         "partialJobFiles": partial_files,
         "partialJobBytes": partial_bytes,
         "orphanChapterDirectoriesWithFiles": orphan_folders,
+        "orphanEmptyChapterDirectories": orphan_empty_chapter_dirs,
+        "unreferencedPrefixDirectories": unreferenced_prefix_dirs,
+        "recordedChapterDirectoriesMissingFromCopy": missing_recorded_dirs,
         "orphanChapterFiles": orphan_files,
         "orphanChapterBytes": orphan_bytes,
         "unclassifiedFileCount": unclassified,
