@@ -11,8 +11,9 @@ on:
       - 'ci/test_build66_csops_capability_report.py'
       - 'ci/package_chimera_csops_token_probe66.py'
       - 'ci/test_chimera_csops_token_probe66_deb.py'
-      - '.github/workflows/chimera-build66-csops-probe.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -35,6 +36,7 @@ concurrency:
 
 jobs:
   hostile-report-checks:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -43,6 +45,7 @@ jobs:
         run: python3 -m unittest discover -s ci -p 'test_build66_csops_capability_report.py' -v
 
   macos-host-and-ios12-cli-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

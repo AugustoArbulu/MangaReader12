@@ -1,6 +1,7 @@
 name: WebReader Build70 Phase DS Signed Build71 + DQ/DO Host Chain (NO install)
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'ci/build70_ds_candidate_evidence_gate.py'
@@ -24,6 +25,7 @@ permissions:
 
 jobs:
   strict-linux-host-gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -52,6 +54,7 @@ jobs:
           PY
 
   native-macos-synthetic-signed-ipa:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 30
     steps:

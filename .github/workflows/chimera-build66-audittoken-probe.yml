@@ -10,8 +10,9 @@ on:
       - 'ci/test_chimera_audit_token_probe66_deb.py'
       - 'ci/build66_audit_token_capability_report.py'
       - 'ci/test_build66_audit_token_capability_report.py'
-      - '.github/workflows/chimera-build66-audittoken-probe.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -33,6 +34,7 @@ concurrency:
 
 jobs:
   host-report-negative-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -41,6 +43,7 @@ jobs:
         run: python3 -m unittest discover -s ci -p 'test_build66_audit_token_capability_report.py' -v
 
   macos-native-and-ios12-cli-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 18
     steps:

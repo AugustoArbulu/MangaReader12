@@ -8,8 +8,9 @@ on:
       - 'ci/build70_dp_inapp_signed_identity_report.py'
       - 'ci/test_build70_dp_inapp_signed_identity_report.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DP_SELF_SIGNING_CLAIM_2026-11-11.md'
-      - '.github/workflows/chimera-build70-phase-dp-sectask-self-identity.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   strict-self-task-report-contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -54,6 +56,7 @@ jobs:
           PY
 
   macos-compile-full-unsigned-ios12-app-public-sdk:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 45
     steps:

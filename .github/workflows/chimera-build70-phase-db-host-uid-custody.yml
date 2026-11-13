@@ -7,8 +7,9 @@ on:
       - 'ci/build70_db_host_uid_boundary.py'
       - 'ci/test_build70_db_host_uid_boundary.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DB_UID_CUSTODY_BOUNDARY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-db-host-uid-custody.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   linux-real-os-uid-permissions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -55,6 +57,7 @@ jobs:
           PY
 
   macos-host-negative-controls:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 12
     steps:

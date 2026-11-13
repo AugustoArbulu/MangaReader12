@@ -9,8 +9,9 @@ on:
       - 'ci/build70_dc_self_credential_readonly.c'
       - 'ci/test_build70_dc_custody_lineage.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DC_ANCHORED_CUSTODY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-dc-anchored-custody.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -27,6 +28,7 @@ permissions:
 
 jobs:
   host-lineage-negative-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +85,7 @@ jobs:
           PY
 
   ios12-arm64-compile-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

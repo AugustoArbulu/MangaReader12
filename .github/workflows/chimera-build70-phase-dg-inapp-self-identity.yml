@@ -7,8 +7,9 @@ on:
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'ci/test_build70_dg_inapp_self_identity.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DG_INAPP_SELF_UID_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-dg-inapp-self-identity.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   self-only-ui-security-contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -54,6 +56,7 @@ jobs:
           PY
 
   native-ios12-generic-app-compile-no-package:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 35
     steps:

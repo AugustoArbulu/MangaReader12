@@ -7,8 +7,9 @@ on:
       - 'ci/build70_cs_appinst_path_boundary_audit.py'
       - 'ci/test_build70_cs_appinst_path_boundary_audit.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CS_APPINST_PATH_BOUNDARY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-cs-appinst-source-audit.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   reference-source-and-fake-copy:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

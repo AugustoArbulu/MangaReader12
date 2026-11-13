@@ -8,8 +8,9 @@ on:
       - 'ci/build70_cx_bounded_scheduler.h'
       - 'ci/test_build70_cx_bounded_scheduler.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CX_BOUNDED_CHECK_QUEUE_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-cx-bounded-check-queue.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   check-only-scheduler-host:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +66,7 @@ jobs:
           PY
 
   ios12-arm64-crosscompile-object-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

@@ -7,8 +7,9 @@ on:
       - 'ci/build70_ct_two_hop_delivery_lab.py'
       - 'ci/test_build70_ct_two_hop_delivery_lab.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CT_TWO_HOP_DELIVERY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-ct-two-hop-review.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   two-hop-review-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

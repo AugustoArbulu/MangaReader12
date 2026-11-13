@@ -7,8 +7,9 @@ on:
       - 'ci/build70_cu_helper_custody_audit.py'
       - 'ci/test_build70_cu_helper_custody_audit.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CU_HELPER_CUSTODY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-cu-helper-custody.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   host-custody-regression:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

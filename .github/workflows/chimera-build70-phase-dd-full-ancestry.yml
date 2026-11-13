@@ -8,8 +8,9 @@ on:
       - 'ci/build70_dd_full_ancestry.h'
       - 'ci/test_build70_dd_full_ancestry.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DD_FULL_ANCESTRY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-dd-full-ancestry.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   native-host-ancestry-negative:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +74,7 @@ jobs:
           PY
 
   arm64-ios12-compile-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

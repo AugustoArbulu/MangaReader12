@@ -8,8 +8,9 @@ on:
       - 'ci/build70_da_crash_quarantine.h'
       - 'ci/test_build70_da_crash_quarantine.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DA_CRASH_EVIDENCE_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-da-crash-evidence.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   host-locked-quarantine:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
@@ -63,6 +65,7 @@ jobs:
           PY
 
   ios12-arm64-compile-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

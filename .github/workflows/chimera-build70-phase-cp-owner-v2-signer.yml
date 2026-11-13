@@ -6,8 +6,9 @@ on:
     paths:
       - 'ci/webreader_owner_offline_v2_signer.py'
       - 'ci/test_webreader_owner_offline_v2_signer.py'
-      - '.github/workflows/chimera-build70-phase-cp-owner-v2-signer.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ concurrency:
 
 jobs:
   cross-platform-offline-owner-signing:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

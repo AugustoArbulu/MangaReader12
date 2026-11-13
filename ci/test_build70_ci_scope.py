@@ -5,6 +5,7 @@ This is a static contract test, not proof of GitHub runner availability.
 No App Store / appinst / IPA packaging, device access, or network requests.
 """
 import fnmatch
+import re
 from pathlib import Path
 import unittest
 
@@ -178,6 +179,97 @@ class TriggerScopeTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: true", workflow)
         self.assertIn("runs-on: macos-15", workflow)
         self.assertIn("WebReader-Chimera-Build60-SignedQA-iOS12", workflow)
+
+    def test_draft_pr_gates_38_historical_workflows_without_losing_manual_review(self):
+        # These historical workflows would otherwise re-run against the
+        # accumulated diff of PR #90 on every unrelated commit.
+        legacy = (
+            "chimera-build66-audittoken-probe.yml",
+            "chimera-build66-csops-probe.yml",
+            "chimera-build66-fd-handoff.yml",
+            "chimera-build66-queued-stream.yml",
+            "chimera-build66-separate-peers.yml",
+            "chimera-build66-preflight.yml",
+            "chimera-build70-phase-cr-fd-alias.yml",
+            "chimera-build70-phase-cs-appinst-source-audit.yml",
+            "chimera-build70-phase-ct-two-hop-review.yml",
+            "chimera-build70-phase-cu-helper-custody.yml",
+            "chimera-build70-phase-cv-readonly-abi.yml",
+            "chimera-build70-phase-cw-native-checkonly.yml",
+            "chimera-build70-phase-cx-bounded-check-queue.yml",
+            "chimera-build70-phase-cy-cooperative-watchdog.yml",
+            "chimera-build70-phase-cz-synthetic-worker.yml",
+            "chimera-build70-phase-da-crash-evidence.yml",
+            "chimera-build70-phase-db-host-uid-custody.yml",
+            "chimera-build70-phase-dc-anchored-custody.yml",
+            "chimera-build70-phase-dd-full-ancestry.yml",
+            "chimera-build70-phase-de-self-identity.yml",
+            "chimera-build70-phase-df-macho-preflight.yml",
+            "chimera-build70-phase-dg-inapp-self-identity.yml",
+            "chimera-build70-phase-dh-unsigned-71-preview.yml",
+            "chimera-build70-phase-di-build71-private-qa-preflight.yml",
+            "chimera-build70-phase-dj-library-continuity.yml",
+            "chimera-build70-phase-dk-evidence-bridge.yml",
+            "chimera-build70-phase-dn-startup-data-guard.yml",
+            "chimera-build70-phase-do-offline-baseline.yml",
+            "chimera-build70-phase-dp-sectask-self-identity.yml",
+            "chimera-build70-phase-dq-installed-bundle-readonly.yml",
+            "chimera-build70-phase-dr-preupgrade-evidence.yml",
+            "chimera-build70-phase-ds-candidate-evidence.yml",
+            "chimera-build70-phase-dt-postupgrade-readonly.yml",
+            "chimera-build70-phase-dx-original-archive-dq-compare.yml",
+            "chimera-build70-phase-dy-build71-delivery-readiness.yml",
+            "chimera-build70-phase-cn-untrusted-trigger.yml",
+            "chimera-build70-phase-co-owner-ceremony.yml",
+            "chimera-build70-phase-cp-owner-v2-signer.yml",
+        )
+        self.assertEqual(len(legacy), 38)
+        guard = (
+            "    if: github.event_name != 'pull_request' || "
+            "github.event.pull_request.draft == false"
+        )
+        for name in legacy:
+            with self.subTest(workflow=name):
+                workflow = text_of(name)
+                self.assertIn(
+                    "  pull_request:\n"
+                    "    types: [opened, synchronize, reopened, ready_for_review]\n",
+                    workflow
+                )
+                self.assertIn("  workflow_dispatch:", workflow)
+                self.assertIn("\njobs:\n", workflow)
+                jobs = workflow.split("\njobs:\n", 1)[1]
+                blocks = re.findall(
+                    r"(?ms)^  [A-Za-z0-9_-]+:\n.*?"
+                    r"(?=^  [A-Za-z0-9_-]+:\n|\Z)", jobs
+                )
+                self.assertTrue(blocks)
+                for block in blocks:
+                    self.assertIn(guard, block)
+                if "\n  push:\n" in workflow:
+                    push = workflow.split("\n  push:\n", 1)[1].split(
+                        "\n  pull_request:\n", 1
+                    )[0]
+                    self.assertIn("    paths:", push)
+                    # An edit only to the YAML should be covered by static
+                    # scope QA, not rebuild every historical macOS artifact.
+                    self.assertNotIn(
+                        "'.github/workflows/" + name + "'", push
+                    )
+
+    def test_general_ios_build_ignores_ci_scope_only_changes(self):
+        workflow = text_of("build.yml")
+        push = yaml_event_body(workflow, "push", "pull_request")
+        pr = yaml_event_body(workflow, "pull_request", "workflow_dispatch")
+        for section in (push, pr):
+            for path in (
+                "ci/test_build70_ci_scope.py",
+                ".github/workflows/chimera-build66-*.yml",
+                ".github/workflows/chimera-build70-phase-*.yml",
+            ):
+                self.assertIn("'" + path + "'", section)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("runs-on: macos-14", workflow)
 
     def test_no_owner_build71_trigger_or_automatic_install_activation(self):
         self.assertFalse((ROOT / "ci/build71_owner_approved_qa_trigger.txt").exists())

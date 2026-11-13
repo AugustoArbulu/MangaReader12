@@ -8,8 +8,9 @@ on:
       - 'ci/build70_cv_lsworkspace_probe_report.py'
       - 'ci/test_build70_cv_lsworkspace_probe_report.py'
       - 'docs/WEBREADER_BUILD70_PHASE_CV_IOS12_INSTALL_API_FEASIBILITY_2026-11-10.md'
-      - '.github/workflows/chimera-build70-phase-cv-readonly-abi.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   linux-protocol-negative:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -47,6 +49,7 @@ jobs:
           PY
 
   macos-crosscompile-ios12-no-execution:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 18
     steps:

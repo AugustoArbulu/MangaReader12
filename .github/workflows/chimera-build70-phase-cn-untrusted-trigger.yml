@@ -6,8 +6,9 @@ on:
     paths:
       - 'ci/build70_cn_untrusted_check_only_gate.py'
       - 'ci/test_build70_cn_untrusted_check_only_gate.py'
-      - '.github/workflows/chimera-build70-phase-cn-untrusted-trigger.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ concurrency:
 
 jobs:
   hostile-untrusted-check-gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:

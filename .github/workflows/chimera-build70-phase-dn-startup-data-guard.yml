@@ -7,8 +7,9 @@ on:
       - 'ci/build70_dn_startup_data_guard.py'
       - 'ci/test_build70_dn_startup_data_guard.py'
       - 'docs/WEBREADER_BUILD70_PHASE_DN_NON_DESTRUCTIVE_STARTUP_2026-11-11.md'
-      - '.github/workflows/chimera-build70-phase-dn-startup-data-guard.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   source-only-destructive-path-safety:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

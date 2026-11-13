@@ -13,8 +13,9 @@ on:
       - 'ci/test_build66_temporal_scm_rights_lab.py'
       - 'ci/build66_independent_peer_report.py'
       - 'ci/test_build66_separate_signed_peer_lab.py'
-      - '.github/workflows/chimera-build66-fd-handoff.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -39,6 +40,7 @@ concurrency:
 
 jobs:
   static-safety-and-report-matrix:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -73,6 +75,7 @@ jobs:
           PY
 
   separate-executable-macos-handoff:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 18
     steps:

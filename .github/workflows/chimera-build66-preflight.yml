@@ -47,8 +47,9 @@ on:
       - 'ci/test_prepare_signed_webreader_update.py'
       - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
       - 'ci/validate_webreader_ipa.py'
-      - '.github/workflows/chimera-build66-preflight.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -107,6 +108,7 @@ concurrency:
 
 jobs:
   synthetic-preflight-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -229,6 +231,7 @@ jobs:
           PY
 
   codesign-identity-host-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:

@@ -1,6 +1,7 @@
 name: WebReader Build70 Phase DT Before-After SQLite and Offline Text (NO install)
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'ci/build70_dt_postupgrade_offline_text_compare.py'
@@ -21,6 +22,7 @@ permissions:
 
 jobs:
   cross-build-text-continuity:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:

@@ -8,8 +8,9 @@ on:
       - 'ci/build66_queued_peer_report.py'
       - 'ci/test_build66_queued_peer_report.py'
       - 'ci/test_build66_queued_scm_rights_lab.py'
-      - '.github/workflows/chimera-build66-queued-stream.yml'
+
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -25,6 +26,7 @@ permissions:
 
 jobs:
   fail-closed-parser:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -55,6 +57,7 @@ jobs:
           PY
 
   native-macos-queued-stream:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     timeout-minutes: 20
     steps:
