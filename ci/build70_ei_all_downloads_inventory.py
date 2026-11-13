@@ -202,6 +202,21 @@ def audit_noncompleted_and_orphans(snapshot):
            "Application Support" / "MangaReader12")
     tree = _collect_download_tree(app / "Downloads")
 
+    # Anchor this inventory to the same copied DB and completed page bytes
+    # examined by EA BEFORE the tree walk. A snapshot can be edited in
+    # parallel without changing file counts; never return a coherent status
+    # from observations of two different versions.
+    try:
+        after_inventory = audit_snapshot(snapshot)
+    except (AuditRejected, OSError, ValueError):
+        stop("EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY")
+    for field in (
+        "sqliteSHA256", "offlineContentSHA256", "completedChapters",
+        "receiptVerifiedChapters", "legacyChapters", "pageFilesReadAndHashed",
+    ):
+        if after_inventory[field] != baseline[field]:
+            stop("EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY")
+
     # All known rows have a canonical path regardless of current download state.
     # Files that belong to paused, failed or queued jobs matter to preservation.
     known = tree["filesByChapter"]

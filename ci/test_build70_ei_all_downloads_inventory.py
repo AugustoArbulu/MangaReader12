@@ -195,6 +195,44 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(r["nestedUnexpectedDirectoryCount"], 1)
         self.assertTrue(r["status"].startswith("EI_STOP_"))
 
+    def test_mutated_complete_page_during_inventory_is_not_accepted(self):
+        chapter = self.base / "asura" / "fiction1" / "chap1"
+        target = chapter / "page-00000.bin"
+        before = target.read_bytes()
+        original_scan = ei._collect_download_tree
+
+        def mutate_after_tree_walk(root):
+            result = original_scan(root)
+            target.write_bytes(b"X" + before[1:])
+            return result
+
+        with mock.patch.object(ei, "_collect_download_tree",
+                               side_effect=mutate_after_tree_walk):
+            with self.assertRaises(EIRejected) as caught:
+                self.audit()
+        self.assertEqual(
+            caught.exception.code, "EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY"
+        )
+        self.assertNotEqual(target.read_bytes(), before)
+        # Fixture is synthetic; auditor did not repair or roll back the bytes.
+
+    def test_mutated_sqlite_during_inventory_is_not_accepted(self):
+        original_scan = ei._collect_download_tree
+
+        def mutate_after_tree_walk(root):
+            result = original_scan(root)
+            with sqlite3.connect(self.fx.db) as db:
+                db.execute("UPDATE chapters SET bookmarked=1")
+            return result
+
+        with mock.patch.object(ei, "_collect_download_tree",
+                               side_effect=mutate_after_tree_walk):
+            with self.assertRaises(EIRejected) as caught:
+                self.audit()
+        self.assertEqual(
+            caught.exception.code, "EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY"
+        )
+
     def test_unrecognized_regular_file_in_completed_chapter_blocks(self):
         chapter = self.base / "asura" / "fiction1" / "chap1"
         payload = chapter / "hidden-recoverable-data"

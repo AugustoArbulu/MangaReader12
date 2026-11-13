@@ -71,6 +71,8 @@ jobs:
           assert 'PRAGMA foreign_key_check' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
           assert 'validate_schema_foreign_keys(db)' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
           assert 'EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'unrecognizedLeafFilesInRecordedChapters' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
           assert 'EJ_STOP_RECOVERY_ROWS_REQUIRE_DEVICE_REVIEW' in Path('ci/build70_ej_recovery_plan_metadata.py').read_text()
           assert 'EK_STOP_PARTIAL_PAGES_OR_PLANS_REQUIRE_REVIEW' in Path('ci/build70_ek_partial_prefix_metadata.py').read_text()
           assert 'MAX_PAGE_BYTES = 20 * 1024 * 1024' in Path('ci/build70_ek_partial_prefix_metadata.py').read_text()
