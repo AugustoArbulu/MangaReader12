@@ -52,6 +52,25 @@ class SafePartialRetryContract(unittest.TestCase):
         self.assertLess(body.index("if existingDirectory {"),
                         body.index("self.savePlan(for: job)"))
 
+    def test_in_place_retry_never_trusts_legacy_prefix_after_restart(self):
+        plan = MANAGER.split("private struct DownloadRecoveryPlan: Codable {", 1)[1].split(
+            "// A job keeps", 1)[0]
+        restore = MANAGER.split("private func restorePreviousSession()", 1)[1].split(
+            "private func jobKey(", 1)[0]
+        admission = MANAGER.split("    func download(\n", 1)[1].split(
+            "    // Returns false for a job left over", 1)[0]
+        save = MANAGER.split("private func savePlan(for job:", 1)[1].split(
+            "private func completedPagePrefix(", 1)[0]
+        self.assertIn("let requiresFullReplay: Bool?", plan)
+        self.assertIn("requiresFullReplay: job.requiresFullReplay ? true : nil", save)
+        self.assertIn("requiresFullReplay: existingDirectory,", admission)
+        self.assertIn("requiresFullReplay: plan.requiresFullReplay == true,", restore)
+        self.assertIn(
+            "job.nextIndex = job.requiresFullReplay ? 0 : completedPagePrefix(", restore
+        )
+        self.assertIn("let requiresFullReplay: Bool", MANAGER)
+        self.assertIn("self.requiresFullReplay = requiresFullReplay", MANAGER)
+
     def test_only_confirmed_downloads_ui_supplies_replacement_policy(self):
         prompt = DOWNLOADS.split("private func retryDownload(", 1)[1].split(
             "private func beginRetryDownload(", 1)[0]
@@ -93,6 +112,88 @@ class SafePartialRetryContract(unittest.TestCase):
         explicit = MANAGER.split("    func remove(\n", 1)[1]
         self.assertIn("fileManager.removeItem(at: current)", explicit)
         self.assertIn("ChapterDownloadError.downloadInProgress", explicit)
+
+    @unittest.skipUnless(sys.platform == "darwin", "native Swift Codable check")
+    def test_native_legacy_recovery_plan_decodes_without_full_replay_flag(self):
+        # Compile the actual Swift Codable struct, replacing app-only types
+        # with tiny synthetic stubs. No filesystem access outside temp data.
+        struct = MANAGER.split(
+            "private struct DownloadRecoveryPlan: Codable {", 1
+        )[1].split("\n}\n\n// A job keeps", 1)[0]
+        native = shutil.which("swiftc")
+        self.assertIsNotNone(native)
+        swift = """
+import Foundation
+struct Manga: Codable { let id: String }
+struct Chapter: Codable { let id: String }
+struct Page: Codable { let index: Int }
+struct SourceManifest: Codable { let id: String }
+private struct DownloadRecoveryPlan: Codable {
+""" + struct + """
+}
+
+let previous: [String: Any] = [
+    "schemaVersion": 1,
+    "sourceID": "source",
+    "manga": ["id": "manga"],
+    "chapter": ["id": "chapter"],
+    "pages": [["index": 0]],
+    "manifest": ["id": "source"],
+    "queueOrder": 1
+]
+let legacyBytes = try JSONSerialization.data(withJSONObject: previous)
+let legacy = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: legacyBytes)
+precondition(legacy.requiresFullReplay == nil,
+             "legacy plan missing optional field must decode")
+let replay = DownloadRecoveryPlan(
+    schemaVersion: 1,
+    sourceID: "source",
+    manga: Manga(id: "manga"),
+    chapter: Chapter(id: "chapter"),
+    pages: [Page(index: 0)],
+    manifest: SourceManifest(id: "source"),
+    queueOrder: 1,
+    requiresFullReplay: true
+)
+let replayBytes = try JSONEncoder().encode(replay)
+let recovered = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: replayBytes)
+precondition(recovered.requiresFullReplay == true, "retry marker lost")
+let replayJSON = try JSONSerialization.jsonObject(with: replayBytes) as! [String: Any]
+precondition((replayJSON["requiresFullReplay"] as? Bool) == true,
+             "retry marker must persist as JSON Boolean")
+let normal = DownloadRecoveryPlan(
+    schemaVersion: 1,
+    sourceID: "source",
+    manga: Manga(id: "manga"),
+    chapter: Chapter(id: "chapter"),
+    pages: [Page(index: 0)],
+    manifest: SourceManifest(id: "source"),
+    queueOrder: 1,
+    requiresFullReplay: nil
+)
+let normalJSON = try JSONSerialization.jsonObject(
+    with: JSONEncoder().encode(normal)) as! [String: Any]
+precondition(normalJSON["requiresFullReplay"] == nil,
+             "new downloads must omit optional marker")
+print("PASS EN native Swift: old plan compatible; forced replay persists")
+"""
+        with tempfile.TemporaryDirectory(prefix="wr-en-codable-") as directory:
+            folder = Path(directory)
+            main = folder / "main.swift"
+            executable = folder / "codable-check"
+            main.write_text(swift, encoding="utf-8")
+            compile_result = subprocess.run(
+                [native, "-swift-version", "5", str(main), "-o", str(executable)],
+                text=True, capture_output=True, timeout=120
+            )
+            self.assertEqual(
+                compile_result.returncode, 0, compile_result.stderr[-5000:]
+            )
+            run = subprocess.run(
+                [str(executable)], text=True, capture_output=True, timeout=30
+            )
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr[-5000:])
+            self.assertIn("PASS EN native Swift:", run.stdout)
 
     @unittest.skipUnless(sys.platform == "darwin", "native Darwin Swift only")
     def test_real_swift_auditor_with_disposable_adversarial_files(self):

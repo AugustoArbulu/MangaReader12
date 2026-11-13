@@ -84,6 +84,41 @@ class EJRecoveryPlanTests(unittest.TestCase):
         self.assertNotIn("secret.example.test", str(r))
         self.assertNotIn("private-test-token", str(r))
 
+
+    def test_optional_replay_flag_true_requires_device_review(self):
+        self.active()
+        obj = fake_plan()
+        obj["requiresFullReplay"] = True
+        self.write_plan(obj)
+        r = self.audit()
+        self.assertEqual(r["status"], "EJ_STOP_RECOVERY_ROWS_REQUIRE_DEVICE_REVIEW")
+        self.assertEqual(r["plansWithPlausibleMetadata"], 1)
+        self.assertEqual(r["sumOfDeclaredPlanPages"], 2)
+        self.denied(r)
+
+    def test_optional_replay_flag_false_and_missing_are_legacy_compatible(self):
+        self.active()
+        obj = fake_plan()
+        obj["requiresFullReplay"] = False
+        self.write_plan(obj)
+        self.assertEqual(self.audit()["plansWithPlausibleMetadata"], 1)
+        obj.pop("requiresFullReplay")
+        self.write_plan(obj)
+        self.assertEqual(self.audit()["plansWithPlausibleMetadata"], 1)
+
+    def test_wrong_type_replay_flag_refused_without_repair(self):
+        self.active()
+        for value in (1, 0, "true", None, [], {}):
+            with self.subTest(value=value):
+                obj = fake_plan()
+                obj["requiresFullReplay"] = value
+                self.write_plan(obj)
+                report = self.audit()
+                self.assertEqual(report["malformedOrUnsafePlans"], 1)
+                self.assertEqual(report["status"],
+                                 "EJ_STOP_MISSING_MALFORMED_OR_STALE_RECOVERY_PLANS")
+                self.denied(report)
+
     def test_missing_paused_plan_is_not_recovered_by_guess(self):
         self.active()
         r = self.audit()

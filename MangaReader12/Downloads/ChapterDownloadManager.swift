@@ -222,6 +222,10 @@ private struct DownloadRecoveryPlan: Codable {
     let pages: [Page]
     let manifest: SourceManifest
     let queueOrder: Int
+    // Optional for backward compatibility with existing Build69/70 plans.
+    // A confirmed in-place retry must NEVER trust pre-existing page indices
+    // after an interrupted process: they may belong to an older attempt.
+    let requiresFullReplay: Bool?
 }
 
 // A job keeps the HTTP client alive while the queue is active. An interrupted
@@ -237,6 +241,7 @@ private final class ChapterDownloadJob {
     let client: HTTPClient
     let manifest: SourceManifest
     var queueOrder: Int
+    let requiresFullReplay: Bool
     let progress: (Double) -> Void
     let completion: (Result<[Page], Error>) -> Void
     var nextIndex = 0
@@ -253,6 +258,7 @@ private final class ChapterDownloadJob {
         directory: URL,
         manifest: SourceManifest,
         queueOrder: Int,
+        requiresFullReplay: Bool = false,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
@@ -264,6 +270,7 @@ private final class ChapterDownloadJob {
         self.directory = directory
         self.manifest = manifest
         self.queueOrder = queueOrder
+        self.requiresFullReplay = requiresFullReplay
         self.client = HTTPClient(policy: HTTPPolicy(
             allowedDomains: manifest.domains,
             timeout: 30,
@@ -328,7 +335,8 @@ final class ChapterDownloadManager {
         let plan = DownloadRecoveryPlan(
             schemaVersion: 1, sourceID: job.sourceID,
             manga: job.manga, chapter: job.chapter, pages: job.pages,
-            manifest: job.manifest, queueOrder: job.queueOrder
+            manifest: job.manifest, queueOrder: job.queueOrder,
+            requiresFullReplay: job.requiresFullReplay ? true : nil
         )
         let data = try JSONEncoder().encode(plan)
         // Match the BQ reader's maximum before touching any existing plan.
@@ -390,9 +398,13 @@ final class ChapterDownloadManager {
                     manga: plan.manga, chapter: plan.chapter,
                     pages: plan.pages, directory: expected,
                     manifest: plan.manifest, queueOrder: plan.queueOrder,
+                    requiresFullReplay: plan.requiresFullReplay == true,
                     progress: { _ in }, completion: { _ in }
                 )
-                job.nextIndex = completedPagePrefix(
+                // A restarted confirmed retry cannot distinguish old page
+                // bytes from new ones merely by filename and nonzero size.
+                // Replay all pages from zero until the download completes.
+                job.nextIndex = job.requiresFullReplay ? 0 : completedPagePrefix(
                     in: expected, count: plan.pages.count
                 )
                 job.state = record.state == "paused" ? "paused" : "queued"
@@ -506,6 +518,7 @@ final class ChapterDownloadManager {
                     key: key, sourceID: sourceID, manga: manga,
                     chapter: chapter, pages: pages, directory: directory,
                     manifest: manifest, queueOrder: self.nextQueueOrder,
+                    requiresFullReplay: existingDirectory,
                     progress: progress, completion: completion
                 )
                 try self.savePlan(for: job)

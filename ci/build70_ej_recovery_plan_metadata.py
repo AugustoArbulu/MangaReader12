@@ -66,6 +66,11 @@ def plausible_plan(raw, source, manga, chapter):
     if (type(obj.get("queueOrder")) is not int
             or not 0 <= obj["queueOrder"] <= 2**63 - 1):
         stop("EJ_STOP_PLAN_SHAPE_INVALID")
+    # Build70 EN: optional replay flag is always Boolean if present.
+    # True prevents treating stale pre-retry pages as a valid prefix.
+    if ("requiresFullReplay" in obj
+            and type(obj["requiresFullReplay"]) is not bool):
+        stop("EJ_STOP_INVALID_REPLAY_FLAG")
     if (obj.get("sourceID") != source
             or type(obj.get("sourceID")) is not str):
         stop("EJ_STOP_PLAN_IDENTITY_MISMATCH")
