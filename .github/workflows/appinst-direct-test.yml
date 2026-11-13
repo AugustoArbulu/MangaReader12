@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
+    # This isolated diagnostic IPA must not be rebuilt for every audit-only
+    # Python/doc commit. Manual workflow_dispatch remains available.
+    paths:
+      - 'ci/appinst_direct_probe/**'
+      - 'ci/build_appinst_direct_probe.sh'
+      - 'ci/test_appinst_direct_probe.py'
+      - '.github/workflows/appinst-direct-test.yml'
   workflow_dispatch:
 
 permissions:

@@ -8,6 +8,12 @@ on:
       - 'ci/test_build70_ek_partial_prefix_metadata.py'
       - 'docs/WEBREADER_BUILD70_PHASE_EK_PARTIAL_PREFIX_2026-11-13.md'
       - '.github/workflows/chimera-build70-phase-ek-partial-prefix.yml'
+# Only retain the newest attempt for this *same workflow and branch*.
+# Never allow a new head to publish superseded host-only audit evidence.
+concurrency:
+  group: wr-build70-ek-partial-prefix-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:

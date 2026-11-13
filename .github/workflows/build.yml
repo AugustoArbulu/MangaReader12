@@ -2,14 +2,34 @@ name: iOS 12 Milestone 0
 
 on:
   push:
+    # Changes confined to read-only Build70 data auditors or documentation
+    # never need a heavyweight iOS compile or diagnostic IPA artifact.
+    paths-ignore:
+      - 'docs/**'
+      - 'ci/build70_e*.py'
+      - 'ci/test_build70_e*.py'
+      - '.github/workflows/chimera-build70-phase-e*.yml'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'ci/build70_e*.py'
+      - 'ci/test_build70_e*.py'
+      - '.github/workflows/chimera-build70-phase-e*.yml'
   workflow_dispatch:
+
+# Superseded macOS builds of the same branch/PR are not useful.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   build:
+    # Draft PRs can touch hundreds of historical files; the push trigger
+    # still tests real native changes, while PR review enables full validation.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-14
     timeout-minutes: 30
 
