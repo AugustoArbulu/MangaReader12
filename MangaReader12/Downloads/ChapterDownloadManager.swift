@@ -96,6 +96,9 @@ enum WebReaderOfflineDeletionPreflight {
 
     static func inspect(
         directory: URL,
+        sourceID: String,
+        mangaID: String,
+        chapterID: String,
         fileManager: FileManager = .default
     ) -> Verdict {
         var before = stat()
@@ -157,6 +160,38 @@ enum WebReaderOfflineDeletionPreflight {
                   item.st_nlink == 1,
                   item.st_size > 0,
                   item.st_size <= maximumBytes else { return .unsafe }
+        }
+
+        // ER metadata-only name checks are insufficient for a foreign
+        // _download-plan.json. Reuse the bounded BQ reader and the real
+        // Codable model: a plan for any different identity or a malformed
+        // interrupted transfer must not be erased in a confirmed delete.
+        if names.contains("_download-plan.json") {
+            guard let data = try? WebReaderOfflineRecoveryPlanReader.read(
+                from: directory.appendingPathComponent("_download-plan.json")
+            ), let plan = try? JSONDecoder().decode(
+                DownloadRecoveryPlan.self, from: data
+            ), plan.schemaVersion == 1,
+               plan.sourceID == sourceID,
+               plan.manifest.id == sourceID,
+               plan.manga.id == mangaID,
+               plan.chapter.id == chapterID,
+               !plan.pages.isEmpty,
+               plan.pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages
+            else { return .unsafe }
+        }
+
+        // Count-only completion receipts are not arbitrary 64-byte blobs.
+        // If present, require contiguous page names and the exact receipt
+        // text/count. Legacy folders without a receipt stay deletable after
+        // the same explicit consent and path-ownership checks.
+        if names.contains(WebReaderOfflineCompletionReceipt.filename) {
+            guard let pages = try? WebReaderOfflinePageInventory.inspect(
+                directory: directory, fileManager: fileManager
+            ), (try? WebReaderOfflineCompletionReceipt.verifyIfPresent(
+                directory: directory, actualPages: pages.count,
+                fileManager: fileManager
+            )) == true else { return .unsafe }
         }
 
         var afterFD = stat()
@@ -1050,7 +1085,9 @@ final class ChapterDownloadManager {
                 sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
             )
             let verdict = WebReaderOfflineDeletionPreflight.inspect(
-                directory: current, fileManager: fileManager
+                directory: current,
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+                fileManager: fileManager
             )
             guard verdict != .unsafe else {
                 throw ChapterDownloadError.unsafeOfflineDeletionContents
