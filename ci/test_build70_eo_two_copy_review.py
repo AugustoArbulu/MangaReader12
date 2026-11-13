@@ -41,7 +41,9 @@ class EOTwoCopyReviewTests(unittest.TestCase):
 
     def test_two_matching_full_copies_are_not_device_evidence(self):
         result = self.review()
-        self.assertEqual(result["status"], "EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED")
+        # The synthetic pages are arbitrary bytes, not known image signatures.
+        # Matching hashes alone must not be labelled locally coherent.
+        self.assertEqual(result["status"], "EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY")
         self.assertTrue(result["copiesByteIdenticalAtTwoChecks"])
         self.assertEqual(result["observedAggregateCounts"]["completedChapterRows"], 1)
         self.assertEqual(result["observedAggregateCounts"]["completedPageFilesHashed"], 2)
@@ -57,8 +59,59 @@ class EOTwoCopyReviewTests(unittest.TestCase):
         self.assertEqual(result["auditStatuses"]["EF"],
                          "EF_UNKNOWN_FORMATS_REQUIRE_REAL_IOS12_READ")
         self.assertEqual(result["observedAggregateCounts"]["unknownPageFormats"], 2)
+        self.assertEqual(result["status"], "EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY")
         self.assertIs(result["allImagesDecodeOnIOS12Proven"], False)
         self.check_denied(result)
+
+    def test_plausible_png_signatures_only_allow_host_coherence_never_install(self):
+        # Minimal plausible signature, NOT a decodable PNG, on both copies.
+        # EF classifies these as plausible; no full decoder ever runs.
+        header = b"\x89PNG\r\n\x1a\n"
+        trailer = b"\x00\x00\x00\x00IEND\xaeB\x60\x82"
+        payload = header + b"synthetic-only" * 4 + trailer
+        for root in (self.first, self.second):
+            chapter = (root / "Library" / "Application Support" /
+                       "MangaReader12" / "Downloads" / "asura" /
+                       "fiction1" / "chap1")
+            for name in ("page-00000.bin", "page-00001.bin"):
+                (chapter / name).write_bytes(payload)
+        report = self.review()
+        self.assertEqual(report["status"],
+                         "EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED")
+        self.assertEqual(report["auditStatuses"]["EF"],
+                         "EF_KNOWN_IMAGE_SIGNATURES_PLAUSIBLE_NOT_DECODED")
+        self.assertEqual(report["observedAggregateCounts"]["unknownPageFormats"], 0)
+        self.assertIs(report["allImagesDecodeOnIOS12Proven"], False)
+        self.check_denied(report)
+
+    def test_legacy_completed_receipts_require_manual_review(self):
+        for root in (self.first, self.second):
+            receipt = (root / "Library" / "Application Support" /
+                       "MangaReader12" / "Downloads" / "asura" /
+                       "fiction1" / "chap1" / ".webreader-completion-v1")
+            receipt.unlink()
+        report = self.review()
+        self.assertEqual(report["status"], "EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY")
+        self.assertEqual(report["observedAggregateCounts"]["legacyCompletedChapterRows"], 1)
+        self.check_denied(report)
+
+    def test_hardlinked_page_never_qualifies_as_second_copy(self):
+        # cp -al or a hand-linked file may share physical inode storage.
+        # The pre-existing EC st_nlink == 1 guard must reject it.
+        original = (self.first / "Library" / "Application Support" /
+                    "MangaReader12" / "Downloads" / "asura" /
+                    "fiction1" / "chap1" / "page-00000.bin")
+        linked = (self.second / "Library" / "Application Support" /
+                  "MangaReader12" / "Downloads" / "asura" /
+                  "fiction1" / "chap1" / "page-00000.bin")
+        linked.unlink()
+        import os
+        os.link(original, linked)
+        with self.assertRaises(eo.EORejected) as error:
+            self.review()
+        self.assertEqual(error.exception.code, "EO_STOP_EC_FAILED")
+        self.assertTrue(original.is_file())
+        self.assertEqual(original.read_bytes(), linked.read_bytes())
 
     def test_one_copy_changed_preference_is_rejected(self):
         prefs = self.second / "Library" / "Preferences"
@@ -164,7 +217,7 @@ class EOTwoCopyReviewTests(unittest.TestCase):
                            text=True, capture_output=True, timeout=25)
         self.assertEqual(p.returncode, 2, p.stderr)
         report = json.loads(p.stdout)
-        self.assertEqual(report["status"], "EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED")
+        self.assertEqual(report["status"], "EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY")
         self.check_denied(report)
         self.assertNotIn(str(self.first), p.stdout + p.stderr)
         self.assertNotIn("fic", p.stdout + p.stderr)

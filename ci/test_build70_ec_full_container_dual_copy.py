@@ -128,6 +128,19 @@ class ECDualCopyTests(unittest.TestCase):
         r = compare_copies(self.first, self.second)
         self.assertEqual(r["status"], "EC_STOP_EXTERNAL_COPIES_DIFFER")
 
+    def test_shared_hardlinked_file_is_rejected_before_hash_comparison(self):
+        # Content hashes alone cannot distinguish copied bytes from the
+        # same inode referenced through two different directory trees.
+        existing = self.first / "Documents" / ".hidden-empty"
+        target = self.second / "Documents" / ".hidden-empty"
+        target.unlink()
+        os.link(existing, target)
+        with self.assertRaises(ECRejected) as caught:
+            audit_tree(self.first)
+        self.assertEqual(caught.exception.code, "EC_STOP_UNSAFE_HARDLINK_OR_FILE")
+        self.assertTrue(existing.exists())
+        self.assertTrue(target.exists())
+
     def test_root_symlink_rejected_even_with_valid_target(self):
         link = self.first.parent / "alias"
         link.symlink_to(self.first, target_is_directory=True)

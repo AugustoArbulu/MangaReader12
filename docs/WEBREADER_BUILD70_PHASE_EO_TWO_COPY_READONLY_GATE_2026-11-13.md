@@ -42,3 +42,11 @@ Cópias idênticas podem resultar da mesma cópia original defeituosa. Dois hash
 `ci/test_build70_eo_two_copy_review.py` usa apenas SQLite e arquivos sintéticos e cobre correspondência de duas cópias, alteração de preferências, página ausente, links simbólicos, órfãos, incompletos, alteração durante auditoria, privacidade e retorno não zero. Os testes são rodados na matriz Linux/macOS do workflow EA–EO; **a PR Draft, `main` e o iPad não são alterados** pelas verificações. `productionPublicKeyX963` e SPKI continuam nil, e `liveInstallationEnabled=false`; `ci/build71_owner_approved_qa_trigger.txt` continua ausente.
 
 Próxima etapa só após evidência física: conferir identidade do app instalado e leitura offline real antes de eventual autorização de build de atualização. Não gerar nem instalar IPA71 nesta fase.
+
+## Revisão EP: falsos positivos de coerência local e cópias fisicamente compartilhadas
+
+A auditoria do EC confirmou que arquivos com múltiplos hardlinks (`st_nlink != 1`) **já eram recusados**; a EP acrescenta testes explícitos contra cópias feitas com hardlink, sem alterar essa proteção. Isso não prova independência entre dispositivos ou mídia: cópias distintas no mesmo disco, clones copy-on-write/reflinks ou a mesma captura extraída duas vezes podem falhar juntas.
+
+A EP também estreita a classificação do pré-check EO: não basta um auditor devolver algo diferente de `*_STOP_*`. O estado `EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED` exige rótulos esperados e específicos em EC, EA, EH, EI, EJ, EK e EF, inclusive recibos de downloads completos e **assinaturas de imagem reconhecidas apenas como plausíveis**. Formatos desconhecidos, capítulos legacy sem recibo, ausência de downloads ou qualquer status não previsto resultam em `EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY`.
+
+Nenhum desses estados autoriza instalação: a ferramenta sempre sai com código **2**, não decodifica páginas em iOS 12, não verifica origem ou cadeia de custódia, e não acessa dados reais do iPad. Testes EP cobrem formato desconhecido, marcador PNG sintético plausível, recibos legacy e hardlinks, sem remover dados fora de fixtures descartáveis.

@@ -97,11 +97,26 @@ def review_pair(first: Path, second: Path) -> dict:
             or checked_again.get("fullTreeSHA256") != baseline["fullTreeSHA256"]):
         fail("EO_STOP_TWO_COPIES_CHANGED_DURING_REVIEW")
 
-    flagged = any(value.startswith(label + "_STOP_")
-                  for label, value in statuses.items())
+    # Positive labels must be explicitly reviewed. A merely non-STOP
+    # status is not enough: for example, EF_UNKNOWN_FORMATS_REQUIRE_REAL_IOS12_READ
+    # indicates bytes that may be HTML, AVIF, damaged images or an unfamiliar
+    # format, and legacy receipts/zero offline pages still need human review.
+    accepted_only_for_local_coherence = {
+        "EC": "EC_TWO_EXTERNAL_COPIES_IDENTICAL_NOT_DEVICE_PROOF",
+        "EA": "EA_COPIED_SQLITE_AND_OFFLINE_BYTES_COHERENT_NOT_DEVICE_PROOF",
+        "EH": "EH_COPIED_SQLITE_METADATA_CONSISTENT_NOT_DEVICE_ATTESTED",
+        "EI": "EI_ALL_SCANNED_FILES_ACCOUNTED_NOT_DEVICE_PROOF",
+        "EJ": "EJ_NO_PENDING_RECOVERY_ROWS_NOT_DEVICE_PROOF",
+        "EK": "EK_NO_INCOMPLETE_DOWNLOAD_ROWS_NOT_DEVICE_PROOF",
+        "EF": "EF_KNOWN_IMAGE_SIGNATURES_PLAUSIBLE_NOT_DECODED",
+    }
+    needs_review = any(
+        statuses.get(label) != allowed
+        for label, allowed in accepted_only_for_local_coherence.items()
+    )
     status = (
         "EO_STOP_REQUIRES_HUMAN_REVIEW_OF_COPY"
-        if flagged else "EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED"
+        if needs_review else "EO_TWO_COPIES_COHERENT_NOT_DEVICE_ATTESTED"
     )
     return {
         "status": status,
