@@ -1,4 +1,4 @@
-# WebReader Build70 — laboratório descartável EV–FC
+# WebReader Build70 — laboratório descartável EV–FD
 
 Este pacote contém **somente protótipos de QA**. Não há IPA, instalador, chamada ao app ou acesso à biblioteca real do iPad. Os testes geram diretórios temporários com marcador `EV_SYNTHETIC_ONLY`, arquivos fictícios e bancos SQLite sintéticos.
 
@@ -18,9 +18,9 @@ python3 -m unittest discover -s ci -p 'test_build70_*.py' -q
 | FA | 42 | Schema v1 integral em fixture, três rotas não destrutivas |
 | FB | 52 | Plano/recibo no Swift + journal copy-only no shadow v2 integral |
 | FC | 20 | Compatibilidade Codable do modelo, bloqueio de cabeçalhos privados e pré-flight nativo |
-| **Total** | **223** | **Aprovados no Linux; CI Darwin criado no GitHub** |
+| FD | 27 | Snapshot estrito completed-only, sem duplicar planos que podem conter segredos |\n| **Total** | **250** | **Revalidados em Linux a partir da extração limpa; CI completo Linux/macOS configurado** |
 
-Leia `docs/WEBREADER_BUILD70_PHASE_FC_CODABLE_PRIVACY_DARWIN_CI_2026-11-13.md` e o relatório FB. O workflow macOS FC foi commitado no PR #90; os arquivos de testes FC ainda estão apenas neste ZIP e o CI completo EV–FC não foi executado no Mac.
+Leia `docs/WEBREADER_BUILD70_PHASE_FD_SEALED_COMPLETED_SNAPSHOT_2026-11-13.md` e o relatório FC. Os 41 arquivos deste laboratório estão versionados em `ci/labs/webreader-ev-fd/` na branch Draft do PR #90. O workflow raiz `.github/workflows/chimera-build70-phase-fe-evfd-full-lab.yml` testa os mesmos arquivos em Ubuntu/macOS, sem gerar IPA nem instalar nada.
 
 ## Limites
 
