@@ -2290,6 +2290,15 @@ final class DownloadRepository {
         ).first else { return 0 }
         var removed = 0
         for record in records {
+            // A path collision must never silently rebind a completed
+            // record to another chapter's files or remove its metadata.
+            // Leave both records untouched for owner review.
+            if WebReaderOfflineCanonicalOwnership.collides(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID,
+                recorded: records
+            ) { continue }
             let expected = OfflineDownloadPath.chapterDirectory(
                 applicationSupport: support,
                 sourceID: record.sourceID,

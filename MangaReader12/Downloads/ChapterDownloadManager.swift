@@ -32,6 +32,47 @@ enum OfflineDownloadPath {
 }
 // END OFFLINE_PATH_RELOCATION
 
+// BEGIN BUILD70_EQ_CANONICAL_OWNERSHIP
+// iOS file-system normalization can map distinct source IDs to the same
+// physical chapter directory. Refuse destructive operations and offline
+// reads whenever two persisted download rows claim an equivalent path.
+// This is intentionally conservative for case/Unicode variants.
+enum WebReaderOfflineCanonicalOwnership {
+    private static let comparisonLocale = Locale(identifier: "en_US_POSIX")
+
+    private static func components(
+        sourceID: String, mangaID: String, chapterID: String
+    ) -> [String] {
+        return [sourceID, mangaID, chapterID].map { raw in
+            OfflineDownloadPath.safeComponent(raw)
+                .precomposedStringWithCanonicalMapping
+                .folding(
+                    options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                    locale: comparisonLocale
+                )
+        }
+    }
+
+    static func collides(
+        sourceID: String, mangaID: String, chapterID: String,
+        recorded: [DownloadListRecord]
+    ) -> Bool {
+        let requestedIdentity = [sourceID, mangaID, chapterID]
+        let requestedPath = components(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
+        )
+        return recorded.contains { item in
+            let identity = [item.sourceID, item.sourceMangaID, item.sourceChapterID]
+            if identity == requestedIdentity { return false }
+            return components(
+                sourceID: item.sourceID, mangaID: item.sourceMangaID,
+                chapterID: item.sourceChapterID
+            ) == requestedPath
+        }
+    }
+}
+// END BUILD70_EQ_CANONICAL_OWNERSHIP
+
 // BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
 // Normal chapter/batch downloads must preserve any preexisting local data.
 // The Downloads retry flow supplies the explicit user-confirmed override.
@@ -121,6 +162,7 @@ enum ChapterDownloadError: Error, LocalizedError {
     case alreadyCompleted
     case existingLocalDataRequiresReview
     case unsafeExistingLocalData
+    case ambiguousOfflineChapterPath
     case downloadInProgress
 
     var errorDescription: String? {
@@ -147,6 +189,8 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "Já existem páginas ou metadados offline. Abra Downloads e confirme a reinicialização. Preserve uma cópia externa antes de substituir. Nenhum arquivo foi apagado."
         case .unsafeExistingLocalData:
             return "A pasta offline contém arquivos inesperados ou inseguros. Nenhum arquivo foi apagado. Preserve a pasta para revisão."
+        case .ambiguousOfflineChapterPath:
+            return "Duas obras ou capítulos podem compartilhar a mesma pasta offline. Operação bloqueada para proteger os arquivos. Nenhuma página foi apagada."
         case .downloadInProgress:
             return "Pause o download antes de removê-lo."
         }
@@ -372,7 +416,13 @@ final class ChapterDownloadManager {
                     mangaID: record.sourceMangaID,
                     chapterID: record.sourceChapterID
                 )
-                guard record.localPath == expected.path else { continue }
+                guard record.localPath == expected.path,
+                      !WebReaderOfflineCanonicalOwnership.collides(
+                          sourceID: record.sourceID,
+                          mangaID: record.sourceMangaID,
+                          chapterID: record.sourceChapterID,
+                          recorded: records
+                      ) else { continue }
                 // Recovery metadata is untrusted after an interrupted
                 // transfer. Reject symlink/FIFO/oversized plans without
                 // removing the offline page files already on disk.
@@ -471,6 +521,12 @@ final class ChapterDownloadManager {
             }
 
             do {
+                guard !WebReaderOfflineCanonicalOwnership.collides(
+                    sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id,
+                    recorded: try self.repository.listDownloads()
+                ) else {
+                    throw ChapterDownloadError.ambiguousOfflineChapterPath
+                }
                 // A second download tap must not silently erase a completed
                 // chapter, including old Build68 pages without a receipt.
                 // The operator can explicitly remove it from Downloads first.
@@ -798,6 +854,15 @@ final class ChapterDownloadManager {
             sourceChapterID: chapterID
         ), record.state == "completed" else { return nil }
 
+        // Never expose another downloaded chapter's bytes through a
+        // colliding normalized directory, or rebind this DB row to it.
+        guard !WebReaderOfflineCanonicalOwnership.collides(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+            recorded: try repository.listDownloads()
+        ) else {
+            throw ChapterDownloadError.ambiguousOfflineChapterPath
+        }
+
         // Do not follow the obsolete stored absolute local_path from Build56.
         let directory = try chapterDirectory(
             sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
@@ -857,6 +922,20 @@ final class ChapterDownloadManager {
             let key = jobKey(sourceID: sourceID, mangaID: mangaID, chapterID: chapterID)
             if runningKey == key {
                 throw ChapterDownloadError.downloadInProgress
+            }
+            // A confirmed delete cannot erase a different title's pages,
+            // nor an orphan directory without an existing exact DB owner.
+            let rows = try repository.listDownloads()
+            guard rows.contains(where: {
+                $0.sourceID == sourceID &&
+                $0.sourceMangaID == mangaID &&
+                $0.sourceChapterID == chapterID
+            }),
+            !WebReaderOfflineCanonicalOwnership.collides(
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+                recorded: rows
+            ) else {
+                throw ChapterDownloadError.ambiguousOfflineChapterPath
             }
             let removedJob = jobs.removeValue(forKey: key)
             pending.removeAll { $0 == key }

@@ -142,6 +142,9 @@ jobs:
       - name: Test EL no silent partial-download replacement (Swift host offline)
         run: python3 -m unittest discover -s ci -p 'test_build70_el_safe_partial_retry.py' -v
 
+      - name: Test EQ canonical offline path ownership (synthetic host)
+        run: python3 -m unittest discover -s ci -p 'test_build70_eq_canonical_path_ownership.py' -v
+
       - name: Test proposed Chimera updater signed-manifest protocol (offline; no installation)
         run: python3 ci/test_webreader_update_manifest.py
 

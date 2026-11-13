@@ -24,6 +24,8 @@ on:
       - 'ci/test_build70_el_safe_partial_retry.py'
       - 'ci/build70_eo_two_copy_review.py'
       - 'ci/test_build70_eo_two_copy_review.py'
+      - 'ci/test_build70_eq_canonical_path_ownership.py'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
       - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
       - 'MangaReader12/UI/DownloadsViewController.swift'
       - 'docs/WEBREADER_BUILD70_PHASE_EG_FAIL_CLOSED_CLI_2026-11-12.md'
@@ -67,6 +69,7 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_ci_scope.py' -v
           python -m unittest discover -s ci -p 'test_build70_el_safe_partial_retry.py' -v
           python -m unittest discover -s ci -p 'test_build70_eo_two_copy_review.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eq_canonical_path_ownership.py' -v
       - name: No owner IPA QA trigger or publisher/installer authority
         run: |
           python - <<'PY'
