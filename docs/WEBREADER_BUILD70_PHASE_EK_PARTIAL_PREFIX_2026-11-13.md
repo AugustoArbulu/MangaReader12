@@ -29,3 +29,7 @@ ci/test_build70_ek_partial_prefix_metadata.py usa fixtures sintéticos com downl
 O .mr12backup é um backup portátil sanitizado: elimina downloads da cópia do SQLite, redefine chapters.downloaded e NÃO inclui page-*.bin. Sua restauração real substitui o banco e remove Downloads. Não usar esse restore como etapa da futura atualização por cima.
 
 Para eventual Build71 final, será indispensável primeiro verificar a identidade do app físico instalado, conservar uma cópia externa coerente de TODO o contêiner com capítulos completos/parciais e metadados, testar o mesmo capítulo offline sem Wi-Fi e obter duas autorizações específicas: uma para entregar a IPA privada e outra para instalar. Trigger ci/build71_owner_approved_qa_trigger.txt ausente; publisher key nil, SPKI pin nil, liveInstallationEnabled=false. Sem merge na main.
+
+## Compatibilidade com classificação de arquivos desconhecidos na EI
+
+A EI passou a bloquear arquivos regulares com nomes não reconhecidos mesmo dentro de uma pasta de capítulo conhecida. Por isso, a EK pode retornar EK_STOP_UNACCOUNTED_DOWNLOADS ANTES de calcular o prefixo de páginas se a cópia contém, por exemplo, page-invalid.bin ou outro artefato inesperado. Isso é intencional: a contagem do prefixo em um diretório que contém material não classificado não deve aparecer como se fosse um inventário concluído. Arquivos desconhecidos permanecem intactos para revisão.
