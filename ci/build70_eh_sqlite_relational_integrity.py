@@ -16,6 +16,45 @@ from build70_ea_external_copy_audit import AuditRejected, audit_snapshot, MAX_DA
 from build70_ed_portable_vs_external_library import copied_database, EDRejected
 
 
+# Exact foreign key contracts from SQLiteDatabase.schemaV1 in Swift.
+# Tuple layout: parent table, child column, parent column, delete action.
+EXPECTED_FK = {
+    "manga": (),
+    "library": (("manga", "manga_id", "internal_id", "CASCADE"),),
+    "chapters": (("manga", "manga_id", "internal_id", "CASCADE"),),
+    "categories": (),
+    "manga_categories": (
+        ("manga", "manga_id", "internal_id", "CASCADE"),
+        ("categories", "category_id", "internal_id", "CASCADE"),
+    ),
+    "history": (
+        ("manga", "manga_id", "internal_id", "CASCADE"),
+        ("chapters", "chapter_id", "internal_id", "SET NULL"),
+    ),
+    "downloads": (("chapters", "chapter_id", "internal_id", "CASCADE"),),
+    "sources": (),
+    "repositories": (),
+    "source_settings": (("sources", "source_id", "source_id", "CASCADE"),),
+    "migration_map": (
+        ("manga", "source_manga_id", "internal_id", "CASCADE"),
+        ("manga", "destination_manga_id", "internal_id", "CASCADE"),
+    ),
+}
+
+
+def validate_schema_foreign_keys(db):
+    for table, expected in EXPECTED_FK.items():
+        actual = db.execute('PRAGMA foreign_key_list("' + table + '")').fetchall()
+        normalized = []
+        for record in actual:
+            _, seq, parent, child_field, parent_field, update_action, delete_action, match = record
+            if seq != 0 or update_action != "NO ACTION" or match != "NONE":
+                stop("EH_STOP_FOREIGN_KEY_SCHEMA_MISMATCH")
+            normalized.append((parent, child_field, parent_field, delete_action))
+        if sorted(normalized) != sorted(expected):
+            stop("EH_STOP_FOREIGN_KEY_SCHEMA_MISMATCH")
+
+
 class EHRejected(Exception):
     def __init__(self, code):
         self.code = code
@@ -50,6 +89,7 @@ def audit_metadata_relations(snapshot):
         integrity = db.execute("PRAGMA integrity_check").fetchall()
         if integrity != [("ok",)]:
             stop("EH_STOP_SQLITE_INTEGRITY_FAILED")
+        validate_schema_foreign_keys(db)
         violations = db.execute("PRAGMA foreign_key_check").fetchmany(1)
         if violations:
             stop("EH_STOP_FOREIGN_KEY_VIOLATIONS")
