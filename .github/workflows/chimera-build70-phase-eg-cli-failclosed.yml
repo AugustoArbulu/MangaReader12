@@ -4,6 +4,10 @@ on:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
     paths:
+      - 'ci/build70_ea_external_copy_audit.py'
+      - 'ci/test_build70_ea_external_copy_audit.py'
+      - 'ci/build70_eh_sqlite_relational_integrity.py'
+      - 'ci/test_build70_eh_sqlite_relational_integrity.py'
       - 'ci/build70_eb_copy_vs_device_text.py'
       - 'ci/build70_ec_full_container_dual_copy.py'
       - 'ci/build70_ed_portable_vs_external_library.py'
@@ -29,7 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Full host-only regression EA, EB, EC, ED, EE, EF and new EG
+      - name: Full host-only regression EA through EH, including fail-closed CLI
         run: |
           python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
           python -m unittest discover -s ci -p 'test_build70_eb_copy_vs_device_text.py' -v
@@ -38,6 +42,7 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_ee_portable_preferences_plist.py' -v
           python -m unittest discover -s ci -p 'test_build70_ef_offline_payload_triage.py' -v
           python -m unittest discover -s ci -p 'test_build70_eg_cli_fail_closed.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eh_sqlite_relational_integrity.py' -v
       - name: No owner IPA QA trigger or publisher/installer authority
         run: |
           python - <<'PY'
@@ -54,5 +59,9 @@ jobs:
           assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
           assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
           assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
-          print("PASS EG: every STOP is nonzero; no IPA, install or trust")
+          assert 'PRAGMA foreign_key_check' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
+          assert 'validate_schema_foreign_keys(db)' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
+          assert 'read_database_bytes(db_path, db_hash)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
+          assert 'db.deserialize(raw)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
+          print("PASS EG: all EA-EH audited, every STOP nonzero; no IPA, install or trust")
           PY
