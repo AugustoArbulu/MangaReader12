@@ -127,13 +127,16 @@ class EKPartialPagePrefixTests(unittest.TestCase):
         self.assertEqual(result["metadataOnlyContiguousPrefixFiles"], 1)
         self.assertEqual(result["status"], "EK_STOP_PARTIAL_PAGES_OR_PLANS_REQUIRE_REVIEW")
 
-    def test_malformed_page_filename_is_not_silently_ignored(self):
+    def test_malformed_page_filename_is_blocked_early_by_ei(self):
         self.start(count=2)
-        (self.folder / "page-invalid.bin").write_bytes(b"private bytes")
-        result = self.audit()
-        self.assertEqual(result["unexpectedChapterLeafFiles"], 1)
-        self.assertEqual(result["status"], "EK_STOP_PARTIAL_PAGES_OR_PLANS_REQUIRE_REVIEW")
-        self.assertNotIn("page-invalid.bin", str(result))
+        malformed = self.folder / "page-invalid.bin"
+        malformed.write_bytes(b"private bytes")
+        # EI now detects unknown regular leaves inside KNOWN chapter folders,
+        # so EK must stop before claiming a complete prefix observation.
+        with self.assertRaises(EKRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EK_STOP_UNACCOUNTED_DOWNLOADS")
+        self.assertTrue(malformed.exists())
 
     def test_stale_completed_receipt_in_paused_folder_is_flagged(self):
         self.start(count=2)
