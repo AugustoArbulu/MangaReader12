@@ -231,12 +231,12 @@ final class DataStorageViewController: UITableViewController {
         let alert = UIAlertController(
             title: "Apagar todos os downloads?",
             message: "Todos os capítulos offline e suas imagens serão removidos. " +
-                "Somente downloads registrados e seguros serão excluídos; " +
-                "pastas desconhecidas ou órfãs serão preservadas. " +
+                "O backup .mr12backup não contém essas páginas; restaurá-lo " +
+                "não recupera os downloads. Somente downloads registrados e " +
+                "seguros serão excluídos; pastas desconhecidas ou órfãs serão preservadas. " +
                 "Se ocorrer erro durante a operação, alguns capítulos podem " +
-                "já ter sido removidos. O backup .mr12backup não contém essas " +
-                "páginas; restaurá-lo não recupera os downloads. " +
-                "Biblioteca, progresso e histórico não serão apagados.",
+                "já ter sido removidos. Biblioteca, progresso e histórico " +
+                "não serão apagados.",
             preferredStyle: .alert
         )
 
