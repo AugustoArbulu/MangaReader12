@@ -706,6 +706,7 @@ final class DownloadsViewController: UITableViewController {
                         chapter: chapter,
                         pages: pages,
                         manifest: source.manifest,
+                        existingDataPolicy: .replaceAfterExplicitUserConfirmation,
                         progress: { [weak self] _ in self?.reloadDownloads() },
                         completion: { [weak self] result in
                             DispatchQueue.main.async {

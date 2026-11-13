@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import Darwin
 
 // BEGIN OFFLINE_PATH_RELOCATION
 // Absolute paths persisted in SQLite can outlive their iOS app container UUID.
@@ -31,6 +32,83 @@ enum OfflineDownloadPath {
 }
 // END OFFLINE_PATH_RELOCATION
 
+// BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
+// Normal chapter/batch downloads must preserve any preexisting local data.
+// The Downloads retry flow supplies the explicit user-confirmed override.
+enum ChapterDownloadExistingDataPolicy: Equatable {
+    case preserve
+    case replaceAfterExplicitUserConfirmation
+}
+
+/// Admission audit only. Does not decode or modify stored page data.
+/// Unexpected leaves, symlinks, special files and completed receipts
+/// must never be erased by a retry, even after user confirmation.
+enum WebReaderPartialRetryFolderAudit {
+    private static func sameIdentity(_ a: stat, _ b: stat) -> Bool {
+        return a.st_dev == b.st_dev && a.st_ino == b.st_ino &&
+            a.st_mode == b.st_mode && a.st_nlink == b.st_nlink &&
+            a.st_size == b.st_size &&
+            a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec &&
+            a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec &&
+            a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
+    }
+
+    static func canReplace(
+        directory: URL,
+        plannedPages: Int,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard plannedPages > 0, plannedPages <= 5_000 else { return false }
+        var before = stat()
+        guard Darwin.lstat(directory.path, &before) == 0,
+              (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            return false
+        }
+        let fd = Darwin.open(
+            directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard fd >= 0 else { return false }
+        defer { _ = Darwin.close(fd) }
+
+        var opened = stat()
+        guard Darwin.fstat(fd, &opened) == 0,
+              sameIdentity(before, opened) else { return false }
+        guard let names = try? fileManager.contentsOfDirectory(
+            atPath: directory.path
+        ), names.count <= plannedPages + 1 else { return false }
+
+        for name in names {
+            let isPlan = name == "_download-plan.json"
+            if !isPlan {
+                guard name.range(
+                    of: "^page-[0-9]{5}\\.bin$",
+                    options: .regularExpression
+                ) != nil,
+                let index = Int(name.dropFirst(5).prefix(5)),
+                index < plannedPages else { return false }
+            }
+            var item = stat()
+            guard Darwin.fstatat(
+                fd, name, &item, AT_SYMLINK_NOFOLLOW
+            ) == 0,
+            (item.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+            item.st_nlink == 1, item.st_size > 0,
+            item.st_size <= (isPlan ? 16 * 1024 * 1024 : 20 * 1024 * 1024)
+            else { return false }
+        }
+
+        var afterFD = stat()
+        var afterPath = stat()
+        guard Darwin.fstat(fd, &afterFD) == 0,
+              Darwin.lstat(directory.path, &afterPath) == 0,
+              sameIdentity(before, afterFD),
+              sameIdentity(before, afterPath) else { return false }
+        return true
+    }
+}
+// END BUILD70_EL_SAFE_PARTIAL_RETRY
+
 enum ChapterDownloadError: Error, LocalizedError {
     case applicationSupportUnavailable
     case emptyPages
@@ -41,6 +119,8 @@ enum ChapterDownloadError: Error, LocalizedError {
     case oversizedImagePayload
     case alreadyScheduled
     case alreadyCompleted
+    case existingLocalDataRequiresReview
+    case unsafeExistingLocalData
     case downloadInProgress
 
     var errorDescription: String? {
@@ -63,6 +143,10 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "Este capítulo já está na fila de downloads."
         case .alreadyCompleted:
             return "O capítulo já está marcado como baixado. Para refazer, remova manualmente o download na área Downloads. Nenhum arquivo foi apagado."
+        case .existingLocalDataRequiresReview:
+            return "Já existem páginas ou metadados offline. Abra Downloads e confirme a reinicialização. Preserve uma cópia externa antes de substituir. Nenhum arquivo foi apagado."
+        case .unsafeExistingLocalData:
+            return "A pasta offline contém arquivos inesperados ou inseguros. Nenhum arquivo foi apagado. Preserve a pasta para revisão."
         case .downloadInProgress:
             return "Pause o download antes de removê-lo."
         }
@@ -346,6 +430,7 @@ final class ChapterDownloadManager {
         chapter: Chapter,
         pages: [Page],
         manifest: SourceManifest,
+        existingDataPolicy: ChapterDownloadExistingDataPolicy = .preserve,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
@@ -387,9 +472,25 @@ final class ChapterDownloadManager {
                 let directory = try self.chapterDirectory(
                     sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id
                 )
-                // Retrying a failed download starts from zero; normal
-                // in-session pause/resume preserves the original directory.
+                // No implicit overwrite on chapter taps or batch queues.
+                // A destructive user prompt in Downloads is required, and
+                // unknown/unsafe contents block replacement even then.
                 if self.fileManager.fileExists(atPath: directory.path) {
+                    guard existingDataPolicy == .replaceAfterExplicitUserConfirmation,
+                          let previous = try self.repository.record(
+                              sourceID: sourceID,
+                              sourceMangaID: manga.id,
+                              sourceChapterID: chapter.id
+                          ),
+                          previous.state == "failed" || previous.state == "paused" else {
+                        throw ChapterDownloadError.existingLocalDataRequiresReview
+                    }
+                    guard WebReaderPartialRetryFolderAudit.canReplace(
+                        directory: directory, plannedPages: pages.count,
+                        fileManager: self.fileManager
+                    ) else {
+                        throw ChapterDownloadError.unsafeExistingLocalData
+                    }
                     try self.fileManager.removeItem(at: directory)
                 }
                 try self.fileManager.createDirectory(
