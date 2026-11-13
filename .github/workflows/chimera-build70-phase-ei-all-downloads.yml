@@ -40,7 +40,7 @@ jobs:
                          '"readyToDistributeIPA": False',
                          '"automaticUpdaterEnabled": False',
                          'EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES',
-                         'EI_NONCOMPLETED_DOWNLOADS_OR_UNICODE_REQUIRE_OWNER_REVIEW'):
+                         'EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW'):
               assert needle in src, needle
           assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
           assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
