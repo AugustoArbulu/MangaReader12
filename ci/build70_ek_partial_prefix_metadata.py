@@ -22,7 +22,7 @@ from build70_ei_all_downloads_inventory import (
     audit_noncompleted_and_orphans, EIRejected,
 )
 from build70_ej_recovery_plan_metadata import (
-    plausible_plan, EJRejected, MAX_PAGES, MAX_PLAN_BYTES,
+    plausible_plan, EJRejected, MAX_PAGES, MAX_PLAN_BYTES, ACTIVE_STATES,
 )
 from build69_production_release_preflight import (
     _read_external_regular, ProductionPreflightRejected,
@@ -101,11 +101,15 @@ def inspect_partial_directory(folder, expected_pages=None):
             stop("EK_STOP_CHAPTER_DIRECTORY_CHANGED")
         # Crucial: a zero prefix with page-00002 present is anomalous,
         # even though native resume would restart at page 0.
-        sparse_or_extra = max(0, page_files - bad - prefix)
+        sparse_or_extra = (max(0, page_files - bad - out_of_plan - prefix)
+                           if expected_pages is not None else 0)
         return {
             "totalPageFiles": page_files, "validPrefixFilesMetadataOnly": prefix,
             "badSizePageFiles": bad, "outOfPlanPageFiles": out_of_plan,
             "nonPrefixPageFiles": sparse_or_extra,
+            "unverifiedPageFilesWithoutPlan": (
+                page_files - bad if expected_pages is None else 0
+            ),
             "unexpectedLeafFiles": unexpected,
             "planPageLimitKnown": expected_pages is not None,
         }
@@ -129,6 +133,7 @@ def audit_partial_prefixes(snapshot):
     bad_size = out_of_plan = nonprefix = unexpected = 0
     absent_folders = missing_plans = invalid_plans = 0
     without_planned_count = with_planned_count = 0
+    unverified_no_plan = 0
     try:
         root = Path(os.path.abspath(snapshot))
         lib = safe_child(root, "Library", directory=True)
@@ -164,7 +169,8 @@ def audit_partial_prefixes(snapshot):
             plan = safe_child(folder, "_download-plan.json", required=False)
             expected = None
             if plan is None:
-                missing_plans += 1
+                if state in ACTIVE_STATES:
+                    missing_plans += 1
             else:
                 try:
                     blob = _read_external_regular(plan, MAX_PLAN_BYTES)
@@ -182,6 +188,7 @@ def audit_partial_prefixes(snapshot):
             out_of_plan += observation["outOfPlanPageFiles"]
             nonprefix += observation["nonPrefixPageFiles"]
             unexpected += observation["unexpectedLeafFiles"]
+            unverified_no_plan += observation["unverifiedPageFilesWithoutPlan"]
         if digest_file(path, MAX_DATABASE_BYTES) != fingerprint:
             stop("EK_STOP_DATABASE_CHANGED")
     except (AuditRejected, sqlite3.Error, OSError, ValueError, UnicodeError):
@@ -209,6 +216,7 @@ def audit_partial_prefixes(snapshot):
         "zeroOrOversizePageFiles": bad_size,
         "pageFilesBeyondPlan": out_of_plan,
         "nonPrefixPageFiles": nonprefix,
+        "unverifiedPageFilesWithoutPlan": unverified_no_plan,
         "unexpectedChapterLeafFiles": unexpected,
         "byteContentsOfPagesVerifiedHere": False,
         "validImageDecodingProven": False,
