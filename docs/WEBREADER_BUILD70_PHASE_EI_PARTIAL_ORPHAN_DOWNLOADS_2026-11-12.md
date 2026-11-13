@@ -19,7 +19,7 @@ Um diretório com páginas e nenhum registro em downloads também pode ter valor
 
 ## Limites
 
-Esta fase é um inventário de metadados (tamanhos, caminhos internos para classificação) e não lê integralmente o conteúdo dos arquivos de downloads NÃO completos. A EA já lê/hashia os capítulos completos, enquanto EC pode comparar conteúdo de duas cópias externas; nenhuma delas atesta os bytes do iPad. Uma pasta vazia sem registro pode não ser classificada como pasta de capítulo com arquivos. A presença de arquivos parciais não garante retomada, legibilidade de imagem, plano válido ou consistência do snapshot físico.
+Esta fase é um inventário de metadados (tamanhos, caminhos internos para classificação) e não lê integralmente o conteúdo dos arquivos de downloads NÃO completos. A EA já lê/hashia os capítulos completos, enquanto EC pode comparar conteúdo de duas cópias externas; nenhuma delas atesta os bytes do iPad. A EI também inventaria DIRETÓRIOS, inclusive vazios: capítulos sem registro correspondente, prefixos de fonte/obra que não pertencem a nenhum download e subpastas inesperadas são bloqueantes mesmo com zero arquivos. Diretórios de capítulos de downloads pausados conhecidos permanecem preservados e são reportados como pendências para revisão. Contagens de diretórios ausentes de registros conhecidos são exibidas sem caminhos privados. A presença de arquivos parciais não garante retomada, legibilidade de imagem, plano válido ou consistência do snapshot físico.
 
 A sanitização de identificadores Unicode por Python pode divergir de Foundation, portanto o auditor sinaliza IDs Unicode para revisão, sem tratar hash local como prova de origem. Valores de current path no banco podem conter UUIDs antigos; a ferramenta NÃO segue local_path e utiliza apenas os caminhos derivados dos IDs.
 
@@ -35,3 +35,7 @@ Trigger ci/build71_owner_approved_qa_trigger.txt permanece ausente; productionPu
 
 ## Reforço EI fail-closed
 A presença de registros não completos ou IDs Unicode agora gera EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW com exit code 2. Isso não indica necessariamente corrupção: significa que a revisão de conteúdo parcial e a equivalência dos caminhos são uma condição pendente e não podem ser tratadas por um shell como aprovação automática. O auditor não elimina nem tenta completar esses arquivos.
+
+## Reforço adicional: diretórios vazios (13/11/2026 UTC)
+
+Revisão adversarial identificou um falso cenário de sucesso: um diretório órfão sem arquivos não entrava nas contagens de arquivos e podia passar como totalmente reconciliado. A EI passou a registrar também os caminhos relativos internos dos diretórios de capítulo e seus prefixos (somente em memória durante a execução), sem imprimi-los. O relatório contém apenas números agregados: orphanEmptyChapterDirectories, unreferencedPrefixDirectories e recordedChapterDirectoriesMissingFromCopy. Também classifica subpastas inesperadas vazias como bloqueio. Nenhuma pasta vazia é apagada; toda divergência exige revisão da cópia e do contexto histórico.
