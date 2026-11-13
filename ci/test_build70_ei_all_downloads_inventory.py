@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 from unittest import mock
+import build70_ei_all_downloads_inventory as ei
 
 import test_build70_ed_portable_vs_external_library as fixtures
 from build70_ei_all_downloads_inventory import (
@@ -185,6 +186,17 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         with self.assertRaises(EIRejected) as caught:
             self.audit()
         self.assertEqual(caught.exception.code, "EI_STOP_SANITIZED_PATH_COLLISION")
+
+    def test_untrusted_directory_listing_is_bounded_before_sort(self):
+        folder = self.base / "asura" / "fiction1" / "chap1"
+        for i in range(6):
+            (folder / ("extra-" + str(i))).write_bytes(b"x")
+        # Four directories (root / source / manga / chapter); cap file
+        # names to two + four => seven or more names must abort early.
+        with mock.patch.object(ei, "MAX_FILES", 2), mock.patch.object(ei, "MAX_DIRS", 4):
+            with self.assertRaises(EIRejected) as caught:
+                _collect_download_tree(self.base)
+        self.assertEqual(caught.exception.code, "EI_STOP_ENTRY_LIMIT")
 
     def test_orphan_cli_must_exit_nonzero_without_private_paths(self):
         folder = self.base / "lost-source" / "manga" / "chapter"
