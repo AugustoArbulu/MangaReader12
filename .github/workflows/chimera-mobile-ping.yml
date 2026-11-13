@@ -4,6 +4,27 @@ on:
   push:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
+    # Only IPC/pairing/disposable QA inputs merit another macOS artifact.
+    paths:
+      - 'MangaReader12/**'
+      - 'MangaReader12.xcodeproj/**'
+      - 'ci/webreader_appinst_bridge.c'
+      - 'ci/webreader_chimera_disposable_gate.c'
+      - 'ci/chimera_mobile_ping.entitlements'
+      - 'ci/chimera_disposable_app.entitlements'
+      - 'ci/appinst_disposable/**'
+      - 'ci/build_appinst_disposable.sh'
+      - 'ci/test_appinst_disposable_artifacts.py'
+      - 'ci/test_native_webreader_appinst_socket.py'
+      - 'ci/test_chimera_ping_only_bridge.py'
+      - 'ci/test_chimera_disposable_install_gate.py'
+      - 'ci/prepare_webreader_icons.py'
+      - 'ci/prepare_libwebp_ios.sh'
+      - 'ci/test_ipc_probe_launch.py'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/package_ipc_probe_ipa.sh'
+      - 'ci/test_chimera_mobile_ping_kit.py'
+      - '.github/workflows/chimera-mobile-ping.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +33,7 @@ permissions:
 # Only the newest diagnostic build is useful. Do not occupy macOS runners
 # with superseded intermediate commits on the experimental feature branch.
 concurrency:
-  group: webreader-chimera-ipc-client-${{ github.ref }}
+  group: webreader-chimera-ipc-client-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:

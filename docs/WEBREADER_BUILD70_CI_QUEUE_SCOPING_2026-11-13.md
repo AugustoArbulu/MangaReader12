@@ -23,3 +23,11 @@ O agrupamento de `build.yml` passou a usar `github.run_id` quando a execução f
 ## Revisão do evento Ready for Review (13/11/2026)
 
 O `pull_request` padrão do GitHub não inclui o evento `ready_for_review`. Sem uma declaração explícita, uma PR que deixa de ser Draft pode não disparar o build nativo ao ser promovida (até um novo synchronize). `.github/workflows/build.yml` agora declara `types: [opened, synchronize, reopened, ready_for_review]`, preserva o gate `draft == false` no job e mantém `workflow_dispatch`. O contrato estático ganhou um oitavo teste de governança. Isso não transforma a PR atual em Ready, não dispensa revisão humana e NÃO comprova que um runner macOS esteja disponível. O `paths-ignore` da PR continua sujeito ao diff acumulado; uma transição só executa se o GitHub considerar o workflow aplicável.
+
+## Escopo adicional de diagnósticos IPA legados (13/11/2026)
+
+A revisão do HEAD encontrou dois workflows **macOS-15 com push de branch sem filtros de caminhos**, apesar de serem diagnósticos antigos: `.github/workflows/chimera-oneapp.yml` (OneApp IPA) e `.github/workflows/chimera-mobile-ping.yml` (Build60 SignedQA). O commit anterior, que modificou apenas workflow geral/teste/documentação, disparou ambos, gerando novos jobs e possíveis artefatos sem necessidade. **Nenhum deles é a Build71.**
+
+Ambos agora filtram o push pelos fontes do aplicativo Xcode, scripts, helpers, testes e entitlements que efetivamente usam. Eventos apenas de auditorias Python EA–EK ou docs não os acionam. `workflow_dispatch` permanece para testes deliberados, com grupo próprio por `github.run_id`; push automático não cancela um disparo manual. O OneApp passou a ter concorrência isolada com `cancel-in-progress: true` para descartar pushes obsoletos. O Build60 manteve sua política de cancelamento por branch, separando os manuais.
+
+A regressão estática em `ci/test_build70_ci_scope.py` ganhou **dois testes**, passando de 8 para 10. Isso verifica o YAML e a política de artefatos; não comprova distribuição GitHub, disponibilidade macOS, assinatura nativa nem compatibilidade física. A inclusão do próprio YAML como entrada pode gerar **uma última execução** ao alterar essa definição; o benefício é em pushes posteriores. PR #90 segue Draft; sem acionamento de IPA71, appinst, restauração ou merge.

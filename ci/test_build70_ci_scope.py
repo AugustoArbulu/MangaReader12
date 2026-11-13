@@ -130,6 +130,55 @@ class TriggerScopeTests(unittest.TestCase):
         )
         self.assertNotIn("github.workflow", text_of("chimera-build70-phase-eg-cli-failclosed.yml"))
 
+    def test_oneapp_expensive_ipa_has_narrow_push_inputs_and_safe_manual_run(self):
+        workflow = text_of("chimera-oneapp.yml")
+        push = yaml_event_body(workflow, "push", "workflow_dispatch")
+        self.assertIn("paths:", push)
+        for required in (
+            "MangaReader12/**",
+            "MangaReader12.xcodeproj/**",
+            "ci/webreader_helper_probe.c",
+            "ci/package_chimera_oneapp_ipa.sh",
+            "ci/test_chimera_oneapp_ipa.py",
+            ".github/workflows/chimera-oneapp.yml",
+        ):
+            self.assertIn("'" + required + "'", push)
+        self.assertNotIn("ci/build70_e*.py", push)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.run_id",
+                      workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn("runs-on: macos-15", workflow)
+        self.assertIn("WebReader-Chimera-OneApp-iOS12-TEST", workflow)
+
+    def test_build60_ping_ipa_has_narrow_push_inputs_and_safe_manual_run(self):
+        workflow = text_of("chimera-mobile-ping.yml")
+        push = yaml_event_body(workflow, "push", "workflow_dispatch")
+        self.assertIn("paths:", push)
+        for required in (
+            "MangaReader12/**",
+            "MangaReader12.xcodeproj/**",
+            "ci/webreader_appinst_bridge.c",
+            "ci/webreader_chimera_disposable_gate.c",
+            "ci/chimera_mobile_ping.entitlements",
+            "ci/chimera_disposable_app.entitlements",
+            "ci/appinst_disposable/**",
+            "ci/build_appinst_disposable.sh",
+            "ci/package_ipc_probe_ipa.sh",
+            "ci/test_chimera_mobile_ping_kit.py",
+            ".github/workflows/chimera-mobile-ping.yml",
+        ):
+            self.assertIn("'" + required + "'", push)
+        self.assertNotIn("ci/build70_e*.py", push)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.run_id",
+                      workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn("runs-on: macos-15", workflow)
+        self.assertIn("WebReader-Chimera-Build60-SignedQA-iOS12", workflow)
+
     def test_no_owner_build71_trigger_or_automatic_install_activation(self):
         self.assertFalse((ROOT / "ci/build71_owner_approved_qa_trigger.txt").exists())
         source = (ROOT / "MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()

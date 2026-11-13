@@ -4,10 +4,28 @@ on:
   push:
     branches:
       - feat/chimera-updater-phase1-protocol-audit
+    # Rebuild this isolated diagnostic IPA only if its actual inputs changed.
+    paths:
+      - 'MangaReader12/**'
+      - 'MangaReader12.xcodeproj/**'
+      - 'ci/webreader_helper_probe.c'
+      - 'ci/package_chimera_oneapp_ipa.sh'
+      - 'ci/test_chimera_oneapp_ipa.py'
+      - 'ci/prepare_webreader_icons.py'
+      - 'ci/prepare_libwebp_ios.sh'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/test_ipc_probe_launch.py'
+      - 'ci/package_ipa.sh'
+      - '.github/workflows/chimera-oneapp.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Manual owner QA must not be canceled by an automatic push build.
+concurrency:
+  group: wr-chimera-oneapp-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   oneapp:
