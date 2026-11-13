@@ -125,6 +125,60 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(r["orphanChapterBytes"], len(b"unreferenced"))
         self.denied(r)
 
+    def test_empty_orphan_chapter_folder_is_preserved_and_blocks(self):
+        folder = self.base / "orphan-source" / "orphan-manga" / "orphan-chapter"
+        folder.mkdir(parents=True)
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["orphanEmptyChapterDirectories"], 1)
+        self.assertEqual(r["orphanChapterDirectoriesWithFiles"], 0)
+        self.assertEqual(r["orphanChapterFiles"], 0)
+        self.assertTrue(folder.exists())
+        self.denied(r)
+
+    def test_empty_orphan_source_prefix_blocks(self):
+        orphan = self.base / "abandoned-source"
+        orphan.mkdir()
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["unreferencedPrefixDirectories"], 1)
+        self.assertEqual(r["orphanEmptyChapterDirectories"], 0)
+        self.denied(r)
+
+    def test_orphan_empty_manga_prefix_blocks(self):
+        orphan = self.base / "asura" / "abandoned-manga"
+        orphan.mkdir()
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["unreferencedPrefixDirectories"], 1)
+        self.denied(r)
+
+    def test_unexpected_empty_nested_directory_blocks(self):
+        folder = self.base / "asura" / "fiction1" / "chap1" / "extra-empty"
+        folder.mkdir()
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["nestedUnexpectedDirectoryCount"], 1)
+        self.assertEqual(r["unclassifiedFileCount"], 0)
+        self.denied(r)
+
+    def test_known_empty_queued_folder_is_not_mislabeled_orphan(self):
+        self.add_noncompleted(state="queued")
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+        self.assertEqual(r["orphanEmptyChapterDirectories"], 0)
+        self.assertEqual(r["unreferencedPrefixDirectories"], 0)
+        self.assertEqual(r["recordedChapterDirectoriesMissingFromCopy"], 0)
+
+    def test_missing_noncompleted_directory_is_visible_to_owner(self):
+        folder = self.add_noncompleted(state="failed")
+        folder.rmdir()
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+        self.assertEqual(r["recordedChapterDirectoriesMissingFromCopy"], 1)
+        self.assertEqual(r["orphanEmptyChapterDirectories"], 0)
+        self.denied(r)
+
     def test_unclassified_root_file_blocks_even_if_completed_valid(self):
         (self.base / "unclassified-private.bin").write_bytes(b"secret")
         r = self.audit()
