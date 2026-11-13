@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""EI tests using synthetic SQLite v1 and fake offline files, no real iPad."""
+import json
+import os
+from pathlib import Path
+import sqlite3
+import subprocess
+import sys
+import unittest
+from unittest import mock
+
+import test_build70_ed_portable_vs_external_library as fixtures
+from build70_ei_all_downloads_inventory import (
+    EIRejected, audit_noncompleted_and_orphans, _collect_download_tree,
+)
+
+
+class EIAllDownloadsInventoryTests(unittest.TestCase):
+    def setUp(self):
+        fixture = fixtures.EDPortableLibraryTests(
+            "test_exact_library_rows_equal_but_not_attested")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.fx = fixture
+        self.root = fixture.root
+        self.base = fixture.app / "Downloads"
+
+    def mutate(self, query):
+        with sqlite3.connect(self.fx.db) as db:
+            db.execute(query)
+
+    def add_noncompleted(self, state="paused", source="asura",
+                         title="fictitious2", chapter="ch2", ident=2):
+        with sqlite3.connect(self.fx.db) as db:
+            db.execute("""
+                INSERT INTO manga(internal_id,source_id,source_manga_id,
+                    title,status,date_added) VALUES (?,?,?,'Example','unknown',1)
+            """, (ident, source, title))
+            db.execute("""
+                INSERT INTO chapters(internal_id,manga_id,source_chapter_id,name)
+                VALUES (?,?,?,'Chapter')""", (ident, ident, chapter))
+            db.execute("""
+                INSERT INTO downloads(chapter_id,state,progress,updated_at)
+                VALUES (?,?,0.2,5)
+            """, (ident, state))
+        source = "".join(c if c.isalnum() or c in "._-" else "_" for c in source)
+        folder = self.base / source / title / chapter
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def audit(self):
+        return audit_noncompleted_and_orphans(self.root)
+
+    def denied(self, value):
+        for field in ("contentBytesVerifiedHere",
+                      "noncompletedFilesConfirmedToSurviveUpgrade",
+                      "allUserFilesOffDeviceProven",
+                      "sourceDeviceAttested", "originalIPadRead",
+                      "readyToDistributeIPA", "readyToInstallIPA",
+                      "installationAuthorized", "restorationAuthorized",
+                      "automaticUpdaterEnabled"):
+            self.assertIs(value[field], False, field)
+
+    def test_completed_snapshot_has_only_accounted_files(self):
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_ALL_SCANNED_FILES_ACCOUNTED_NOT_DEVICE_PROOF")
+        self.assertEqual(r["downloadRows"], 1)
+        self.assertEqual(r["noncompletedDownloadRows"], 0)
+        self.assertEqual(r["totalRegularFilesWithinDownloads"], 3)
+        self.assertEqual(r["orphanChapterFiles"], 0)
+        self.denied(r)
+
+    def test_paused_download_pages_and_recovery_plan_preserved_as_material(self):
+        folder = self.add_noncompleted(state="paused")
+        (folder / "page-00000.bin").write_bytes(b"part1")
+        (folder / "_download-plan.json").write_bytes(b'{"private":"fiction"}')
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_NONCOMPLETED_DOWNLOADS_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+        self.assertEqual(r["downloadRows"], 2)
+        self.assertEqual(r["noncompletedDownloadRows"], 1)
+        self.assertEqual(r["partialJobFiles"], 2)
+        self.assertEqual(r["partialJobBytes"], 24)
+        self.assertEqual(r["orphanChapterFiles"], 0)
+        self.denied(r)
+        self.assertNotIn("fictitious2", str(r))
+
+    def test_failed_job_pages_also_counted(self):
+        folder = self.add_noncompleted(state="failed")
+        (folder / "page-00000.bin").write_bytes(b"x")
+        r = self.audit()
+        self.assertEqual(r["partialJobFiles"], 1)
+        self.assertEqual(r["noncompletedDownloadRows"], 1)
+
+    def test_queued_job_empty_directory_is_not_pretended_offline(self):
+        self.add_noncompleted(state="queued")
+        r = self.audit()
+        self.assertEqual(r["partialJobFiles"], 0)
+        self.assertEqual(r["noncompletedDownloadRows"], 1)
+        self.assertIn("REVIEW", r["status"])
+        self.denied(r)
+
+    def test_orphan_chapter_file_is_never_ignored(self):
+        folder = self.base / "lost-source" / "manga" / "chapter"
+        folder.mkdir(parents=True)
+        (folder / "page-00000.bin").write_bytes(b"unreferenced")
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["orphanChapterDirectoriesWithFiles"], 1)
+        self.assertEqual(r["orphanChapterFiles"], 1)
+        self.assertEqual(r["orphanChapterBytes"], len(b"unreferenced"))
+        self.denied(r)
+
+    def test_unclassified_root_file_blocks_even_if_completed_valid(self):
+        (self.base / "unclassified-private.bin").write_bytes(b"secret")
+        r = self.audit()
+        self.assertEqual(r["status"], "EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES")
+        self.assertEqual(r["unclassifiedFileCount"], 1)
+        self.assertEqual(r["unclassifiedFileBytes"], 6)
+
+    def test_extra_nested_files_not_misclassified_as_legitimate_pages(self):
+        extra = self.base / "asura" / "fiction1" / "chap1" / "unusual"
+        extra.mkdir()
+        (extra / "page-00099.bin").write_bytes(b"x")
+        r = self.audit()
+        self.assertEqual(r["unclassifiedFileCount"], 1)
+        self.assertEqual(r["nestedUnexpectedDirectoryCount"], 1)
+        self.assertTrue(r["status"].startswith("EI_STOP_"))
+
+    def test_symlinked_orphan_folder_is_refused(self):
+        link = self.base / "link"
+        link.symlink_to(self.base / "asura", target_is_directory=True)
+        with self.assertRaises(EIRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EI_STOP_SYMLINK")
+
+    def test_symlinked_orphan_file_is_refused(self):
+        folder = self.base / "lost-source" / "manga" / "chapter"
+        folder.mkdir(parents=True)
+        (folder / "page-00000.bin").symlink_to(
+            self.base / "asura" / "fiction1" / "chap1" / "page-00000.bin"
+        )
+        with self.assertRaises(EIRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EI_STOP_SYMLINK")
+
+    def test_special_fifo_rejected_without_reading_contents(self):
+        path = self.base / "asura" / "fiction1" / "chap1" / "special.fifo"
+        os.mkfifo(path)
+        with self.assertRaises(EIRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EI_STOP_SPECIAL_FILE")
+
+    def test_unreferenced_and_queued_are_both_counted(self):
+        self.add_noncompleted(state="queued")
+        orphan = self.base / "other" / "manga" / "chapter"
+        orphan.mkdir(parents=True)
+        (orphan / "page-00000.bin").write_bytes(b"orphan")
+        r = self.audit()
+        self.assertEqual(r["noncompletedDownloadRows"], 1)
+        self.assertEqual(r["orphanChapterFiles"], 1)
+        self.assertTrue(r["status"].startswith("EI_STOP_"))
+
+    def test_mixed_completed_and_paused_sanitized_collision_is_refused(self):
+        self.add_noncompleted(state="paused", source="asura",
+                              title="fiction1", chapter="ch1", ident=2)
+        with self.assertRaises(EIRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EI_STOP_SANITIZED_PATH_COLLISION")
+
+    def test_collision_between_two_noncompleted_paths_is_refused(self):
+        self.add_noncompleted(source="a?b", title="fictitious2",
+                              chapter="ch2", ident=2)
+        self.add_noncompleted(source="a/b", title="fictitious2",
+                              chapter="ch2", ident=3)
+        with self.assertRaises(EIRejected) as caught:
+            self.audit()
+        self.assertEqual(caught.exception.code, "EI_STOP_SANITIZED_PATH_COLLISION")
+
+    def test_orphan_cli_must_exit_nonzero_without_private_paths(self):
+        folder = self.base / "lost-source" / "manga" / "chapter"
+        folder.mkdir(parents=True)
+        (folder / "page-00000.bin").write_bytes(b"secret")
+        script = Path(__file__).resolve().parent / "build70_ei_all_downloads_inventory.py"
+        proc = subprocess.run(
+            [sys.executable, str(script), "--snapshot", str(self.root)],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(proc.returncode, 2)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["orphanChapterFiles"], 1)
+        self.assertNotIn(str(self.root), proc.stdout + proc.stderr)
+        self.assertNotIn("lost-source", proc.stdout + proc.stderr)
+        self.assertFalse(report["installationAuthorized"])
+
+    def test_cli_success_requires_only_accounted_local_files(self):
+        script = Path(__file__).resolve().parent / "build70_ei_all_downloads_inventory.py"
+        proc = subprocess.run(
+            [sys.executable, str(script), "--snapshot", str(self.root)],
+            capture_output=True, text=True, timeout=15
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["status"], "EI_ALL_SCANNED_FILES_ACCOUNTED_NOT_DEVICE_PROOF")
+        self.denied(report)
+
+    def test_readonly_source_never_repairs_or_installs(self):
+        source = (Path(__file__).resolve().parent /
+                  "build70_ei_all_downloads_inventory.py").read_text()
+        for forbidden in ("appinst", "restoreBackup(", ".unlink(", ".write_bytes(",
+                          ".write_text(", "shutil.rmtree(", "subprocess.run(",
+                          "DELETE FROM ", "UPDATE downloads"):
+            self.assertNotIn(forbidden, source)
+        self.assertIn('os.scandir(folder_fd)', source)
+        self.assertIn('dir_fd=folder_fd', source)
+        self.assertIn('"installationAuthorized": False', source)
+        self.assertIn('return 2 if result["status"].startswith("EI_STOP_") else 0', source)
+
+
+if __name__ == "__main__":
+    unittest.main()
