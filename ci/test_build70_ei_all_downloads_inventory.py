@@ -76,7 +76,7 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         (folder / "page-00000.bin").write_bytes(b"part1")
         (folder / "_download-plan.json").write_bytes(b'{"private":"fiction"}')
         r = self.audit()
-        self.assertEqual(r["status"], "EI_NONCOMPLETED_DOWNLOADS_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+        self.assertEqual(r["status"], "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
         self.assertEqual(r["downloadRows"], 2)
         self.assertEqual(r["noncompletedDownloadRows"], 1)
         self.assertEqual(r["partialJobFiles"], 2)
@@ -84,6 +84,20 @@ class EIAllDownloadsInventoryTests(unittest.TestCase):
         self.assertEqual(r["orphanChapterFiles"], 0)
         self.denied(r)
         self.assertNotIn("fictitious2", str(r))
+
+    def test_paused_download_requires_nonzero_cli_owner_review(self):
+        folder = self.add_noncompleted(state="paused")
+        (folder / "page-00000.bin").write_bytes(b"partial private test bytes")
+        script = Path(__file__).resolve().parent / "build70_ei_all_downloads_inventory.py"
+        p = subprocess.run([sys.executable, str(script), "--snapshot", str(self.root)],
+                           text=True, capture_output=True, timeout=15)
+        self.assertEqual(p.returncode, 2)
+        report = json.loads(p.stdout)
+        self.assertEqual(report["status"],
+                         "EI_STOP_NONCOMPLETED_OR_UNICODE_REQUIRE_OWNER_REVIEW")
+        self.assertEqual(report["partialJobFiles"], 1)
+        self.assertNotIn("partial private test bytes", p.stdout + p.stderr)
+        self.assertFalse(report["installationAuthorized"])
 
     def test_failed_job_pages_also_counted(self):
         folder = self.add_noncompleted(state="failed")
