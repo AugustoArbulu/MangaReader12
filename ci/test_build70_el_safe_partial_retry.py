@@ -128,7 +128,9 @@ struct Manga: Codable { let id: String }
 struct Chapter: Codable { let id: String }
 struct Page: Codable { let index: Int }
 struct SourceManifest: Codable { let id: String }
-private struct DownloadRecoveryPlan: Codable {
+// This standalone fixture has top-level constants. The real app struct
+// remains private; only the synthetic copy changes visibility.
+struct DownloadRecoveryPlan: Codable {
 """ + struct + """
 }
 
