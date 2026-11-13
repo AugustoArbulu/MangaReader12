@@ -1,0 +1,50 @@
+name: WebReader Build70 Phase EI All Downloads Inventory (host only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ei_all_downloads_inventory.py'
+      - 'ci/test_build70_ei_all_downloads_inventory.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EI_PARTIAL_ORPHAN_DOWNLOADS_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-ei-all-downloads.yml'
+permissions:
+  contents: read
+jobs:
+  copied-downloads-host-inventory:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run synthetic EA, ED and EI read-only regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ed_portable_vs_external_library.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ei_all_downloads_inventory.py' -v
+      - name: Validate EI can never authorize Build71 IPA or overwrite device
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          for needle in ('"installationAuthorized": False',
+                         '"restorationAuthorized": False',
+                         '"readyToDistributeIPA": False',
+                         '"automaticUpdaterEnabled": False',
+                         'EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES',
+                         'EI_NONCOMPLETED_DOWNLOADS_OR_UNICODE_REQUIRE_OWNER_REVIEW'):
+              assert needle in src, needle
+          assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS EI: partial/offline bytes retained for review; never restore/install/distribute')
+          PY
