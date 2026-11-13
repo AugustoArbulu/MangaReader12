@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from build70_ea_external_copy_audit import AuditRejected, audit_snapshot
 
@@ -186,6 +187,31 @@ class ExternalBackupCopyAuditTests(unittest.TestCase):
         self.assertEqual(before["status"], after["status"])
         self.assert_denied(after)
 
+    def test_sqlite_swap_between_digest_and_open_is_refused(self):
+        self.add_completed()
+        from build70_ea_external_copy_audit import digest_file as original_digest
+        changed = [False]
+
+        def mutate_after_initial_hash(path, max_bytes):
+            h = original_digest(path, max_bytes)
+            if Path(path) == self.db and not changed[0]:
+                changed[0] = True
+                with sqlite3.connect(self.db) as conn:
+                    conn.execute("PRAGMA user_version=2")
+            return h
+
+        with mock.patch("build70_ea_external_copy_audit.digest_file",
+                        side_effect=mutate_after_initial_hash):
+            self.fail_code("EA_STOP_DATABASE_CHANGED")
+        self.assertTrue(changed[0])
+
+    def test_sqlite_is_deserialized_from_hash_bound_bytes(self):
+        src = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("read_database_bytes(db_path, db_hash)", src)
+        self.assertIn("db.deserialize(raw)", src)
+        self.assertIn("PRAGMA query_only=ON", src)
+        self.assertNotIn("sqlite3.connect(uri", src)
+
     def test_future_database_schema_refused(self):
         with sqlite3.connect(self.db) as conn:
             conn.execute("PRAGMA user_version=2")
@@ -229,7 +255,7 @@ class ExternalBackupCopyAuditTests(unittest.TestCase):
             "UPDATE downloads", "DELETE FROM", "restoreBackup(",
         ):
             self.assertNotIn(forbidden, source)
-        self.assertIn("immutable=1", source)
+        self.assertIn("db.deserialize(raw)", source)
         self.assertIn("EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT", source)
         self.assertIn("EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT", source)
 
