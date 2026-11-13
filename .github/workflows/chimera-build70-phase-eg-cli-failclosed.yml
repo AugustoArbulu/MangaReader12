@@ -6,6 +6,8 @@ on:
     paths:
       - 'ci/build70_ea_external_copy_audit.py'
       - 'ci/test_build70_ea_external_copy_audit.py'
+      - 'ci/build70_ei_all_downloads_inventory.py'
+      - 'ci/test_build70_ei_all_downloads_inventory.py'
       - 'ci/build70_eh_sqlite_relational_integrity.py'
       - 'ci/test_build70_eh_sqlite_relational_integrity.py'
       - 'ci/build70_eb_copy_vs_device_text.py'
@@ -33,7 +35,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Full host-only regression EA through EH, including fail-closed CLI
+      - name: Full host-only regression EA through EI, including fail-closed CLI
         run: |
           python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
           python -m unittest discover -s ci -p 'test_build70_eb_copy_vs_device_text.py' -v
@@ -43,6 +45,7 @@ jobs:
           python -m unittest discover -s ci -p 'test_build70_ef_offline_payload_triage.py' -v
           python -m unittest discover -s ci -p 'test_build70_eg_cli_fail_closed.py' -v
           python -m unittest discover -s ci -p 'test_build70_eh_sqlite_relational_integrity.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ei_all_downloads_inventory.py' -v
       - name: No owner IPA QA trigger or publisher/installer authority
         run: |
           python - <<'PY'
@@ -61,7 +64,9 @@ jobs:
           assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
           assert 'PRAGMA foreign_key_check' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
           assert 'validate_schema_foreign_keys(db)' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
+          assert 'EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert '"installationAuthorized": False' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
           assert 'read_database_bytes(db_path, db_hash)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
           assert 'db.deserialize(raw)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
-          print("PASS EG: all EA-EH audited, every STOP nonzero; no IPA, install or trust")
+          print("PASS EG: all EA-EI audited, every STOP nonzero; no IPA, install or trust")
           PY
