@@ -1,0 +1,28 @@
+name: WebReader Build70 FD synthetic sealed snapshot regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fd-synthetic:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile real Swift test core and run all synthetic EV-FD tests
+        env:
+          PYTHONPATH: ci
+          PYTHONWARNINGS: ignore::ResourceWarning
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -v
+      - name: Safety gates: no app install or production writes
+        run: |
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift

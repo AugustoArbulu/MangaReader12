@@ -1,0 +1,37 @@
+name: Build70 EY synthetic shadow migration and native race drill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-ey:
+    name: Synthetic Python + native Swift (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runner tools
+        run: |
+          python3 --version
+          swiftc --version
+      - name: Run offline EV/EW/EX/EY QA
+        env:
+          PYTHONPATH: ci
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m unittest -v \
+            test_build70_ev_recoverable_quarantine \
+            test_build70_ev_native_swift_fd \
+            test_build70_ex_persistent_journal_bridge \
+            test_build70_ey_shadow_schema_migration \
+            test_build70_ey_source_inode_race
+      - name: State hard stop
+        run: |
+          echo "Synthetic lab only: no IPA, production DB, appinst, device or releases."
