@@ -125,7 +125,7 @@ assert 'stager?.cancel()' in screen
 assert 'UIActivityViewController(activityItems: [url]' in screen
 # Public Release discovery is not independent publisher authentication.
 assert '"GitHub Releases • HTTPS • sem autenticação editorial independente"' in screen
-assert '"GitHub Releases indisponível: sem release ou repositório privado"' in screen
+assert '"HTTP 404: nenhuma Release pública acessível; não há IPA para baixar"' in screen
 assert '"Metadados do GitHub não têm assinatura editorial independente. "' in screen
 assert '"SHA-256 e estrutura IPA conferidos • instalação manual"' in screen
 assert "verifyingExport" in screen
