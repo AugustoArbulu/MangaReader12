@@ -35,3 +35,14 @@ O leitor `inspect_disposable_version_clock` abre v3 com `mode=ro`, ativa `PRAGMA
 5. Ainda faltam orçamento de espaço, validade de backups, operação concorrente com outros processos e validação física em iOS 12 antes de considerar um descarte definitivo.
 
 **Sem Build71, IPA, assinatura, instalação, releases, `appinst`, dados do iPad, alteração da `main` ou operação de exclusão real.**
+
+
+## Resultado final do GitHub Actions
+
+[Workflow FL #43543370467](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43543370467): **SUCCESS, 2/2 jobs** em 14/11/2026 UTC.
+
+- **Ubuntu 24.04:** FL 20 + FK 36 + FJ 30 + FI metadata 17 + FI Swift WAL 2 + EV–FD 250 = **355 testes sintéticos aprovados**.
+- **macOS 15:** os mesmos **355 testes sintéticos aprovados**, mais `swiftc -target arm64-apple-ios12.0 -typecheck` do núcleo Swift modificado.
+- Em ambos os jobs, as **40 entradas SHA-256** do laboratório EV–FD foram validadas, as flags de instalação/exclusão permaneceram desativadas e os testes não alteraram arquivos versionados.
+
+Este resultado **não** valida execução no iPad, limite de armazenamento real, ligação atômica entre nome e inode para exclusão, nem a ausência de escritores externos não cooperativos. O código da Fase FL permanece isolado da aplicação instalada.
