@@ -31,3 +31,9 @@ Em `ci/build70_fm_held_recovery_budget.py`, `audit_held_recovery` lê o journal 
 Projetar um estado de **retenção e liberação controlada** de snapshots sem apagar a origem, com orçamento de armazenamento, cota efetivamente reservada e recuperação após crash. A exclusão física não pode ser promovida sem uma operação condicional ao inode/política comprovada contra escritores externos e validação em iOS 12 real.
 
 **Barreiras invariáveis:** branch `main` intacta; PR #90 Draft; `diagnosticCopyPreviewEnabled=false`; schema SQLite de produção v1; Build70 do iPad e dados reais intactos; sem Build71 autorizada, IPA distribuído, appinst ou chaves de produção.
+
+## Resultado final GitHub Actions — 14/11/2026 UTC
+
+[Workflow FM #43545759069](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43545759069): **SUCCESS — 2/2 jobs** (`ubuntu-24.04`, `macos-15`). Cada runner executou **395 testes**: FM 40 + FL 20 + FK 36 + FJ 30 + FI journal 17 + FI Swift WAL 2 + EV–FD 250, além da verificação de 40 hashes SHA-256 e flags de segurança. O macOS passou também no `swiftc -typecheck -target arm64-apple-ios12.0` do núcleo de laboratório. **Não houve compilação do aplicativo completo nesta fase**, apenas verificação isolada de alvo iOS 12, nem IPA/instalação.
+
+Commits: implementação `b7970f363ec5ace8288729e51c472138d4ca0b84`, documento atualizado no commit seguinte. A branch `main` permaneceu em `1283a0614acf3a267e3daddcdafc6c0d0cf335a7` quando conferida. Mesmo 395 testes bem-sucedidos não demonstram exclusão condicional segura, durabilidade APFS/WAL ou validação em iPad real.
