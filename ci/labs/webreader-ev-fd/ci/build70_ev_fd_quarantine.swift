@@ -576,6 +576,10 @@ private func ezCopySnapshot(_ sourceParent: Int32, _ sourceName: String,
               ezStableFile(admitted, before) else {
             throw EVError.unsafe("page changed before opening")
         }
+        // FL: file-scoped defer. A defer directly inside the for-loop body
+        // runs at function exit, leaking 2 FDs per page for long chapters.
+        // The lexical do scope closes both descriptors before the next page.
+        do {
         let srcFD = name.withCString { openat(pinnedFD, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC) }
         guard srcFD >= 0 else { throw EVError.system("openat-source-file", errno) }
         defer { _ = close(srcFD) }
@@ -614,6 +618,7 @@ private func ezCopySnapshot(_ sourceParent: Int32, _ sourceName: String,
             _ = fsync(quarantineParent)
             exit(86)
         }
+        } // FL: close this page's pinned source and destination FDs.
     }
     // Re-list to detect extra or swapped names; validate exact source binding.
     if let owner = owner {
@@ -684,6 +689,8 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
               srcBefore.st_size == dstBefore.st_size else {
             throw EVError.unsafe("snapshot page metadata mismatch")
         }
+        // FL: scope the pair of verification FDs to one page only.
+        do {
         let src = name.withCString { openat(sourceFD, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC) }
         guard src >= 0 else { throw EVError.system("verify-open-source", errno) }
         defer { _ = close(src) }
@@ -706,6 +713,7 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
             throw EVError.unsafe("snapshot file drift after comparison")
         }
         bytes += Int64(srcBefore.st_size)
+        } // FL: both verify FDs close before the next file.
     }
     guard try directoryEntries(sourceFD).sorted() == originalNames,
           try directoryEntries(snapshotFD).sorted() == copiedNames,

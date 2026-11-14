@@ -1,0 +1,73 @@
+name: WebReader Build70 FL - bounded FD copy and cooperative SQLite ABA (synthetic only)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/build70_fl_monotonic_shadow.py'
+      - 'ci/test_build70_fl_*.py'
+      - 'ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift'
+      - 'ci/labs/webreader-ev-fd/SHA256SUMS'
+      - '.github/workflows/chimera-build70-phase-fl-fd-budget-monotonic-shadow.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wr-build70-fl-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-only-no-deletion:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check production deletion and installation remain disabled
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let currentSchemaVersion = 1' MangaReader12/Database/SQLiteDatabase.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+      - name: Verify all 40 EV-FD lab checksums after Swift source change
+        working-directory: ci/labs/webreader-ev-fd
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('.').resolve()
+          count=0
+          for line in Path('SHA256SUMS').read_text().splitlines():
+              digest,name=line.split('  ',1)
+              item=(root/name).resolve()
+              assert item.is_relative_to(root),name
+              assert hashlib.sha256(item.read_bytes()).hexdigest()==digest,name
+              count+=1
+          assert count==40,count
+          print('FL_ALL_LAB_CHECKSUMS_VALID',count)
+          PY
+      - name: Run FL 20 new low-FD/SQLite ABA tests
+        run: python -m unittest discover -s ci -p 'test_build70_fl_*.py' -v
+      - name: Run FK FJ FI full synthetic regression
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fk_late_window_evidence.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fj_paired_readonly_reconciliation.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fi_readonly_shadow_audit.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fi_native_wal_snapshot.py' -q
+      - name: Run prior EV-FD 250 synthetic tests (scoped FDs)
+        working-directory: ci/labs/webreader-ev-fd
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: macOS iOS12 Swift FD source-only typecheck (no app install)
+        if: runner.os == 'macOS'
+        run: |
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+      - name: No tracked files changed by synthetic tests
+        run: git diff --exit-code -- .
