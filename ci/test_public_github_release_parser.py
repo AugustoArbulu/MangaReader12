@@ -77,7 +77,7 @@ func v2Asset(_ build: Int = 57) -> [String: Any] {
         "state": "uploaded",
         "browser_download_url":
             "https://github.com/AugustoArbulu/MangaReader12/releases/" +
-            "download/build57/" + name
+            "download/build" + String(build) + "/" + name
     ]
 }
 var validV2 = fixture()
