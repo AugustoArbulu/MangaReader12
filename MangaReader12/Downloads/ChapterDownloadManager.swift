@@ -310,6 +310,21 @@ enum WebReaderOfflineDeletionV2ShadowGate {
 }
 // END BUILD70_FF_INERT_READONLY_DELETION_BRIDGE
 
+// BEGIN BUILD70_FG_READONLY_BATCH_PREVIEW
+// No database reads or writes are performed here. The caller supplies a
+// previously obtained snapshot of rows, which may itself become stale.
+// Results are only provisional and must never authorize filesystem mutation.
+struct WebReaderOfflineDeletionV2AuditItem {
+    let sourceID: String
+    let sourceMangaID: String
+    let sourceChapterID: String
+    let decision: WebReaderOfflineDeletionV2ShadowGate.Preview
+}
+enum WebReaderOfflineDeletionV2AuditError: Error {
+    case tooManyRecords
+}
+// END BUILD70_FG_READONLY_BATCH_PREVIEW
+
 // BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
 // Normal chapter/batch downloads must preserve any preexisting local data.
 // The Downloads retry flow supplies the explicit user-confirmed override.
@@ -1152,6 +1167,57 @@ final class ChapterDownloadManager {
             Page(index: index, imageUrl: url.absoluteString, headers: [:])
         }
     }
+
+    // BEGIN BUILD70_FG_READONLY_MANAGER_PREVIEW
+    // Accepts supplied metadata only: does not open SQLite, initialize the
+    // shared manager, change the download queue, or modify file contents.
+    // Always treat results as stale immediately after return.
+    func previewOfflineDeletionCandidates(
+        from recorded: [DownloadListRecord]
+    ) throws -> [WebReaderOfflineDeletionV2AuditItem] {
+        return try worker.sync {
+            guard recorded.count <= 5_000 else {
+                throw WebReaderOfflineDeletionV2AuditError.tooManyRecords
+            }
+            let busy = runningKey != nil || !pending.isEmpty || !jobs.isEmpty
+            let keys = recorded.map {
+                jobKey(
+                    sourceID: $0.sourceID,
+                    mangaID: $0.sourceMangaID,
+                    chapterID: $0.sourceChapterID
+                )
+            }
+            var keyCounts: [String: Int] = [:]
+            for key in keys { keyCounts[key, default: 0] += 1 }
+
+            return recorded.enumerated().map { index, record in
+                let decision: WebReaderOfflineDeletionV2ShadowGate.Preview
+                if busy || keyCounts[keys[index]] != 1 {
+                    decision = .requiresReview
+                } else if let directory = try? chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                ) {
+                    decision = WebReaderOfflineDeletionV2ShadowGate.previewForAudit(
+                        record: record,
+                        allRecords: recorded,
+                        directory: directory,
+                        fileManager: fileManager
+                    )
+                } else {
+                    decision = .requiresReview
+                }
+                return WebReaderOfflineDeletionV2AuditItem(
+                    sourceID: record.sourceID,
+                    sourceMangaID: record.sourceMangaID,
+                    sourceChapterID: record.sourceChapterID,
+                    decision: decision
+                )
+            }
+        }
+    }
+    // END BUILD70_FG_READONLY_MANAGER_PREVIEW
 
     func remove(
         sourceID: String,
