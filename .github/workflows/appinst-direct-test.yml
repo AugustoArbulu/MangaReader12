@@ -10,6 +10,8 @@ on:
       - 'ci/appinst_direct_probe/**'
       - 'ci/build_appinst_direct_probe.sh'
       - 'ci/test_appinst_direct_probe.py'
+      - 'ci/appinst_probe_report.py'
+      - 'ci/test_appinst_probe_report.py'
       - '.github/workflows/appinst-direct-test.yml'
   workflow_dispatch:
 
@@ -29,6 +31,9 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Reject ambiguous diagnostic reports; never authorize installation
+        run: python3 -m unittest discover -s ci -p 'test_appinst_probe_report.py' -v
 
       - name: Build ONE independent iOS12 IPA with safe bundled-spawn first and optional appinst help
         run: bash ci/build_appinst_direct_probe.sh

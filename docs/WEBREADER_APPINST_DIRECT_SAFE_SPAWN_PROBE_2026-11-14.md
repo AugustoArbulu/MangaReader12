@@ -42,3 +42,8 @@ O empacotamento de diagnóstico agora **confere o entitlement efetivamente grava
 **Novo artefato** `WebReader-Appinst-Direto-iOS12-TEST`, ID **14098076811**. Contém a IPA de diagnóstico ARM64/iOS12 e SHA-256. Prefira esse artefato ao da execução anterior (ID 14096369777), pois a versão nova inclui `APPINST_META_LSTAT`, `APPINST_META_XOK` e os controles de assinatura adicionais.
 
 Ainda não existem resultados físicos em Chimera, não há instalação de IPA efetuada nem método de atualização em um toque habilitado. O botão opcional `appinst --help` continua separado e não é necessário para a primeira validação.
+
+## Interpretador offline do relatório (sem novas ações no iPad)
+O novo `ci/appinst_probe_report.py` recebe **somente texto copiado** do primeiro botão. Exige cabeçalho exato, um resultado `SPAWN_LOCAL`, metadados `APPINST_META_*` coerentes e marcador `APPINST_EXECUTADO=NAO | INSTALACAO=NAO`. Recusa texto truncado, duplicado, incompleto, de outro botão ou com formato inesperado. Classifica execução do **child local**, não do appinst. Em todos os retornos: `direct_appinst_execution_verified=false`, `installer_authorized=false` e `installation_performed=false`. Nenhum dado da biblioteca é lido e nenhum processo é executado.
+
+Exemplo de uso no checkout, após copiar o relatório para um arquivo de texto local do proprietário: `python3 ci/appinst_probe_report.py resultado.txt`. É opcional; também é possível colar o texto diretamente no chat para análise. O CI macOS executa os casos sintéticos antes de montar a IPA diagnóstica. Não representa um novo instalador nem depende de publicar uma Release.
