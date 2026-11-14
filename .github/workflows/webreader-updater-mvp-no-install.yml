@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/webreader-updater-mvp-no-install.yml'
       - 'ci/test_webreader_updater_mvp_scope.py'
+      - 'ci/test_app_updates_screen.py'
       - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
       - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
       - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
