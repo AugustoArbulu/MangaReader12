@@ -29,3 +29,7 @@ Leia `docs/WEBREADER_BUILD70_PHASE_FD_SEALED_COMPLETED_SNAPSHOT_2026-11-13.md` e
 - `snapshotmeta` preserva o capítulo original; **não implementa delete** nem restauração automática.
 - Testes de Linux não substituem execução macOS/APFS/iOS 12, backup real verificado ou testes físicos.
 - O antigo experimento `stage` por rename de origem continua conhecido como **inseguro** para produção diante de troca do basename. Use **somente** os novos modos copy-only para experimentos de preservação; nenhum modo do laboratório deve ser usado com arquivos do usuário.
+
+## Complemento FM (host-only)
+
+A Fase FM altera **somente** o Swift de laboratório em `ci/build70_ev_fd_quarantine.swift`, e os novos testes vivem em `ci/test_build70_fm_held_recovery_budget.py` na raiz do repositório. Os comandos `holdverifysealed` e `budgetsealed` observam descritores mantidos e cota por capítulo de 512 MiB; **não** excluem nada. O workflow raiz `chimera-build70-phase-fm-held-recovery-quota.yml` testa FM e regressões anteriores Linux/macOS. Nada disso é validação no iPad.

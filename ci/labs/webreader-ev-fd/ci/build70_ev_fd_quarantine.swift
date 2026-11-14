@@ -651,7 +651,9 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
                               _ quarantineParent: Int32, _ destName: String,
                               _ expected: Identity,
                               owner: (String,String,String)? = nil,
-                              sealedOnly: Bool = false) throws -> String {
+                              sealedOnly: Bool = false,
+                              byteBudget: Int64? = nil,
+                              rootForRace: Int32? = nil) throws -> String {
     let sourceFD = try openChild(sourceParent, sourceName)
     defer { _ = close(sourceFD) }
     let snapshotFD = try openChild(quarantineParent, destName)
@@ -665,6 +667,9 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
           same(original, originalPath), same(snapshot, snapshotPath) else {
         throw EVError.unsafe("snapshot verification directory binding mismatch")
     }
+    // FM: both directory descriptors are already open; the test gate can
+    // swap path names, but it cannot redirect a read through either FD.
+    if let raceRoot = rootForRace { try ezPauseForAdversary(raceRoot) }
     let inventory = try owner.map { try fbInventory(sourceFD, $0.0, $0.1, $0.2,
                                                     allowRecoveryPlan: !sealedOnly) }
     let originalNames = try inventory?.names ?? directoryEntries(sourceFD).sorted()
@@ -688,6 +693,13 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
               fbAdmittedFile(dstBefore, name, metadata: owner != nil),
               srcBefore.st_size == dstBefore.st_size else {
             throw EVError.unsafe("snapshot page metadata mismatch")
+        }
+        // FM: enforce budget before opening/reading the next file. This is a
+        // bound on verification work, not a reservation of future disk space.
+        if let ceiling = byteBudget {
+            guard srcBefore.st_size <= ceiling - bytes else {
+                throw EVError.unsafe("snapshot verified bytes exceed FM quota")
+            }
         }
         // FL: scope the pair of verification FDs to one page only.
         do {
@@ -726,6 +738,70 @@ private func ezVerifySnapshot(_ sourceParent: Int32, _ sourceName: String,
 }
 // END BUILD70_EZ_DESCRIPTOR_PINNED_COPY_LAB
 
+// BEGIN BUILD70_FM_PINNED_READONLY_QUOTA
+// New checks NEVER create snapshots or mutate the SQLite/production library.
+// All operations are confined to the EV-marked synthetic test root.
+private let fmChapterBudget: Int64 = 512 * 1024 * 1024
+private let fmMaximumPages = 5_000
+
+private func fmBudgetPinned(_ parent: Int32, _ leaf: String,
+                            _ quarantine: Int32,
+                            _ owner: (String,String,String)) throws -> String {
+    let directory = try openChild(parent, leaf)
+    defer { _ = close(directory) }
+    var original = stat()
+    guard fstat(directory, &original) == 0,
+          let attached = try lstatChild(parent, leaf),
+          same(original, attached), isDirectory(original) else {
+        throw EVError.unsafe("FM budget original is not pinned to canonical source")
+    }
+    let inventory = try fbInventory(directory, owner.0, owner.1, owner.2,
+                                    allowRecoveryPlan: false)
+    guard inventory.pages >= 1 && inventory.pages <= fmMaximumPages else {
+        throw EVError.unsafe("FM page limit exceeded")
+    }
+    var total: Int64 = 0
+    for name in inventory.names {
+        guard let before = try lstatChild(directory, name),
+              fbAdmittedFile(before, name, metadata: true),
+              Int64(before.st_size) <= fmChapterBudget - total else {
+            throw EVError.unsafe("FM chapter snapshot byte budget exceeded")
+        }
+        do {
+            let fd = name.withCString {
+                openat(directory, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+            }
+            guard fd >= 0 else { throw EVError.system("fm-open-page", errno) }
+            defer { _ = close(fd) }
+            var opened = stat()
+            guard fstat(fd, &opened) == 0, ezStableFile(before, opened) else {
+                throw EVError.unsafe("FM file changed before budget measurement")
+            }
+            total += Int64(before.st_size)
+            var after = stat()
+            guard fstat(fd, &after) == 0, ezStableFile(opened, after),
+                  let current = try lstatChild(directory, name),
+                  ezStableFile(opened, current) else {
+                throw EVError.unsafe("FM file changed during budget measurement")
+            }
+        } // descriptor closed on each entry
+    }
+    guard try directoryEntries(directory).sorted() == inventory.names,
+          let after = try lstatChild(parent, leaf), same(original, after) else {
+        throw EVError.unsafe("FM directory rebound during quota check")
+    }
+    var statv = statvfs()
+    guard fstatvfs(quarantine, &statv) == 0 else {
+        throw EVError.system("fm-statvfs", errno)
+    }
+    let (free, overflow) = UInt64(statv.f_bavail).multipliedReportingOverflow(
+        by: UInt64(statv.f_frsize))
+    guard !overflow else { throw EVError.unsafe("FM free-space overflow") }
+    // FM does not reserve free bytes; this figure is advisory and can age.
+    return "{\"status\":\"observed\",\"device\":\"\(Identity(original).device)\",\"inode\":\"\(Identity(original).inode)\",\"pages\":\(inventory.pages),\"bytes\":\(total),\"free_bytes\":\(free)}"
+}
+// END BUILD70_FM_PINNED_READONLY_QUOTA
+
 private func run(_ arguments: [String]) throws -> String {
     guard arguments.count == 6 || arguments.count == 8 else {
         throw EVError.unsafe("usage: inspect|classify|stage root source manga chapter ev_name [device inode]")
@@ -762,6 +838,19 @@ private func run(_ arguments: [String]) throws -> String {
             return expected.json("needs_review")
         // FD strict completed-only path: do not open/copy recovery-plan
         // JSON under any circumstances, even if its headers are empty.
+        case "budgetsealed":
+            guard expected == nil else { throw EVError.unsafe("budgetsealed takes no identity") }
+            return try fmBudgetPinned(parent, leaf, quarantine, (source,manga,leaf))
+        case "holdverifysealed":
+            guard let expected = expected else {
+                throw EVError.unsafe("holdverifysealed requires persisted directory identity")
+            }
+            // Descriptor-held byte-for-byte comparison, bounded by 512 MiB.
+            // Its success NEVER authorizes any unlink or rename operation.
+            return try ezVerifySnapshot(parent, leaf, quarantine, dest, expected,
+                                        owner: (source,manga,leaf), sealedOnly: true,
+                                        byteBudget: fmChapterBudget,
+                                        rootForRace: rootFD)
         case "inspectsealed":
             guard expected == nil else { throw EVError.unsafe("inspectsealed takes no identity") }
             return try inspectChapter(parent, leaf, owner: (source,manga,leaf),
