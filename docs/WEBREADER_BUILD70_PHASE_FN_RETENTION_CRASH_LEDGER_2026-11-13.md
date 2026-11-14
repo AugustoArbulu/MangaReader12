@@ -38,3 +38,10 @@ A Fase FM comprovou leitura comparada por descritores de arquivo (FDs) durante a
 A execução local do laboratório com Python 3.13/Swift 6.2.1 concluiu **FN 51/51, FM 40/40, FL 20/20, FK 36/36, FJ 30/30, FI metadata 17/17, EV–FD 250/250**, totalizando **444/444 testes aprovados**. A suíte EV–FD foi repetida isoladamente e terminou com `Ran 250 tests ... OK`; uma tentativa agregada anterior excedeu o limite temporal do comando, motivo pelo qual não foi usada como evidência de aprovação. A suíte FI Swift WAL adicional (**2 testes**) exige o código integral do app, ausente neste checkout local de laboratório e presente no checkout completo do GitHub Actions; será verificada exclusivamente no CI FN.
 
 O resultado local **não constitui validação física no iPad**, não assegura quotas de armazenamento do APFS nem autoriza deleção/restore. O CI precisa executar o conjunto completo de 446 testes por sistema antes que se possa declarar a FN validada em macOS/Ubuntu.
+
+
+## GitHub Actions — validação final em 14/11/2026 UTC
+
+[Workflow FN #43548542177](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43548542177) terminou **SUCCESS, 2/2 jobs** em Ubuntu 24.04 e macOS 15. Cada runner executou **446 testes**: FN 51 + FM 40 + FL 20 + FK 36 + FJ 30 + FI read-only 17 + FI Swift WAL 2 + EV–FD 250. Ambos verificaram que as flags de produção permanecem desativadas, que os 40 arquivos anteriores correspondem ao SHA-256 e que a suíte não modificou os arquivos rastreados. O job macOS também concluiu o `swiftc -typecheck` do núcleo de laboratório para `arm64-apple-ios12.0`.
+
+A evidência acima **não prova** durabilidade APFS/WAL em iPad físico, exclusão condicional atômica, reserva real de armazenamento, recuperação de dados de usuário ou integração do ledger ao app. **Não houve compilação integral nem instalação do app neste workflow FN**. A Build70 instalada permanece fora do escopo da execução.
