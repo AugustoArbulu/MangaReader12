@@ -20,3 +20,8 @@ O iOS possui mecanismo de instalação OTA via manifesto plist HTTPS contendo UR
 
 ## Proibições mantidas
 Não alterar `main`, não gerar Release/Build71, não executar AppInst real, não instalar no iPad, não migrar banco nem apagar capítulos; manter PR #90 Draft. O trabalho EV–FN fica arquivado e fora do caminho crítico.
+
+## Resultado do CI final (14/11/2026 UTC)
+O [workflow dedicado #43551192312](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43551192312) terminou **SUCCESS** em macOS 15, no commit `cb541b6ffc82b4fd2141f8fd679f412bc863984b`. Passaram os 5 testes de escopo, o parser real com a fixture Build70→Build71, checker Swift com resposta injetada, stager de IPA, auditor nativo ZIP/Info.plist/SHA-256, UI e AppInst falso; o WebReader inteiro compilou para o alvo iOS 12 sem assinatura, IPA ou instalação. Esse resultado **não comprova** a instalação no Chimera nem cria uma Release pública.
+
+O método OTA foi apenas estudado: AppSync Unified pode contornar certas verificações de assinatura no `installd`, mas as exigências de manifestação e distribuição OTA são distintas. Nenhuma compatibilidade real entre `itms-services` e a assinatura ad hoc usada aqui foi demonstrada. Preferir o caminho já comprovado de AppInst/Filza até ensaio físico com um app descartável.
