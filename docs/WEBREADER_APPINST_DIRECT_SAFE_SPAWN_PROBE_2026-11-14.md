@@ -22,3 +22,11 @@ Ambos exigem o bundle ID independente; EUID root é recusado. O pacote agora é 
 
 ## Preservação
 `main`, Build70, Downloads, SQLite e iPad intocados. PR #90 Draft. `WebReaderAppinstSocket.liveInstallationEnabled=false`; nenhum install IPC; nenhuma Build71/Release. Depois de revisar o relatório **do primeiro botão**, decidir se faz sentido prosseguir com execução direta ou se a ponte Chimera autenticada é indispensável.
+
+
+## Resultado validado no GitHub Actions
+[Execução #43552863939](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43552863939): **SUCCESS** (macOS 15). Compilação iOS12 ARM64 de `WRAppinstDirect` e `WRSpawnChild`, assinatura ad hoc de ambos com `codesign --verify`, auditoria de ZIP, Bundle ID `com.example.WebReaderAppinstDirectProbe`, `CFBundleVersion=3`, Mach-O ARM64 e restrições de escopo. Artefato de Actions **`WebReader-Appinst-Direto-iOS12-TEST`**, id `14096369777`, contendo `WebReader-Appinst-Direto-iOS12-adhoc.ipa` e SHA-256. Não é um GitHub Release e não substitui o WebReader instalado.
+
+**Não foi executado** no iPad. O próximo dado necessário é a saída de `Testar processo local (sem appinst)`, copiada do aplicativo de diagnóstico. Não usar o resultado para autorizar instalação. Nenhum AppInst real foi executado na CI; somente `codesign`, compilação e ZIP.
+
+Observação: o teste `posix_spawn` de `WRSpawnChild` demonstra apenas uma classe de execução sob a assinatura do arquivo e o sandbox do diagnóstico. Não substitui um teste de permissão para execução de `/usr/bin/appinst` nem o requisito de conferir o pacote antes da instalação.
