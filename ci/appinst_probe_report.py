@@ -18,7 +18,7 @@ META_RE = re.compile(r"^(?:REGULAR|NOT_REGULAR|ERRNO_[0-9]{1,5})$")
 XOK_RE = re.compile(r"^(?:YES|ERRNO_[0-9]{1,5})$")
 SPAWN_RE = re.compile(
     r"^SPAWN_LOCAL=(OK|NEGADO|FALHA_DO_CHILD|WAITPID_INDISPONIVEL|TIMEOUT)"
-    r"(?: \\([^\\r\\n]{1,180}\\))?$"
+    r"(?: \([^\r\n]{1,180}\))?$"
 )
 
 
