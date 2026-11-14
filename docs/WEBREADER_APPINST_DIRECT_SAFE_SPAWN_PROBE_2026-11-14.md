@@ -35,3 +35,10 @@ Observação: o teste `posix_spawn` de `WRSpawnChild` demonstra apenas uma class
 O primeiro botão também registra `APPINST_META_LSTAT`, `APPINST_META_XOK` e `APPINST_META_ADVISORY=YES`. Ele chama **somente** `lstat` e `access(X_OK)` em `/usr/bin/appinst` — **não executa** o comando; a sandbox pode ocultar esses dados, então `ERRNO` não prova que `posix_spawn` seria impossível. A consulta é incluída na mesma ação do child local, para evitar solicitar uma execução desnecessária de `appinst --help`.
 
 O empacotamento de diagnóstico agora **confere o entitlement efetivamente gravado na assinatura** (`application-identifier=WRTEST0001.com.example.WebReaderAppinstDirectProbe`) antes de criar a IPA, além de validar as duas assinaturas ad hoc com `codesign --verify`. Identidade sintética específica do app de testes, sem vínculo com a Build70. O CI reexecuta os contratos de primeiro botão sem AppInst e audita a IPA assinada. O resultado de CI não demonstra instalação física nem permissões no iPad.
+
+## Nova validação (14/11/2026, metadata-only)
+[GitHub Actions #43555724305](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43555724305) **SUCCESS** em macOS 15. O teste de pacote incluiu os novos contratos do primeiro botão: `lstat` e `access(X_OK)` de `/usr/bin/appinst` apenas para metadados, execução exclusivamente de `WRSpawnChild` e **nenhuma invocação de AppInst** nesse percurso. O pipeline verificou também o entitlement assinado, não apenas o arquivo-fonte de configuração: `WRTEST0001.com.example.WebReaderAppinstDirectProbe`.
+
+**Novo artefato** `WebReader-Appinst-Direto-iOS12-TEST`, ID **14098076811**. Contém a IPA de diagnóstico ARM64/iOS12 e SHA-256. Prefira esse artefato ao da execução anterior (ID 14096369777), pois a versão nova inclui `APPINST_META_LSTAT`, `APPINST_META_XOK` e os controles de assinatura adicionais.
+
+Ainda não existem resultados físicos em Chimera, não há instalação de IPA efetuada nem método de atualização em um toque habilitado. O botão opcional `appinst --help` continua separado e não é necessário para a primeira validação.
