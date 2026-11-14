@@ -30,17 +30,17 @@ jobs:
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
 
-      - name: Build ONE isolated iOS12 IPA with only the appinst help probe
+      - name: Build ONE independent iOS12 IPA with safe bundled-spawn first and optional appinst help
         run: bash ci/build_appinst_direct_probe.sh
 
-      - name: Audit IPA structure, iOS12 deployment and safe direct command
+      - name: Audit isolated signed IPA, bundled child, iOS12 target and opt-in help command
         run: python3 ci/test_appinst_direct_probe.py
 
-      - name: Upload single experimental direct-appinst test IPA
+      - name: Upload independent iOS12 diagnostic IPA (not a WebReader update)
         uses: actions/upload-artifact@v4
         with:
           name: WebReader-Appinst-Direto-iOS12-TEST
           if-no-files-found: error
           path: |
-            WebReader-Appinst-Direto-iOS12-unsigned.ipa
-            WebReader-Appinst-Direto-iOS12-unsigned.ipa.sha256
+            WebReader-Appinst-Direto-iOS12-adhoc.ipa
+            WebReader-Appinst-Direto-iOS12-adhoc.ipa.sha256

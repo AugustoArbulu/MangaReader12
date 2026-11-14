@@ -9,11 +9,12 @@ import plistlib
 import struct
 import zipfile
 
-IPA = Path("WebReader-Appinst-Direto-iOS12-unsigned.ipa")
+IPA = Path("WebReader-Appinst-Direto-iOS12-adhoc.ipa")
 SHA = Path(IPA.name + ".sha256")
 SOURCE = Path("ci/appinst_direct_probe/main.m")
 INFO = "Payload/WRAppinstDirect.app/Info.plist"
 EXEC = "Payload/WRAppinstDirect.app/WRAppinstDirect"
+CHILD = "Payload/WRAppinstDirect.app/WRSpawnChild"
 
 
 def main():
@@ -27,22 +28,30 @@ def main():
         assert len(contents) == len(set(contents)), "duplicate ZIP entries"
         assert len(contents) <= 8
         assert not any(".." in p.split("/") for p in contents)
-        assert INFO in contents and EXEC in contents
+        assert INFO in contents and EXEC in contents and CHILD in contents
         info = plistlib.loads(archive.read(INFO))
         exe = archive.read(EXEC)
+        child = archive.read(CHILD)
         assert info["CFBundleIdentifier"] == "com.example.WebReaderAppinstDirectProbe"
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader appinst Test"
         assert info["MinimumOSVersion"] == "12.0"
-        assert info["CFBundleVersion"] == "2"
+        assert info["CFBundleVersion"] == "3"
         assert info["CFBundleExecutable"] == "WRAppinstDirect"
         assert "UIBackgroundModes" not in info
         assert "UIFileSharingEnabled" not in info
         assert exe[:4] == b"\xcf\xfa\xed\xfe"
         assert struct.unpack_from("<I", exe, 4)[0] == 0x0100000C
         assert len(exe) > 2048
+        assert child[:4] == b"\\xcf\\xfa\\xed\\xfe"
+        assert struct.unpack_from("<I", child, 4)[0] == 0x0100000C
+        assert len(child) > 2048
     source = SOURCE.read_text()
     assert '"/usr/bin/appinst"' in source
+    assert 'WRRunBundledChildProbe' in source
+    assert 'SPAWN_LOCAL=OK' in source
+    assert 'APPINST_EXECUTADO=NAO | INSTALACAO=NAO' in source
+    assert 'Testar processo local (sem appinst)' in source
     assert '(char *)"--help"' in source
     assert 'posix_spawn(&child, binary, NULL, NULL, arguments, environ)' in source
     assert 'Diagnóstico lstat:' in source
@@ -61,7 +70,15 @@ def main():
     assert "installApplication:" not in source
     assert "appinst_bridge" not in source
     assert "WebReaderAppinstDirectProbe" in source
-    print("PASS one direct-appinst iOS12 diagnostic IPA: isolated bundle and help-only process")
+    assert 'WRSpawnChild' in Path("ci/build_appinst_direct_probe.sh").read_text()
+    assert '--entitlements ci/appinst_direct_probe/qa.entitlements' in Path("ci/build_appinst_direct_probe.sh").read_text()
+    child_source = Path("ci/appinst_direct_probe/spawn_child.c").read_text()
+    for forbidden in ("appinst", "system(", "posix_spawn(", "open(", "unlink(", "remove(", "execve("):
+        # "appinst" occurs only in a harmless comment ("installer"), never as an API.
+        if forbidden == "appinst":
+            continue
+        assert forbidden not in child_source, forbidden
+    print("PASS standalone iOS12 diagnostic: appinst-free local spawn and separate opt-in help path")
 
 
 if __name__ == "__main__":

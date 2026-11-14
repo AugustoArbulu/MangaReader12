@@ -23,6 +23,70 @@ static NSString *WRDescribeError(int error) {
     return [NSString stringWithFormat:@"%d (%s)", error, message ? message : "?"];
 }
 
+
+/*
+ * First-stage, non-installing spawn test. This invokes ONLY the bundled
+ * WRSpawnChild (source reviewed in this repository). It does not touch
+ * appinst, system installation services, IPAs or the WebReader library.
+ * Success does NOT establish that /usr/bin/appinst can be launched.
+ */
+static NSString *WRRunBundledChildProbe(void) {
+    NSString *bundleID = [NSBundle mainBundle].bundleIdentifier;
+    NSMutableString *report = [NSMutableString stringWithFormat:
+        @"WebReader • Spawn local sem appinst\\niOS: %@\\nUID: %u | EUID: %u\\n",
+        [UIDevice currentDevice].systemVersion,
+        (unsigned)getuid(), (unsigned)geteuid()];
+    if (![bundleID isEqualToString:@"com.example.WebReaderAppinstDirectProbe"] ||
+        geteuid() == 0) {
+        [report appendString:@"RESULTADO: identidade do teste ou UID inválido.\\n"];
+        return report;
+    }
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"WRSpawnChild" ofType:nil];
+    if (path == nil) {
+        [report appendString:@"RESULTADO: child de teste ausente.\\n"];
+        return report;
+    }
+    const char *binary = path.fileSystemRepresentation;
+    struct stat item;
+    if (lstat(binary, &item) != 0 || !S_ISREG(item.st_mode) ||
+        (item.st_mode & 0111) == 0) {
+        [report appendString:@"RESULTADO: child inválido ou não executável.\\n"];
+        return report;
+    }
+    char * const arguments[] = {(char *)binary, NULL};
+    pid_t child = -1;
+    int rc = posix_spawn(&child, binary, NULL, NULL, arguments, environ);
+    if (rc != 0 || child <= 0) {
+        [report appendFormat:@"SPAWN_LOCAL=NEGADO (%@)\\n",
+             WRDescribeError(rc != 0 ? rc : ECHILD)];
+        [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+        return report;
+    }
+    int status = 0;
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        pid_t finished = waitpid(child, &status, WNOHANG);
+        if (finished == child) {
+            BOOL success = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            [report appendString:success ? @"SPAWN_LOCAL=OK\\n" :
+                                           @"SPAWN_LOCAL=FALHA_DO_CHILD\\n"];
+            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+            [report appendString:@"Não prova acesso a /usr/bin/appinst.\\n"];
+            return report;
+        }
+        if (finished < 0) {
+            [report appendFormat:@"SPAWN_LOCAL=WAITPID_INDISPONIVEL (%@)\\n",
+                    WRDescribeError(errno)];
+            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+            return report;
+        }
+        usleep(50000);
+    }
+    (void)kill(child, SIGTERM);
+    (void)waitpid(child, &status, 0);
+    [report appendString:@"SPAWN_LOCAL=TIMEOUT\\nAPPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+    return report;
+}
+
 static NSString *WRRunHelpProbe(void) {
     const char *binary = "/usr/bin/appinst";
     uid_t uid = getuid();
@@ -112,6 +176,7 @@ static NSString *WRRunHelpProbe(void) {
 @interface WRAppinstProbeController : UIViewController
 @property (strong, nonatomic) UILabel *reportLabel;
 @property (strong, nonatomic) UIButton *testButton;
+@property (strong, nonatomic) UIButton *localButton;
 @property (copy, nonatomic) NSString *report;
 @end
 
@@ -121,7 +186,7 @@ static NSString *WRRunHelpProbe(void) {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor whiteColor];
     self.title = @"WebReader appinst Test";
-    self.report = @"Este app só verifica se o WebReader pode executar /usr/bin/appinst diretamente.\nNenhuma IPA será instalada.";
+    self.report = @"Primeiro teste execução local sem appinst. O segundo testa appinst --help somente após seu consentimento.\nNenhuma IPA será instalada.";
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.numberOfLines = 0;
     label.textColor = [UIColor blackColor];
@@ -132,8 +197,18 @@ static NSString *WRRunHelpProbe(void) {
     self.reportLabel = label;
     [self.view addSubview:label];
 
+    UIButton *local = [UIButton buttonWithType:UIButtonTypeSystem];
+    [local setTitle:@"1. Testar processo local (sem appinst)"
+            forState:UIControlStateNormal];
+    local.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    local.translatesAutoresizingMaskIntoConstraints = NO;
+    [local addTarget:self action:@selector(runLocalProbe)
+       forControlEvents:UIControlEventTouchUpInside];
+    self.localButton = local;
+    [self.view addSubview:local];
+
     UIButton *test = [UIButton buttonWithType:UIButtonTypeSystem];
-    [test setTitle:@"Testar appinst diretamente" forState:UIControlStateNormal];
+    [test setTitle:@"2. Testar appinst --help (opcional)" forState:UIControlStateNormal];
     test.titleLabel.font = [UIFont boldSystemFontOfSize:17];
     test.translatesAutoresizingMaskIntoConstraints = NO;
     [test addTarget:self action:@selector(confirmTest)
@@ -153,7 +228,11 @@ static NSString *WRRunHelpProbe(void) {
         [label.topAnchor constraintEqualToAnchor:safe.topAnchor constant:28],
         [label.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:20],
         [label.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-20],
-        [test.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+        [local.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+        [local.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:20],
+        [local.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-20],
+        [local.heightAnchor constraintEqualToConstant:50],
+        [test.topAnchor constraintEqualToAnchor:local.bottomAnchor constant:16],
         [test.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:20],
         [test.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-20],
         [test.heightAnchor constraintEqualToConstant:50],
@@ -161,6 +240,25 @@ static NSString *WRRunHelpProbe(void) {
         [copy.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
         [copy.heightAnchor constraintEqualToConstant:44]
     ]];
+}
+
+- (void)runLocalProbe {
+    self.localButton.enabled = NO;
+    self.testButton.enabled = NO;
+    self.report = @"Testando processo interno sem appinst... nenhuma IPA.";
+    self.reportLabel.text = self.report;
+    __weak WRAppinstProbeController *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSString *result = WRRunBundledChildProbe();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            WRAppinstProbeController *owner = weakSelf;
+            if (!owner) return;
+            owner.report = result;
+            owner.reportLabel.text = result;
+            owner.localButton.enabled = YES;
+            owner.testButton.enabled = YES;
+        });
+    });
 }
 
 - (void)confirmTest {
@@ -177,6 +275,7 @@ static NSString *WRRunHelpProbe(void) {
             WRAppinstProbeController *strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf.testButton.enabled = NO;
+            strongSelf.localButton.enabled = NO;
             strongSelf.report = @"Executando teste de ajuda... nenhuma IPA fornecida.";
             strongSelf.reportLabel.text = strongSelf.report;
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -187,6 +286,7 @@ static NSString *WRRunHelpProbe(void) {
                     owner.report = result;
                     owner.reportLabel.text = result;
                     owner.testButton.enabled = YES;
+                    owner.localButton.enabled = YES;
                 });
             });
         }]];
