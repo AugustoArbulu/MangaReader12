@@ -1,0 +1,88 @@
+name: WebReader Build70 Phase DP iOS12 Own Bundle and UID Observation (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/build70_dp_inapp_signed_identity_report.py'
+      - 'ci/test_build70_dp_inapp_signed_identity_report.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DP_SELF_SIGNING_CLAIM_2026-11-11.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/build70_dp_inapp_signed_identity_report.py'
+      - 'ci/test_build70_dp_inapp_signed_identity_report.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DP_SELF_SIGNING_CLAIM_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dp-sectask-self-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-self-task-report-contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reject forged signed-entitlement reports and leaked installation authority
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dp_inapp_signed_identity_report.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dg_inapp_self_identity.py' -v
+          python ci/test_app_updates_screen.py
+      - name: Verify three production hard stops remain disabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          ui=Path('MangaReader12/UI/WebReaderAppUpdatesViewController.swift').read_text()
+          assert 'APP_SELF_SIGNING_ID=UNAVAILABLE_IOS12_PUBLIC_SDK' in ui
+          assert 'APP_SELF_APPLICATION_IDENTIFIER_ENTITLEMENT=UNAVAILABLE_IOS12_PUBLIC_SDK' in ui
+          assert 'SecTaskCreateFromSelf(' not in ui
+          assert 'SecTaskCopyValueForEntitlement(' not in ui
+          assert '"INSTALLED_PREVIOUS_BUILD_IDENTITY_ATTESTED=NO"' in ui
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DP: own Bundle ID / UID only, no signed entitlement claim or install authority')
+          PY
+
+  macos-compile-full-unsigned-ios12-app-public-sdk:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select tested Xcode16.4 and iPhoneOS toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Prepare pinned libwebp and original app icon offline
+        run: |
+          bash ci/prepare_libwebp_ios.sh
+          python3 ci/prepare_webreader_icons.py
+      - name: Build WebReader Build71 full Release for generic iOS12, UNSIGNED
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr-dp-sec-task-app" \
+            CURRENT_PROJECT_VERSION=71 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr-dp-sec-task-build.log" 2>&1 \
+            || { tail -n 180 "$RUNNER_TEMP/wr-dp-sec-task-build.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr-dp-sec-task-build.log"
+          python3 ci/build70_dh_unsigned_build71_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr-dp-sec-task-app/Build/Products/Release-iphoneos/MangaReader12.app"
+          echo 'PASS DP: current iOS12 public SDK self metadata compiles; no IPA, codesign, upload or installation'

@@ -1,0 +1,90 @@
+name: WebReader Build70 Phase DG In-App Self Identity (read only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/test_build70_dg_inapp_self_identity.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DG_INAPP_SELF_UID_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/test_build70_dg_inapp_self_identity.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DG_INAPP_SELF_UID_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dg-inapp-self-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-only-ui-security-contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify DG copy-only UID/GID button, disabled updater and isolation of data
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dg_inapp_self_identity.py' -v
+      - name: Re-run all prior native updater screen regression checks
+        run: |
+          python ci/test_app_updates_screen.py
+      - name: No appinst, trust root, IPA release or entitlement change
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('MangaReader12/UI/WebReaderAppUpdatesViewController.swift').read_text()
+          assert 'if source == 3 { return 9 }' in src
+          assert 'APP_SELF_IDENTITY_SCOPE=SELF_ONLY' in src
+          assert 'HELPER_PROCESS_IDENTITY=NOT_TESTED' in src
+          assert 'INSTALLATION_AUTHORIZED=NO' in src
+          assert 'Darwin.getuid()' in src
+          assert 'Darwin.geteuid()' in src
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DG: user-tapped report only; install and publisher gates stay closed')
+          PY
+
+  native-ios12-generic-app-compile-no-package:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use compatible Xcode for ARM64 iOS12 app code
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Prepare pinned libwebp 1.6.0 for iOS12 (same as existing app build)
+        run: bash ci/prepare_libwebp_ios.sh
+      - name: Generate existing approved WebReader icon resources offline
+        run: python3 ci/prepare_webreader_icons.py
+      - name: Build full WebReader Debug app for generic iOS without codesigning
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr-dg-app" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr-dg-build.log" 2>&1 \
+            || { tail -n 180 "$RUNNER_TEMP/wr-dg-build.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr-dg-build.log"
+          test -d "$RUNNER_TEMP/wr-dg-app/Build/Products/Debug-iphoneos/MangaReader12.app"
+          echo 'PASS DG: existing iOS12 app compiles; no IPA/DEB, sign or upload.'

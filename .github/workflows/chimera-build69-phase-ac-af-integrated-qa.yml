@@ -1,0 +1,325 @@
+name: WebReader Build70 Dev AC-CK — Safe Helper Review Snapshot and iOS12 Safety
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderUpdaterSecuritySnapshot.swift'
+      - 'MangaReader12/Core/WebReaderProductionSignedReleaseChecker.swift'
+      - 'MangaReader12/Core/WebReaderSignedProductionEnvelopeBinding.swift'
+      - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12/Core/WebReaderIPADownloadBudget.swift'
+      - 'MangaReader12/Core/WebReaderPhysicalQAChecklist.swift'
+      - 'MangaReader12/Core/BackupManager.swift'
+      - 'MangaReader12/Core/WebReaderUpgradeContinuitySnapshot.swift'
+      - 'MangaReader12/UI/BackupViewController.swift'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflinePageInventory.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflineCompletionReceipt.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflineResumePrefix.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflineRecoveryPlanReader.swift'
+      - 'MangaReader12/Downloads/WebReaderOfflineRecoveryPlanWriter.swift'
+      - 'MangaReader12/Core/WebReaderOfflinePreservationAudit.swift'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12/UI/ReaderPreferences.swift'
+      - 'MangaReader12/UI/ReaderSettingsViewController.swift'
+      - 'MangaReader12/UI/ReaderViewController.swift'
+      - 'ci/test_reader_webtoon_landscape_width.py'
+      - 'ci/build70_unsigned_candidate_audit.py'
+      - 'ci/build70_private_qa_ipa_preflight.py'
+      - 'ci/build70_actions_qa_package.py'
+      - 'ci/test_build70_private_qa_contract.py'
+      - 'ci/test_build70_private_qa_ipa_preflight.py'
+      - 'ci/test_build70_owner_qa_gate.py'
+      - '.github/workflows/chimera-build70-owner-approved-one-shot-qa.yml'
+      - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'MangaReader12/Core/WebReaderSignedIPAReview.swift'
+      - 'MangaReader12/Core/WebReaderProductionSignedIPAReview.swift'
+      - 'ci/test_native_webreader_production_signed_ipa_review.py'
+      - 'ci/build70_owner_public_root_patch_preview.py'
+      - 'ci/test_build70_owner_public_root_patch_preview.py'
+      - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_native_webreader_local_ipa_review.py'
+      - 'ci/test_native_webreader_local_qa_storage.py'
+      - 'ci/test_native_webreader_signed_production_discovery.py'
+      - 'ci/test_native_webreader_signed_production_envelope_binding.py'
+      - 'ci/test_build70_signed_envelope_download_policy.py'
+      - 'ci/build70_immutable_public_release_readback.py'
+      - 'ci/test_build70_immutable_public_release_readback.py'
+      - 'ci/webreader_appinst_bridge.c'
+      - 'ci/test_webreader_appinst_bridge.py'
+      - 'ci/test_build70_chimera_unsafe_cli_lock.py'
+      - 'ci/webreader_helper_review_snapshot.py'
+      - 'ci/test_webreader_helper_review_snapshot.py'
+      - 'ci/test_build70_real_ipa_signed_production_v2_lab.py'
+      - 'ci/test_native_webreader_release_channel_separation.py'
+      - 'ci/test_native_webreader_ipa_download_budget.py'
+      - 'ci/test_native_webreader_physical_qa_checklist.py'
+      - 'ci/test_build69_phase_ac_ad_ae_policy.py'
+      - 'ci/test_build69_phase_ag_ah_ai_transfer_policy.py'
+      - 'ci/test_build69_phase_aj_ak_al_crash_recovery_policy.py'
+      - 'ci/test_build69_phase_am_an_signed_discovery_policy.py'
+      - 'ci/webreader_update_manifest.py'
+      - 'ci/build66_signed_release_preflight.py'
+      - 'ci/build66_ipa_preflight.py'
+      - 'ci/build69_production_release_preflight.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_build69_phase_ap_aq_ar_production_rehearsal.py'
+      - 'ci/build69_publisher_bootstrap_review.py'
+      - 'ci/test_build69_phase_at_owner_bootstrap.py'
+      - 'ci/build69_owner_rotation_review.py'
+      - 'ci/test_build69_phase_au_owner_rotation.py'
+      - 'ci/test_build69_phase_av_aw_ax_ay_update_policy.py'
+      - 'ci/test_build69_az_backup_restore_consent.py'
+      - 'ci/test_build69_az_persisted_library_sqlite.py'
+      - 'ci/build69_az_candidate_readiness.py'
+      - 'ci/build69_ba_unsigned_candidate_audit.py'
+      - 'ci/test_build69_ba_unsigned_candidate_audit.py'
+      - 'ci/build69_bb_private_qa_ipa_preflight.py'
+      - 'ci/test_build69_bb_private_qa_contract.py'
+      - 'ci/test_build69_bb_private_qa_ipa_preflight.py'
+      - 'ci/build69_bc_copied_ipa_recheck.py'
+      - 'ci/test_build69_bc_copied_ipa_recheck.py'
+      - 'ci/test_build69_bd_upgrade_continuity_policy.py'
+      - 'ci/build69_be_compare_upgrade_counts.py'
+      - 'ci/test_build69_be_compare_upgrade_counts.py'
+      - 'ci/build69_bf_portable_backup_baseline.py'
+      - 'ci/test_build69_bf_portable_backup_baseline.py'
+      - 'ci/test_build69_bg_ui_nonblocking_snapshot.py'
+      - 'ci/test_build69_bh_offline_reader_policy.py'
+      - 'ci/test_native_webreader_offline_page_inventory.py'
+      - 'ci/test_native_webreader_offline_preservation_audit.py'
+      - 'ci/test_build69_bi_offline_audit_policy.py'
+      - 'ci/test_build69_bj_offline_corruption_and_qa.py'
+      - 'ci/package_webreader_build69_private_qa_ipa.sh'
+      - 'ci/test_build69_bk_private_qa_packaging_gate.py'
+      - 'ci/test_build69_bl_atomic_private_delivery.py'
+      - 'ci/test_build69_bm_completion_receipt_policy.py'
+      - 'ci/test_native_webreader_offline_completion_receipt.py'
+      - 'ci/build69_bn_real_signed_app_preview.py'
+      - 'ci/test_build69_bn_real_signed_app_preview_policy.py'
+      - 'ci/test_build69_bo_resume_prefix_policy.py'
+      - 'ci/test_native_webreader_offline_resume_prefix.py'
+      - 'ci/test_build69_bp_offline_paging_policy.py'
+      - 'ci/test_build69_bq_recovery_plan_policy.py'
+      - 'ci/test_build69_br_atomic_recovery_plan_writer_policy.py'
+      - 'ci/test_native_webreader_offline_recovery_plan_writer.py'
+      - 'ci/test_build69_bs_bounded_download_admission.py'
+      - 'ci/test_build69_bt_completed_download_retention.py'
+      - 'ci/test_build69_bu_page_payload_bound.py'
+      - 'ci/test_build69_bv_destructive_download_consent.py'
+      - 'ci/test_build69_bw_storage_reindex_deletion_consent.py'
+      - 'ci/build69_bx_reviewed_source_gate.py'
+      - 'ci/test_build69_bx_reviewed_source_gate.py'
+      - 'ci/build69_by_private_qa_candidate_mac.sh'
+      - 'ci/test_build69_by_private_qa_candidate_mac.py'
+      - 'ci/test_build69_bz_optimized_python_admission.py'
+      - 'MangaReader12/UI/DataStorageViewController.swift'
+      - 'ci/test_native_webreader_offline_recovery_plan_reader.py'
+      - 'MangaReader12/UI/DownloadsViewController.swift'
+      - 'ci/test_native_webreader_upgrade_continuity_snapshot.py'
+      - 'ci/test_build69_az_candidate_readiness.py'
+      - 'MangaReader12/Info.plist'
+      - 'ci/test_build53_backup_pins.py'
+      - 'ci/test_build65_offline_relocation.py'
+      - 'ci/test_native_webreader_physical_qa_checklist.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/test_native_webreader_update_checker.py'
+      - 'ci/test_native_webreader_update_security_snapshot.py'
+      - 'ci/test_public_github_release_parser.py'
+      - 'ci/test_build69_phase_as_at_owner_trust_policy.py'
+      - 'ci/test_native_webreader_owner_trust_readiness.py'
+      - 'ci/test_build66_code_signature_gate.py'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/test_native_webreader_release_cache_storage.py'
+      - 'ci/test_build68_phase_tu_readonly_contract.py'
+      - '.github/workflows/chimera-build69-phase-ac-af-integrated-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build69-phase-ac-af-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-offline-and-no-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SHA recheck, whole CDN response, QA-only UI, and library preservation
+        run: |
+          python3 -m compileall -q ci
+          python3 -m unittest discover -s ci -p 'test_build69_phase_ac_ad_ae_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_ag_ah_ai_transfer_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_aj_ak_al_crash_recovery_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_am_an_signed_discovery_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_ap_aq_ar_production_rehearsal.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_at_owner_bootstrap.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_au_owner_rotation.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_av_aw_ax_ay_update_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_backup_restore_consent.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_persisted_library_sqlite.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_az_candidate_readiness.py' -v
+          python3 ci/build69_az_candidate_readiness.py
+          python3 -m unittest discover -s ci -p 'test_build69_ba_unsigned_candidate_audit.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bc_copied_ipa_recheck.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bd_upgrade_continuity_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_be_compare_upgrade_counts.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bf_portable_backup_baseline.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bg_ui_nonblocking_snapshot.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bh_offline_reader_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bi_offline_audit_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bj_offline_corruption_and_qa.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bk_private_qa_packaging_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bl_atomic_private_delivery.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bm_completion_receipt_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bn_real_signed_app_preview_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bo_resume_prefix_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bp_offline_paging_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bq_recovery_plan_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_br_atomic_recovery_plan_writer_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bs_bounded_download_admission.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bt_completed_download_retention.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bu_page_payload_bound.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bv_destructive_download_consent.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bw_storage_reindex_deletion_consent.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bx_reviewed_source_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_by_private_qa_candidate_mac.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
+          python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_private_qa_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_owner_qa_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_owner_public_root_patch_preview.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_signed_envelope_download_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_immutable_public_release_readback.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_chimera_unsafe_cli_lock.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_helper_review_snapshot.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_phase_as_at_owner_trust_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_update_manifest.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
+          python3 -m unittest discover -s ci -p 'test_prepare_signed_webreader_update.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_tu_readonly_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_aa_ab_manual_controls.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_w_production_publisher_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_y_monotonic_preview_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_p_local_qa_inventory_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          test ! -f ci/build69_candidate_trigger.txt
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          echo 'PASS: Build69 AC-CA bounded pages, confirm delete/retry/reindex and clear-all; no IPA or install'
+
+  native-swift-arm64-ios12:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode supporting iOS 12 deployment target
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Real Swift tests — protected local import, CDN transfer, forward-only Build and privacy
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_ipa_preflight.py' -v
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_public_github_release_parser.py
+          python3 ci/test_native_webreader_update_checker.py
+          python3 ci/test_native_webreader_signed_production_discovery.py
+          python3 ci/test_native_webreader_signed_production_envelope_binding.py
+          python3 ci/test_native_webreader_owner_trust_readiness.py
+          python3 ci/test_native_webreader_production_signed_ipa_review.py
+          python3 ci/test_native_webreader_release_channel_separation.py
+          python3 -m unittest discover -s ci -p 'test_build70_private_qa_ipa_preflight.py' -v
+          python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
+          python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
+          python3 ci/test_native_webreader_offline_page_inventory.py
+          python3 ci/test_native_webreader_offline_completion_receipt.py
+          python3 ci/test_native_webreader_offline_resume_prefix.py
+          python3 ci/test_native_webreader_offline_recovery_plan_reader.py
+          python3 ci/test_native_webreader_offline_recovery_plan_writer.py
+          python3 ci/test_native_webreader_offline_preservation_audit.py
+          python3 ci/test_build53_backup_pins.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 -m unittest discover -s ci -p 'test_webreader_appinst_bridge.py' -v
+          python3 -m unittest discover -s ci -p 'test_webreader_helper_review_snapshot.py' -v
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_local_ipa_review.py
+          python3 ci/test_native_webreader_ipa_download_budget.py
+          python3 ci/test_native_webreader_update_security_snapshot.py
+          python3 ci/test_native_webreader_signed_ipa_joint_audit.py
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_webreader_release_cache_storage.py
+          python3 ci/test_native_webreader_local_qa_storage.py
+      - name: Prepare app icons and iOS12 bounded WebP library
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile complete iOS12 ARM64 Debug (without producing an IPA)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr69-ac-af-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile complete iOS12 ARM64 Release (without producing an IPA)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr69-ac-af-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile isolated UNSIGNED Build69 preview (no IPA, no upload, no signing)
+        run: |
+          # A command-line override changes only the ephemeral build product;
+          # Xcode Debug/Release project source remains at build56.
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr69-ba-unsigned-preview" \
+            CURRENT_PROJECT_VERSION=69 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+          python3 ci/build69_ba_unsigned_candidate_audit.py \
+            "$RUNNER_TEMP/wr69-ba-unsigned-preview/Build/Products/Release-iphoneos/MangaReader12.app"
+          # No GitHub artifact step exists for this .app. It is NOT installable.
+          if find "$RUNNER_TEMP/wr69-ba-unsigned-preview" -name '*.ipa' -print -quit | grep -q .; then
+            echo 'ERROR: forbidden IPA appeared in isolated preview'
+            exit 1
+          fi
+          git diff --exit-code -- MangaReader12.xcodeproj/project.pbxproj MangaReader12/Info.plist
+          test ! -f ci/build69_candidate_trigger.txt
+          echo 'PASS: temporary unsigned CFBundleVersion69 ARM64 iOS12 app; no IPA/sign/install'
+      - name: Verify real Build69 app with disposable ad-hoc signature (NO IPA)
+        run: |
+          python3 ci/build69_bn_real_signed_app_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr69-ba-unsigned-preview/Build/Products/Release-iphoneos/MangaReader12.app"
+          git diff --exit-code -- MangaReader12.xcodeproj/project.pbxproj MangaReader12/Info.plist
+          test ! -f ci/build69_candidate_trigger.txt
+          echo 'PASS: real app ephemeral ad-hoc seal and installed entitlement; no IPA made'
+      - name: Confirm stable identity and no privileged installation
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr69-ac-af-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: Build69 AC-CA iOS12 native build, temporary signature and offline storage consent; no IPA or install'

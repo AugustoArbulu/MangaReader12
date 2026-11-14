@@ -1,0 +1,145 @@
+name: WebReader Chimera Build60 Adhoc Signed QA Kit
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    # Only IPC/pairing/disposable QA inputs merit another macOS artifact.
+    paths:
+      - 'MangaReader12/**'
+      - 'MangaReader12.xcodeproj/**'
+      - 'ci/webreader_appinst_bridge.c'
+      - 'ci/webreader_chimera_disposable_gate.c'
+      - 'ci/chimera_mobile_ping.entitlements'
+      - 'ci/chimera_disposable_app.entitlements'
+      - 'ci/appinst_disposable/**'
+      - 'ci/build_appinst_disposable.sh'
+      - 'ci/test_appinst_disposable_artifacts.py'
+      - 'ci/test_native_webreader_appinst_socket.py'
+      - 'ci/test_chimera_ping_only_bridge.py'
+      - 'ci/test_chimera_disposable_install_gate.py'
+      - 'ci/prepare_webreader_icons.py'
+      - 'ci/prepare_libwebp_ios.sh'
+      - 'ci/test_ipc_probe_launch.py'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/package_ipc_probe_ipa.sh'
+      - 'ci/test_chimera_mobile_ping_kit.py'
+      - '.github/workflows/chimera-mobile-ping.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest diagnostic build is useful. Do not occupy macOS runners
+# with superseded intermediate commits on the experimental feature branch.
+concurrency:
+  group: webreader-chimera-ipc-client-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ping-kit:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select macOS Xcode 16.4 experimental iOS12 SDK build
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "18.5"
+
+      - name: Test native Swift IPC error stages against FAKE appinst
+        run: python3 ci/test_native_webreader_appinst_socket.py
+
+      - name: Test PING-only, one-use pairing, and rejection of installer opcodes
+        run: python3 ci/test_chimera_ping_only_bridge.py
+
+      - name: Test SHA-pinned disposable install gate with FAKE appinst only
+        run: python3 ci/test_chimera_disposable_install_gate.py
+
+      - name: Compile ARM64 iOS12 PING-only bridge with minimal Chimera entitlement
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror -Wno-deprecated-declarations \
+            -DWEBREADER_PING_ONLY -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_appinst_bridge.c \
+            -o WebReader-Chimera-Ping-DIAG-iOS12
+          codesign --force --sign - --timestamp=none \
+            --entitlements ci/chimera_mobile_ping.entitlements \
+            WebReader-Chimera-Ping-DIAG-iOS12
+          codesign --verify --verbose WebReader-Chimera-Ping-DIAG-iOS12
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.private.security.no-container' \
+            ci/chimera_mobile_ping.entitlements | grep -x true
+          codesign -d --entitlements :- WebReader-Chimera-Ping-DIAG-iOS12 > signed-entitlements.plist 2>/dev/null
+          python3 -c "import plistlib; p=plistlib.load(open('signed-entitlements.plist','rb')); assert p=={'com.apple.private.security.no-container': True}, p"
+          shasum -a 256 WebReader-Chimera-Ping-DIAG-iOS12 > WebReader-Chimera-Ping-DIAG-iOS12.sha256
+
+      - name: Prepare iOS12 WebReader app assets
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+          python3 ci/test_ipc_probe_launch.py
+          python3 ci/test_app_updates_screen.py
+
+      - name: Build and audit TWO disposable iOS12 apps with isolated Bundle ID
+        run: |
+          bash ci/build_appinst_disposable.sh
+          python3 ci/test_appinst_disposable_artifacts.py
+
+      - name: Compile iOS12 SHA-pinned disposable-only gate (NOT a network listener)
+        run: |
+          HASH_V1="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa.sha256)"
+          HASH_V2="$(cut -d ' ' -f1 WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa.sha256)"
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror -Wno-deprecated-declarations \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            "-DWRD_SHA_V1=\"$HASH_V1\"" "-DWRD_SHA_V2=\"$HASH_V2\"" \
+            ci/webreader_chimera_disposable_gate.c \
+            -o WebReader-Chimera-Disposable-Gate-iOS12
+          codesign --force --sign - --timestamp=none \
+            --entitlements ci/chimera_mobile_ping.entitlements \
+            WebReader-Chimera-Disposable-Gate-iOS12
+          codesign --verify --verbose WebReader-Chimera-Disposable-Gate-iOS12
+          shasum -a 256 WebReader-Chimera-Disposable-Gate-iOS12 > WebReader-Chimera-Disposable-Gate-iOS12.sha256
+
+      - name: Build iOS12 diagnostic app with isolated Bundle ID
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Release" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+      - name: Package one IPC diagnostic IPA and checksum
+        run: |
+          WEBREADER_IPC_PROBE_BUILD=60 bash ci/package_ipc_probe_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+
+      - name: Audit IPA and check that PING bridge cannot install apps
+        run: python3 ci/test_chimera_mobile_ping_kit.py
+
+      - name: Upload ONE Build60 ZIP for pairing and disposable-app validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Chimera-Build60-SignedQA-iOS12
+          if-no-files-found: error
+          path: |
+            WebReader-IPC-Probe-iOS12-unsigned.ipa
+            WebReader-IPC-Probe-iOS12-unsigned.ipa.sha256
+            WebReader-Chimera-Ping-DIAG-iOS12
+            WebReader-Chimera-Ping-DIAG-iOS12.sha256
+            WebReader-Chimera-Disposable-Gate-iOS12
+            WebReader-Chimera-Disposable-Gate-iOS12.sha256
+            WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa
+            WebReader-Appinst-Disposable-v1-iOS12-adhoc.ipa.sha256
+            WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa
+            WebReader-Appinst-Disposable-v2-iOS12-adhoc.ipa.sha256

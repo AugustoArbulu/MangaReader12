@@ -1,0 +1,154 @@
+name: WebReader Build71 Owner-Authorized One-Shot Manual QA IPA (NO install)
+
+# INTENTIONALLY INERT: no marker file exists, no workflow_dispatch,
+# and no code edit triggers this workflow. Owner must explicitly request
+# one precise Build71 QA delivery in a later separate turn/action.
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build71_owner_approved_qa_trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webreader-build71-one-shot-owner-approved-manual-qa
+  cancel-in-progress: false
+
+jobs:
+  compile-audit-one-shot-owner-manual-qa-ipa:
+    runs-on: macos-15
+    # The signed owner-only path rechecks git status AFTER Python host tests.
+    # Suppress pyc files rather than weakening the strict source cleanliness gate.
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    timeout-minutes: 75
+    steps:
+      - name: Checkout immutable trigger commit and reviewed parent
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Stop unless sole change is separately approved Build71 QA marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "AugustoArbulu/MangaReader12"
+          test "$GITHUB_EVENT_NAME" = "push"
+          test "$GITHUB_REF" = "refs/heads/feat/chimera-updater-phase1-protocol-audit"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git diff --name-only HEAD^ HEAD)" = "ci/build71_owner_approved_qa_trigger.txt"
+          test ! -L ci/build71_owner_approved_qa_trigger.txt
+          test "$(sed -n '1p' ci/build71_owner_approved_qa_trigger.txt)" = "WEBREADER_BUILD71_OWNER_APPROVED_ONE_SHOT_ACTIONS_QA_IPA_NO_INSTALL"
+          test "$(sed -n '2p' ci/build71_owner_approved_qa_trigger.txt)" = "$(git rev-parse HEAD^)"
+          test "$(wc -l < ci/build71_owner_approved_qa_trigger.txt | tr -d ' ')" -eq 2
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+          echo 'PASS: exact owner-triggered source; NO permission to install on any device'
+      - name: Select Xcode 16.4 for iOS 12 ARM64
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Prepare isolated source snapshot outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wr71-owner-qa-source"
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$RUNNER_TEMP/wr71-owner-qa-source"
+          test -f "$RUNNER_TEMP/wr71-owner-qa-source/MangaReader12.xcodeproj/project.pbxproj"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - name: Run Build71 owner-package host and negative regressions
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build71_dy_owner_approved_qa_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_host.py' -v
+          python3 -m unittest discover -s ci -p 'test_build70_dv_shadow_ds_integration.py' -v
+      - name: Generate original app icon and pinned libwebp in temporary source
+        working-directory: ${{ runner.temp }}/wr71-owner-qa-source
+        run: |
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+      - name: Compile real UNSIGNED WebReader Build71 Release for iOS 12
+        shell: bash
+        working-directory: ${{ runner.temp }}/wr71-owner-qa-source
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr71-owner-approved-build" \
+            CURRENT_PROJECT_VERSION=71 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr71-owner-approved-build.log" 2>&1 \
+            || { tail -n 150 "$RUNNER_TEMP/wr71-owner-approved-build.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr71-owner-approved-build.log"
+          test -d "$RUNNER_TEMP/wr71-owner-approved-build/Build/Products/Release-iphoneos/MangaReader12.app"
+      - name: Audit complete Build71 unsigned app before code signing
+        shell: bash
+        run: |
+          python3 ci/build70_dh_unsigned_build71_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr71-owner-approved-build/Build/Products/Release-iphoneos/MangaReader12.app"
+      - name: Sign Build71 copy, audit DI+DS, deliver QA files inside runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          DELIVERY="$RUNNER_TEMP/wr71-owner-approved-qa-delivery"
+          mkdir -p "$DELIVERY"
+          python3 ci/build71_owner_approved_actions_qa_package.py \
+            "$RUNNER_TEMP/wr71-owner-approved-build/Build/Products/Release-iphoneos/MangaReader12.app" \
+            "$DELIVERY" > "$DELIVERY/WebReader-Build71-packager-summary.json"
+          python3 ci/build70_di_build71_private_qa_preflight.py \
+            --ipa "$DELIVERY/WebReader-Build71-iOS12-adhoc.ipa" \
+            --checksum-file "$DELIVERY/WebReader-Build71-iOS12-adhoc.ipa.sha256" \
+            --installed-build 70 > "$DELIVERY/WebReader-Build71-independent-preflight.json"
+          python3 - "$DELIVERY" <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1])
+          name="WebReader-Build71-iOS12-adhoc.ipa"
+          data=(root/name).read_bytes()
+          digest=hashlib.sha256(data).hexdigest()
+          assert (root/(name+".sha256")).read_text("ascii")==digest+"  "+name+"\n"
+          reports=[
+              json.loads((root/x).read_text("utf-8"))
+              for x in (
+                  "WebReader-Build71-private-qa-audit.json",
+                  "WebReader-Build71-second-preflight.json",
+                  "WebReader-Build71-independent-preflight.json",
+              )
+          ]
+          for report in reports:
+              assert report["candidateBuild"] == 71
+              assert report["expectedInstalledPhysicalBuild"] == 70
+              assert report["ipaSHA256"] == digest
+              assert report["adHocCodeSealIntegrityVerifiedOnHost"] is True
+              assert report["installationAuthorized"] is False
+              assert report["readyForPrivateQADistribution"] is False
+          provenance=json.loads((root/"WebReader-Build71-source-provenance.json").read_text())
+          assert provenance["ipaSHA256"]==digest
+          assert provenance["physicalInstalledBuild70IdentityAttested"] is False
+          assert provenance["installationAuthorized"] is False
+          print("PASS: original Build71 signed QA exact bytes and independent Apple code seal")
+          print("NOT_DONE: no physical iPad check, no installation, no GitHub Release")
+          PY
+      - name: Upload ONLY owner-requested short-lived QA artifact, not a Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build71-OwnerApproved-iOS12-ManualQA
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-iOS12-adhoc.ipa
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-iOS12-adhoc.ipa.sha256
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-private-qa-audit.json
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-second-preflight.json
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-source-provenance.json
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-packager-summary.json
+            ${{ runner.temp }}/wr71-owner-approved-qa-delivery/WebReader-Build71-independent-preflight.json

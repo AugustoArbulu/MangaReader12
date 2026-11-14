@@ -1,0 +1,31 @@
+name: WebReader Build70 FA full-schema copy-only coordination — synthetic QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lab-fa:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Confirm toolchain and non-destructive synthetic scope
+        shell: bash
+        run: |
+          set -eu
+          python3 --version
+          swift --version
+          test -f ci/build70_ev_fd_quarantine.swift
+          test -f ci/fixture_build70_schema_v1_exact.sql
+          test -f ci/build70_fa_copy_only_router.py
+          test -f ci/test_build70_fa_full_schema_shadow.py
+          test -f ci/test_build70_fa_copy_only_router.py
+      - name: Regression EV to FA — no app/container/IPA access
+        run: python3 -W ignore::ResourceWarning -m unittest discover -s ci -p 'test_build70_*.py' -q

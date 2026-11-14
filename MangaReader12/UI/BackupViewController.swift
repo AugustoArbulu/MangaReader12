@@ -3,6 +3,7 @@ import UIKit
 final class BackupViewController: UITableViewController, UIDocumentPickerDelegate {
     private let manager = BackupManager()
     private var restoring = false
+    private var restoreConfirmationPending = false
 
     init() {
         super.init(style: .grouped)
@@ -52,12 +53,12 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
                 cell.detailTextLabel?.text = "Biblioteca, capítulos, histórico, obras fixadas, categorias e ajustes."
             } else {
                 cell.textLabel?.text = "Restaurar backup"
-                cell.detailTextLabel?.text = "Importar um arquivo .mr12backup."
+                cell.detailTextLabel?.text = "Restaura biblioteca e ajustes; remove capítulos baixados offline."
             }
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
         } else {
-            cell.textLabel?.text = "Arquivos de capítulos e scripts de extensões não entram no backup."
+            cell.textLabel?.text = "Backup não inclui páginas offline; restaurar remove downloads existentes."
             cell.detailTextLabel?.text = "Após restaurar em outro aparelho, reinstale as sources necessárias. O progresso e a Biblioteca permanecem no banco."
             cell.textLabel?.numberOfLines = 0
             cell.detailTextLabel?.numberOfLines = 0
@@ -97,6 +98,7 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
     }
 
     private func chooseBackup() {
+        guard !restoring, !restoreConfirmationPending else { return }
         restoring = true
         let picker = UIDocumentPickerViewController(
             documentTypes: ["public.data"],
@@ -117,7 +119,36 @@ final class BackupViewController: UITableViewController, UIDocumentPickerDelegat
         }
 
         restoring = false
+        guard !restoreConfirmationPending else { return }
+        restoreConfirmationPending = true
+        let warning = UIAlertController(
+            title: "Restaurar backup e remover downloads?",
+            message: "A restauração substitui os dados da biblioteca pelo " +
+                "conteúdo do arquivo selecionado e APAGA os capítulos " +
+                "baixados offline. O backup .mr12backup não contém páginas. " +
+                "Para atualizar o WebReader sem perder downloads, instale " +
+                "a nova IPA por cima da existente; não restaure o backup " +
+                "sem necessidade. Continuar?",
+            preferredStyle: .alert
+        )
+        warning.addAction(UIAlertAction(
+            title: "Cancelar", style: .cancel
+        ) { [weak self] _ in
+            self?.restoreConfirmationPending = false
+        })
+        warning.addAction(UIAlertAction(
+            title: "Restaurar e apagar downloads", style: .destructive
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.restoreConfirmationPending = false
+            self.performSelectedBackupRestore(from: url)
+        })
+        present(warning, animated: true)
+    }
 
+    private func performSelectedBackupRestore(from url: URL) {
+        // The document picker imports a local copy. Open its security scope
+        // only for the owner-confirmed restore operation.
         let accessed = url.startAccessingSecurityScopedResource()
         defer {
             if accessed {

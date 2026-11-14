@@ -1,0 +1,101 @@
+name: WebReader Chimera One-IPA Test
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    # Rebuild this isolated diagnostic IPA only if its actual inputs changed.
+    paths:
+      - 'MangaReader12/**'
+      - 'MangaReader12.xcodeproj/**'
+      - 'ci/webreader_helper_probe.c'
+      - 'ci/package_chimera_oneapp_ipa.sh'
+      - 'ci/test_chimera_oneapp_ipa.py'
+      - 'ci/prepare_webreader_icons.py'
+      - 'ci/prepare_libwebp_ios.sh'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/test_ipc_probe_launch.py'
+      - 'ci/package_ipa.sh'
+      - '.github/workflows/chimera-oneapp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Manual owner QA must not be canceled by an automatic push build.
+concurrency:
+  group: wr-chimera-oneapp-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oneapp:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.4 solely for experimental iOS12 compatibility probe
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          echo 'iOS12 deployment target must remain 12.0; Xcode16 compilation is unsupported for production.'
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = '18.5'
+
+      - name: Prepare original WebReader icons and pinned WebP library
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+
+      - name: Assert isolated Chimera test UI and original app wiring
+        run: |
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_ipc_probe_launch.py
+
+      - name: Compile and sign read-only ARM64 iOS12 PING helper
+        run: |
+          xcrun --sdk iphoneos clang \
+            -std=c11 -Os -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            ci/webreader_helper_probe.c \
+            -o WebReader-Helper-Ping-iOS12
+          codesign --force --sign - --timestamp=none WebReader-Helper-Ping-iOS12
+          codesign --verify --verbose WebReader-Helper-Ping-iOS12
+
+      - name: Build WebReader Release for generic iOS 12 device
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Release" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+      - name: Package reference IPA locally (not uploaded)
+        run: |
+          ./ci/package_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-iOS12-unsigned.ipa
+
+      - name: Package one isolated Chimera test IPA with embedded PING
+        run: |
+          bash ci/package_chimera_oneapp_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Helper-Ping-iOS12
+
+      - name: Verify separate Bundle ID, no installer, identical WebReader executable
+        run: python3 ci/test_chimera_oneapp_ipa.py
+
+      - name: Upload the ONE test IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Chimera-OneApp-iOS12-TEST
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-Test-iOS12-unsigned.ipa
+            WebReader-Chimera-Test-iOS12-unsigned.ipa.sha256

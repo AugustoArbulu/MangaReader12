@@ -4,6 +4,22 @@ import UIKit
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
+    // The separate IPA is a connectivity diagnostic, not a second reader.
+    // It must never instantiate the Library/Explore tabs or schedule updates.
+    private var isIPCProbe: Bool {
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe" ||
+            Bundle.main.bundleIdentifier == "com.example.MangaReader12.chimeraoneapp"
+    }
+
+    private func makeRootController() -> UIViewController {
+        if isIPCProbe {
+            return UINavigationController(
+                rootViewController: WebReaderAppUpdatesViewController()
+            )
+        }
+        return MainTabBarController()
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -12,12 +28,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         let window = UIWindow(frame: UIScreen.main.bounds)
         window.backgroundColor = ThemeManager.shared.palette.background
-        window.rootViewController = MainTabBarController()
+        window.rootViewController = makeRootController()
         window.makeKeyAndVisible()
         self.window = window
 
         ThemeManager.shared.apply(to: window.rootViewController)
-        BackgroundLibraryUpdateManager.shared.applyScheduling()
+        if !isIPCProbe {
+            BackgroundLibraryUpdateManager.shared.applyScheduling()
+        }
         return true
     }
 
@@ -25,6 +43,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
+        guard !isIPCProbe else {
+            completionHandler(.noData)
+            return
+        }
         BackgroundLibraryUpdateManager.shared.performFetch(
             completion: completionHandler
         )
@@ -33,7 +55,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     func resetRootViewController() {
         guard let window = window else { return }
 
-        let root = MainTabBarController()
+        let root = makeRootController()
         window.rootViewController = root
         window.backgroundColor = ThemeManager.shared.palette.background
         ThemeManager.shared.applyGlobalAppearance()

@@ -1,0 +1,62 @@
+name: WebReader Build70 Phase CP Owner Encrypted Manifest v2 Signing QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_owner_offline_v2_signer.py'
+      - 'ci/test_webreader_owner_offline_v2_signer.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/webreader_owner_offline_v2_signer.py'
+      - 'ci/test_webreader_owner_offline_v2_signer.py'
+      - '.github/workflows/chimera-build70-phase-cp-owner-v2-signer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr70-cp-signing-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-platform-offline-owner-signing:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install fixed cryptography dependency for DISPOSABLE test keys only
+        shell: bash
+        run: python -m pip install --disable-pip-version-check --no-input cryptography==46.0.4
+      - name: Validate no-owner-secret no-signing dry-run
+        shell: bash
+        run: python ci/webreader_owner_offline_v2_signer.py --check
+      - name: Test ephemeral encrypted P256 manifest signing and hostile inputs
+        shell: bash
+        run: python -m unittest discover -s ci -p 'test_webreader_owner_offline_v2_signer.py' -v
+      - name: Check production trust and live installer stay disabled
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          checker = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          installer = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in root
+          assert "static let productionPublicKeyX963: Data? = nil" in checker
+          assert "static let liveInstallationEnabled = false" in installer
+          print("PASS CP: production owner key absent; no public release or installer")
+          PY

@@ -1,0 +1,104 @@
+name: WebReader Build70 Phase CV iOS12 Native ABI Lookup (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cv_lsworkspace_readonly_probe.c'
+      - 'ci/build70_cv_lsworkspace_probe_report.py'
+      - 'ci/test_build70_cv_lsworkspace_probe_report.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CV_IOS12_INSTALL_API_FEASIBILITY_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cv_lsworkspace_readonly_probe.c'
+      - 'ci/build70_cv_lsworkspace_probe_report.py'
+      - 'ci/test_build70_cv_lsworkspace_probe_report.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CV_IOS12_INSTALL_API_FEASIBILITY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cv-readonly-abi.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-protocol-negative:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: CV strict read-only report parser and hostile inputs
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cv_lsworkspace_probe_report.py' -v
+          python ci/build70_cv_lsworkspace_probe_report.py
+      - name: Verify static production hard stops
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('NO installer or editor trust activated')
+          PY
+
+  macos-crosscompile-ios12-no-execution:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pin Xcode toolchain and verify SDK
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Test parser and forbid installer invocation in probe
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cv_lsworkspace_probe_report.py' -v
+          python ci/build70_cv_lsworkspace_probe_report.py
+      - name: Cross-compile read-only runtime method lookup for iOS12 ARM64
+        shell: bash
+        run: |
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -o "$RUNNER_TEMP/WebReader-CV-ABI-LOOKUP-NOT-INSTALL" \
+            ci/build70_cv_lsworkspace_readonly_probe.c -lobjc
+          file "$RUNNER_TEMP/WebReader-CV-ABI-LOOKUP-NOT-INSTALL"
+          xcrun otool -hv "$RUNNER_TEMP/WebReader-CV-ABI-LOOKUP-NOT-INSTALL"
+          xcrun otool -l "$RUNNER_TEMP/WebReader-CV-ABI-LOOKUP-NOT-INSTALL" > "$RUNNER_TEMP/cv_load_commands.txt"
+          xcrun nm -u "$RUNNER_TEMP/WebReader-CV-ABI-LOOKUP-NOT-INSTALL" > "$RUNNER_TEMP/cv_undefined_symbols.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          meta = Path(os.environ['RUNNER_TEMP'])
+          load = (meta / 'cv_load_commands.txt').read_text()
+          syms = (meta / 'cv_undefined_symbols.txt').read_text()
+          assert ('LC_BUILD_VERSION' in load or 'LC_VERSION_MIN_IPHONEOS' in load), 'missing iOS minOS marker'
+          assert '12.0' in load, 'not built for iOS12 minimum'
+          for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork', '_execve', '_system'):
+              assert forbidden not in syms, forbidden
+          assert '_class_getInstanceMethod' in syms
+          assert '_objc_lookUpClass' in syms
+          print('PASS CV: cross-compiled read-only ABI lookup iOS12 ARM64, no installer invocation')
+          PY
+      - name: Confirm no distributable IPA or DEB artifacts and blocked install gate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_cv_lsworkspace_readonly_probe.c').read_text()
+          assert 'CV_AUTHORIZATION=DENIED' in src
+          assert 'CV_INSTALLATION=NOT_ATTEMPTED' in src
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          print('PASS CV: no appinst, no IPA, no DEB, no publication, no real owner key')
+          PY

@@ -1,0 +1,92 @@
+name: WebReader Build70 Phase DK Signed QA and Continuity Evidence (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dk_qa_evidence_bridge.py'
+      - 'ci/test_build70_dk_qa_evidence_bridge.py'
+      - 'ci/test_build70_dk_qa_evidence_native.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DK_EVIDENCE_BRIDGE_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dk_qa_evidence_bridge.py'
+      - 'ci/test_build70_dk_qa_evidence_bridge.py'
+      - 'ci/test_build70_dk_qa_evidence_native.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DK_EVIDENCE_BRIDGE_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dk-evidence-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-readonly-evidence-bridge:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test mock-only DI receipts and genuine DJ strict report parser
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_bridge.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dj_continuity_report_compare.py' -v
+      - name: Verify no code paths for IPA creation/distribution or installation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          source = Path('ci/build70_dk_qa_evidence_bridge.py').read_text()
+          tree = ast.parse(source)
+          calls = {
+              n.func.id if isinstance(n.func, ast.Name) else n.func.attr
+              for n in ast.walk(tree) if isinstance(n, ast.Call)
+              and isinstance(n.func, (ast.Name, ast.Attribute))
+          }
+          forbidden = {
+              'posix_spawn', 'appinst', 'system', 'Popen', 'ZipFile',
+              'codesign', 'upload_artifact', 'publish_release',
+              'write_bytes', 'write_text', 'unlink', 'rename', 'chmod',
+              'make_archive', 'installApplication',
+          }
+          assert not calls.intersection(forbidden), calls.intersection(forbidden)
+          for claim in (
+              '"ownerDistributionApprovalRecorded": False',
+              '"readyToDistributePrivateIPA": False',
+              '"readyToInstall": False',
+              '"installationAuthorized": False',
+              '"installationPerformed": False',
+              '"offlinePageFilesVerified": False',
+          ):
+              assert claim in source, claim
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DK: all distribution and installer permissions still false')
+          PY
+
+  native-macos-adhoc-signed-synthetic-evidence:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Use iOS12 capable Apple Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Confirm signed IPA and count evidence bridge, no real user IPA
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_bridge.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dk_qa_evidence_native.py' -v
+          echo 'PASS DK: native synthetic signed IPA + count reports, no distribution'

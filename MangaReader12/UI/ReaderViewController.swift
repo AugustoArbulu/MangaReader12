@@ -322,6 +322,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
     private let errorLabel = UILabel()
     private var representedURL: String?
     private var scaleMode: ReaderScaleMode = .fitScreen
+    private var isWebtoon = false
+    private var webtoonWidthFraction: CGFloat = 1
     private var trimMargins = false
     private var originalImage: UIImage?
     private var lastViewportSize: CGSize = .zero
@@ -363,6 +365,9 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         representedURL = nil
         imageView.image = nil
         originalImage = nil
+        isWebtoon = false
+        webtoonWidthFraction = 1
+        zoomScrollView.isScrollEnabled = true
         errorLabel.isHidden = true
         errorLabel.text = nil
         zoomScrollView.zoomScale = 1
@@ -390,6 +395,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         loader: ReaderImageLoader,
         zoomEnabled: Bool,
         scaleMode: ReaderScaleMode,
+        webtoonMode: Bool,
+        webtoonWidthFraction: CGFloat,
         trimMargins: Bool,
         backgroundColor: UIColor,
         foregroundColor: UIColor,
@@ -397,12 +404,16 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
     ) {
         representedURL = page.imageUrl
         self.scaleMode = scaleMode
+        self.isWebtoon = webtoonMode
+        self.webtoonWidthFraction = min(1, max(0.60, webtoonWidthFraction))
         self.trimMargins = trimMargins
         originalImage = nil
         imageView.image = nil
         errorLabel.isHidden = true
         zoomScrollView.zoomScale = 1
         zoomScrollView.maximumZoomScale = zoomEnabled ? 4 : 1
+        // In continuous-strip mode only the outer collection scrolls vertically.
+        zoomScrollView.isScrollEnabled = !webtoonMode
         self.backgroundColor = backgroundColor
         contentView.backgroundColor = backgroundColor
         zoomScrollView.backgroundColor = backgroundColor
@@ -468,7 +479,8 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         let factor: CGFloat
         switch scaleMode {
         case .fitScreen: factor = min(horizontal, vertical)
-        case .fitWidth: factor = horizontal
+        case .fitWidth:
+            factor = horizontal * (isWebtoon ? webtoonWidthFraction : 1)
         case .fitHeight: factor = vertical
         case .original: factor = 1
         }
@@ -481,12 +493,26 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
             width: max(1, image.size.width * factor),
             height: max(1, image.size.height * factor)
         )
-        imageView.frame = CGRect(origin: .zero, size: scaledSize)
-        zoomScrollView.contentSize = scaledSize
+        // The image is centered horizontally within the full-width cell.
+        // Its collection height is adjusted by the very same width fraction.
+        let imageX = isWebtoon ? max(0, (viewport.width - scaledSize.width) / 2) : 0
+        imageView.frame = CGRect(
+            origin: CGPoint(x: imageX, y: 0), size: scaledSize
+        )
+        zoomScrollView.contentSize = isWebtoon
+            ? CGSize(width: viewport.width,
+                     height: max(viewport.height, scaledSize.height))
+            : scaledSize
         centerImage()
     }
 
     private func centerImage() {
+        if isWebtoon {
+            // Horizontal centering lives in imageView.frame, not a scroll inset:
+            // insets would double-shift narrow Webtoon strips in landscape.
+            zoomScrollView.contentInset = .zero
+            return
+        }
         let viewSize = zoomScrollView.bounds.size
         let imageSize = imageView.frame.size
         let vertical = max(0, (viewSize.height - imageSize.height) / 2)
@@ -505,6 +531,15 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         scaleMode = mode
         // Update the image already displayed without reloading the chapter,
         // moving the collection, or triggering image downloads.
+        layoutImage(resetZoom: true)
+    }
+
+    func setWebtoonWidthFraction(_ fraction: CGFloat) {
+        guard isWebtoon else { return }
+        let adjusted = min(1, max(0.60, fraction))
+        guard abs(adjusted - webtoonWidthFraction) > 0.001 else { return }
+        webtoonWidthFraction = adjusted
+        // Only layout changes: no image decode, download or persistence writes.
         layoutImage(resetZoom: true)
     }
 
@@ -585,6 +620,8 @@ final class ReaderViewController: UIViewController,
     private var didRestoreInitialPage = false
     private var controlsHidden = false
     private var scaleMode: ReaderScaleMode = ReaderPreferences.shared.scaleMode
+    private var webtoonWidth: ReaderWebtoonWidth = ReaderPreferences.shared.webtoonWidth
+    private var lastAppliedWebtoonFraction: CGFloat = -1
     private var isChangingChapter = false
     private var prefetchingChapterID: String?
     private var attemptedPreloadChapterID: String?
@@ -769,7 +806,29 @@ final class ReaderViewController: UIViewController,
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if displayMode == .webtoon {
+            let fraction = effectiveWebtoonWidthFraction()
+            if abs(fraction - lastAppliedWebtoonFraction) > 0.001 {
+                lastAppliedWebtoonFraction = fraction
+                for case let cell as ReaderPageCell in collectionView.visibleCells {
+                    cell.setWebtoonWidthFraction(fraction)
+                }
+            }
+        }
         layout.invalidateLayout()
+    }
+
+    override func viewWillTransition(
+        to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        let anchor = displayMode == .webtoon ? captureWebtoonPosition() : nil
+        super.viewWillTransition(to: size, with: coordinator)
+        guard let readingAnchor = anchor else { return }
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.layout.invalidateLayout()
+            self?.collectionView.layoutIfNeeded()
+            self?.restoreWebtoonPosition(readingAnchor)
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -947,12 +1006,94 @@ final class ReaderViewController: UIViewController,
                 title: "Comparar escalas: \(scaleMode.title)",
                 style: .default
             ) { [weak self] _ in self?.showScaleComparison() })
+        } else {
+            sheet.addAction(UIAlertAction(
+                title: "Largura Webtoon: \(webtoonWidth.shortTitle)",
+                style: .default
+            ) { [weak self] _ in self?.showWebtoonWidthPicker() })
         }
         sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
         if let popover = sheet.popoverPresentationController {
             popover.barButtonItem = navigationItem.rightBarButtonItem
         }
         present(sheet, animated: true)
+    }
+
+    private func effectiveWebtoonWidthFraction() -> CGFloat {
+        return webtoonWidth.fraction(for: collectionView.bounds.size)
+    }
+
+    // Store the viewport's position *within* the visible strip so changing
+    // width/rotating does not restart a chapter or jump to another image.
+    private func captureWebtoonPosition() -> (index: Int, progress: CGFloat)? {
+        guard displayMode == .webtoon, !pages.isEmpty else { return nil }
+        let top = collectionView.contentOffset.y
+        let candidates = collectionView.indexPathsForVisibleItems.sorted {
+            $0.item < $1.item
+        }
+        guard let index = candidates.first(where: {
+            guard let frame = collectionView.layoutAttributesForItem(at: $0)?.frame
+            else { return false }
+            return frame.maxY > top
+        }) ?? candidates.first,
+              let frame = collectionView.layoutAttributesForItem(at: index)?.frame
+        else { return nil }
+        let progress = min(1, max(0, (top - frame.minY) / max(1, frame.height)))
+        return (index.item, progress)
+    }
+
+    private func restoreWebtoonPosition(_ anchor: (index: Int, progress: CGFloat)) {
+        guard displayMode == .webtoon, anchor.index < pages.count else { return }
+        let indexPath = IndexPath(item: anchor.index, section: 0)
+        guard let frame = collectionView.layoutAttributesForItem(at: indexPath)?.frame
+        else { return }
+        let target = frame.minY + anchor.progress * frame.height
+        let maxOffset = max(0, collectionView.contentSize.height
+            - collectionView.bounds.height)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: min(maxOffset, max(0, target))), animated: false
+        )
+        updatePagePrompt()
+    }
+
+    private func showWebtoonWidthPicker() {
+        guard displayMode == .webtoon else { return }
+        let sheet = UIAlertController(
+            title: "Largura do Webtoon",
+            message: "Adaptável: largura total em pé, 75% com o iPad deitado.",
+            preferredStyle: .actionSheet
+        )
+        let modes: [ReaderWebtoonWidth] = [
+            .adaptive, .full, .wide, .comfortable, .narrow
+        ]
+        for mode in modes {
+            sheet.addAction(UIAlertAction(
+                title: (mode == webtoonWidth ? "✓ " : "") + mode.title,
+                style: .default
+            ) { [weak self] _ in
+                self?.changeWebtoonWidth(to: mode)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.barButtonItem = navigationItem.rightBarButtonItem
+        }
+        present(sheet, animated: true)
+    }
+
+    private func changeWebtoonWidth(to mode: ReaderWebtoonWidth) {
+        guard displayMode == .webtoon, mode != webtoonWidth else { return }
+        let anchor = captureWebtoonPosition()
+        webtoonWidth = mode
+        preferences.webtoonWidth = mode
+        let fraction = effectiveWebtoonWidthFraction()
+        lastAppliedWebtoonFraction = fraction
+        for case let cell as ReaderPageCell in collectionView.visibleCells {
+            cell.setWebtoonWidthFraction(fraction)
+        }
+        layout.invalidateLayout()
+        collectionView.layoutIfNeeded()
+        if let anchor = anchor { restoreWebtoonPosition(anchor) }
     }
 
     private func showScaleComparison() {
@@ -1292,6 +1433,7 @@ final class ReaderViewController: UIViewController,
         let current = currentPageIndex()
         displayMode = ReaderDisplayMode(rawValue: modeControl.selectedSegmentIndex) ?? .pages
         ReaderPreferences.shared.displayMode = displayMode
+        lastAppliedWebtoonFraction = -1
 
         layout.scrollDirection = displayMode == .pages ? .horizontal : .vertical
         layout.minimumLineSpacing = displayMode == .webtoon && preferences.webtoonGapEnabled ? 8 : 0
@@ -1400,6 +1542,8 @@ final class ReaderViewController: UIViewController,
             loader: imageLoader,
             zoomEnabled: displayMode == .pages,
             scaleMode: displayMode == .webtoon ? .fitWidth : scaleMode,
+            webtoonMode: displayMode == .webtoon,
+            webtoonWidthFraction: effectiveWebtoonWidthFraction(),
             trimMargins: displayMode == .pages && preferences.trimMargins,
             backgroundColor: readerBackgroundColor(),
             foregroundColor: readerForegroundColor()
@@ -1460,7 +1604,10 @@ final class ReaderViewController: UIViewController,
         }
 
         let ratio = aspectRatios[indexPath.item] ?? 1.5
-        return CGSize(width: width, height: max(180, width * ratio))
+        // Exact same content width as ReaderPageCell.layoutImage, so there
+        // are no artificial gaps/overlaps between continuous Webtoon images.
+        let artWidth = width * effectiveWebtoonWidthFraction()
+        return CGSize(width: width, height: max(1, artWidth * ratio))
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {

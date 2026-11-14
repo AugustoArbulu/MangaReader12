@@ -1,0 +1,31 @@
+name: WebReader Build70 FB - synthetic metadata and full-schema shadow only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-fb:
+    name: Synthetic FB (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show local tool versions
+        run: |
+          python3 --version
+          swiftc --version
+      - name: Run 203+ isolated synthetic tests (no app or iPad)
+        run: |
+          PYTHONWARNINGS=ignore::ResourceWarning python3 -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: Assert no IPA or install action
+        shell: bash
+        run: |
+          test ! -e "$RUNNER_TEMP/WebReader.ipa"
+          test ! -e "$RUNNER_TEMP/library.sqlite"

@@ -1,0 +1,76 @@
+name: WebReader Build66 Phase G Separate Signed Peer Host QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build66_separate_signed_peer_lab.c'
+      - 'ci/build66_independent_peer_report.py'
+      - 'ci/test_build66_independent_peer_report.py'
+      - 'ci/test_build66_separate_signed_peer_lab.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build66_separate_signed_peer_lab.c'
+      - 'ci/build66_independent_peer_report.py'
+      - 'ci/test_build66_independent_peer_report.py'
+      - 'ci/test_build66_separate_signed_peer_lab.py'
+      - '.github/workflows/chimera-build66-separate-peers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr66-phase-g-signed-peers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  strict-report-parser:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test report rejection and no privileged authority
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('ci/build66_separate_signed_peer_lab.c').read_text()
+          parser = Path('ci/build66_independent_peer_report.py').read_text()
+          assert 'LOCAL_PEERTOKEN' in code
+          assert 'csops_audittoken' in code
+          assert 'WR_CS_OPS_CDHASH 5' in code
+          assert 'geteuid() == 0' in code
+          assert 'WR66-TEST-EXECUTABLE-VARIANT-' in code
+          assert 'MATCH_ONLY_NO_AUTH' in code
+          assert 'installation_authorized: bool = False' in parser
+          assert 'publisher_authenticated: bool = False' in parser
+          for forbidden in ('appinst(', 'posix_spawn(', 'execve(', 'system(', 'setuid(', 'setgid(', 'chown(', 'launchctl', 'WRINST1'):
+              assert forbidden not in code, forbidden
+          print('PASS: separate signed peer laboratory is never installation authority')
+          PY
+
+  independently-signed-macos-peer-processes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use verified native Apple developer tools
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Run strict report parser tests on Darwin
+        run: python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+      - name: Check independently signed client and server CDHash against kernel audit token
+        run: python3 ci/test_build66_separate_signed_peer_lab.py
+      - name: Check Build65 and updater remain fail-closed
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: no IPA, installation or new helper introduced'

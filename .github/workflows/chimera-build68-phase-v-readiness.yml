@@ -1,0 +1,38 @@
+name: WebReader Build68 Phase V — Chimera Read-only Readiness Audit
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build68_chimera_readiness_matrix.py'
+      - 'ci/test_build68_chimera_readiness_matrix.py'
+      - 'ci/build66_ios12_physical_capability_policy.py'
+      - 'ci/build66_peer_evidence_policy.py'
+      - 'ci/test_build66_ios12_physical_capability_policy.py'
+      - '.github/workflows/chimera-build68-phase-v-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build68-phase-v-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  strict-chimera-authority-negative-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit observed mobile runtime and all spoofed-positive alternatives
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_chimera_readiness_matrix.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_ios12_physical_capability_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_peer_evidence_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_queued_peer_report.py' -v
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: no installed peer identified; manual Filza fallback remains'

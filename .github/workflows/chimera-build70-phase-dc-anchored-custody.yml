@@ -1,0 +1,122 @@
+name: WebReader Build70 Phase DC Anchored Custody Lineage (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dc_custody_lineage.c'
+      - 'ci/build70_dc_custody_lineage.h'
+      - 'ci/build70_dc_self_credential_readonly.c'
+      - 'ci/test_build70_dc_custody_lineage.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DC_ANCHORED_CUSTODY_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dc_custody_lineage.c'
+      - 'ci/build70_dc_custody_lineage.h'
+      - 'ci/build70_dc_self_credential_readonly.c'
+      - 'ci/test_build70_dc_custody_lineage.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DC_ANCHORED_CUSTODY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dc-anchored-custody.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-lineage-negative-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Native read-only directory chain test suite
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dc_custody_lineage.py' -v
+      - name: Native self-credentials probe has no IPC authority
+        shell: bash
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            ci/build70_dc_self_credential_readonly.c -o "$RUNNER_TEMP/wr-dc-self-host"
+          "$RUNNER_TEMP/wr-dc-self-host" > "$RUNNER_TEMP/wr-dc-self.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          data = Path(os.environ['RUNNER_TEMP'], 'wr-dc-self.txt').read_text()
+          assert 'DC_SELF_EFFECTIVE_UID=' + str(os.geteuid()) in data
+          assert 'DC_IPC_PEER_AUTHENTICATED=NO' in data
+          assert 'DC_IOS12_HELPER_ISOLATION_PROVEN=NO' in data
+          assert 'DC_INSTALLATION_AUTHORIZED=NO' in data
+          assert 'DC_INSTALLATION_ATTEMPTED=NO' in data
+          print('PASS DC: self credentials only, no peer identity or installation')
+          PY
+      - name: Verify no release authority and production hard stops
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('ci/build70_dc_custody_lineage.c').read_text()
+          hdr = Path('ci/build70_dc_custody_lineage.h').read_text()
+          for field in ('anchor_ancestry_independently_attested',
+                        'real_ios12_process_identity_attested',
+                        'immune_to_root_or_same_uid_mutation',
+                        'owner_install_consent_verified',
+                        'installation_authorized', 'installation_performed'):
+              assert field in hdr, field
+          assert 'AT_SYMLINK_NOFOLLOW' in source
+          assert 'O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC' in source
+          for forbidden in ('O_CREAT', 'O_WRONLY', 'O_RDWR', 'unlink(',
+                            'rename(', 'chmod(', 'mkdir(', 'socket(',
+                            'appinst(', 'posix_spawn(', 'objc_msgSend('):
+              assert forbidden not in source, forbidden
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DC: host metadata audit never grants installer authority')
+          PY
+
+  ios12-arm64-compile-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-compile native DC metadata observer for iOS12/ARM64
+        shell: bash
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_dc_custody_lineage.c \
+            -o "$RUNNER_TEMP/wr-dc-lineage-ios12.o"
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 \
+            -c ci/build70_dc_self_credential_readonly.c \
+            -o "$RUNNER_TEMP/wr-dc-self-ios12.o"
+          file "$RUNNER_TEMP/wr-dc-lineage-ios12.o" "$RUNNER_TEMP/wr-dc-self-ios12.o"
+          xcrun nm -g "$RUNNER_TEMP/wr-dc-lineage-ios12.o" > "$RUNNER_TEMP/dc_symbols.txt"
+          xcrun nm -u "$RUNNER_TEMP/wr-dc-lineage-ios12.o" > "$RUNNER_TEMP/dc_undefined.txt"
+          xcrun nm -u "$RUNNER_TEMP/wr-dc-self-ios12.o" >> "$RUNNER_TEMP/dc_undefined.txt"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          defined = (root / 'dc_symbols.txt').read_text()
+          undefined = (root / 'dc_undefined.txt').read_text()
+          assert '_wr_dc_inspect_host_only' in defined
+          for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork', '_execve',
+                            '_system', '_socket', '_connect', '_dlopen',
+                            '_unlink', '_rename', '_chmod', '_mkdir'):
+              assert forbidden not in undefined, forbidden
+          print('PASS DC: iOS12 ARM64 read-only objects, no helper/IPA/install')
+          PY

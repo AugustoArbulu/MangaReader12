@@ -1,0 +1,75 @@
+name: WebReader Build70 FN - synthetic durable retention ledger (NO purge)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/build70_fn_retention_ledger.py'
+      - 'ci/test_build70_fn_retention_ledger.py'
+      - '.github/workflows/chimera-build70-phase-fn-retention-ledger.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: wr-build70-fn-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-retention-no-purge:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm feature flags and production schema unchanged
+        shell: bash
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let currentSchemaVersion = 1' MangaReader12/Database/SQLiteDatabase.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+      - name: Verify 51 FN ledger crash, WAL, ABA, and retention tests
+        run: python -m unittest discover -s ci -p 'test_build70_fn_retention_ledger.py' -v
+      - name: Run 40 FM, 20 FL, 36 FK and 30 FJ regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fm_held_recovery_budget.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fl_*.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fk_late_window_evidence.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fj_paired_readonly_reconciliation.py' -q
+      - name: Recheck FI journal and actual-app SQLite native WAL regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fi_readonly_shadow_audit.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fi_native_wal_snapshot.py' -q
+      - name: Validate EV-FD 40 hashes
+        working-directory: ci/labs/webreader-ev-fd
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root=Path.cwd(); entries=Path('SHA256SUMS').read_text().splitlines()
+          assert len(entries)==40,len(entries)
+          for entry in entries:
+              expected,name=entry.split('  ',1)
+              path=(root/name).resolve()
+              assert path.is_relative_to(root) and path.is_file(),name
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==expected,name
+          print('FN_EVFD_SHA256_40_PASS')
+          PY
+      - name: Full EV-FD 250-test synthetic regression
+        working-directory: ci/labs/webreader-ev-fd
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: Typecheck standalone Swift FD probe for iOS 12 (NO IPA)
+        if: runner.os == 'macOS'
+        run: |
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+      - name: Ensure tests did not modify tracked content
+        run: git diff --exit-code -- .

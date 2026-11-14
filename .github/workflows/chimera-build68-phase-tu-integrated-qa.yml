@@ -1,0 +1,87 @@
+name: WebReader Build68 Phases T/U — Signed IPA + Security Status iOS12
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderSignedIPAReview.swift'
+      - 'MangaReader12/Core/WebReaderUpdaterSecuritySnapshot.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12/Core/WebReaderNativeIPAAuditor.swift'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'ci/test_native_webreader_signed_ipa_joint_audit.py'
+      - 'ci/test_native_webreader_update_security_snapshot.py'
+      - 'ci/test_build68_phase_tu_readonly_contract.py'
+      - 'ci/test_app_updates_screen.py'
+      - '.github/workflows/chimera-build68-phase-tu-integrated-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build68-tu-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-security-ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-check installed app identity, no installer, and UI status contract
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_phase_tu_readonly_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_signed_trust_gate_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          python3 ci/test_build65_offline_relocation.py
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: no production trust, no installation, no QA library migration'
+
+  native-swift-and-ios12-release:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use iOS12-capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Run signed manifest + exact IPA Swift tests and security snapshot
+        run: |
+          python3 ci/test_native_webreader_signed_ipa_joint_audit.py
+          python3 ci/test_native_webreader_update_security_snapshot.py
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_webreader_ipa_auditor.py
+          python3 ci/test_native_webreader_local_qa_storage.py
+          python3 ci/test_native_webreader_release_cache_storage.py
+      - name: Prepare application assets and iOS12 WebP build
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile complete app — Debug iOS12 ARM64, no IPA
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-tu-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Compile complete app — Release iOS12 ARM64, no IPA
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-tu-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Verify executable name, bundle, min OS, updater install gate
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-tu-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: Build68 integrated T/U static + native + full iOS12, no IPA or installation'

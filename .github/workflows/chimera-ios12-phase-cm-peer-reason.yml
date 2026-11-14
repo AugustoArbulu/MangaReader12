@@ -1,0 +1,129 @@
+name: WebReader Phase CM iOS12 Signed Peer Reason Read-only Diagnostic
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/package_chimera_signed_peer_cm.py'
+      - 'ci/test_build71_cm_peer_reason_report.py'
+      - 'ci/test_chimera_signed_peer_cm_deb.py'
+      - 'ci/build71_cm_peer_reason_report.py'
+      - 'ci/test_build71_cm_peer_reason_report.py'
+      - 'ci/build66_separate_signed_peer_lab.c'
+      - 'ci/test_build66_separate_signed_peer_lab.py'
+      - 'ci/build66_independent_peer_report.py'
+      - 'ci/chimera_mobile_ping.entitlements'
+      - '.github/workflows/chimera-ios12-phase-cm-peer-reason.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-phase-cm-peer-reasons-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-threat-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject fake identity and installer capabilities
+        run: |
+          python3 -m compileall -q ci
+          python3 -m unittest discover -s ci -p 'test_build71_cm_peer_reason_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_package_chimera_signed_peer_cl.py' -v
+          python3 -m unittest discover -s ci -p 'test_build71_cm_peer_reason_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: optional signed peer capability lab never authorizes installation'
+
+  macos-separately-signed-ios12-arm64:
+    runs-on: macos-15
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Apple toolchain with iOS12 deployment support
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Prove distinct ad-hoc signed clients on macOS first
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build71_cm_peer_reason_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_package_chimera_signed_peer_cl.py' -v
+          python3 ci/test_build66_separate_signed_peer_lab.py
+      - name: Cross-compile and sign three distinct iOS12 ARM64 CLI binaries
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          for variant, label in (
+              (7100, "Server"), (7200, "AllowedClient"), (7300, "ForeignClient")
+          ):
+              output = "WebReader-CL-Peer" + label + "-iOS12"
+              subprocess.run([
+                  "xcrun", "--sdk", "iphoneos", "clang",
+                  "-std=c11", "-Os", "-Wall", "-Wextra", "-Werror",
+                  "-arch", "arm64", "-miphoneos-version-min=12.0",
+                  "-DWR66_VARIANT=" + str(variant),
+                  "ci/build66_separate_signed_peer_lab.c",
+                  "-o", output
+              ], check=True, timeout=90)
+              subprocess.run([
+                  "codesign", "--force", "--sign", "-", "--timestamp=none",
+                  "--entitlements", "ci/chimera_mobile_ping.entitlements",
+                  output
+              ], check=True, timeout=30)
+              subprocess.run(
+                  ["codesign", "--verify", "--verbose=2", output],
+                  check=True, timeout=30
+              )
+              subprocess.run(
+                  ["xcrun", "lipo", "-info", output],
+                  check=True, timeout=20
+              )
+          PY
+      - name: Package local one-command QA with independently audited CodeDirectory pins
+        run: |
+          python3 - <<'PY'
+          import re
+          import subprocess
+          from pathlib import Path
+          binaries = {
+              "server": Path("WebReader-CL-PeerServer-iOS12"),
+              "allowed": Path("WebReader-CL-PeerAllowedClient-iOS12"),
+              "foreign": Path("WebReader-CL-PeerForeignClient-iOS12"),
+          }
+          pins = {}
+          for role, path in binaries.items():
+              result = subprocess.run(
+                  ["codesign", "-d", "--verbose=4", str(path)],
+                  capture_output=True, text=True, check=True, timeout=20
+              )
+              found = re.findall(r"\bCDHash=([0-9a-f]{40})\b",
+                                 result.stdout + result.stderr)
+              assert len(found) == 1, "ambiguous CDHash"
+              pins[role] = found[0]
+          assert len(set(pins.values())) == 3, "all code identities must differ"
+          subprocess.run([
+              "python3", "ci/package_chimera_signed_peer_cm.py",
+              "--allowed-cdhash", pins["allowed"],
+              "--foreign-cdhash", pins["foreign"],
+          ], check=True, timeout=30)
+          print("PASS: independently derived signed iOS12 CodeDirectory references")
+          PY
+      - name: Independently audit ARM64 seals, entitlements, runner and DEB
+        run: |
+          python3 ci/test_chimera_signed_peer_cm_deb.py
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+      - name: Upload optional read-only CLI; never release or deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-PhaseCM-PeerReasons-CLI-only-iOS12
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-Chimera-PhaseCM-PeerReason-iOS12.deb
+            WebReader-Chimera-PhaseCM-PeerReason-iOS12.deb.sha256

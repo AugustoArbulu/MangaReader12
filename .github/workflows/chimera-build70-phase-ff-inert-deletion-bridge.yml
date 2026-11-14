@@ -1,0 +1,50 @@
+name: WebReader Build70 FF - inert deletion bridge (no IPA)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'ci/test_build70_ff_deletion_gate.py'
+      - '.github/workflows/chimera-build70-phase-ff-inert-deletion-bridge.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ff-audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile/run isolated Swift shadow gate and check three entrypoints
+        run: python -m unittest discover -s ci -p 'test_build70_ff_deletion_gate.py' -v
+      - name: Typecheck the FF bridge for iOS12 without creating IPA
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcodebuild -version
+          xcrun swiftc --version
+          python - <<'PY'
+          from pathlib import Path
+          gate = Path('MangaReader12/Downloads/ChapterDownloadManager.swift').read_text()
+          gate = gate.split('// BEGIN BUILD70_FF_INERT_READONLY_DELETION_BRIDGE',1)[1].split('// END BUILD70_FF_INERT_READONLY_DELETION_BRIDGE',1)[0]
+          test = Path('ci/test_build70_ff_deletion_gate.py').read_text()
+          # Python harness does a fully exercised compiled native test above;
+          # this job separately typechecks source-only iOS deployment target.
+          stubs = test.split('stubs = r"""',1)[1].split('"""',1)[0]
+          Path('/tmp/wr-ff-ios12.swift').write_text(stubs + gate)
+          PY
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck /tmp/wr-ff-ios12.swift
+      - name: Confirm production safety switches remain disabled
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt

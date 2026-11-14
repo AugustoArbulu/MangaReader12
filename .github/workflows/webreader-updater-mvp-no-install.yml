@@ -1,0 +1,58 @@
+name: WebReader updater MVP - release, verify, export (no IPA publishing)
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - '.github/workflows/webreader-updater-mvp-no-install.yml'
+      - 'ci/test_webreader_updater_mvp_scope.py'
+      - 'ci/test_app_updates_screen.py'
+      - 'ci/test_public_github_release_parser.py'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
+permissions:
+  contents: read
+jobs:
+  updater-contract:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce personal updater boundaries
+        run: |
+          python3 -m unittest discover -s ci -p 'test_webreader_updater_mvp_scope.py' -v
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+      - name: Run Swift GitHub Release parser with synthetic metadata
+        run: python3 ci/test_public_github_release_parser.py
+      - name: Run native GitHub update checker with injected responses
+        run: python3 ci/test_native_webreader_update_checker.py
+      - name: Run native IPA stager and package integrity tests, no network
+        run: |
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_ipa_auditor.py
+      - name: Run UIKit screen wiring and fake AppInst IPC protocol checks
+        run: |
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_native_webreader_appinst_socket.py
+      - name: Prepare source dependencies for an unsigned iOS 12 compile
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+      - name: Compile WebReader for generic iOS12, no IPA or installation
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/MVP-UnsignedOnly" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Assert no install or publishing was enabled
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          test -z "$(find "$RUNNER_TEMP/MVP-UnsignedOnly" -name '*.ipa' -print -quit)"

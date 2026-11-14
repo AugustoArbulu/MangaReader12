@@ -1,0 +1,81 @@
+name: WebReader Build70 Phase DB Host UID Custody Boundary (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_db_host_uid_boundary.py'
+      - 'ci/test_build70_db_host_uid_boundary.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DB_UID_CUSTODY_BOUNDARY_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_db_host_uid_boundary.py'
+      - 'ci/test_build70_db_host_uid_boundary.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DB_UID_CUSTODY_BOUNDARY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-db-host-uid-custody.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-real-os-uid-permissions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify real Linux runner UID is not nobody
+        run: |
+          id
+          id nobody
+          test "$(id -u)" != "$(id -u nobody)"
+          sudo -n -u nobody id
+      - name: Cross-user (runner vs nobody) and same-user host-only custody tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_db_host_uid_boundary.py' -v
+      - name: Check production install and publisher switches are disabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('ci/build70_db_host_uid_boundary.py').read_text()
+          assert 'ios12_helper_uid_isolation_proven: bool = False' in source
+          assert 'protected_directory_mode' in source
+          assert 'storage_rollback_resistance_proven: bool = False' in source
+          assert 'installation_authorized: bool = False' in source
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DB Linux: only OS host permissions; NO iOS proof or installer')
+          PY
+
+  macos-host-negative-controls:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run same-UID mutation and path safety negative cases
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_db_host_uid_boundary.py' -v
+      - name: Verify no iPad code or production installer modified
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('ci/build70_db_host_uid_boundary.py').read_text()
+          for prohibited in ('subprocess', 'setuid(', 'setgid(', 'posix_spawn(',
+                             'appinst(', 'installApplication:', 'socket.'):
+              assert prohibited not in source, prohibited
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DB macOS: no real separate UID case claimed; no installation')
+          PY

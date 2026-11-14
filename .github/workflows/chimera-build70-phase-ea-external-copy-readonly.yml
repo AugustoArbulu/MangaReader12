@@ -1,0 +1,66 @@
+name: WebReader Build70 Phase EA External Copy Read-Only Audit
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ea_external_copy_audit.py'
+      - 'ci/test_build70_ea_external_copy_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EA_EXTERNAL_COPY_OFFLINE_BYTES_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-ea-external-copy-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  external-copy-host-tests:
+    name: Host-only synthetic offline copy security tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check external copy auditor syntax and adversarial fixtures
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in ('ci/build70_ea_external_copy_audit.py', 'ci/test_build70_ea_external_copy_audit.py'):
+              ast.parse(Path(name).read_text(encoding='utf-8'), filename=name)
+          print('PASS EA: Python syntax (no bytecode emitted)')
+          PY
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+      - name: Verify source compatibility and ineligible installer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          script = Path('ci/build70_ea_external_copy_audit.py').read_text()
+          database = Path('MangaReader12/Database/SQLiteDatabase.swift').read_text()
+          downloader = Path('MangaReader12/Downloads/ChapterDownloadManager.swift').read_text()
+          receipt = Path('MangaReader12/Downloads/WebReaderOfflineCompletionReceipt.swift').read_text()
+          assert 'CREATE TABLE IF NOT EXISTS downloads' in database
+          assert 'FROM downloads d' in script and 'JOIN chapters c' in script
+          assert '.appendingPathComponent("Downloads"' in downloader
+          assert 'page-%05d.bin' in Path('MangaReader12/Downloads/WebReaderOfflinePageInventory.swift').read_text()
+          assert 'WR-OFFLINE-COMPLETE-V1:' in receipt
+          assert 'EA_STOP_NONEMPTY_WAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
+          assert 'EA_STOP_NONEMPTY_JOURNAL_NEEDS_CONSISTENT_SQLITE_SNAPSHOT' in script
+          assert 'read_database_bytes(db_path, db_hash)' in script
+          assert 'db.deserialize(raw)' in script
+          assert 'sqlite3.connect(uri' not in script
+          assert 'installationAuthorized": False' in script
+          assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS EA: source-compatible host-only audit; trigger absent, install/trust gates closed')
+          PY

@@ -1,0 +1,63 @@
+name: WebReader Build70 Phase CO Owner Offline P256 Ceremony Safety
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_owner_key_ceremony.py'
+      - 'ci/test_webreader_owner_key_ceremony.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/webreader_owner_key_ceremony.py'
+      - 'ci/test_webreader_owner_key_ceremony.py'
+      - '.github/workflows/chimera-build70-phase-co-owner-ceremony.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr70-co-offline-ceremony-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  disposable-cryptography-security-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local cryptographic dependency for disposable CI tests
+        shell: bash
+        run: python -m pip install --disable-pip-version-check --no-input cryptography==46.0.4
+      - name: Validate local offline mode without creating any owner key
+        shell: bash
+        run: python ci/webreader_owner_key_ceremony.py --check
+      - name: Test encrypted ephemeral lab keys, fail-closed owner controls
+        shell: bash
+        run: python -m unittest discover -s ci -p 'test_webreader_owner_key_ceremony.py' -v
+      - name: Ensure no production enrollment or installer path activated
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          checker = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          installer = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in root
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let liveInstallationEnabled = false' in installer
+          assert not list(Path(".").glob("*owner-private-encrypted*"))
+          print("PASS CO: only disposable ephemeral test identities; production trust nil")
+          PY

@@ -47,6 +47,34 @@
 		A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ComixBrowserProbeViewController.swift */; };
 		A10000000000000000000028 /* libwebp-COPYING.txt in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* libwebp-COPYING.txt */; };
 		A10000000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* Assets.xcassets */; };
+		A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */; };
+		A1000000000000000000002B /* WebReaderUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* WebReaderUpdateChecker.swift */; };
+		A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* WebReaderStrictJSON.swift */; };
+		A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* WebReaderIPAStager.swift */; };
+		A1000000000000000000002E /* WebReaderAppUpdatesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */; };
+		A1000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */; };
+		A10000000000000000000030 /* WebReaderNativeIPAAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* WebReaderNativeIPAAuditor.swift */; };
+		A10000000000000000000035 /* WebReaderSignedReleaseTrustGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* WebReaderSignedReleaseTrustGate.swift */; };
+		A10000000000000000000036 /* WebReaderSignedIPAReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* WebReaderSignedIPAReview.swift */; };
+		A10000000000000000000037 /* WebReaderUpdaterSecuritySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000037 /* WebReaderUpdaterSecuritySnapshot.swift */; };
+		A10000000000000000000038 /* WebReaderProductionPublisherTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* WebReaderProductionPublisherTrust.swift */; };
+		A10000000000000000000039 /* WebReaderSignedPreviewSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000039 /* WebReaderSignedPreviewSequence.swift */; };
+		A10000000000000000000040 /* WebReaderIPADownloadBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* WebReaderIPADownloadBudget.swift */; };
+		A10000000000000000000041 /* WebReaderPhysicalQAChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */; };
+		A10000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */; };
+		A10000000000000000000050 /* WebReaderProductionSignedIPAReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */; };
+		A10000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */; };
+		A10000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */; };
+		A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */; };
+		A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */; };
+		A10000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */; };
+		A10000000000000000000047 /* WebReaderOfflineResumePrefix.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */; };
+		A10000000000000000000048 /* WebReaderOfflineRecoveryPlanReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000048 /* WebReaderOfflineRecoveryPlanReader.swift */; };
+		A10000000000000000000049 /* WebReaderOfflineRecoveryPlanWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000049 /* WebReaderOfflineRecoveryPlanWriter.swift */; };
+		A10000000000000000000031 /* WebReaderHelperPingProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* WebReaderHelperPingProbe.swift */; };
+		A10000000000000000000032 /* WebReaderGitHubReleaseParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* WebReaderGitHubReleaseParser.swift */; };
+		A10000000000000000000033 /* WebReaderAppinstSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* WebReaderAppinstSocket.swift */; };
+		A10000000000000000000034 /* WebReaderChimeraSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* WebReaderChimeraSelfTest.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +120,34 @@
 		A20000000000000000000027 /* ComixBrowserProbeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComixBrowserProbeViewController.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* libwebp-COPYING.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "libwebp-COPYING.txt"; sourceTree = "<group>"; };
 		A20000000000000000000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdateManifestVerifier.swift; sourceTree = "<group>"; };
+		A2000000000000000000002B /* WebReaderUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdateChecker.swift; sourceTree = "<group>"; };
+		A2000000000000000000002C /* WebReaderStrictJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderStrictJSON.swift; sourceTree = "<group>"; };
+		A2000000000000000000002D /* WebReaderIPAStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderIPAStager.swift; sourceTree = "<group>"; };
+		A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderAppUpdatesViewController.swift; sourceTree = "<group>"; };
+		A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderReleaseHTTPSProbe.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* WebReaderNativeIPAAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderNativeIPAAuditor.swift; sourceTree = "<group>"; };
+		A20000000000000000000035 /* WebReaderSignedReleaseTrustGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderSignedReleaseTrustGate.swift; sourceTree = "<group>"; };
+		A20000000000000000000036 /* WebReaderSignedIPAReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderSignedIPAReview.swift; sourceTree = "<group>"; };
+		A20000000000000000000037 /* WebReaderUpdaterSecuritySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpdaterSecuritySnapshot.swift; sourceTree = "<group>"; };
+		A20000000000000000000038 /* WebReaderProductionPublisherTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderProductionPublisherTrust.swift; sourceTree = "<group>"; };
+		A20000000000000000000039 /* WebReaderSignedPreviewSequence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderSignedPreviewSequence.swift; sourceTree = "<group>"; };
+		A20000000000000000000040 /* WebReaderIPADownloadBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderIPADownloadBudget.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderPhysicalQAChecklist.swift; sourceTree = "<group>"; };
+		A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderProductionSignedReleaseChecker.swift; sourceTree = "<group>"; };
+		A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderProductionSignedIPAReview.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderSignedProductionEnvelopeBinding.swift; sourceTree = "<group>"; };
+		A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderUpgradeContinuitySnapshot.swift; sourceTree = "<group>"; };
+		A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePageInventory.swift; sourceTree = "<group>"; };
+		A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflinePreservationAudit.swift; sourceTree = "<group>"; };
+		A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineCompletionReceipt.swift; sourceTree = "<group>"; };
+		A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineResumePrefix.swift; sourceTree = "<group>"; };
+		A20000000000000000000048 /* WebReaderOfflineRecoveryPlanReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineRecoveryPlanReader.swift; sourceTree = "<group>"; };
+		A20000000000000000000049 /* WebReaderOfflineRecoveryPlanWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderOfflineRecoveryPlanWriter.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* WebReaderHelperPingProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderHelperPingProbe.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* WebReaderGitHubReleaseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderGitHubReleaseParser.swift; sourceTree = "<group>"; };
+		A20000000000000000000033 /* WebReaderAppinstSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderAppinstSocket.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* WebReaderChimeraSelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderChimeraSelfTest.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +208,28 @@
 				A2000000000000000000001E /* BackupManager.swift */,
 				A20000000000000000000022 /* StorageManager.swift */,
 				A20000000000000000000025 /* SafeCBZArchive.swift */,
+				A2000000000000000000002A /* WebReaderUpdateManifestVerifier.swift */,
+				A2000000000000000000002B /* WebReaderUpdateChecker.swift */,
+				A2000000000000000000002C /* WebReaderStrictJSON.swift */,
+				A2000000000000000000002D /* WebReaderIPAStager.swift */,
+				A2000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift */,
+				A20000000000000000000030 /* WebReaderNativeIPAAuditor.swift */,
+				A20000000000000000000035 /* WebReaderSignedReleaseTrustGate.swift */,
+				A20000000000000000000036 /* WebReaderSignedIPAReview.swift */,
+				A20000000000000000000037 /* WebReaderUpdaterSecuritySnapshot.swift */,
+				A20000000000000000000038 /* WebReaderProductionPublisherTrust.swift */,
+				A20000000000000000000039 /* WebReaderSignedPreviewSequence.swift */,
+				A20000000000000000000040 /* WebReaderIPADownloadBudget.swift */,
+				A20000000000000000000041 /* WebReaderPhysicalQAChecklist.swift */,
+				A20000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift */,
+				A20000000000000000000050 /* WebReaderProductionSignedIPAReview.swift */,
+				A20000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift */,
+				A20000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift */,
+				A20000000000000000000045 /* WebReaderOfflinePreservationAudit.swift */,
+				A20000000000000000000031 /* WebReaderHelperPingProbe.swift */,
+				A20000000000000000000032 /* WebReaderGitHubReleaseParser.swift */,
+				A20000000000000000000033 /* WebReaderAppinstSocket.swift */,
+				A20000000000000000000034 /* WebReaderChimeraSelfTest.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -212,6 +290,7 @@
 				A20000000000000000000023 /* DataStorageViewController.swift */,
 				A20000000000000000000026 /* LocalComicsViewController.swift */,
 				A20000000000000000000027 /* ComixBrowserProbeViewController.swift */,
+				A2000000000000000000002E /* WebReaderAppUpdatesViewController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -220,6 +299,11 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000016 /* ChapterDownloadManager.swift */,
+				A20000000000000000000044 /* WebReaderOfflinePageInventory.swift */,
+				A20000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift */,
+				A20000000000000000000047 /* WebReaderOfflineResumePrefix.swift */,
+				A20000000000000000000048 /* WebReaderOfflineRecoveryPlanReader.swift */,
+				A20000000000000000000049 /* WebReaderOfflineRecoveryPlanWriter.swift */,
 			);
 			path = Downloads;
 			sourceTree = "<group>";
@@ -349,6 +433,34 @@
 				A10000000000000000000024 /* SafeCBZArchive.swift in Sources */,
 				A10000000000000000000025 /* LocalComicsViewController.swift in Sources */,
 				A10000000000000000000026 /* ComixBrowserProbeViewController.swift in Sources */,
+				A1000000000000000000002A /* WebReaderUpdateManifestVerifier.swift in Sources */,
+				A1000000000000000000002B /* WebReaderUpdateChecker.swift in Sources */,
+				A1000000000000000000002C /* WebReaderStrictJSON.swift in Sources */,
+				A1000000000000000000002D /* WebReaderIPAStager.swift in Sources */,
+				A1000000000000000000002E /* WebReaderAppUpdatesViewController.swift in Sources */,
+				A1000000000000000000002F /* WebReaderReleaseHTTPSProbe.swift in Sources */,
+				A10000000000000000000030 /* WebReaderNativeIPAAuditor.swift in Sources */,
+				A10000000000000000000035 /* WebReaderSignedReleaseTrustGate.swift in Sources */,
+				A10000000000000000000036 /* WebReaderSignedIPAReview.swift in Sources */,
+				A10000000000000000000037 /* WebReaderUpdaterSecuritySnapshot.swift in Sources */,
+				A10000000000000000000038 /* WebReaderProductionPublisherTrust.swift in Sources */,
+				A10000000000000000000039 /* WebReaderSignedPreviewSequence.swift in Sources */,
+				A10000000000000000000040 /* WebReaderIPADownloadBudget.swift in Sources */,
+				A10000000000000000000041 /* WebReaderPhysicalQAChecklist.swift in Sources */,
+				A10000000000000000000042 /* WebReaderProductionSignedReleaseChecker.swift in Sources */,
+				A10000000000000000000050 /* WebReaderProductionSignedIPAReview.swift in Sources */,
+				A10000000000000000000051 /* WebReaderSignedProductionEnvelopeBinding.swift in Sources */,
+				A10000000000000000000043 /* WebReaderUpgradeContinuitySnapshot.swift in Sources */,
+				A10000000000000000000044 /* WebReaderOfflinePageInventory.swift in Sources */,
+				A10000000000000000000045 /* WebReaderOfflinePreservationAudit.swift in Sources */,
+				A10000000000000000000046 /* WebReaderOfflineCompletionReceipt.swift in Sources */,
+				A10000000000000000000047 /* WebReaderOfflineResumePrefix.swift in Sources */,
+				A10000000000000000000048 /* WebReaderOfflineRecoveryPlanReader.swift in Sources */,
+				A10000000000000000000049 /* WebReaderOfflineRecoveryPlanWriter.swift in Sources */,
+				A10000000000000000000031 /* WebReaderHelperPingProbe.swift in Sources */,
+				A10000000000000000000032 /* WebReaderGitHubReleaseParser.swift in Sources */,
+				A10000000000000000000033 /* WebReaderAppinstSocket.swift in Sources */,
+				A10000000000000000000034 /* WebReaderChimeraSelfTest.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

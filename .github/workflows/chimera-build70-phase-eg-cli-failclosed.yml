@@ -1,0 +1,108 @@
+name: WebReader Build70 Phase EG CLI STOP Exit Codes (host only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ea_external_copy_audit.py'
+      - 'ci/test_build70_ea_external_copy_audit.py'
+      - 'ci/build70_ek_partial_prefix_metadata.py'
+      - 'ci/test_build70_ek_partial_prefix_metadata.py'
+      - 'ci/build70_ej_recovery_plan_metadata.py'
+      - 'ci/test_build70_ej_recovery_plan_metadata.py'
+      - 'ci/build70_ei_all_downloads_inventory.py'
+      - 'ci/test_build70_ei_all_downloads_inventory.py'
+      - 'ci/build70_eh_sqlite_relational_integrity.py'
+      - 'ci/test_build70_eh_sqlite_relational_integrity.py'
+      - 'ci/build70_eb_copy_vs_device_text.py'
+      - 'ci/build70_ec_full_container_dual_copy.py'
+      - 'ci/build70_ed_portable_vs_external_library.py'
+      - 'ci/build70_ee_portable_preferences_plist.py'
+      - 'ci/build70_ef_offline_payload_triage.py'
+      - 'ci/test_build70_eg_cli_fail_closed.py'
+      - 'ci/test_build70_ci_scope.py'
+      - 'ci/test_build70_el_safe_partial_retry.py'
+      - 'ci/build70_eo_two_copy_review.py'
+      - 'ci/test_build70_eo_two_copy_review.py'
+      - 'ci/test_build70_eq_canonical_path_ownership.py'
+      - 'ci/test_build70_er_deletion_preflight.py'
+      - 'ci/test_build70_et_safe_bulk_deletion.py'
+      - 'MangaReader12/Core/StorageManager.swift'
+      - 'MangaReader12/UI/DataStorageViewController.swift'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'MangaReader12/UI/DownloadsViewController.swift'
+      - 'docs/WEBREADER_BUILD70_PHASE_EG_FAIL_CLOSED_CLI_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-eg-cli-failclosed.yml'
+# Only retain the newest attempt for this *same workflow and branch*.
+# Never allow a new head to publish superseded host-only audit evidence.
+concurrency:
+  group: wr-build70-ea-ek-integrated-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+jobs:
+  audit-stop-exit-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Full host-only regression EA through EK, including fail-closed CLI
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eb_copy_vs_device_text.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ec_full_container_dual_copy.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ed_portable_vs_external_library.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ee_portable_preferences_plist.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ef_offline_payload_triage.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eg_cli_fail_closed.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eh_sqlite_relational_integrity.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ei_all_downloads_inventory.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ej_recovery_plan_metadata.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ek_partial_prefix_metadata.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ci_scope.py' -v
+          python -m unittest discover -s ci -p 'test_build70_el_safe_partial_retry.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eo_two_copy_review.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eq_canonical_path_ownership.py' -v
+          python -m unittest discover -s ci -p 'test_build70_er_deletion_preflight.py' -v
+          python -m unittest discover -s ci -p 'test_build70_et_safe_bulk_deletion.py' -v
+      - name: No owner IPA QA trigger or publisher/installer authority
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
+          for suffix in ('eb_copy_vs_device_text', 'ec_full_container_dual_copy',
+                         'ed_portable_vs_external_library', 'ee_portable_preferences_plist',
+                         'ef_offline_payload_triage'):
+              path = Path('ci/build70_' + suffix + '.py')
+              content = path.read_text()
+              prefix = suffix[:2].upper()
+              assert 'return 2 if result["status"].startswith("' + prefix + '_STOP_") else 0' in content
+              assert '"installationAuthorized": False' in content
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          assert 'PRAGMA foreign_key_check' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
+          assert 'validate_schema_foreign_keys(db)' in Path('ci/build70_eh_sqlite_relational_integrity.py').read_text()
+          assert 'EI_STOP_UNREFERENCED_OR_UNCLASSIFIED_DOWNLOAD_FILES' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'EI_STOP_SNAPSHOT_CHANGED_DURING_INVENTORY' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'unrecognizedLeafFilesInRecordedChapters' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'EJ_STOP_RECOVERY_ROWS_REQUIRE_DEVICE_REVIEW' in Path('ci/build70_ej_recovery_plan_metadata.py').read_text()
+          assert 'EK_STOP_PARTIAL_PAGES_OR_PLANS_REQUIRE_REVIEW' in Path('ci/build70_ek_partial_prefix_metadata.py').read_text()
+          assert 'MAX_PAGE_BYTES = 20 * 1024 * 1024' in Path('ci/build70_ek_partial_prefix_metadata.py').read_text()
+          assert '"installationAuthorized": False' in Path('ci/build70_ej_recovery_plan_metadata.py').read_text()
+          assert '"installationAuthorized": False' in Path('ci/build70_ei_all_downloads_inventory.py').read_text()
+          assert 'read_database_bytes(db_path, db_hash)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
+          assert 'db.deserialize(raw)' in Path('ci/build70_ea_external_copy_audit.py').read_text()
+          print("PASS EG: all EA-EK audited, every STOP nonzero; no IPA, install or trust")
+          PY

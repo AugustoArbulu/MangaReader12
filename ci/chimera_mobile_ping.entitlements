@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Minimal permission for an outside-the-app-container, mobile-user CLI
+         on legacy Chimera. NOT an entitlement for the sandboxed WebReader app.
+         The signed PING QA binary has no installer path or process launcher. -->
+    <key>com.apple.private.security.no-container</key>
+    <true/>
+</dict>
+</plist>

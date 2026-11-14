@@ -1,0 +1,153 @@
+name: WebReader Build69 Owner-Approved One-Shot QA IPA for Filza
+
+# Owner approved the generation of ONE short-lived QA IPA from this branch.
+# This workflow runs ONLY after a separate, owner-authorized trigger-file push.
+# It is not a GitHub Release, editorial signature, updater feed, or installer.
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build69_owner_approved_qa_trigger.txt'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+concurrency:
+  group: webreader-build69-owner-approved-qa-one-shot
+  cancel-in-progress: false
+
+jobs:
+  compile-sign-audit-manual-qa-ipa:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - name: Checkout exact owner-triggering Git commit and its parent
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Require authorized trigger as the ONLY changed file
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "push"
+          test "$GITHUB_REF" = "refs/heads/feat/chimera-updater-phase1-protocol-audit"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git diff --name-only HEAD^ HEAD)" = "ci/build69_owner_approved_qa_trigger.txt"
+          test -f ci/build69_owner_approved_qa_trigger.txt
+          test "$(sed -n '1p' ci/build69_owner_approved_qa_trigger.txt)" = "WEBREADER_BUILD69_OWNER_APPROVED_ONE_SHOT_ACTIONS_QA_IPA_NO_INSTALL"
+          test "$(sed -n '2p' ci/build69_owner_approved_qa_trigger.txt)" = "$(git rev-parse HEAD^)"
+          test "$(wc -l < ci/build69_owner_approved_qa_trigger.txt | tr -d ' ')" -eq 2
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          echo 'PASS: one-shot source commit and Build68 upgrade safety flags'
+
+      - name: Select tested Xcode 16.4 for iOS 12 ARM64
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Prepare immutable source snapshot outside the clean review checkout
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wr69-owner-source"
+          git archive --format=tar HEAD | tar -xf - -C "$RUNNER_TEMP/wr69-owner-source"
+          test -f "$RUNNER_TEMP/wr69-owner-source/MangaReader12.xcodeproj/project.pbxproj"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Run private QA, backup and updater regressions
+        working-directory: ${{ runner.temp }}/wr69-owner-source
+        run: |
+          python3 -m compileall -q ci
+          python3 -m unittest discover -s ci -p 'test_build69_cb_actions_qa_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bl_atomic_private_delivery.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bz_optimized_python_admission.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bb_private_qa_ipa_preflight.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bf_portable_backup_baseline.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bh_offline_reader_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bv_destructive_download_consent.py' -v
+          python3 -m unittest discover -s ci -p 'test_build69_bw_storage_reindex_deletion_consent.py' -v
+          python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+
+      - name: Generate WebReader icon and prepare hash-pinned iOS12 libwebp
+        working-directory: ${{ runner.temp }}/wr69-owner-source
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+
+      - name: Build actual unsigned WebReader 69 Release for iOS12 ARM64
+        working-directory: ${{ runner.temp }}/wr69-owner-source
+        run: |
+          set -euo pipefail
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr69-owner-approved-qa-build" \
+            CURRENT_PROJECT_VERSION=69 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+          python3 ci/build69_ba_unsigned_candidate_audit.py \
+            "$RUNNER_TEMP/wr69-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app"
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: real unsigned WebReader 69 ARM64/iOS12 app, same installed bundle'
+
+      - name: Sign QA copy, verify final IPA and write owner receipts (NO INSTALL)
+        run: |
+          set -euo pipefail
+          DELIVERY="$RUNNER_TEMP/wr69-owner-qa-artifact"
+          mkdir -p "$DELIVERY"
+          python3 ci/build69_cb_actions_qa_package.py \
+            "$RUNNER_TEMP/wr69-owner-approved-qa-build/Build/Products/Release-iphoneos/MangaReader12.app" \
+            "$DELIVERY" > "$DELIVERY/WebReader-Build69-packager-summary.json"
+          python3 ci/build69_bb_private_qa_ipa_preflight.py \
+            --ipa "$DELIVERY/WebReader-Build69-iOS12-adhoc.ipa" \
+            --sha256-file "$DELIVERY/WebReader-Build69-iOS12-adhoc.ipa.sha256" \
+            --installed-build 68 > "$DELIVERY/WebReader-Build69-second-preflight.json"
+          python3 - "$DELIVERY" <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import sys
+          root = Path(sys.argv[1])
+          base = "WebReader-Build69-iOS12-adhoc.ipa"
+          data = (root / base).read_bytes()
+          checksum = (root / (base + ".sha256")).read_text("ascii")
+          digest = hashlib.sha256(data).hexdigest()
+          if checksum != digest + "  " + base + "\n":
+              raise SystemExit("BLOCKED: uploaded IPA differs from checksum")
+          audit = json.loads((root / "WebReader-Build69-second-preflight.json").read_text())
+          if (audit.get("build") != 69
+                  or audit.get("ipaSHA256") != digest
+                  or audit.get("adHocSignatureIntegrityVerified") is not True
+                  or audit.get("installedApplicationIdentifierMatch") is not True
+                  or audit.get("installationAuthorized") is not False):
+              raise SystemExit("BLOCKED: second preflight failed")
+          print("PASS: exact Build69 signed ad-hoc QA bytes, SHA256=" + digest)
+          print("NOT_DONE: no publisher authentication or device installation")
+          PY
+
+      - name: Upload owner-requested short-lived Build69 QA artifact (not Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build69-OwnerApproved-iOS12-QA-Filza
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-iOS12-adhoc.ipa
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-iOS12-adhoc.ipa.sha256
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-private-qa-audit.json
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-source-provenance.json
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-second-preflight.json
+            ${{ runner.temp }}/wr69-owner-qa-artifact/WebReader-Build69-packager-summary.json

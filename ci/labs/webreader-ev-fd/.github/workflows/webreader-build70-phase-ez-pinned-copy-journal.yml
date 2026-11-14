@@ -1,0 +1,19 @@
+name: WebReader Build70 EZ copy-only synthetic laboratory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-ez:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift toolchain details
+        run: swift --version
+      - name: Python tests — synthetic only
+        run: python3 -m unittest discover -s ci -p 'test_build70_*.py' -q

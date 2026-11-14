@@ -30,7 +30,7 @@ final class ReaderSettingsViewController: UITableViewController {
         case 0: return 3
         case 1: return 5
         case 2: return 2
-        default: return 1
+        default: return 2
         }
     }
 
@@ -135,6 +135,11 @@ final class ReaderSettingsViewController: UITableViewController {
                 action: #selector(doubleTapZoomChanged(_:))
             )
 
+        case (3, 0):
+            cell.textLabel?.text = "Largura do Webtoon"
+            cell.detailTextLabel?.text = preferences.webtoonWidth.title
+            cell.accessoryType = .disclosureIndicator
+
         default:
             configureSwitch(
                 cell,
@@ -163,6 +168,8 @@ final class ReaderSettingsViewController: UITableViewController {
             showBackgroundPicker()
         case (1, 1):
             showScalePicker()
+        case (3, 0):
+            showWebtoonWidthPicker()
         default:
             break
         }
@@ -279,10 +286,32 @@ final class ReaderSettingsViewController: UITableViewController {
         presentActionSheet(sheet)
     }
 
+    private func showWebtoonWidthPicker() {
+        let sheet = UIAlertController(
+            title: "Largura do Webtoon",
+            message: "Adaptável: 100% em pé e 75% deitado. " +
+                "Não altera imagens baixadas nem a escala do modo Páginas.",
+            preferredStyle: .actionSheet
+        )
+        let options: [ReaderWebtoonWidth] = [
+            .adaptive, .full, .wide, .comfortable, .narrow
+        ]
+        for mode in options {
+            sheet.addAction(UIAlertAction(
+                title: (preferences.webtoonWidth == mode ? "✓ " : "") + mode.title,
+                style: .default
+            ) { [weak self] _ in
+                self?.preferences.webtoonWidth = mode
+                self?.tableView.reloadData()
+            })
+        }
+        presentActionSheet(sheet)
+    }
+
     private func showScalePicker() {
         let sheet = UIAlertController(
             title: "Escala padrão das páginas",
-            message: "Webtoon sempre ajusta à largura.",
+            message: "O Webtoon tem seu próprio ajuste de largura.",
             preferredStyle: .actionSheet
         )
         for mode in [ReaderScaleMode.fitScreen, .fitWidth, .fitHeight, .original] {

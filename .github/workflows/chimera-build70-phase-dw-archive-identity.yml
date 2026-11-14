@@ -1,0 +1,134 @@
+name: WebReader Build70 Phase DW Archived Real IPA Native Identity (NO install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-build70-phase-dw-archive-identity.yml'
+      - 'ci/test_build70_dw_archive_identity_contract.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DW_ARCHIVED_QA_IDENTITY_2026-11-11.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: webreader-build70-dw-archive-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-archived-qa-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate pinned archived QA workflow without downloading IPA
+        run: python -m unittest discover -s ci -p 'test_build70_dw_archive_identity_contract.py' -v
+
+  macos-original-build70-native-audit:
+    if: github.repository == 'AugustoArbulu/MangaReader12' && github.ref == 'refs/heads/feat/chimera-updater-phase1-protocol-audit'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check untouched production gates and source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+      - name: Select native Apple code seal validation
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Download exact Build70 owner-approved historical QA archive
+        uses: actions/download-artifact@v4
+        with:
+          name: WebReader-Build70-OwnerApproved-iOS12-QA-Filza
+          run-id: 42705903886
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/wr70-dw-original
+      - name: Revalidate original exact bytes with macOS codesign and compare historical reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/wr70-dw-original"
+          test -f "$ROOT/WebReader-Build70-iOS12-adhoc.ipa"
+          test -f "$ROOT/WebReader-Build70-iOS12-adhoc.ipa.sha256"
+          python3 ci/build70_private_qa_ipa_preflight.py \
+            --ipa "$ROOT/WebReader-Build70-iOS12-adhoc.ipa" \
+            --sha256-file "$ROOT/WebReader-Build70-iOS12-adhoc.ipa.sha256" \
+            --installed-build 69 > "$RUNNER_TEMP/wr70-dw-native.json"
+          python3 - <<'PY'
+          import hashlib, json, os, plistlib, stat, zipfile
+          from io import BytesIO
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "wr70-dw-original"
+          ipa = root / "WebReader-Build70-iOS12-adhoc.ipa"
+          checksum = root / (ipa.name+".sha256")
+          sha = "526291cc77203c3881e5f3f1c75904e8863dbde3b3bd9df7e1185c3229fb4fc1"
+          cdhash = "e0de7f55a2684da7507c3a862247480bd05c39bd"
+          entitlement = "AR5SFJC432.com.example.MangaReader12.AR5SFJC432"
+          expected_members = {
+              ipa.name, checksum.name,
+              "WebReader-Build70-source-provenance.json",
+              "WebReader-Build70-private-qa-audit.json",
+              "WebReader-Build70-second-preflight.json",
+              "WebReader-Build70-packager-summary.json",
+          }
+          assert {p.name for p in root.iterdir()} == expected_members
+          assert not ipa.is_symlink() and stat.S_ISREG(ipa.stat().st_mode)
+          payload = ipa.read_bytes()
+          assert len(payload) == 17845463
+          assert hashlib.sha256(payload).hexdigest() == sha
+          assert checksum.read_text("ascii") == sha+"  "+ipa.name+"\n"
+          with zipfile.ZipFile(BytesIO(payload)) as z:
+              info=plistlib.loads(z.read("Payload/MangaReader12.app/Info.plist"))
+              assert info["CFBundleVersion"] == "70"
+              assert info["CFBundleIdentifier"] == "com.example.MangaReader12"
+              assert info["MinimumOSVersion"] == "12.0"
+          def load(name):
+              return json.loads((root/name).read_text("utf-8"))
+          native = json.loads((Path(os.environ["RUNNER_TEMP"])/"wr70-dw-native.json").read_text())
+          first = load("WebReader-Build70-private-qa-audit.json")
+          second = load("WebReader-Build70-second-preflight.json")
+          provenance = load("WebReader-Build70-source-provenance.json")
+          package = load("WebReader-Build70-packager-summary.json")
+          fields = {
+              "build":70, "bundleID":"com.example.MangaReader12",
+              "minimumIOS":"12.0", "actualExecutableMinimumIOS":"12.0",
+              "binaryArchitecture":"arm64", "ipaSHA256":sha,
+              "ipaSize":17845463, "verifiedApplicationIdentifier":entitlement,
+              "codeDirectoryCDHash":cdhash,
+              "adHocSignatureIntegrityVerified":True,
+              "installedApplicationIdentifierMatch":True,
+              "publisherAuthenticatedByCodeSignature":False,
+              "deviceInstallationCompatibilityProven":False,
+              "installationAuthorized":False,
+              "installationPerformed":False,
+          }
+          for who, report in (("native",native),("first",first),("second",second)):
+              for key,val in fields.items():
+                  assert type(report.get(key)) is type(val) and report[key] == val,(who,key)
+          assert provenance["githubActionsRun"] == 42705903886
+          assert provenance["sourceCommit"] == "ae931abb725977a417a1fcb20b79c82af825dd55"
+          assert provenance["sha256"] == sha
+          assert provenance["ipaBytes"] == 17845463
+          assert provenance["installationAuthorized"] is False
+          assert provenance["installationPerformed"] is False
+          assert provenance["deviceInstallTested"] is False
+          assert package["sha256"] == sha
+          assert package["sourceCommit"] == provenance["sourceCommit"]
+          assert package["publishedAsGitHubRelease"] is False
+          claim = plistlib.loads(Path("ci/chimera_webreader_qa.entitlements").read_bytes())
+          assert claim == {"application-identifier":entitlement}
+          print("PASS DW: archived Build70 original SHA256, native code seal, CDHash and historical entitlement match")
+          print("NOT_PROVEN: current iPad bundle identity, publisher, offline retention or installation admission")
+          PY

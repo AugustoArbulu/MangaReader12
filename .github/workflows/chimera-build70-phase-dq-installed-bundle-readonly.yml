@@ -1,0 +1,60 @@
+name: WebReader Build70 Phase DQ Local Installed Bundle Readonly Preflight (no install)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dq_installed_bundle_readonly.sh'
+      - 'ci/test_build70_dq_installed_bundle_readonly.py'
+      - 'ci/build70_dq_installed_bundle_report.py'
+      - 'ci/test_build70_dq_installed_bundle_report.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DQ_PHYSICAL_BUNDLE_IDENTITY_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-dq-installed-bundle-readonly.yml'
+  workflow_dispatch:
+
+concurrency:
+  # PR-only: drop superseded commits, keep latest HEAD and its macOS gate.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  local-installed-bundle-probe-source-contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate POSIX read-only probe syntax and fail-closed paths
+        run: |
+          /bin/sh -n ci/build70_dq_installed_bundle_readonly.sh
+          python -m unittest discover -s ci -p 'test_build70_dq_installed_bundle_readonly.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dq_installed_bundle_report.py' -v
+      - name: Keep no-provider and no-install hard stops
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path("ci/build70_dq_installed_bundle_readonly.sh").read_text()
+          assert 'INSTALLATION_AUTHORIZED=NO' in src
+          assert 'CODE_SIGNATURE_CRYPTOGRAPHIC_VALIDITY_PROVEN=NO' in src
+          assert 'CURRENT_DEVICE_PROVEN_BY_SHELL_TEXT=NO' in src
+          parser=Path('ci/build70_dq_installed_bundle_report.py').read_text()
+          assert 'inputShellReportCryptographicallyAuthenticated' in parser
+          assert 'installationAuthorized' in parser
+          assert 'installedBuild70IndependentEntitlementAttested' in parser
+          assert 'ldid -S' not in src
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DQ: optional read-only installed-app observation; no distribution or installation')
+          PY

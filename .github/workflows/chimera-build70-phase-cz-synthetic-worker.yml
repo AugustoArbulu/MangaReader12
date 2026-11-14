@@ -1,0 +1,92 @@
+name: WebReader Build70 Phase CZ Synthetic Worker Integration (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_cz_synthetic_worker_runtime.py'
+      - 'ci/test_build70_cz_synthetic_worker_runtime.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CZ_WORKER_INTEGRATION_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_cz_synthetic_worker_runtime.py'
+      - 'ci/test_build70_cz_synthetic_worker_runtime.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_CZ_WORKER_INTEGRATION_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-cz-synthetic-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-worker-host:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Host-only worker thread integration, cancellation, flood and crash gap
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cz_synthetic_worker_runtime.py' -v
+      - name: Verify CY base watchdog remains compatible
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_cy_supervisor.py' -v
+      - name: Verify production installation and trust switches remain disabled
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_cz_synthetic_worker_runtime.py').read_text()
+          t = Path('ci/test_build70_cz_synthetic_worker_runtime.py').read_text()
+          assert 'def offer_untrusted(self, packet: bytes)' in src
+          assert 'def reap_finished_worker(self):' in src
+          assert 'w.thread.join(timeout=2.0)' in src
+          assert 'def reconcile_quarantine_host_only(self):' in src
+          assert 'def test_recovered_instance_is_not_durable_without_external_state' in t
+          assert 'range(256)' in t
+          for forbidden in ('subprocess', 'urllib', 'requests.', 'socket.',
+                            'posix_spawn', 'appinst(', 'installApplication:'):
+              assert forbidden not in src, forbidden
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS CZ: synthetic worker only; real installer remains permanently disabled')
+          PY
+
+  ios12-base-policy-compile-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode build CY+C X native policy objects for iOS12 arm64
+        shell: bash
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          for file in ci/build70_cx_bounded_scheduler.c ci/build70_cy_supervisor.c; do
+            name="$(basename "$file" .c)"
+            xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+              -arch arm64 -miphoneos-version-min=12.0 \
+              -c "$file" -o "$RUNNER_TEMP/${name}.o"
+            file "$RUNNER_TEMP/${name}.o"
+          done
+          xcrun nm -u "$RUNNER_TEMP/build70_cy_supervisor.o" > "$RUNNER_TEMP/cz_undefined.txt"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          s = (Path(os.environ['RUNNER_TEMP']) / 'cz_undefined.txt').read_text()
+          for forbidden in ('_objc_msgSend', '_posix_spawn', '_fork', '_execve',
+                            '_system', '_socket', '_connect', '_open', '_dlopen'):
+              assert forbidden not in s, forbidden
+          print('PASS CZ: iOS12 ARM64 native policy objects; NO executable, IPA, DEB, or appinst')
+          PY

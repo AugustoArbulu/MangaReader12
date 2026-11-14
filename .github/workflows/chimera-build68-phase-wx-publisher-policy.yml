@@ -1,0 +1,76 @@
+name: WebReader Build68 Phases W/X — Publisher Trust and Key Lifecycle QA
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'ci/test_native_webreader_signed_release_trust_gate.py'
+      - 'ci/build68_release_key_lifecycle_review.py'
+      - 'ci/test_build68_release_key_lifecycle_review.py'
+      - 'ci/test_build68_phase_w_production_publisher_policy.py'
+      - '.github/workflows/chimera-build68-phase-wx-publisher-policy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build68-wx-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-key-lifecycle-and-default-deny:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner trust not configurable through remote payload
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_phase_w_production_publisher_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_release_key_lifecycle_review.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_rotation_lab.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_pinning_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_tu_readonly_contract.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_chimera_readiness_matrix.py' -v
+          python3 ci/test_app_updates_screen.py
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: no production signing key, no automatic install or trust enrollment'
+
+  native-default-deny-and-ios12:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS12-compatible Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Test genuine Swift Security.framework, ephemeral P-256 key and production denial
+        run: |
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_build68_release_public_key_handoff.py
+          python3 ci/test_native_webreader_signed_ipa_joint_audit.py
+          python3 ci/test_native_webreader_update_security_snapshot.py
+      - name: Prepare legacy iOS12 app assets
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile full iOS12 Release with trust root disabled, no IPA
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-wx" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Verify binary identity and no installer
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-wx/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: no IPA, no root helper, no installation'

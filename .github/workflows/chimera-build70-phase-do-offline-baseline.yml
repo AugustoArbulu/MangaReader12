@@ -1,0 +1,86 @@
+name: WebReader Build70 Phase DO Before-Upgrade Offline Baseline (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'ci/test_build70_do_preupgrade_baseline_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DO_BEFORE_UPGRADE_OFFLINE_BASELINE_2026-11-11.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_do_preupgrade_baseline_audit.py'
+      - 'ci/test_build70_do_preupgrade_baseline_audit.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DO_BEFORE_UPGRADE_OFFLINE_BASELINE_2026-11-11.md'
+      - '.github/workflows/chimera-build70-phase-do-offline-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-baseline-parsing:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cross-check canonical Build70 SQLite and 64-chapter offline batch report protocol
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_do_preupgrade_baseline_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dj_continuity_report_compare.py' -v
+      - name: Verify protocol labels are identical to actual Build70 Swift diagnostics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "ci")
+          from build70_do_preupgrade_baseline_audit import (
+              MAX_BATCH, OFFLINE_HEADER, OFFLINE_INTRO,
+              FIELDS, OFFLINE_FOOTER
+          )
+          from build70_dj_continuity_report_compare import COUNT_LABELS
+          swift = Path("MangaReader12/Core/WebReaderOfflinePreservationAudit.swift").read_text()
+          ui = Path("MangaReader12/UI/WebReaderAppUpdatesViewController.swift").read_text()
+          assert MAX_BATCH == 64 and len(FIELDS) == 10
+          assert 'private static let sampleLimit = 64' in swift
+          for value in (OFFLINE_HEADER, *OFFLINE_INTRO[2:], *FIELDS, *OFFLINE_FOOTER):
+              assert value in swift, repr(value)
+          assert 'sampleOffset: requestedOffset' in ui
+          assert 'self.offlineSampleOffset = audit.nextOffset' in ui
+          assert 'WebReaderUpgradeContinuitySnapshot.report(' in ui
+          assert len(COUNT_LABELS) == 9
+          print("PASS DO: existing Build70 app emits all 10 offline counters and 9 SQLite counts")
+          PY
+      - name: Fail-closed publisher, helper and installer gates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_do_preupgrade_baseline_audit.py').read_text()
+          for token in (
+              '"offlinePagePayloadBytesRead": False',
+              '"physicalReadingWithoutWiFiVerified": False',
+              '"physicalBuild70AppIdentifierAttested": False',
+              '"publisherAuthenticated": False',
+              '"ownerQADistributionApprovalRecorded": False',
+              '"readyToDistributeIPA": False',
+              '"installationAuthorized": False',
+              '"installationPerformed": False',
+          ):
+              assert token in src, token
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print("PASS DO: source static-only report; no publisher, offline decoding, IPA, consent or installation")
+          PY
