@@ -13,3 +13,12 @@ Data: 13/11/2026 · PR #90 Draft · após FG
 `ci/test_build70_fh_strict_readonly_sqlite.py` compila o núcleo real `SQLiteDatabase` + método SQL extraído contra SQLite/Swift host em fixture descartável, injeta tentativas de DELETE negadas, versão futura, mais de 5000 capítulos, estado inconsistente e banco inexistente. Contratos adicionais verificam que o manager não chama listagem migratória. O workflow FH executa Ubuntu/macOS e compila o app inteiro sem assinatura no macOS, no destino generic iOS. Essa compilação produz apenas objeto .app temporário no runner, **não gera IPA ou release**, e não autoriza instalação.
 
 O CI de FH só pode ser declarado aprovado após inspeção dos jobs. O código EV–FD permanece em `ci/labs/webreader-ev-fd` e sem uso live; `main`, iPad, biblioteca/offline, instalação, updater e Build70 permanecem intactos.
+
+
+## CI final verificado em 14/11/2026 UTC
+O [workflow FH #43534359409](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43534359409) terminou **SUCCESS, 3/3 jobs**:
+- `strict-readonly (ubuntu-24.04)`: SUCCESS, teste do código Swift real da conexão SQLite read-only + validações de regressão FF/FG;
+- `strict-readonly (macos-15)`: SUCCESS, mesma suíte no Darwin/macOS;
+- `ios12-unsigned-compile`: SUCCESS, compilação **completa** do target `MangaReader12` para dispositivo iOS sem assinatura, IPA, upload ou instalação, após preparação de ícones e libwebp no runner.
+
+O sucesso do xcodebuild confirma compatibilidade de compilação; **não** valida leitura offline real no iPad, atomicidade entre SQLite e filesystem nem autorização para apagar. `main` permaneceu `1283a0614acf3a267e3daddcdafc6c0d0cf335a7`, o PR #90 permanece Draft.
