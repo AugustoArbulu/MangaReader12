@@ -1,0 +1,57 @@
+name: WebReader Build70 FJ - paired FD and SQLite evidence (lab only)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/build70_fj_paired_readonly_reconciliation.py'
+      - 'ci/test_build70_fj_paired_readonly_reconciliation.py'
+      - 'ci/build70_fi_readonly_shadow_audit.py'
+      - 'ci/labs/webreader-ev-fd/**'
+      - '.github/workflows/chimera-build70-phase-fj-paired-readonly-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build70-fj-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paired-evidence-lab:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm source, copy and lab are isolated from installed app
+        shell: bash
+        run: |
+          test -f ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+      - name: FJ paired SQLite + native FD checks with adversarial races
+        run: python -m unittest discover -s ci -p 'test_build70_fj_paired_readonly_reconciliation.py' -v
+      - name: FI metadata-only WAL journal regression
+        run: python -m unittest discover -s ci -p 'test_build70_fi_readonly_shadow_audit.py' -v
+      - name: EV-FD native Swift and Python regression
+        working-directory: ci/labs/webreader-ev-fd
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: Apple iOS 12 standalone FD typecheck (no build or IPA)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+      - name: Verify no source files changed by tests
+        run: git diff --exit-code -- .
