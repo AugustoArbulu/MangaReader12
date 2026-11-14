@@ -90,6 +90,41 @@ case .updateAvailable(let update):
           "v2 GitHub metadata must never masquerade as signed publisher")
 default: fatalError("v2 ad-hoc metadata rejected")
 }
+// Personal updater readiness: actual installed Build70 baseline.
+// This is synthetic GitHub JSON only, not a produced or approved Build71 IPA.
+func installed70Candidate(_ build: Int) -> [String: Any] {
+    var release = fixture("build" + String(build))
+    release["assets"] = [v2Asset(build)]
+    return release
+}
+switch parse(installed70Candidate(71), installedBuild:70) {
+case .updateAvailable(let update):
+    check(update.build == 71, "Build 70 must recognize only a newer Build")
+    check(update.ipaURL.absoluteString ==
+          "https://github.com/AugustoArbulu/MangaReader12/releases/download/" +
+          "build71/WebReader-Build71-iOS12-adhoc.ipa",
+          "Build71 candidate must be bound to exact tag and ad-hoc asset")
+    check(update.provenance == .publicGitHubRelease,
+          "GitHub metadata must not confer independently signed trust")
+default: fatalError("synthetic Build70 to Build71 update should be detected")
+}
+switch parse(installed70Candidate(70), installedBuild:70) {
+case .upToDate: break
+default: fatalError("same Build70 is not an update")
+}
+switch parse(installed70Candidate(69), installedBuild:70) {
+case .upToDate: break
+default: fatalError("older Build69 is not an update")
+}
+var candidateWithoutDigest = installed70Candidate(71)
+var candidateAsset = (candidateWithoutDigest["assets"] as! [[String: Any]])[0]
+candidateAsset["digest"] = NSNull()
+candidateWithoutDigest["assets"] = [candidateAsset]
+switch parse(candidateWithoutDigest, installedBuild:70) {
+case .failed(.invalidGitHubRelease): break
+default: fatalError("synthetic newer Build with no digest must be rejected")
+}
+
 var bothFormats = fixture()
 bothFormats["assets"] = (fixture()["assets"] as! [[String: Any]]) + [v2Asset()]
 shouldReject(bothFormats, "ambiguous legacy plus ad-hoc IPA")
