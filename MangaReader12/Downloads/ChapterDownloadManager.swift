@@ -251,6 +251,65 @@ enum WebReaderOfflineDeletionPreflight {
 }
 // END BUILD70_ER_DELETION_PREFLIGHT
 
+// BEGIN BUILD70_FF_INERT_READONLY_DELETION_BRIDGE
+// FF: compile-time-off integration seam for the future copy-only audit.
+// This is not a deletion implementation. No UI, network, filesystem writes,
+// SQLite writes, or application installation are performed by this gate.
+// If somebody opts into the diagnostic mode prematurely, the existing
+// destructive routes fail closed rather than trusting a preliminary verdict.
+enum WebReaderOfflineDeletionV2ShadowGate {
+    static let diagnosticCopyPreviewEnabled = false
+
+    enum Preview: Equatable {
+        case requiresReview
+        case provisionalCopyOnly
+    }
+
+    static func rejectLegacyDestructionWhenPreviewEnabled() throws {
+        if diagnosticCopyPreviewEnabled {
+            throw ChapterDownloadError.unsafeOfflineDeletionContents
+        }
+    }
+
+    // Non-authoritative, read-only diagnostic. A provisional result is never
+    // permission to remove files, retire rows, or skip the FD snapshot gate.
+    static func previewForAudit(
+        record: DownloadListRecord,
+        allRecords: [DownloadListRecord],
+        directory: URL,
+        fileManager: FileManager = .default
+    ) -> Preview {
+        guard record.state == "completed",
+              allRecords.contains(where: {
+                  $0.sourceID == record.sourceID &&
+                  $0.sourceMangaID == record.sourceMangaID &&
+                  $0.sourceChapterID == record.sourceChapterID
+              }),
+              !WebReaderOfflineCanonicalOwnership.collides(
+                  sourceID: record.sourceID,
+                  mangaID: record.sourceMangaID,
+                  chapterID: record.sourceChapterID,
+                  recorded: allRecords
+              ) else { return .requiresReview }
+
+        // A plan can embed authorization headers or URL tokens. Checking only
+        // headers is insufficient; any plan makes a chapter non-copyable.
+        guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path),
+              !names.contains("_download-plan.json") else {
+            return .requiresReview
+        }
+        let verdict = WebReaderOfflineDeletionPreflight.inspect(
+            directory: directory,
+            sourceID: record.sourceID,
+            mangaID: record.sourceMangaID,
+            chapterID: record.sourceChapterID,
+            fileManager: fileManager
+        )
+        return verdict == .allowed ? .provisionalCopyOnly : .requiresReview
+    }
+}
+// END BUILD70_FF_INERT_READONLY_DELETION_BRIDGE
+
 // BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
 // Normal chapter/batch downloads must preserve any preexisting local data.
 // The Downloads retry flow supplies the explicit user-confirmed override.
@@ -1100,6 +1159,7 @@ final class ChapterDownloadManager {
         chapterID: String
     ) throws {
         try worker.sync {
+            try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
             let key = jobKey(sourceID: sourceID, mangaID: mangaID, chapterID: chapterID)
             if runningKey == key {
                 throw ChapterDownloadError.downloadInProgress
@@ -1165,6 +1225,7 @@ final class ChapterDownloadManager {
     // Every known chapter is reviewed BEFORE the first deletion.
     func removeAllConfirmed() throws -> Int {
         return try worker.sync {
+            try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
             guard runningKey == nil, pending.isEmpty else {
                 throw ChapterDownloadError.downloadInProgress
             }

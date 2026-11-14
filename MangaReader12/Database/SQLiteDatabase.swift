@@ -2284,6 +2284,7 @@ final class DownloadRepository {
     }
 
     func removeMissingFiles(fileManager: FileManager = .default) throws -> Int {
+        try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
         let records = try listDownloads()
         guard let support = fileManager.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
