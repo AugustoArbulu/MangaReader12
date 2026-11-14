@@ -72,6 +72,63 @@ final class SQLiteDatabase {
         }
     }
 
+
+    // BEGIN BUILD70_FH_STRICT_READONLY_SQLITE
+    // Independent READONLY handle: no openAndMigrate, SQLITE_OPEN_CREATE,
+    // journal-mode changes, or writes to the library schema. SQLite may
+    // require OS-managed WAL/-shm coordination; this is a logical read-only
+    // guarantee, NOT a byte-for-byte no-filesystem-write attestation.
+    func withStrictReadOnlyConnection<T>(
+        _ read: (OpaquePointer) throws -> T
+    ) throws -> T {
+        var raw: OpaquePointer?
+        let result = sqlite3_open_v2(
+            path, &raw, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil
+        )
+        guard result == SQLITE_OK, let connection = raw else {
+            if let raw = raw { _ = sqlite3_close(raw) }
+            throw SQLiteDatabaseError.openFailed(code: result)
+        }
+        defer { _ = sqlite3_close(connection) }
+
+        guard sqlite3_db_readonly(connection, "main") == 1 else {
+            throw SQLiteDatabaseError.connectionUnavailable
+        }
+        guard sqlite3_exec(connection, "PRAGMA query_only = ON;", nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(connection, "BEGIN TRANSACTION;", nil, nil, nil) == SQLITE_OK else {
+            throw sqliteError(connection)
+        }
+        var committed = false
+        defer {
+            if !committed {
+                _ = sqlite3_exec(connection, "ROLLBACK;", nil, nil, nil)
+            }
+        }
+
+        let found: Int
+        do {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                connection, "PRAGMA user_version;", -1, &statement, nil
+            ) == SQLITE_OK else { throw sqliteError(connection) }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                throw sqliteError(connection)
+            }
+            found = Int(sqlite3_column_int(statement, 0))
+        }
+        guard found == Self.currentSchemaVersion else {
+            throw SQLiteDatabaseError.auditRequiresSchemaV1(found)
+        }
+        let value = try read(connection)
+        guard sqlite3_exec(connection, "COMMIT;", nil, nil, nil) == SQLITE_OK else {
+            throw sqliteError(connection)
+        }
+        committed = true
+        return value
+    }
+    // END BUILD70_FH_STRICT_READONLY_SQLITE
+
     func close() {
         queue.sync {
             if let handle = handle {
@@ -275,6 +332,8 @@ enum SQLiteDatabaseError: Error, LocalizedError {
     case applicationSupportUnavailable
     case connectionUnavailable
     case unsupportedSchemaVersion(Int)
+    case auditRequiresSchemaV1(Int)
+    case auditRecordLimitExceeded
     case openFailed(code: Int32)
     case executionFailed(code: Int32, message: String)
 
@@ -286,6 +345,10 @@ enum SQLiteDatabaseError: Error, LocalizedError {
             return "SQLite connection is unavailable."
         case .unsupportedSchemaVersion(let version):
             return "Library schema version \(version) is newer than this WebReader build. The database was not migrated. Do not restore or downgrade automatically."
+        case .auditRequiresSchemaV1(let version):
+            return "Read-only offline audit requires schema v1; found schema \(version). No migration was performed."
+        case .auditRecordLimitExceeded:
+            return "Read-only offline audit exceeds the maximum number of records."
         case .openFailed(let code):
             return "Could not open SQLite database (code \(code))."
         case .executionFailed(let code, let message):
@@ -2204,6 +2267,63 @@ final class DownloadRepository {
             }
         }
     }
+
+    // BEGIN BUILD70_FH_READONLY_DOWNLOAD_ROWS
+    // Snapshot for the inert FG preview API only. Never call
+    // openAndMigrate() or the normal listDownloads() from this method.
+    // Cap enforced BEFORE constructing an unbounded array.
+    func listDownloadsForAuditReadOnly() throws -> [DownloadListRecord] {
+        return try database.withStrictReadOnlyConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.source_id, m.source_manga_id, m.title, m.cover,
+                    c.source_chapter_id, c.name,
+                    CASE WHEN d.state = 'completed' AND c.downloaded <> 1
+                         THEN 'inconsistent-completed' ELSE d.state END,
+                    d.progress, d.local_path, d.updated_at
+                FROM downloads d
+                JOIN chapters c ON c.internal_id = d.chapter_id
+                JOIN manga m ON m.internal_id = c.manga_id
+                ORDER BY d.updated_at DESC, m.title COLLATE NOCASE ASC
+                LIMIT 5001;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+            var records: [DownloadListRecord] = []
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+                guard step == SQLITE_ROW,
+                      let sourceID = columnText(statement, index: 0),
+                      let sourceMangaID = columnText(statement, index: 1),
+                      let mangaTitle = columnText(statement, index: 2),
+                      let sourceChapterID = columnText(statement, index: 4),
+                      let chapterName = columnText(statement, index: 5),
+                      let state = columnText(statement, index: 6) else {
+                    throw sqliteError(handle)
+                }
+                guard records.count < 5_000 else {
+                    throw SQLiteDatabaseError.auditRecordLimitExceeded
+                }
+                records.append(DownloadListRecord(
+                    sourceID: sourceID,
+                    sourceMangaID: sourceMangaID,
+                    mangaTitle: mangaTitle,
+                    cover: columnText(statement, index: 3),
+                    sourceChapterID: sourceChapterID,
+                    chapterName: chapterName,
+                    state: state,
+                    progress: sqlite3_column_double(statement, 7),
+                    localPath: columnText(statement, index: 8),
+                    updatedAt: sqlite3_column_double(statement, 9)
+                ))
+            }
+            return records
+        }
+    }
+    // END BUILD70_FH_READONLY_DOWNLOAD_ROWS
 
     func listDownloads() throws -> [DownloadListRecord] {
         try database.openAndMigrate()

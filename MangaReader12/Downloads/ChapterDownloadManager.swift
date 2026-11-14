@@ -1168,6 +1168,18 @@ final class ChapterDownloadManager {
         }
     }
 
+    // BEGIN BUILD70_FH_READONLY_SQLITE_TO_PREVIEW
+    // One pass through a dedicated READONLY SQLite connection, followed by
+    // the FG provisional worker-serialized preflight. Not a locked or
+    // durable FS+SQLite transaction. Callers must never use it as deletion
+    // authority, and the method has intentionally NO production/UI caller.
+    func previewOfflineDeletionCandidatesFromSQLiteReadOnly()
+        throws -> [WebReaderOfflineDeletionV2AuditItem] {
+        let rows = try repository.listDownloadsForAuditReadOnly()
+        return try previewOfflineDeletionCandidates(from: rows)
+    }
+    // END BUILD70_FH_READONLY_SQLITE_TO_PREVIEW
+
     // BEGIN BUILD70_FG_READONLY_MANAGER_PREVIEW
     // Accepts supplied metadata only: does not open SQLite, initialize the
     // shared manager, change the download queue, or modify file contents.
