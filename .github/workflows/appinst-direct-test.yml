@@ -33,7 +33,7 @@ jobs:
       - name: Build ONE independent iOS12 IPA with safe bundled-spawn first and optional appinst help
         run: bash ci/build_appinst_direct_probe.sh
 
-      - name: Audit isolated signed IPA, bundled child, iOS12 target and opt-in help command
+      - name: Audit signed entitlement, safe read-only metadata, local spawn and opt-in help
         run: python3 ci/test_appinst_direct_probe.py
 
       - name: Upload independent iOS12 diagnostic IPA (not a WebReader update)

@@ -30,6 +30,28 @@ static NSString *WRDescribeError(int error) {
  * appinst, system installation services, IPAs or the WebReader library.
  * Success does NOT establish that /usr/bin/appinst can be launched.
  */
+/* Read-only metadata observation. Advisory only: access(X_OK) is NOT
+ * authority to spawn appinst and must never be promoted to install consent.
+ * No process launch, IPA read, filesystem mutation or network request.
+ */
+static void WRAppendAppinstMetadataOnly(NSMutableString *report) {
+    const char *tool = "/usr/bin/appinst";
+    struct stat state;
+    if (lstat(tool, &state) != 0) {
+        [report appendFormat:@"APPINST_META_LSTAT=ERRNO_%d\n", errno];
+    } else if (S_ISREG(state.st_mode)) {
+        [report appendString:@"APPINST_META_LSTAT=REGULAR\n"];
+    } else {
+        [report appendString:@"APPINST_META_LSTAT=NOT_REGULAR\n"];
+    }
+    if (access(tool, X_OK) == 0) {
+        [report appendString:@"APPINST_META_XOK=YES\n"];
+    } else {
+        [report appendFormat:@"APPINST_META_XOK=ERRNO_%d\n", errno];
+    }
+    [report appendString:@"APPINST_META_ADVISORY=YES\n"];
+}
+
 static NSString *WRRunBundledChildProbe(void) {
     NSString *bundleID = [NSBundle mainBundle].bundleIdentifier;
     NSMutableString *report = [NSMutableString stringWithFormat:
@@ -41,6 +63,7 @@ static NSString *WRRunBundledChildProbe(void) {
         [report appendString:@"RESULTADO: identidade do teste ou UID inválido.\n"];
         return report;
     }
+    WRAppendAppinstMetadataOnly(report);
     NSString *path = [[NSBundle mainBundle] pathForResource:@"WRSpawnChild" ofType:nil];
     if (path == nil) {
         [report appendString:@"RESULTADO: child de teste ausente.\n"];

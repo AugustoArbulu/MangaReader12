@@ -30,3 +30,8 @@ Ambos exigem o bundle ID independente; EUID root é recusado. O pacote agora é 
 **Não foi executado** no iPad. O próximo dado necessário é a saída de `Testar processo local (sem appinst)`, copiada do aplicativo de diagnóstico. Não usar o resultado para autorizar instalação. Nenhum AppInst real foi executado na CI; somente `codesign`, compilação e ZIP.
 
 Observação: o teste `posix_spawn` de `WRSpawnChild` demonstra apenas uma classe de execução sob a assinatura do arquivo e o sandbox do diagnóstico. Não substitui um teste de permissão para execução de `/usr/bin/appinst` nem o requisito de conferir o pacote antes da instalação.
+
+## Incremento do diagnóstico (14/11/2026)
+O primeiro botão também registra `APPINST_META_LSTAT`, `APPINST_META_XOK` e `APPINST_META_ADVISORY=YES`. Ele chama **somente** `lstat` e `access(X_OK)` em `/usr/bin/appinst` — **não executa** o comando; a sandbox pode ocultar esses dados, então `ERRNO` não prova que `posix_spawn` seria impossível. A consulta é incluída na mesma ação do child local, para evitar solicitar uma execução desnecessária de `appinst --help`.
+
+O empacotamento de diagnóstico agora **confere o entitlement efetivamente gravado na assinatura** (`application-identifier=WRTEST0001.com.example.WebReaderAppinstDirectProbe`) antes de criar a IPA, além de validar as duas assinaturas ad hoc com `codesign --verify`. Identidade sintética específica do app de testes, sem vínculo com a Build70. O CI reexecuta os contratos de primeiro botão sem AppInst e audita a IPA assinada. O resultado de CI não demonstra instalação física nem permissões no iPad.

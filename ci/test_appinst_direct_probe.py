@@ -49,6 +49,25 @@ def main():
     source = SOURCE.read_text()
     assert '"/usr/bin/appinst"' in source
     assert 'WRRunBundledChildProbe' in source
+    # The first button only checks metadata; it must never execute appinst.
+    first_probe = source.split("static NSString *WRRunBundledChildProbe(void) {", 1)[1].split(
+        "static NSString *WRRunHelpProbe(void) {", 1
+    )[0]
+    metadata = source.split("static void WRAppendAppinstMetadataOnly", 1)[1].split(
+        "static NSString *WRRunBundledChildProbe(void) {", 1
+    )[0]
+    assert "WRAppendAppinstMetadataOnly(report);" in first_probe
+    assert 'APPINST_META_LSTAT=REGULAR' in metadata
+    assert 'APPINST_META_XOK=YES' in metadata
+    assert 'APPINST_META_ADVISORY=YES' in metadata
+    assert "lstat(tool, &state)" in metadata and "access(tool, X_OK)" in metadata
+    for forbidden in ("posix_spawn(", "fork(", "system(", "execve(", "installApplication:", "unlink(", "remove("):
+        assert forbidden not in metadata, forbidden
+    assert '"/usr/bin/appinst"' not in first_probe
+    assert '"--help"' not in first_probe
+    assert first_probe.count("posix_spawn(") == 1
+    assert "pathForResource:@\"WRSpawnChild\"" in first_probe
+    assert "APPINST_EXECUTADO=NAO | INSTALACAO=NAO" in first_probe
     assert 'SPAWN_LOCAL=OK' in source
     assert 'APPINST_EXECUTADO=NAO | INSTALACAO=NAO' in source
     assert 'Testar processo local (sem appinst)' in source
@@ -72,6 +91,17 @@ def main():
     assert "WebReaderAppinstDirectProbe" in source
     assert 'WRSpawnChild' in Path("ci/build_appinst_direct_probe.sh").read_text()
     assert '--entitlements ci/appinst_direct_probe/qa.entitlements' in Path("ci/build_appinst_direct_probe.sh").read_text()
+    build_script = Path("ci/build_appinst_direct_probe.sh").read_text()
+    assert 'signed-entitlements.plist' in build_script
+    assert 'WRTEST0001.com.example.WebReaderAppinstDirectProbe' in build_script
+    assert 'if observed != expected:' in build_script
+    entitlements = plistlib.loads(
+        Path("ci/appinst_direct_probe/qa.entitlements").read_bytes()
+    )
+    assert entitlements == {
+        "application-identifier":
+            "WRTEST0001.com.example.WebReaderAppinstDirectProbe"
+    }
     child_source = Path("ci/appinst_direct_probe/spawn_child.c").read_text()
     for forbidden in ("appinst", "system(", "posix_spawn(", "open(", "unlink(", "remove(", "execve("):
         # "appinst" occurs only in a harmless comment ("installer"), never as an API.

@@ -58,6 +58,22 @@ PY
   --entitlements ci/appinst_direct_probe/qa.entitlements "$APP"
 /usr/bin/codesign --verify --verbose=2 "$APP"
 /usr/bin/codesign --verify --verbose=2 "$APP/WRSpawnChild"
+# Verify signed entitlements exactly: a previous unsigned QA IPA failed to
+# install due to missing application-identifier. This is a standalone test ID.
+/usr/bin/codesign -d --entitlements :- "$APP" > "$TMP/signed-entitlements.plist" 2>/dev/null
+python3 - "$TMP/signed-entitlements.plist" <<'PY'
+from pathlib import Path
+import plistlib
+import sys
+observed = plistlib.loads(Path(sys.argv[1]).read_bytes())
+expected = {
+    "application-identifier":
+        "WRTEST0001.com.example.WebReaderAppinstDirectProbe",
+}
+if observed != expected:
+    raise SystemExit("BLOCKED: diagnostic signing entitlement mismatch")
+print("PASS diagnostic signing application-identifier (not WebReader)")
+PY
 (
   cd "$TMP"
   /usr/bin/zip -qry "$OLDPWD/$OUTPUT" Payload
