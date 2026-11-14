@@ -1,0 +1,56 @@
+name: WebReader Build70 FK - late-window TOCTOU and SQLite ABA (synthetic only)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/build70_fk_late_window_evidence.py'
+      - 'ci/test_build70_fk_late_window_evidence.py'
+      - 'ci/build70_fj_paired_readonly_reconciliation.py'
+      - 'ci/labs/webreader-ev-fd/**'
+      - '.github/workflows/chimera-build70-phase-fk-late-window-adversarial.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wr-build70-fk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-no-delete:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assert no activation or installation authority
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let currentSchemaVersion = 1' MangaReader12/Database/SQLiteDatabase.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+      - name: Run 36 FK inode/basename/SQLite ABA adversarial tests
+        run: python -m unittest discover -s ci -p 'test_build70_fk_late_window_evidence.py' -v
+      - name: Run 30 FJ paired native+SQLite regressions
+        run: python -m unittest discover -s ci -p 'test_build70_fj_paired_readonly_reconciliation.py' -q
+      - name: Run FI 17 metadata and 2 native Swift WAL regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fi_readonly_shadow_audit.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fi_native_wal_snapshot.py' -q
+      - name: Run EV-FD entire 250-test synthetic suite
+        working-directory: ci/labs/webreader-ev-fd
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: macOS iOS12 standalone FD compile compatibility (no IPA)
+        if: runner.os == 'macOS'
+        run: |
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+      - name: Ensure no source changes by tests
+        run: git diff --exit-code -- .
