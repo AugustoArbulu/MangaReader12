@@ -605,7 +605,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             case .transport: return "Não foi possível acessar o manifesto HTTPS"
             case .unexpectedHTTPStatus(let status):
                 if status == 404 {
-                    return "GitHub Releases indisponível: sem release ou repositório privado"
+                    return "HTTP 404: nenhuma Release pública acessível; não há IPA para baixar"
                 }
                 return "Resposta HTTP " + String(status)
             case .unexpectedContentType:
