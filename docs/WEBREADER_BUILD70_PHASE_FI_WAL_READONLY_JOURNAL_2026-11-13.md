@@ -20,3 +20,16 @@ Data: 13/11/2026 (America/Sao_Paulo) · PR #90 Draft · branch `feat/chimera-upd
 - EV–FD permanece em `ci/labs/webreader-ev-fd`; FI lê suas fixtures sem alterá-las. A main, Build70 instalada, downloads reais, AppInst, trust SPKI e releases não são modificados.
 
 **Não considerar a fase aprovada em macOS ou a compilação iOS12 revalidada até os respectivos jobs do GitHub Actions terminarem com sucesso.**
+
+
+## Resultado CI confirmado — 14/11/2026 UTC
+
+O workflow [FI #43536661321](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43536661321) concluiu **SUCCESS, 3 de 3 jobs** no commit `7c11dfcbfe5692c974a2b56376f52756dd71a29f`:
+
+- `wal-native-readonly (ubuntu-24.04)`: SUCCESS — 17 testes sintéticos de journal/WAL, 2 testes nativos Swift/WAL e regressões FH/FG/FF.
+- `wal-native-readonly (macos-15)`: SUCCESS — mesma auditoria e regressões no Darwin/macOS.
+- `ios12-unsigned-recompile`: SUCCESS — compilação integral do aplicativo no destino `generic/platform=iOS`, sem assinatura, IPA, upload, release ou instalação.
+
+O programa `FISummary` **sempre** retorna `can_delete=false`, `can_restore=false`, `can_purge=false`. O journal não foi integrado no aplicativo; somente a inspeção sintética foi testada. O código real do app não foi modificado pela FI. Os resultados não autorizam operações destrutivas.
+
+A branch `main` foi confirmada em `1283a0614acf3a267e3daddcdafc6c0d0cf335a7` e o PR #90 continuou Draft na conferência do CI.
