@@ -31,3 +31,9 @@ Não existe uma transação ACID que abranja SQLite e filesystem simultaneamente
 O arquivo `ci/build70_fj_paired_readonly_reconciliation.py` é **somente de laboratório** e **não entra** no bundle iOS, tampouco adiciona novas telas, migração DB v2 ou chamadas nos três pontos de exclusão legados. O app continua com `SQLiteDatabase.currentSchemaVersion = 1`, `diagnosticCopyPreviewEnabled = false`, instalação desativada e código de journal v2 separado em `ci/labs/webreader-ev-fd`.
 
 Próxima prioridade: assegurar duração/identidade estável do armazenamento em APFS, planejamento de espaço e política explícita para arquivos parcialmente transferidos, antes de sequer projetar habilitar uma operação destrutiva. O PR continua Draft e nenhuma autorização de Build 71 ou de instalação foi dada.
+
+
+## CI concluído — 14/11/2026 UTC
+[Workflow FJ #43538184400](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43538184400): **SUCCESS em 2/2 jobs** (`ubuntu-24.04` e `macos-15`). Cada job executou os 30 testes FJ, os 17 testes FI de metadados e os 250 testes EV–FD; o job macOS ainda validou `swiftc -target arm64-apple-ios12.0 -typecheck` do verificador nativo. Estes testes continuam isolados em fixtures sintéticas. Não houve compilação integral do app nesta FJ, pois nenhuma fonte de produção foi alterada; a compilação integral anterior da FH [#43534359409](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43534359409) passou anteriormente. Nenhum IPA, assinatura, release ou instalação foi produzido pela FJ.
+
+Git SHA principal da FJ: `fa7d8b281f41fe47e2f9569a4d5c1a60e2babd8a`. A conclusão positiva é uma observação transitória e **NUNCA** autorização para deletar conteúdo.
