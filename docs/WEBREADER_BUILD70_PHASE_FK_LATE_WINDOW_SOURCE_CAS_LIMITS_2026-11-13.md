@@ -29,3 +29,11 @@ Campos de retorno: `observations`, `requires_review`, distribuição de motivos,
 A cadeia “FJ/FK passou → apagar pasta” é **inválida** por TOCTOU. Antes da exclusão física, é necessário desenhar uma operação que impeça retirar **outro** diretório sob troca concorrente (ou exigir lock/cooperatividade comprovada e tratar outras aplicações/Filza como escritor externo), com journal e rollback de crash, limites de espaço/durabilidade APFS/WAL, backup real verificado e teste iOS12 físico. Uma checagem `stat()` após `rename` é insuficiente: o deslocamento não autorizado já terá ocorrido.
 
 O código do app mantém `diagnosticCopyPreviewEnabled=false`, a versão do banco de produção é v1 e as três rotas reais ainda não usam o laboratório. Nenhuma alteração foi feita em `main`, dados do iPad, instalação ou release. A Build 71 permanece sem autorização.
+
+
+## Execução GitHub Actions — resultado final
+O [workflow FK #43539228012](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43539228012) terminou **SUCCESS, 2/2 jobs** em 14/11/2026 UTC:
+- `synthetic-no-delete (ubuntu-24.04)`: SUCCESS;
+- `synthetic-no-delete (macos-15)`: SUCCESS, incluindo typecheck do Swift nativo com `arm64-apple-ios12.0`.
+
+Cada job passou pelas suítes **FK 36 + FJ 30 + FI metadata 17 + FI Swift WAL 2 + EV–FD 250 = 335 testes**. O CI não gerou IPA nem executou exclusão ou restore. Não houve compilação do app completo nesta etapa (a última compilação integral havia passado no workflow FH). O resultado valida o laboratório, **não** o comportamento físico de APFS em um iPad com jailbreak.
