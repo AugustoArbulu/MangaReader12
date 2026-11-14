@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds ONE standalone, unsigned iOS12 test IPA. No app installation.
+# Builds ONE standalone, ad-hoc-signed diagnostic iOS12 IPA; no installation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ "$(uname -s)" != Darwin ]]; then

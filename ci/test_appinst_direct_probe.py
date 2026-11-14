@@ -43,7 +43,7 @@ def main():
         assert exe[:4] == b"\xcf\xfa\xed\xfe"
         assert struct.unpack_from("<I", exe, 4)[0] == 0x0100000C
         assert len(exe) > 2048
-        assert child[:4] == b"\\xcf\\xfa\\xed\\xfe"
+        assert child[:4] == b"\xcf\xfa\xed\xfe"
         assert struct.unpack_from("<I", child, 4)[0] == 0x0100000C
         assert len(child) > 2048
     source = SOURCE.read_text()

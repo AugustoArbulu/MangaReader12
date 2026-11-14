@@ -33,33 +33,33 @@ static NSString *WRDescribeError(int error) {
 static NSString *WRRunBundledChildProbe(void) {
     NSString *bundleID = [NSBundle mainBundle].bundleIdentifier;
     NSMutableString *report = [NSMutableString stringWithFormat:
-        @"WebReader • Spawn local sem appinst\\niOS: %@\\nUID: %u | EUID: %u\\n",
+        @"WebReader • Spawn local sem appinst\niOS: %@\nUID: %u | EUID: %u\n",
         [UIDevice currentDevice].systemVersion,
         (unsigned)getuid(), (unsigned)geteuid()];
     if (![bundleID isEqualToString:@"com.example.WebReaderAppinstDirectProbe"] ||
         geteuid() == 0) {
-        [report appendString:@"RESULTADO: identidade do teste ou UID inválido.\\n"];
+        [report appendString:@"RESULTADO: identidade do teste ou UID inválido.\n"];
         return report;
     }
     NSString *path = [[NSBundle mainBundle] pathForResource:@"WRSpawnChild" ofType:nil];
     if (path == nil) {
-        [report appendString:@"RESULTADO: child de teste ausente.\\n"];
+        [report appendString:@"RESULTADO: child de teste ausente.\n"];
         return report;
     }
     const char *binary = path.fileSystemRepresentation;
     struct stat item;
     if (lstat(binary, &item) != 0 || !S_ISREG(item.st_mode) ||
         (item.st_mode & 0111) == 0) {
-        [report appendString:@"RESULTADO: child inválido ou não executável.\\n"];
+        [report appendString:@"RESULTADO: child inválido ou não executável.\n"];
         return report;
     }
     char * const arguments[] = {(char *)binary, NULL};
     pid_t child = -1;
     int rc = posix_spawn(&child, binary, NULL, NULL, arguments, environ);
     if (rc != 0 || child <= 0) {
-        [report appendFormat:@"SPAWN_LOCAL=NEGADO (%@)\\n",
+        [report appendFormat:@"SPAWN_LOCAL=NEGADO (%@)\n",
              WRDescribeError(rc != 0 ? rc : ECHILD)];
-        [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+        [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
         return report;
     }
     int status = 0;
@@ -67,23 +67,23 @@ static NSString *WRRunBundledChildProbe(void) {
         pid_t finished = waitpid(child, &status, WNOHANG);
         if (finished == child) {
             BOOL success = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-            [report appendString:success ? @"SPAWN_LOCAL=OK\\n" :
-                                           @"SPAWN_LOCAL=FALHA_DO_CHILD\\n"];
-            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
-            [report appendString:@"Não prova acesso a /usr/bin/appinst.\\n"];
+            [report appendString:success ? @"SPAWN_LOCAL=OK\n" :
+                                           @"SPAWN_LOCAL=FALHA_DO_CHILD\n"];
+            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
+            [report appendString:@"Não prova acesso a /usr/bin/appinst.\n"];
             return report;
         }
         if (finished < 0) {
-            [report appendFormat:@"SPAWN_LOCAL=WAITPID_INDISPONIVEL (%@)\\n",
+            [report appendFormat:@"SPAWN_LOCAL=WAITPID_INDISPONIVEL (%@)\n",
                     WRDescribeError(errno)];
-            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+            [report appendString:@"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
             return report;
         }
         usleep(50000);
     }
     (void)kill(child, SIGTERM);
     (void)waitpid(child, &status, 0);
-    [report appendString:@"SPAWN_LOCAL=TIMEOUT\\nAPPINST_EXECUTADO=NAO | INSTALACAO=NAO\\n"];
+    [report appendString:@"SPAWN_LOCAL=TIMEOUT\nAPPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
     return report;
 }
 
