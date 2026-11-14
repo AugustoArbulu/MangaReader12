@@ -93,14 +93,14 @@ final class Manager {
         func decision(_ records:[DownloadListRecord])throws->[WebReaderOfflineDeletionV2ShadowGate.Preview] {
             return try m.previewOfflineDeletionCandidates(from:records).map{$0.decision}
         }
-        precondition(try decision([completed]) == [.provisionalCopyOnly])
-        precondition(try decision([paused]) == [.requiresReview])
-        precondition(try decision([completed,completed]) == [.requiresReview,.requiresReview])
+        precondition(try! decision([completed]) == [.provisionalCopyOnly])
+        precondition(try! decision([paused]) == [.requiresReview])
+        precondition(try! decision([completed,completed]) == [.requiresReview,.requiresReview])
         m.pending=["s-m-c"]
-        precondition(try decision([completed]) == [.requiresReview])
+        precondition(try! decision([completed]) == [.requiresReview])
         m.pending=[]
         try Data("private URL".utf8).write(to:root.appendingPathComponent("c/_download-plan.json"))
-        precondition(try decision([completed]) == [.requiresReview])
+        precondition(try! decision([completed]) == [.requiresReview])
         print("FG_READONLY_PREVIEW_PASS")
     }
 }
