@@ -1,0 +1,83 @@
+name: WebReader iOS12 manual share QA
+
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths: ['.github/workflows/webreader-share-ios12-qa.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-share-qa:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated share QA app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/share-qa" \
+            PRODUCT_BUNDLE_IDENTIFIER=com.example.MangaReader12.shareqa \
+            CURRENT_PROJECT_VERSION=1 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) WEBREADER_SHARE_QA' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Sign the isolated app and prepare the non-installable test file
+        run: |
+          mkdir -p "$RUNNER_TEMP/stage/Payload" share-qa-output
+          app="$RUNNER_TEMP/stage/Payload/MangaReader12.app"
+          ditto "$RUNNER_TEMP/share-qa/Build/Products/Release-iphoneos/MangaReader12.app" "$app"
+          python3 - "$app/Info.plist" "$RUNNER_TEMP/share-qa.entitlements" <<'PY'
+          import plistlib, sys
+          from pathlib import Path
+          info_path, entitlements = map(Path, sys.argv[1:])
+          info = plistlib.loads(info_path.read_bytes())
+          assert info["CFBundleIdentifier"] == "com.example.MangaReader12.shareqa"
+          assert info["CFBundleVersion"] == "1"
+          assert info["MinimumOSVersion"] == "12.0"
+          info["CFBundleDisplayName"] = "WebReader Teste IPA"
+          info["CFBundleName"] = "WebReader Teste IPA"
+          info.pop("UIBackgroundModes", None)
+          info_path.write_bytes(plistlib.dumps(info))
+          entitlements.write_bytes(plistlib.dumps({
+              "application-identifier": "WRTEST0001.com.example.MangaReader12.shareqa"
+          }))
+          PY
+          codesign --force --sign - --timestamp=none --entitlements "$RUNNER_TEMP/share-qa.entitlements" "$app"
+          codesign --verify --strict --verbose=2 "$app"
+          codesign -d --entitlements :- "$app" > "$RUNNER_TEMP/share-qa-signed.plist" 2>/dev/null
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import plistlib, sys
+          from pathlib import Path
+          base = Path(sys.argv[1])
+          assert plistlib.loads((base / "share-qa-signed.plist").read_bytes()) == {
+              "application-identifier": "WRTEST0001.com.example.MangaReader12.shareqa"
+          }
+          PY
+          xcrun otool -l "$app/MangaReader12" > "$RUNNER_TEMP/share-qa-load.txt"
+          grep -Eq 'minos 12\.0|version 12\.0' "$RUNNER_TEMP/share-qa-load.txt"
+          ! grep -q LC_DYLD_CHAINED_FIXUPS "$RUNNER_TEMP/share-qa-load.txt"
+          out="$PWD/share-qa-output"
+          (cd "$RUNNER_TEMP/stage" && zip -qry "$out/WebReader-ShareQA-iOS12.ipa" Payload)
+          PYTHONPATH=ci python3 - "$out" <<'PY'
+          import sys
+          from pathlib import Path
+          from test_validate_webreader_ipa import make_ipa
+          out = Path(sys.argv[1])
+          fixture, digest = make_ipa(out, build="67")
+          fixture.rename(out / "WebReader-Fixture-NAO-INSTALE.ipa")
+          (out / "SHA256-fixture.txt").write_text(digest + "\n", encoding="ascii")
+          PY
+          python3 ci/test_native_webreader_local_ipa_review.py
+          (cd "$out" && shasum -a 256 WebReader-ShareQA-iOS12.ipa > SHA256-app.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-ShareQA-iOS12
+          path: share-qa-output/
+          retention-days: 14
+          if-no-files-found: error

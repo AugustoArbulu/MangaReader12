@@ -11,8 +11,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             Bundle.main.bundleIdentifier == "com.example.MangaReader12.chimeraoneapp"
     }
 
+    private var isShareQA: Bool {
+        #if WEBREADER_SHARE_QA
+        return Bundle.main.bundleIdentifier == "com.example.MangaReader12.shareqa"
+        #else
+        return false
+        #endif
+    }
+
     private func makeRootController() -> UIViewController {
-        if isIPCProbe {
+        if isIPCProbe || isShareQA {
             return UINavigationController(
                 rootViewController: WebReaderAppUpdatesViewController()
             )
@@ -33,7 +41,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window = window
 
         ThemeManager.shared.apply(to: window.rootViewController)
-        if !isIPCProbe {
+        if !isIPCProbe && !isShareQA {
             BackgroundLibraryUpdateManager.shared.applyScheduling()
         }
         return true
@@ -43,7 +51,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        guard !isIPCProbe else {
+        guard !isIPCProbe, !isShareQA else {
             completionHandler(.noData)
             return
         }
