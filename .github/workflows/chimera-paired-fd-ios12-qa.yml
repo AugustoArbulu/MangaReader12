@@ -1,0 +1,29 @@
+name: WebReader iOS12 paired descriptor QA
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - '.github/workflows/chimera-paired-fd-ios12-qa.yml'
+      - 'ci/paired_fd_app/**'
+      - 'ci/build_webreader_paired_fd_ipas.sh'
+permissions:
+  contents: read
+jobs:
+  build-qa:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate isolated apps
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          bash ci/build_webreader_paired_fd_ipas.sh
+          shasum -a 256 -c WebReader-FD-Target-iOS12.ipa.sha256 WebReader-FD-Observer-iOS12.ipa.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-PairedFD-iOS12-QA
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-FD-*-iOS12.ipa
+            WebReader-FD-*-iOS12.ipa.sha256
