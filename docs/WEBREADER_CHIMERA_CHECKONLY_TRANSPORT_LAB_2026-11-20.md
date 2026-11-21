@@ -119,3 +119,24 @@ A CI verde ainda NÃO prova que o job launchd funciona no dispositivo físico, q
 ### Ajuste de teste para porta efêmera
 
 O comando probe usa porta fixa 38973 em binário iOS. Apenas no host, sob a macro WR_CX_HOST_TEST_PORT, os testes podem fornecer porta efêmera como terceiro argumento; o código exclui explicitamente esse recurso no target iPhone. O primeiro workflow encontrou um falso erro UNAVAILABLE porque o probe mirava porta zero no host, corrigido sem alterar o contrato iOS.
+
+
+### Entrega física CZ aprovada em CI — 21/11/2026 UTC
+
+GitHub Actions #44856655031: SUCCESS (4/4 jobs) no commit e6028c4253d3c9108f11caa257ee70707cc35095.
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44856655031
+
+- Linux: teste host de servidor CX e CLI probe, framing, rate limit, clientes maliciosos e regressão da política CW.
+- macOS: testes equivalentes, mais cliente Swift real da fase CY comunicando-se com serviço C real.
+- macOS/Xcode: compilação ARM64 iOS12 sem pacote do serviço.
+- macOS/Xcode: compilação do executável iOS12, assinatura ad hoc com o entitlement não-contêiner já usado pela Build61, montagem e auditoria de DEB. O auditor confere estrutura ar/tar, entitlements, scripts, SHA-256, diretórios pais, identidade launchd separada e ausência de símbolos de instalador.
+
+Artifact único de QA: WebReader-Chimera-CheckOnly-CX-iOS12-QA, ID 14687618052.
+- ZIP contém WebReader-Chimera-CheckOnly-CX-iOS12-QA.deb e respectivo .sha256.
+- Tamanho do DEB: 5.660 bytes.
+- SHA-256, verificado novamente após download e extração: dd3c56c53fcb26fd8cbd31d3d23e28fe41be79b28c0ec7c3719a84404d15bc8e.
+- dpkg-deb --contents confirma somente um binário de 70.800 bytes em /usr/local/libexec/webreader-checkonly, uma plist independente em /Library/LaunchDaemons/com.example.webreader.checkonlylab.plist e diretórios pais. Não contém WebReader.app, IPA, AppInst, biblioteca ou arquivos pessoais.
+
+Um primeiro teste host falhou porque o CLI probe não recebia a porta efêmera; foi corrigido permitindo porta dinâmica apenas sob WR_CX_HOST_TEST_PORT, proibido no alvo iOS. A execução final acima passou.
+
+**Status após CI:** arquivo DEB está disponível para teste opt-in, mas **NÃO foi instalado no iPad**; nenhum serviço foi executado no dispositivo, nenhuma IPA foi instalada nem atualização de WebReader aplicada. A autorização do proprietário ainda é necessária para instalar o DEB e rodar a QA física. O pacote não substitui a Build61 PING nem habilita instalação automática.
