@@ -170,3 +170,12 @@ GitHub Actions `#44859883589` **SUCCESS**: testes com Swift nativo no macOS, reg
 **Próximo gate:** instalação voluntária **apenas** da IPA DB4 usando Filza/AppSync, tocar uma vez em `Testar HTTPS GitHub`, copiar relatório (HTTP 403/404 ou domínio/código de erro de transporte). Não substituir Build70, nem remover DA/CX. Se sair 403 e aparecer `X-RateLimit-Remaining=0` ou `Retry-After`, fundamentar limitação de API; sem esses dados não inventar explicação. Independentemente do resultado, GitHub metadata não é uma chave editorial e não permite execução do AppInst.
 
 Travas intactas: `liveInstallationEnabled=false`, `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil`, PR #90 Draft, `main` imutável, sem Build71 ou Release. Antes de real instalação ainda faltam identidade editorial, custódia dos bytes consumidos, anti-replay/downgrade, consentimento e recuperação dos dados.
+
+
+## Gate físico DB4 aprovado — iOS 12 HTTPS GitHub API (21/11/2026 UTC)
+
+O usuário forneceu relatório completo da IPA `com.example.WebReaderDB4HTTPSProbe` no iPad iOS 12.5.8, UID/EUID 501/501. A aplicação executou GET HTTPS para `https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest`, resultando em `WR_DB4_HTTP_REACHED=YES`, `WR_DB4_HTTP_STATUS=404`, content-type JSON, rate limit core **58/60 restante**, `Retry-After=MISSING`, sem ler o corpo, sem baixar IPA e sem instalar. Relatório integral: `docs/WEBREADER_POST_DA_DB3_DB4_HTTPS_2026-11-21.md`.
+
+**DB4 aprovado fisicamente:** conectividade da sandbox iOS12 ao GitHub por HTTPS. A resposta 403 do runner macOS DB3 não foi repetida no iPad; sua causa permanece indeterminada. Em particular o iPad NÃO esgotou seu rate limit. O 404 **não** significa que WebReader está atualizado, só que `/releases/latest` não encontrou Release acessível.
+
+**Próximo gate de engenharia:** revisão/fortalecimento offline do fluxo de atualização assinada v2 já existente, providenciar de forma independente origem de chave editorial somente com aprovação do proprietário, e projetar preservação dos bytes consumidos pelo instalador e consentimento — sem nova rodada física de conectividade, sem atualizar o serviço CX instalado ou habilitar AppInst. Chaves/pin continuam nil, produção fail-closed, nenhuma Build71 ou Release, PR #90 Draft e main/Build70 preservadas.
