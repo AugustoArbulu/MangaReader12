@@ -70,11 +70,11 @@ static NSString *WRRunBundledChildProbe(void) {
     NSString *path = [[NSBundle mainBundle] pathForResource:@"WRSpawnChild" ofType:nil];
     if (path == nil) {
         [report appendString:@"CHILD_PATH=MISSING\n"
-                             "CHILD_LSTAT=NOT_CHECKED\n"
-                             "CHILD_MODE_EXEC=UNKNOWN\n"
-                             "CHILD_ACCESS_XOK=NOT_CHECKED\n"
-                             "SPAWN_LOCAL=PRECHECK_FAILED\n"
-                             "APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
+                             @"CHILD_LSTAT=NOT_CHECKED\n"
+                             @"CHILD_MODE_EXEC=UNKNOWN\n"
+                             @"CHILD_ACCESS_XOK=NOT_CHECKED\n"
+                             @"SPAWN_LOCAL=PRECHECK_FAILED\n"
+                             @"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
         return report;
     }
     [report appendString:@"CHILD_PATH=FOUND\n"];
@@ -103,7 +103,7 @@ static NSString *WRRunBundledChildProbe(void) {
     }
     if (!isRegular || !hasExecBits) {
         [report appendString:@"SPAWN_LOCAL=PRECHECK_FAILED\n"
-                             "APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
+                             @"APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
         return report;
     }
     char * const arguments[] = {(char *)binary, NULL};
