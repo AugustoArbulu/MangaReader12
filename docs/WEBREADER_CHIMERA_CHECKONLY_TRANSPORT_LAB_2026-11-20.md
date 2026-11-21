@@ -47,3 +47,15 @@ Um serviço futuro para instalar precisa escolher origem fixa por si próprio, v
 Antes de ação de instalação: teste em aplicativo descartável, assinatura do publisher provisionada fora do GitHub/chat, rollback e preservação de dados documentados. Não produzir outra IPA de diagnóstico de self-spawn sem hipótese nova.
 
 Hard stops permanecem: PR #90 Draft, main e Build70 intactas, liveInstallationEnabled=false, productionPublicKeyX963=nil, independentlyProvisionedSPKISHA256=nil, nenhum comando AppInst real, nenhuma Build71/Release/IPA/DEB publicada, sem modificar SQLite, biblioteca ou offline.
+
+## Resultado da primeira integração — 21/11/2026 UTC
+
+[GitHub Actions #44849062382](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44849062382): **SUCCESS, três jobs** no commit 0cba2fd0692549c7a1bf4adbd86df9723bce0c25.
+
+- Linux Ubuntu: host-checkonly-no-installer SUCCESS (servidor real e teste concorrente de clientes, fragmentos e comandos rejeitados; além de regressão do core CW).
+- macOS 15: host-checkonly-no-installer SUCCESS (mesmos testes independentes).
+- macOS 15 / Xcode 16.4: compile-ios12-arm64-no-package SUCCESS (Mach-O ARM64 iOS12, auditoria de símbolos sem AppInst, spawn ou instalador e verificação das travas existentes no projeto).
+
+Uma execução anterior falhou somente no macOS/iOS devido à visibilidade da constante INADDR_LOOPBACK sob os macros de cabeçalhos Darwin; corrigido ativando _DARWIN_C_SOURCE no código do serviço. O Linux já havia aprovado. O pipeline final passou sem precisar modificar componentes de produção.
+
+**Nenhum artefato IPA/DEB foi criado ou distribuído**: não existe pacote novo para o proprietário instalar nesta fase. A Build70 física e o PING Build61 FIX1 já instalados permanecem intactos.
