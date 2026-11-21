@@ -241,3 +241,9 @@ Para fechar o gate, o ensaio terá de ligar o hash conferido antes da transferê
 O proprietário reportou `WR_INSTALLD_VISIBILITY=PROCESS_LISTED` em NewTerm no iPad com Chimera. A consulta listou o comando exato `installd` na sessão usada. Continuam em aberto a visibilidade de descritores numerados de arquivos regulares e a capacidade de capturar a abertura da IPA durante uma instalação descartável.
 
 A próxima verificação de leitura usa `lsof -a -c installd -Fpcft` em repouso e conta apenas registros `tREG` de descritores numerados do comando exato `installd`. O resultado não divulga PID nem caminhos. Uma contagem positiva demonstra a visibilidade de ao menos um descritor de arquivo regular naquela consulta. Zero é inconclusivo, pois a amostra pode simplesmente não conter arquivos regulares abertos. Nenhuma instalação é necessária para essa leitura.
+
+### Limite confirmado no retorno do NewTerm
+
+A sessão subsequente retornou código 127 com ambos os formatos de consulta. Sem redirecionamento, o Zsh informou `command not found: lsof`. Portanto, o `NOT_OBSERVED` desta sessão foi causado pela falta do comando no ambiente, e não serve como avaliação da visibilidade do serviço. O primeiro `PROCESS_LISTED` relatado fica registrado como observação não reproduzida. Nenhum descritor de IPA foi observado.
+
+Encerrar a rodada de comandos que dependem de `lsof`. Antes de qualquer ensaio com o app descartável, será preciso validar uma ferramenta de observação compatível com esse dispositivo e estabelecer se ela consegue localizar o descritor no serviço no momento da leitura. Instalação automática segue desativada.
