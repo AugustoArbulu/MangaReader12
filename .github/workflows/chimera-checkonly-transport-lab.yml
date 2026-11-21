@@ -1,0 +1,91 @@
+name: WebReader iOS12 Chimera Check-Only Transport Lab
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/webreader_chimera_checkonly_service.c'
+      - 'ci/test_webreader_chimera_checkonly_service.py'
+      - 'ci/build70_cw_checkonly_core.c'
+      - 'ci/build70_cw_checkonly_core.h'
+      - 'ci/build70_cw_shared_dispatch.c'
+      - 'ci/build70_cw_shared_dispatch.h'
+      - '.github/workflows/chimera-checkonly-transport-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-checkonly-no-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test one unprivileged service and hostile clients
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_webreader_chimera_checkonly_service.py' -v
+      - name: Recheck native policy equivalence and synchronized gate
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_build70_cw_checkonly_core.py' -v
+          python3 -m unittest discover -s ci \
+            -p 'test_build70_cw_shared_dispatch.py' -v
+
+  compile-ios12-arm64-no-package:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Build uninstalled read-only native iOS12 preview
+        shell: bash
+        run: |
+          xcrun --sdk iphoneos clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -arch arm64 -miphoneos-version-min=12.0 -pthread \
+            ci/webreader_chimera_checkonly_service.c \
+            ci/build70_cw_checkonly_core.c \
+            ci/build70_cw_shared_dispatch.c \
+            -o "$RUNNER_TEMP/webreader-checkonly-ios12-UNSIGNED"
+          file "$RUNNER_TEMP/webreader-checkonly-ios12-UNSIGNED"
+          xcrun nm -u "$RUNNER_TEMP/webreader-checkonly-ios12-UNSIGNED" \
+            > "$RUNNER_TEMP/checkonly-undefined.txt"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import subprocess
+
+          binary = Path(os.environ['RUNNER_TEMP']) / "webreader-checkonly-ios12-UNSIGNED"
+          meta = subprocess.check_output(
+              ["xcrun", "otool", "-hv", str(binary)], text=True)
+          assert "ARM64" in meta.upper(), meta
+          undefined = (Path(os.environ['RUNNER_TEMP']) /
+                       "checkonly-undefined.txt").read_text()
+          for forbidden in ("_posix_spawn", "_fork", "_execve", "_system",
+                            "_objc_msgSend", "_dlopen", "_chmod", "_chown",
+                            "_fopen", "_remove", "_rename"):
+              assert forbidden not in undefined, forbidden
+          assert b"/usr/bin/appinst" not in binary.read_bytes()
+          print("PASS: iOS12 ARM64 check-only executable compiled, NOT installed")
+          PY
+      - name: Refuse real-install authority, IPA or DEB publication
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          bridge = Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          checker = Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          trust = Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in bridge
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in trust
+          print("PASS no live installer or production publisher trust")
+          PY
