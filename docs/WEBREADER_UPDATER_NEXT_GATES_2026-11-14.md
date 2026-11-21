@@ -247,3 +247,7 @@ A próxima verificação de leitura usa `lsof -a -c installd -Fpcft` em repouso 
 A sessão subsequente retornou código 127 com ambos os formatos de consulta. Sem redirecionamento, o Zsh informou `command not found: lsof`. Portanto, o `NOT_OBSERVED` desta sessão foi causado pela falta do comando no ambiente, e não serve como avaliação da visibilidade do serviço. O primeiro `PROCESS_LISTED` relatado fica registrado como observação não reproduzida. Nenhum descritor de IPA foi observado.
 
 Encerrar a rodada de comandos que dependem de `lsof`. Antes de qualquer ensaio com o app descartável, será preciso validar uma ferramenta de observação compatível com esse dispositivo e estabelecer se ela consegue localizar o descritor no serviço no momento da leitura. Instalação automática segue desativada.
+
+### Sondagem nativa após a indisponibilidade do lsof
+
+`ci/webreader_self_fd_visibility.c` procura `proc_pidinfo` em tempo de execução, abre `/dev/null` como controle e verifica se `PROC_PIDLISTFDS` encontra esse descritor no próprio processo. O ABI usado é o definido no [cabeçalho do XNU](https://github.com/apple/darwin-xnu/blob/main/bsd/sys/proc_info.h). O programa não aceita PID externo e imprime somente um status, sem caminhos, PIDs ou conteúdo. Compilar para iOS 12 e observar sucesso no macOS são verificações diferentes de executar a sondagem no iPad. Mesmo um sucesso no iPad só confirmaria a consulta do próprio processo. A visibilidade de `installd` e a custódia da IPA continuam em aberto.
