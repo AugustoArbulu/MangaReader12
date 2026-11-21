@@ -34,6 +34,65 @@ static NSString *WRDescribeError(int error) {
  * authority to spawn appinst and must never be promoted to install consent.
  * No process launch, IPA read, filesystem mutation or network request.
  */
+/*
+ * Build5 controls for the installed-mode 0644 finding:
+ * spawn only OUR OWN already-installed, signed main executable with one
+ * exact inert argument. Unlike an extra bundle resource, the main
+ * executable has installation-managed executable metadata. This does
+ * NOT invoke appinst, read IPAs, modify files or authorize installation.
+ */
+static NSString *WRRunSignedSelfProbe(void) {
+    NSString *bundleID = [NSBundle mainBundle].bundleIdentifier;
+    if (![bundleID isEqualToString:@"com.example.WebReaderAppinstDirectProbe"] ||
+        geteuid() == 0) {
+        return @"SELF_MAIN=INVALID_ID\nSPAWN_SELF=PRECHECK_FAILED\n";
+    }
+    NSString *path = [NSBundle mainBundle].executablePath;
+    if (path == nil) {
+        return @"SELF_MAIN=MISSING\nSPAWN_SELF=PRECHECK_FAILED\n";
+    }
+    const char *binary = path.fileSystemRepresentation;
+    struct stat entry;
+    if (lstat(binary, &entry) != 0) {
+        return [NSString stringWithFormat:
+            @"SELF_MAIN=ERRNO_%d\nSPAWN_SELF=PRECHECK_FAILED\n", errno];
+    }
+    if (!S_ISREG(entry.st_mode)) {
+        return @"SELF_MAIN=NOT_REGULAR\nSPAWN_SELF=PRECHECK_FAILED\n";
+    }
+    if ((entry.st_mode & 0111) == 0) {
+        return @"SELF_MAIN=REGULAR_NOEXEC\nSPAWN_SELF=PRECHECK_FAILED\n";
+    }
+    // No shell or arbitrary path. The second instance immediately returns
+    // zero in main() on exactly this argument, without launching UIKit.
+    char * const args[] = {(char *)binary, (char *)"--wr-safe-self-child", NULL};
+    pid_t pid = -1;
+    int rc = posix_spawn(&pid, binary, NULL, NULL, args, environ);
+    if (rc != 0 || pid <= 0) {
+        return [NSString stringWithFormat:
+            @"SELF_MAIN=REGULAR_EXEC\nSPAWN_SELF=NEGADO (%@)\n",
+            WRDescribeError(rc != 0 ? rc : ECHILD)];
+    }
+    int status = 0;
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        pid_t finished = waitpid(pid, &status, WNOHANG);
+        if (finished == pid) {
+            BOOL passed = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            return passed ? @"SELF_MAIN=REGULAR_EXEC\nSPAWN_SELF=OK\n" :
+                            @"SELF_MAIN=REGULAR_EXEC\nSPAWN_SELF=FALHA_DO_SELF\n";
+        }
+        if (finished < 0) {
+            return [NSString stringWithFormat:
+                @"SELF_MAIN=REGULAR_EXEC\nSPAWN_SELF=WAITPID_INDISPONIVEL (%@)\n",
+                WRDescribeError(errno)];
+        }
+        usleep(50000);
+    }
+    (void)kill(pid, SIGTERM);
+    (void)waitpid(pid, &status, 0);
+    return @"SELF_MAIN=REGULAR_EXEC\nSPAWN_SELF=TIMEOUT\n";
+}
+
 static void WRAppendAppinstMetadataOnly(NSMutableString *report) {
     const char *tool = "/usr/bin/appinst";
     struct stat state;
@@ -302,7 +361,8 @@ static NSString *WRRunHelpProbe(void) {
     self.reportLabel.text = self.report;
     __weak WRAppinstProbeController *weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSString *result = WRRunBundledChildProbe();
+        NSString *result = [WRRunBundledChildProbe()
+            stringByAppendingString:WRRunSignedSelfProbe()];
         dispatch_async(dispatch_get_main_queue(), ^{
             WRAppinstProbeController *owner = weakSelf;
             if (!owner) return;
@@ -371,6 +431,11 @@ static NSString *WRRunHelpProbe(void) {
 @end
 
 int main(int argc, char *argv[]) {
+    // Safe diagnostic self-spawn only. No UIKit, appinst, files or services.
+    if (argc == 2 && argv[1] != NULL &&
+        strcmp(argv[1], "--wr-safe-self-child") == 0) {
+        return 0;
+    }
     @autoreleasepool {
         return UIApplicationMain(argc, argv, nil,
             NSStringFromClass([WRAppinstProbeDelegate class]));
