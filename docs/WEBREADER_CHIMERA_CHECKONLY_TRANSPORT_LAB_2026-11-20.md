@@ -88,3 +88,34 @@ https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358
 A primeira tentativa do cliente Swift falhou por exclusividade de acesso ao array de resposta dentro de withUnsafeMutableBytes; corrigido movendo o cálculo de remaining para fora da closure. A execução final acima passou. O workflow MVP separado compila o app inteiro para iOS12 sem IPA (resultado próprio a consultar antes de declarar aprovação integral).
 
 Este resultado NÃO é ensaio físico iOS12/Chimera, não significa disponibilidade do serviço no iPad, não autentica o peer e não concede qualquer permissão de instalação. A UI do app não chama ainda a nova função.
+
+
+## Fase CZ — pacote físico CX isolado para Chimera (21/11/2026 UTC)
+
+Depois das fases CX (servidor) e CY (cliente Swift compilado e testado no macOS), esta fase prepara um pacote Debian de laboratório que somente o proprietário poderá escolher instalar. Nenhuma instalação no iPad é feita pelo GitHub Actions.
+
+### Artefatos e isolamento
+
+- ci/com.example.webreader.checkonlylab.plist: LaunchDaemon identificado como com.example.webreader.checkonlylab, com processo executado como mobile, RunAtLoad, KeepAlive e caminho /usr/local/libexec/webreader-checkonly, argumento serve.
+- ci/package_chimera_checkonly_deb.py: reutiliza o empacotador Build61 FIX1, incluindo diretórios pais para evitar erro anterior do dpkg no Chimera. Produz WebReader-Chimera-CheckOnly-CX-iOS12-QA.deb, sem arquivos do leitor e sem tocar no AppInst.
+- ci/test_chimera_checkonly_deb.py: audita estrutura ar/tar, extrai para diretório descartável, valida arquivos e propriedades exatas, checksum, entitlements assinados, permissões e scripts postinst/prerm, sem instalar o pacote.
+- ci/webreader_chimera_checkonly_service.c: novo argumento CLI probe; conecta somente à porta local 38973, envia WRCHK2+LF e apresenta WR_CX_PROBE=NOTE_ONLY_NO_RELEASE_CHECK_NO_INSTALL, WR_CX_PROBE=RATE_LIMITED_NO_INSTALL ou falha. Não lê IPA nem executa processos.
+- Workflow chimera-checkonly-transport-lab.yml: job macOS compila e assina o binário ad hoc ARM64/iOS12, valida o pacote e disponibiliza unicamente artifact QA .deb e checksum. Nenhuma Release, IPA de produção ou instalação é publicada.
+
+O novo pacote NÃO substitui o PING Build61 FIX1. Tem nome, plist, binário e porta diferentes (CX 38973, PING 38971). A assinatura usa somente o entitlement sem contêiner do laboratório já estabelecido na Build61; não concede autoridade para instalar.
+
+### Gate físico opcional depois da CI aprovada
+
+A instalação do .deb modifica o sistema do jailbreak e depende de aprovação do proprietário. Antes disso, baixar e conferir SHA-256 e manter backup adequado. Se ele optar pelo ensaio:
+
+1. Transferir o .deb por Filza para um caminho conhecido, como /var/mobile/Documents/.
+2. Instalar somente o pacote com.example.webreader.checkonlylab pelo gerenciador jailbreak ou NewTerm com permissões apropriadas, sem remover o PING antigo nem o WebReader.
+3. Confirmar status com: dpkg -s com.example.webreader.checkonlylab.
+4. No NewTerm como mobile, executar duas vezes, em menos de 60 segundos: /usr/local/libexec/webreader-checkonly probe. A primeira resposta pode ser NOTE, a segunda RATE. Não há consulta de versão nem instalação de IPA.
+5. Se for necessário remover, desinstalar apenas com.example.webreader.checkonlylab pelo gerenciador ou dpkg -r com.example.webreader.checkonlylab com as permissões apropriadas. O prerm descarrega somente seu job launchd.
+
+A CI verde ainda NÃO prova que o job launchd funciona no dispositivo físico, que o processo inicia após rejailbreak, que clientes sandboxed conseguem acessar a porta ou que o AppInst pode ser usado pelo serviço. O Swift checkOnlyConnection ainda não está ligado à interface da Build70.
+
+### Ajuste de teste para porta efêmera
+
+O comando probe usa porta fixa 38973 em binário iOS. Apenas no host, sob a macro WR_CX_HOST_TEST_PORT, os testes podem fornecer porta efêmera como terceiro argumento; o código exclui explicitamente esse recurso no target iPhone. O primeiro workflow encontrou um falso erro UNAVAILABLE porque o probe mirava porta zero no host, corrigido sem alterar o contrato iOS.
