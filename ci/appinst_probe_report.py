@@ -38,21 +38,26 @@ def classify_report(raw: str) -> dict:
     encoded = raw.encode("utf-8", errors="replace")
     if len(encoded) > MAX_REPORT_BYTES or "\x00" in raw or "\r" in raw:
         return outcome
-    lines = [line.strip() for line in raw.split("\n") if line.strip()]
-    if not lines or lines[0] != HEADER or NO_INSTALL not in lines:
+    # The standalone iOS12 app emits exactly eight fields, plus one
+    # informational line only when the bundled child exits successfully.
+    # Unknown assertions (for example, "INSTALACAO=SIM") must not be
+    # silently discarded by the offline report classifier.
+    lines = raw.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) not in (8, 9) or lines[0] != HEADER:
         return outcome
-    if lines.count(NO_INSTALL) != 1:
+    if any(not line or line != line.strip() for line in lines):
         return outcome
-
-    def one(prefix: str) -> str | None:
-        matches = [line for line in lines if line.startswith(prefix)]
-        return matches[0] if len(matches) == 1 else None
-
-    spawn = one("SPAWN_LOCAL=")
-    meta = one("APPINST_META_LSTAT=")
-    xok = one("APPINST_META_XOK=")
-    advisory = one("APPINST_META_ADVISORY=")
-    if not spawn or not meta or not xok or advisory != "APPINST_META_ADVISORY=YES":
+    if not re.fullmatch(r"iOS: 12(?:\.[0-9]{1,3}){1,2}", lines[1]):
+        return outcome
+    identity = re.fullmatch(r"UID: ([0-9]{1,10}) \\| EUID: ([0-9]{1,10})", lines[2])
+    if identity is None or int(identity.group(2)) == 0:
+        return outcome
+    if lines[5] != "APPINST_META_ADVISORY=YES" or lines[7] != NO_INSTALL:
+        return outcome
+    spawn, meta, xok = lines[6], lines[3], lines[4]
+    if not meta.startswith("APPINST_META_LSTAT=") or not xok.startswith("APPINST_META_XOK="):
         return outcome
     found = SPAWN_RE.fullmatch(spawn)
     m = meta.split("=", 1)[1]
@@ -61,6 +66,11 @@ def classify_report(raw: str) -> dict:
         return outcome
     state = found.group(1)
     if state not in STATES:
+        return outcome
+    if state == "OK":
+        if len(lines) != 9 or lines[8] != "Não prova acesso a /usr/bin/appinst.":
+            return outcome
+    elif len(lines) != 8:
         return outcome
     outcome["report_accepted"] = True
     outcome["local_child"] = state
