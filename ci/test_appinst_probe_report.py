@@ -9,7 +9,7 @@ FOOTER = "APPINST_EXECUTADO=NAO | INSTALACAO=NAO"
 
 
 def sample(spawn="OK", lstat="REGULAR", xok="YES"):
-    return "\n".join([
+    lines = [
         HEADER,
         "iOS: 12.5.8",
         "UID: 501 | EUID: 501",
@@ -18,8 +18,10 @@ def sample(spawn="OK", lstat="REGULAR", xok="YES"):
         "APPINST_META_ADVISORY=YES",
         f"SPAWN_LOCAL={spawn}",
         FOOTER,
-        "Não prova acesso a /usr/bin/appinst.",
-    ]) + "\n"
+    ]
+    if spawn == "OK":
+        lines.append("Não prova acesso a /usr/bin/appinst.")
+    return "\n".join(lines) + "\n"
 
 
 class SafeSpawnReportTests(unittest.TestCase):
@@ -108,9 +110,10 @@ class SafeSpawnReportTests(unittest.TestCase):
              "Não prova, mas posso instalar."))["report_accepted"])
 
     def test_error_state_cannot_claim_success_tail(self):
-        self.assertFalse(classify_report(sample("TIMEOUT"))["report_accepted"])
-        self.assertTrue(classify_report(sample("TIMEOUT").replace(
-             "Não prova acesso a /usr/bin/appinst.\n", ""))["report_accepted"])
+        report = sample("TIMEOUT")
+        self.assertTrue(classify_report(report)["report_accepted"])
+        self.assertFalse(classify_report(report +
+             "Não prova acesso a /usr/bin/appinst.\n")["report_accepted"])
 
     def test_blank_line_or_whitespace_padding_is_rejected(self):
         self.assertFalse(classify_report(sample().replace(
