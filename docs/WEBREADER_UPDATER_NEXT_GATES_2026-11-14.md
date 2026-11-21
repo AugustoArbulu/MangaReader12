@@ -204,3 +204,9 @@ A geração editorial pode ser feita no Windows, com a ferramenta CO, após deci
 O recibo do laboratório expira como evidência no instante da observação. O retorno fecha o descritor e o modo 0400 sozinho não garante imutabilidade. A produção continua com chave e pin ausentes, geração zero e instalação automática desativada. Nenhuma ação no iPad nesta rodada.
 
 O preview CG tem uma modalidade `--verify-only` que executa a mesma revisão do PEM público, do fingerprint independente e das constantes Swift que seriam propostas no diff. Essa modalidade imprime um recibo e deixa `externalPatch` nulo. Use os argumentos do [exemplo da cerimônia CO](WEBREADER_BUILD70_PHASE_CO_OWNER_OFFLINE_SIGNING_IDENTITY_2026-11-10.md), substituindo `--output-patch CAMINHO` por `--verify-only`. A validação da origem do fingerprint continua independente do preview.
+
+## Identificação do AppInst instalado
+
+Os testes físicos de execução direta não chegaram a executar AppInst. O próximo dado de custódia é a identidade do arquivo presente no iPad. O coletor [observe_appinst_identity.sh](../ci/observe_appinst_identity.sh) consulta, em NewTerm, o SHA-256 de `/usr/bin/appinst`, o proprietário registrado para esse caminho e o status, versão e arquitetura do pacote `ai.akemi.appinst`. A consulta de pacote pode ficar indisponível e o SHA-256 ainda pode ser reportado. O coletor não roda AppInst, não exige root e não copia o binário.
+
+Comparar o SHA-256 recebido com o executável extraído em memória de um DEB previamente auditado pelo `ci/compare_appinst_fingerprint.py`. Um match vincula o digest relatado ao payload daquele pacote. A procedência do pacote, o executável efetivamente invocado pelo fluxo futuro e os bytes consumidos pelo instalador continuam dependendo de evidências próprias.
