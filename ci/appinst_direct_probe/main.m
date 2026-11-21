@@ -64,16 +64,46 @@ static NSString *WRRunBundledChildProbe(void) {
         return report;
     }
     WRAppendAppinstMetadataOnly(report);
+    // Separate bundle lookup, lstat, executable bits and sandbox access.
+    // These are observations only; access(X_OK) must NOT be interpreted as
+    // process launch authorization and we never run AppInst in this path.
     NSString *path = [[NSBundle mainBundle] pathForResource:@"WRSpawnChild" ofType:nil];
     if (path == nil) {
-        [report appendString:@"RESULTADO: child de teste ausente.\n"];
+        [report appendString:@"CHILD_PATH=MISSING\n"
+                             "CHILD_LSTAT=NOT_CHECKED\n"
+                             "CHILD_MODE_EXEC=UNKNOWN\n"
+                             "CHILD_ACCESS_XOK=NOT_CHECKED\n"
+                             "SPAWN_LOCAL=PRECHECK_FAILED\n"
+                             "APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
         return report;
     }
+    [report appendString:@"CHILD_PATH=FOUND\n"];
     const char *binary = path.fileSystemRepresentation;
     struct stat item;
-    if (lstat(binary, &item) != 0 || !S_ISREG(item.st_mode) ||
-        (item.st_mode & 0111) == 0) {
-        [report appendString:@"RESULTADO: child inválido ou não executável.\n"];
+    int statRC = lstat(binary, &item);
+    int statError = statRC == 0 ? 0 : errno;
+    BOOL isRegular = statRC == 0 && S_ISREG(item.st_mode);
+    BOOL hasExecBits = isRegular && ((item.st_mode & 0111) != 0);
+    if (statRC != 0) {
+        [report appendFormat:@"CHILD_LSTAT=ERRNO_%d\n", statError];
+        [report appendString:@"CHILD_MODE_EXEC=UNKNOWN\n"];
+    } else {
+        [report appendString:isRegular ? @"CHILD_LSTAT=REGULAR\n" :
+                                        @"CHILD_LSTAT=NOT_REGULAR\n"];
+        [report appendString:isRegular ? (hasExecBits ? @"CHILD_MODE_EXEC=YES\n" :
+                                                       @"CHILD_MODE_EXEC=NO\n") :
+                                         @"CHILD_MODE_EXEC=UNKNOWN\n"];
+    }
+    int accessRC = access(binary, X_OK);
+    int accessError = accessRC == 0 ? 0 : errno;
+    if (accessRC == 0) {
+        [report appendString:@"CHILD_ACCESS_XOK=YES\n"];
+    } else {
+        [report appendFormat:@"CHILD_ACCESS_XOK=ERRNO_%d\n", accessError];
+    }
+    if (!isRegular || !hasExecBits) {
+        [report appendString:@"SPAWN_LOCAL=PRECHECK_FAILED\n"
+                             "APPINST_EXECUTADO=NAO | INSTALACAO=NAO\n"];
         return report;
     }
     char * const arguments[] = {(char *)binary, NULL};
