@@ -51,7 +51,7 @@ def classify_report(raw: str) -> dict:
         return outcome
     if not re.fullmatch(r"iOS: 12(?:\.[0-9]{1,3}){1,2}", lines[1]):
         return outcome
-    identity = re.fullmatch(r"UID: ([0-9]{1,10}) \\| EUID: ([0-9]{1,10})", lines[2])
+    identity = re.fullmatch(r"UID: ([0-9]{1,10}) \| EUID: ([0-9]{1,10})", lines[2])
     if identity is None or int(identity.group(2)) == 0:
         return outcome
     if lines[5] != "APPINST_META_ADVISORY=YES" or lines[7] != NO_INSTALL:
