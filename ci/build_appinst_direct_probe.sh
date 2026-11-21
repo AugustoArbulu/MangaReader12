@@ -43,7 +43,7 @@ info = {
     "CFBundleDisplayName": "WebReader appinst Test",
     "CFBundlePackageType": "APPL",
     "CFBundleShortVersionString": "1.0",
-    "CFBundleVersion": "4",
+    "CFBundleVersion": "5",
     "MinimumOSVersion": "12.0",
     "LSRequiresIPhoneOS": True,
     "UIDeviceFamily": [1, 2],
