@@ -158,15 +158,24 @@ class ChimeraCheckOnlyServiceTests(unittest.TestCase):
         self.assertEqual(self.exchange(FRAME), ACK)
 
     def test_mobile_cli_probe_notice_then_rate_limit(self):
-        first = subprocess.run([str(self.binary), "probe"],
+        first = subprocess.run([str(self.binary), "probe", str(self.port)],
                                capture_output=True, text=True, timeout=6)
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("NOTE_ONLY_NO_RELEASE_CHECK_NO_INSTALL", first.stdout)
-        second = subprocess.run([str(self.binary), "probe"],
+        second = subprocess.run([str(self.binary), "probe", str(self.port)],
                                 capture_output=True, text=True, timeout=6)
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
         self.assertIn("RATE_LIMITED_NO_INSTALL", second.stdout)
         self.assertIsNone(self.server.poll())
+
+    def test_host_override_is_strictly_test_only_and_rejects_bad_ports(self):
+        for port in ("0", "65536", "invalid", "-1", "38973extra", ""):
+            with self.subTest(port=port):
+                result = subprocess.run(
+                    [str(self.binary), "probe", port],
+                    capture_output=True, text=True, timeout=4
+                )
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
 
     def test_cli_probe_cannot_install_or_call_shell(self):
         for command in ("install", "update", "/tmp/bad.ipa", "WRINST1"):
