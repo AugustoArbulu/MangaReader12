@@ -80,3 +80,37 @@ RESULTADO: child inválido ou não executável.
 - GitHub Actions [#44845878702](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44845878702): **SUCCESS**, parser histórico + Build4, clang ARM64/iOS12, `codesign`, contrato de não execução do AppInst pelo primeiro botão, verificação de ZIP/entitlements e upload de artifact.
 - Artifact `WebReader-Appinst-Direto-iOS12-TEST` ID `14682527986`. IPA `WebReader-Appinst-Direto-iOS12-adhoc.ipa` de 18.156 bytes; SHA-256 `db3682dc58506864edfc9b2441ec18a293fd32e5f4922f7e9c99e07c293d7b3e`, conferido com `.sha256` após extração do arquivo do workflow. `CFBundleVersion=4`, `MinimumOSVersion=12.0`, ID isolado `com.example.WebReaderAppinstDirectProbe`; `WRSpawnChild` modo Unix `0100755` no ZIP.
 - **Ainda falta teste físico Build4.** A Build3 encerrou no pré-teste; nenhum AppInst foi executado. O comportamento de `posix_spawn` e do bundle instalado no iPad continua desconhecido. Instale Build4 *apenas como diagnóstico separado* e execute o primeiro botão.
+
+## Retorno físico da Build4 e controle Build5 — 20/11/2026 (America/Sao_Paulo)
+
+O iPad **iOS 12.5.8 / UID 501 mobile** executou o primeiro botão da **Build4** e produziu:
+
+```text
+WebReader • Spawn local sem appinst
+iOS: 12.5.8
+UID: 501 | EUID: 501
+APPINST_META_LSTAT=ERRNO_1
+APPINST_META_XOK=ERRNO_1
+APPINST_META_ADVISORY=YES
+CHILD_PATH=FOUND
+CHILD_LSTAT=REGULAR
+CHILD_MODE_EXEC=NO
+CHILD_ACCESS_XOK=ERRNO_1
+SPAWN_LOCAL=PRECHECK_FAILED
+APPINST_EXECUTADO=NAO | INSTALACAO=NAO
+```
+
+**Fato confirmado:** após instalação, o `WRSpawnChild` é arquivo regular, mas não tinha bits `0111` de execução; logo a Build4 **não chamou `posix_spawn`**. O ZIP da IPA Build4 continha o filho com bit de execução; a diferença é evidência de que os metadados não se mantiveram entre pacote e observação do aplicativo, mas **não identifica com precisão o mecanismo que os alterou**, nem comprova a possibilidade/impossibilidade de executar outros processos no iOS 12.
+
+### Próximo controle independente: Build5 diagnóstica
+
+A Build5 preserva os relatórios de `WRSpawnChild` e acrescenta duas linhas **ao final** do primeiro botão:
+
+- `SELF_MAIN=REGULAR_EXEC/REGULAR_NOEXEC/NOT_REGULAR/MISSING/ERRNO_n`: observação consultiva de `lstat` para o **exato executável principal do app de teste**, obtido de `NSBundle.mainBundle.executablePath`.
+- `SPAWN_SELF=OK/NEGADO/FALHA_DO_SELF/WAITPID_INDISPONIVEL/TIMEOUT/PRECHECK_FAILED`: tenta somente `posix_spawn` do próprio binário assinado instalado, com argumento fixo `--wr-safe-self-child`. Quando chamado com **exatamente** esse argumento, `main()` retorna zero imediatamente, **sem UIKit, sem acesso a arquivos, sem uso de AppInst e sem instalação**.
+
+Esse segundo controle é útil porque o executável principal já inicia normalmente pela SpringBoard, ao contrário do `WRSpawnChild` auxiliar que perdeu bits. **Mesmo `SPAWN_SELF=OK` não prova que `/usr/bin/appinst` pode iniciar, nem que instalar uma IPA seja seguro ou autorizado.** O arquivo de teste continua ad hoc com identidade isolada; não altera permissões, não usa `chmod`, não copia binários, não publica Release e não toca na Build70 ou em dados do usuário.
+
+O parser offline passa a tratar as duas linhas como resultado separado; nenhum desfecho marca `installer_authorized`, `direct_appinst_execution_verified` ou `installation_performed` como verdadeiro. Testes sintéticos cobrem o relatório físico exato da Build4, sucessos e falhas da Build5, estados contraditórios e tentativas de acrescentar autorização falsa.
+
+**Dependências:** checar sucesso do workflow `appinst-direct-test.yml` da Build5, integridade do artifact de diagnóstico e depois solicitar teste físico **somente do primeiro botão**, sem usar `appinst --help`. `main`, PR Draft, `liveInstallationEnabled=false`, Build70, biblioteca e dados offline preservados.
