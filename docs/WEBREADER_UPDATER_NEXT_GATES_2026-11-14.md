@@ -48,3 +48,19 @@ Não produzir Build6 diagnóstica sem hipótese materialmente nova. Não recomen
 4. **Gate obrigatório antes de instalação do WebReader:** teste de IPA descartável, assinatura e identidade verificadas, consentimento do proprietário, estratégia de preservação de biblioteca/offline, recuperação e rollback, sem mexer na Build70 até aprovação explícita.
 
 **Status:** PR #90 Draft e `main` intacta; `WebReaderAppinstSocket.liveInstallationEnabled=false`; nenhum instalador ativo, Release, Build71, migração ou exclusão de dados. Não há necessidade de novos testes físicos de self-spawn por enquanto.
+
+## Marco CX — transporte CHECK_ONLY independente da sandbox (21/11/2026 UTC)
+
+Após o proprietário comprovar pelo NewTerm que o AppInst 2.1.1 inicia normalmente (appinst --help retorna a instrução de uso), mas a Build5 dentro da sandbox retornar SPAWN_SELF=NEGADO (1 (Operation not permitted)), reaproveitamos o núcleo CN/CW sem executar instalador no app.
+
+Novos arquivos:
+- ci/webreader_chimera_checkonly_service.c
+- ci/test_webreader_chimera_checkonly_service.py
+- .github/workflows/chimera-checkonly-transport-lab.yml
+- docs/WEBREADER_CHIMERA_CHECKONLY_TRANSPORT_LAB_2026-11-20.md
+
+O serviço de laboratório aceita SOMENTE sete bytes WRCHK2+LF no localhost 127.0.0.1:38973, após EOF da direção de escrita, e retorna WRNOTE2+LF (aviso aceito, sem checagem real), WRRATE2+LF ou WRDENY2+LF. Não recebe caminho, URL, digest, versão, chave, ação de instalação ou consentimento. Reutiliza dispatcher CW e intervalo de 60 s na mesma instância. Não executa AppInst, não abre IPA nem tem efeitos de instalação. Não integra ainda UI, consulta de Release, publisher, download ou mecanismo de aprovação.
+
+CI SUCCESS 3/3: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44849062382 — Linux/macOS QA real de socket e compilação ARM64 iOS12. Sem novo DEB/IPA, sem instalação em dispositivo, sem Release e sem alterar WebReader/Build70. A prévia iOS compilada em CI não foi assinada/distribuída.
+
+Próximo gate: revisar transporte sem confundi-lo com autorização e projetar, somente após aprovação, um pacote de teste isolado, sem permissão de instalar, com identidade/porta distintas do PING Build61. Jamais substituir o PING já validado antes de testar coexistência. Para atualização automática real, continuam exigidos pin editorial, origem fixa, antireplay, custódia dos bytes, consentimento independente, QA de aplicativo descartável, recuperação e preservação do SQLite.
