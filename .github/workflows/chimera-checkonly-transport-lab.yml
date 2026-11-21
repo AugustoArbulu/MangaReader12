@@ -7,6 +7,8 @@ on:
     paths:
       - 'ci/webreader_chimera_checkonly_service.c'
       - 'ci/test_webreader_chimera_checkonly_service.py'
+      - 'ci/test_native_webreader_checkonly_transport.py'
+      - 'MangaReader12/Core/WebReaderAppinstSocket.swift'
       - 'ci/build70_cw_checkonly_core.c'
       - 'ci/build70_cw_checkonly_core.h'
       - 'ci/build70_cw_shared_dispatch.c'
@@ -31,6 +33,11 @@ jobs:
         run: |
           python3 -m unittest discover -s ci \
             -p 'test_webreader_chimera_checkonly_service.py' -v
+      - name: Test real Swift client to C service, no installer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_native_webreader_checkonly_transport.py' -v
       - name: Recheck native policy equivalence and synchronized gate
         run: |
           python3 -m unittest discover -s ci \
