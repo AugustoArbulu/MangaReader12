@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """CG: ephemeral P-256 public-only patch proposal, no enrollment or installer."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -132,6 +134,40 @@ class OwnerPublicSourceProposalTests(unittest.TestCase):
                 with self.assertRaises(FileExistsError):
                     write_external_proposal(patch, output)
             self.assertEqual(output.read_text(), "someone-else's-file")
+
+    def test_cli_verification_and_patch_use_the_same_review(self):
+        cli = [
+            sys.executable, str(ROOT / "ci/build70_owner_public_root_patch_preview.py"),
+            "--public-key", str(self.public),
+        ]
+        before = set(self.directory.iterdir())
+        verified = subprocess.run(
+            [*cli, "--independent-spki-sha256", self.pin, "--verify-only"],
+            check=True, capture_output=True, text=True, timeout=20
+        )
+        receipt = json.loads(verified.stdout)
+        self.assertIsNone(receipt["externalPatch"])
+        self.assertEqual(set(self.directory.iterdir()), before)
+        self.assertFalse(receipt["ownerIdentityIndependentlyEstablishedByTool"])
+
+        denied = subprocess.run(
+            [*cli, "--independent-spki-sha256", "0" * 64, "--verify-only"],
+            capture_output=True, text=True, timeout=20
+        )
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("BLOCKED:", denied.stderr)
+        self.assertEqual(set(self.directory.iterdir()), before)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "review.patch"
+            written = subprocess.run(
+                [*cli, "--independent-spki-sha256", self.pin, "--output-patch", str(output)],
+                check=True, capture_output=True, text=True, timeout=20
+            )
+            self.assertEqual(json.loads(written.stdout)["externalPatch"], str(output))
+            self.assertEqual(output.stat().st_size, receipt["reviewPatchBytes"])
+            subprocess.run(["git", "apply", "--check", str(output)],
+                           cwd=ROOT, check=True, capture_output=True, timeout=20)
 
     def test_legacy_appinst_and_root_policy_are_left_off(self):
         source = (ROOT / "ci/build70_owner_public_root_patch_preview.py").read_text()

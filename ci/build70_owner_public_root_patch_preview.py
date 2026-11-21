@@ -171,7 +171,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--public-key", type=Path, required=True)
     parser.add_argument("--independent-spki-sha256", required=True)
-    parser.add_argument("--output-patch", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--output-patch", type=Path)
+    mode.add_argument("--verify-only", action="store_true",
+                      help="check the public PEM, independent pin and source preconditions without writing a patch")
     parser.add_argument("--installed-build", type=int, default=70)
     args = parser.parse_args()
     try:
@@ -181,13 +184,15 @@ def main():
             independently_verified_pin=args.independent_spki_sha256,
             installed_build=args.installed_build
         )
-        write_external_proposal(diff, args.output_patch)
+        if not args.verify_only:
+            write_external_proposal(diff, args.output_patch)
     except ProductionPreflightRejected as exc:
         raise SystemExit("BLOCKED: external public PEM is inaccessible") from exc
-    print(json.dumps(
-        {**receipt, "reviewPatchBytes": len(diff.encode("utf-8")),
-         "externalPatch": str(args.output_patch)}, sort_keys=True, indent=2
-    ))
+    except OwnerPublicProposalRejected as exc:
+        raise SystemExit(f"BLOCKED: {exc}") from exc
+    receipt["reviewPatchBytes"] = len(diff.encode("utf-8"))
+    receipt["externalPatch"] = None if args.verify_only else str(args.output_patch)
+    print(json.dumps(receipt, sort_keys=True, indent=2))
 
 
 if __name__ == "__main__":
