@@ -36,7 +36,7 @@ def main():
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader appinst Test"
         assert info["MinimumOSVersion"] == "12.0"
-        assert info["CFBundleVersion"] == "4"
+        assert info["CFBundleVersion"] == "5"
         assert info["CFBundleExecutable"] == "WRAppinstDirect"
         assert "UIBackgroundModes" not in info
         assert "UIFileSharingEnabled" not in info
@@ -58,6 +58,24 @@ def main():
     metadata = source.split("static void WRAppendAppinstMetadataOnly", 1)[1].split(
         "static NSString *WRRunBundledChildProbe(void) {", 1
     )[0]
+    self_probe = source.split("static NSString *WRRunSignedSelfProbe(void) {", 1)[1].split(
+        "static void WRAppendAppinstMetadataOnly", 1
+    )[0]
+    assert self_probe.count("posix_spawn(") == 1
+    assert '"--wr-safe-self-child"' in self_probe
+    assert '[NSBundle mainBundle].executablePath' in self_probe
+    assert 'SELF_MAIN=REGULAR_EXEC' in self_probe
+    assert 'SPAWN_SELF=OK' in self_probe
+    assert 'SPAWN_SELF=NEGADO' in self_probe
+    assert "APPINST_EXECUTADO" not in self_probe
+    assert '"/usr/bin/appinst"' not in self_probe
+    for forbidden in ("system(", "execve(", "fork(", "open(", "unlink(", "remove(", "chmod("):
+        assert forbidden not in self_probe, forbidden
+    assert 'strcmp(argv[1], "--wr-safe-self-child") == 0' in source
+    assert 'return 0;' in source.split(
+        'strcmp(argv[1], "--wr-safe-self-child") == 0', 1
+    )[1].split("UIApplicationMain(", 1)[0]
+    assert 'stringByAppendingString:WRRunSignedSelfProbe()' in source
     assert "WRAppendAppinstMetadataOnly(report);" in first_probe
     assert 'APPINST_META_LSTAT=REGULAR' in metadata
     assert 'APPINST_META_XOK=YES' in metadata
