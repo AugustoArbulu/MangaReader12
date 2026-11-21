@@ -59,3 +59,18 @@ Hard stops permanecem: PR #90 Draft, main e Build70 intactas, liveInstallationEn
 Uma execução anterior falhou somente no macOS/iOS devido à visibilidade da constante INADDR_LOOPBACK sob os macros de cabeçalhos Darwin; corrigido ativando _DARWIN_C_SOURCE no código do serviço. O Linux já havia aprovado. O pipeline final passou sem precisar modificar componentes de produção.
 
 **Nenhum artefato IPA/DEB foi criado ou distribuído**: não existe pacote novo para o proprietário instalar nesta fase. A Build70 física e o PING Build61 FIX1 já instalados permanecem intactos.
+
+
+## Fase CY — cliente Swift de CHECK_ONLY separado da instalação (21/11/2026 UTC)
+
+O arquivo de produção já existente MangaReader12/Core/WebReaderAppinstSocket.swift agora contém uma API opt-in chamada checkOnlyConnection(completion:) e um enum próprio CheckOnlyResult. Não há chamada de interface nem gatilho automático no app. O caminho não depende de posix_spawn na sandbox e não usa o código preexistente de install(...).
+
+- Conexão exclusivamente a 127.0.0.1:38973, limites de envio/recepção de 3 segundos, socket SO_NOSIGPIPE.
+- Envia unicamente os sete bytes fixos WRCHK2+LF e executa shutdown(SHUT_WR), atendendo à regra de EOF da fase CX. Não existe URL, caminho, versão, hash, escolha de IPA, publisher ou consentimento no protocolo do cliente.
+- Recebe exatamente oito bytes, exige EOF sem byte adicional e interpreta apenas WRNOTE2+LF, WRRATE2+LF ou WRDENY2+LF; qualquer outra resposta é rejeitada. Mesmo WRNOTE2 somente registra um aviso aceito por um serviço local não autenticado, não significa Release consultada.
+- O helper pode ser qualquer processo local capaz de responder; não há autenticação do servidor. Nenhum método cria autorização de instalação, executa AppInst, baixa/manipula IPA, modifica arquivos da biblioteca ou publica Release.
+- Somente WEBREADER_HOST_TEST compila hostCheckOnlyProbe(port:) para injeção de porta efêmera nos testes macOS; a porta de produção é fixa em 38973.
+
+ci/test_native_webreader_checkonly_transport.py compila o mesmo arquivo Swift real num harness macOS e comunica-se com o serviço C da fase CX compilado no host. Cenários: aviso, rate limit, servidor ausente, frame literal com half-close, respostas desconhecidas/forjadas, bytes extras, truncamento e invariantes sem instalador. O workflow chimera-checkonly-transport-lab.yml executa essa suíte no macOS e valida também o servidor C em Linux/macOS e compilação ARM64/iOS12. O workflow MVP do atualizador recompila o app para iOS12 sem produzir IPA.
+
+Nenhum pacote para iPad é entregue nesta fase. O serviço CX permanece laboratório; o PING físico Build61 FIX1 não foi modificado. A integração UI e download real com publisher confiável ficam para outro gate. Esta fase não autoriza ativar WebReaderAppinstSocket.install, WRINST1 ou publicar Build71/Release. A Build70 física permanece preservada.
