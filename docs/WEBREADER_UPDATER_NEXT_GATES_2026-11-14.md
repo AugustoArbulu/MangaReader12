@@ -79,3 +79,17 @@ O WebReaderAppinstSocket.swift, já parte do projeto nativo, recebeu a API não 
 CI da fase CY: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358 — SUCCESS 3/3, incluindo Swift real para C real no macOS, tentativas de respostas falsas/truncadas/extras e crosscompile de servidor iOS12. A compilação do app inteiro é verificada separadamente no workflow WebReader updater MVP.
 
 Próxima etapa: comprovar a compilação integral, depois definir UX somente de diagnóstico, e planejar um pacote de QA físico separado com consentimento do usuário, reutilizando a experiência Build61 FIX1, sem sobrescrever o serviço PING existente. Não conectar botão de instalação nem criar Release/Build71 enquanto as provas de publisher, bytes consumidos, autorização independente, backup e instalação descartável faltarem.
+
+
+### Aprovação final da fase CY (21/11/2026 UTC)
+
+A integração foi validada em **dois pipelines SUCCESS** no commit de código 9dcfdc536980243e2e4a53fd6bc350dd59759280:
+
+- GitHub Actions #44850850358: Linux/macOS verificaram o transporte e o serviço CX, macOS exerceu o cliente Swift real e o serviço C real, mais crosscompile ARM64/iOS12 do serviço sem distribuir binário.
+- GitHub Actions #44850850395: MVP de atualização completo SUCCESS, inclusive regressões do parser GitHub Release, checker nativo, IPA stager/auditor, UI e IPC Fake-AppInst, **compilação de todo o aplicativo para iOS12 sem assinatura/IPA** e verificação final dos hard stops.
+
+URLs:
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850395
+
+O serviço CX continua laboratório não instalado no iPad; o método Swift checkOnlyConnection é opt-in e não é chamado automaticamente pela UI. Todos os relatórios positivos são somente avisos locais, não atualização validada nem instalação permitida. Nenhum package/Release/Build71; Build70 e dados intactos.
