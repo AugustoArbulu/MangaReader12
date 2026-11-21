@@ -25,3 +25,26 @@ Não alterar `main`, não gerar Release/Build71, não executar AppInst real, nã
 O [workflow dedicado #43551192312](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43551192312) terminou **SUCCESS** em macOS 15, no commit `cb541b6ffc82b4fd2141f8fd679f412bc863984b`. Passaram os 5 testes de escopo, o parser real com a fixture Build70→Build71, checker Swift com resposta injetada, stager de IPA, auditor nativo ZIP/Info.plist/SHA-256, UI e AppInst falso; o WebReader inteiro compilou para o alvo iOS 12 sem assinatura, IPA ou instalação. Esse resultado **não comprova** a instalação no Chimera nem cria uma Release pública.
 
 O método OTA foi apenas estudado: AppSync Unified pode contornar certas verificações de assinatura no `installd`, mas as exigências de manifestação e distribuição OTA são distintas. Nenhuma compatibilidade real entre `itms-services` e a assinatura ad hoc usada aqui foi demonstrada. Preferir o caminho já comprovado de AppInst/Filza até ensaio físico com um app descartável.
+
+## Gate físico Build5 concluído — revisão de prioridade em 20/11/2026 (America/Sao_Paulo)
+
+A sequência Build3→Build4→Build5 isolou o bloqueio mais importante do **lançamento direto de processo pelo aplicativo**. Na Build5, iPad iOS12.5.8/Chimera:
+
+- `WRSpawnChild` instalado como arquivo regular, mas sem bits de execução; `SPAWN_LOCAL=PRECHECK_FAILED`.
+- Executável principal já assinado: `SELF_MAIN=REGULAR_EXEC`.
+- Tentativa real de `posix_spawn` do próprio executável a partir do processo do app, com argumento seguro e sem instalação: `SPAWN_SELF=NEGADO (1 (Operation not permitted))`.
+- `/usr/bin/appinst` foi apenas consultado com `lstat/access`, ambos retornando `EPERM`. O **AppInst não foi executado**, portanto não há evidência física de tentativa de spawn do AppInst, apenas da negação do self-spawn.
+- Report e interpretação preservados em `docs/WEBREADER_APPINST_DIRECT_SAFE_SPAWN_PROBE_2026-11-14.md`; fixture de regressão em `ci/test_appinst_probe_report.py`.
+
+### Decisão: não repetir diagnósticos de spawn in-app
+
+Não produzir Build6 diagnóstica sem hipótese materialmente nova. Não recomendar executar `appinst --help`, `chmod` no bundle ou relaxar a sandbox. Não confundir `EPERM` observado no self-spawn com prova de que nenhuma arquitetura jailbreak pode instalar IPAs.
+
+### Próximos marcos — independentes do self-spawn
+
+1. **MVP de download seguro:** manter interface para verificar versões/releases publicadas e, quando existir uma Release aprovada, verificar digest, estrutura ZIP, bundle ID, build, iOS mínimo, assinatura editorial confiável e ligação aos bytes. **Nenhuma Release real foi autorizada nesta etapa**. Sem trust root provisionado, o modo produção assinado deve falhar fechado e não declarar autenticidade.
+2. **Instalador fora do sandbox (pesquisa/contrato inicialmente):** investigar somente em laboratório isolado um helper persistente já instalado via mecanismo jailbreak, capaz de operar de forma independente do `posix_spawn` do app. O gatilho do app será no máximo solicitação de *check-only*, nunca caminho/URL/IPA nem autorização. O helper escolherá origem fixa e validará por si próprio identidade editorial, integridade, antirreplay, mesma cópia consumida na instalação, consentimento confiável e limites de uso, conforme fase CN. A identidade de peer por `LOCAL_PEERTOKEN` segue indisponível nos testes CM e não pode ser presumida.
+3. **Alternativa OTA:** `itms-services` segue hipótese sem evidência física para IPA ad hoc + AppSync iOS12. Só poderá ser avaliada em aplicativo descartável, com manifesto próprio, nunca no WebReader principal sem aprovação.
+4. **Gate obrigatório antes de instalação do WebReader:** teste de IPA descartável, assinatura e identidade verificadas, consentimento do proprietário, estratégia de preservação de biblioteca/offline, recuperação e rollback, sem mexer na Build70 até aprovação explícita.
+
+**Status:** PR #90 Draft e `main` intacta; `WebReaderAppinstSocket.liveInstallationEnabled=false`; nenhum instalador ativo, Release, Build71, migração ou exclusão de dados. Não há necessidade de novos testes físicos de self-spawn por enquanto.
