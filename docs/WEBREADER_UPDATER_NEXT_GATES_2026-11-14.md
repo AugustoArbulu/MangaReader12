@@ -251,3 +251,9 @@ Encerrar a rodada de comandos que dependem de `lsof`. Antes de qualquer ensaio c
 ### Sondagem nativa após a indisponibilidade do lsof
 
 `ci/webreader_self_fd_visibility.c` procura `proc_pidinfo` em tempo de execução, abre `/dev/null` como controle e verifica se `PROC_PIDLISTFDS` encontra esse descritor no próprio processo. O ABI usado é o definido no [cabeçalho do XNU](https://github.com/apple/darwin-xnu/blob/main/bsd/sys/proc_info.h). O programa não aceita PID externo e imprime somente um status, sem caminhos, PIDs ou conteúdo. Compilar para iOS 12 e observar sucesso no macOS são verificações diferentes de executar a sondagem no iPad. Mesmo um sucesso no iPad só confirmaria a consulta do próprio processo. A visibilidade de `installd` e a custódia da IPA continuam em aberto.
+
+### Resultado físico do controle de descritor
+
+O proprietário reportou `WR_SELF_FD=CONTROL_LISTED` no app separado `com.example.WebReaderSelfFDProbe`. A [execução de QA](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44867440037) compilou e assinou ad hoc a IPA iOS 12 ARM64. SHA-256 da IPA entregue: `265828bc975f7a4e7768c8f32e39204b9e691c5c20c74cac2dc58a7b8cb91bba`.
+
+O código resolveu `proc_pidinfo` e encontrou, na consulta `PROC_PIDLISTFDS` do próprio PID, o descritor de controle aberto para `/dev/null`. Isso encerra a prova de disponibilidade e funcionamento para o próprio processo nessa configuração. Para avaliar a leitura do instalador, o próximo controle deve investigar a consulta de um processo separado antes de medir `installd`. Nenhum descritor do serviço nem arquivo IPA foi observado nesse teste.
