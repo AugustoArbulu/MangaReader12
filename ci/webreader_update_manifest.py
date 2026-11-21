@@ -60,6 +60,10 @@ def _decode_b64(value, max_bytes):
         raise ManifestRejected("invalid base64 field") from error
     if not raw or len(raw) > max_bytes:
         raise ManifestRejected("decoded field out of bounds")
+    # Canonical Base64 must be unique for signed payloads/signatures.
+    # The regular decoder accepts nonzero unused padding bits.
+    if base64.b64encode(raw).decode("ascii") != value:
+        raise ManifestRejected("noncanonical base64 encoding")
     return raw
 
 def _version(text):
