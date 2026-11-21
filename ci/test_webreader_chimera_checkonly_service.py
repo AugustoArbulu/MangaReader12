@@ -183,7 +183,7 @@ class ChimeraCheckOnlyServiceTests(unittest.TestCase):
                                     capture_output=True, text=True, timeout=4)
             self.assertNotEqual(result.returncode, 0)
         source = SERVER.read_text()
-        cli_source = source.split("static int probe(void) {", 1)[1].split(
+        cli_source = source.split("static int probe(uint16_t port) {", 1)[1].split(
             "int main(int argc,", 1)[0]
         for forbidden in ("posix_spawn(", "execve(", "system(", "popen(",
                           "appinst(", "open(", "fopen(", "chmod(", "chown(",
