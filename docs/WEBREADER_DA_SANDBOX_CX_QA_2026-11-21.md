@@ -29,3 +29,17 @@ O app deve continuar sem acesso a dados de leitura, sem background fetch, sem pe
 ## Hard stops
 
 main intocada, PR #90 Draft, Build70 e downloads intocados; WebReaderAppinstSocket.liveInstallationEnabled=false; productionPublicKeyX963=nil; independentlyProvisionedSPKISHA256=nil; nenhuma Build71/Release/IPA do WebReader ou instalação via appinst. A QA física da DA ainda depende de ação explícita do usuário; compilar no GitHub Actions não prova que a sandbox do iOS físico permitirá conexão ao CX.
+
+
+## Resultado CI final e artifact de QA
+
+GitHub Actions #44859172297: SUCCESS nos três jobs (host Ubuntu, host macOS e build assinado no macOS), código commit a3d211cca0cef00dd5d8b3d8a07e2443217ac118.
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44859172297
+
+A primeira tentativa de build encontrou UIFont.monospacedSystemFontOfSize disponível somente em iOS13; foi substituído por Menlo-Regular com fallback. Uma segunda revelou ausência de link explícito ao CoreGraphics (CGRectZero), corrigido na terceira execução. Testes de host passaram em todas as rodadas; somente a terceira gerou artifact aprovado.
+
+Artifact GitHub Actions: WebReader-DA-CX-Sandbox-iOS12-QA, ID 14688662029, ZIP com IPA e SHA256; expira em 05/12/2026 UTC.
+IPA: WebReader-CX-Sandbox-DA-iOS12-adhoc.ipa; tamanho 13.687 bytes; SHA256 8fba25d3176b3d617c04f10470b5698b32de6bbd47f6929d5f2ba181dd138a1a.
+Inspeção adicional dos bytes extraídos do artifact: Info.plist com CFBundleIdentifier com.example.WebReaderCXSandboxProbe, CFBundleDisplayName WebReader CX Teste, CFBundleVersion 1, MinimumOSVersion 12.0; executável thin Mach-O ARM64; não contém strings de AppInst, WRINST1 ou LSApplicationWorkspace. O SHA-256 coincidiu com o manifesto do artifact.
+
+**Estado após CI:** IPA descartável pronta para instalação manual opcional. Nenhum teste de app sandboxed foi executado no iPad até esta data; nenhuma atualização de WebReader, modificação de Build70 ou instalação de app foi realizada em CI. A CI aprova compilação e integração host, não a comunicação física de sandbox.
