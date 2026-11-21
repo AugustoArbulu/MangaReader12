@@ -43,3 +43,27 @@ IPA: WebReader-CX-Sandbox-DA-iOS12-adhoc.ipa; tamanho 13.687 bytes; SHA256 8fba2
 Inspeção adicional dos bytes extraídos do artifact: Info.plist com CFBundleIdentifier com.example.WebReaderCXSandboxProbe, CFBundleDisplayName WebReader CX Teste, CFBundleVersion 1, MinimumOSVersion 12.0; executável thin Mach-O ARM64; não contém strings de AppInst, WRINST1 ou LSApplicationWorkspace. O SHA-256 coincidiu com o manifesto do artifact.
 
 **Estado após CI:** IPA descartável pronta para instalação manual opcional. Nenhum teste de app sandboxed foi executado no iPad até esta data; nenhuma atualização de WebReader, modificação de Build70 ou instalação de app foi realizada em CI. A CI aprova compilação e integração host, não a comunicação física de sandbox.
+
+
+## Resultado físico real DA — CONFIRMADO (21/11/2026 UTC)
+
+O proprietário instalou e executou o aplicativo de QA no iPad e forneceu **o relatório textual real**, reproduzido abaixo exatamente no conteúdo relevante:
+
+```text
+WebReader CX Sandbox QA
+Bundle: com.example.WebReaderCXSandboxProbe
+iOS: 12.5.8
+UID: 501 | EUID: 501
+Destino: 127.0.0.1:38973
+Comando: WRCHK2 (7 bytes, LF)
+WR_DA=NOTICE_ACCEPTED
+Servico CX respondeu. Nenhuma Release consultada; nenhuma IPA instalada.
+WR_DA_INSTALL=NEVER
+WR_DA_PUBLISHER_AUTHENTICATED=NO
+```
+
+**Interpretação auditável:** o aplicativo DA com Bundle ID exclusivo executou como mobile (UID/EUID 501) e recebeu uma resposta válida e completa do listener CX em loopback, após enviar `WRCHK2\n`. O caminho aplicativo iOS12 de QA → serviço CX fora do processo do app foi observado fisicamente. Como a IPA foi auditada sem o entitlement no-container e sem instalador, esta é a evidência necessária para a comunicação entre os componentes separados no contexto sandbox do teste.
+
+**Limites:** `NOTICE_ACCEPTED` é somente sinal de transporte, não download ou consulta de Releases; não autentica identidade de peer ou do servidor, nem publisher. Não demonstra instalação, persistência após reboot/rejailbreak, acesso seguro ao AppInst pelo helper nem preservação de dados após atualização. `WR_DA_INSTALL=NEVER` e `WR_DA_PUBLISHER_AUTHENTICATED=NO` são afirmações do cliente de teste sobre ausência dessas funções, não provas de uma arquitetura de instalação real.
+
+**Decisão:** fase DA física de transporte considerada APROVADA. Prosseguir sem reinstalar CX, sem repetir testes de spawn do app. Próximo gate de projeto deve tratar consulta genuína de Release com origem fixa, versionamento e publisher trust como questões distintas de IPC, com qualquer fluxo de instalação ainda fechado; o app principal Build70 não foi tocado.
