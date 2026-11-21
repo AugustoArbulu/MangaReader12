@@ -30,3 +30,18 @@ Os validadores iOS12 EXISTENTES são reaproveitados sem fork de formato: WebRead
 5. Antes de qualquer instalação continuam pendentes custódia de bytes imutável entre verificador e instalador, proteção contra replay/downgrade, consentimento confiável, assinatura nativa, backup/recovery e teste de aplicativo descartável. Keep WebReaderAppinstSocket.liveInstallationEnabled=false.
 
 **Regra de interpretação:** uma resposta 404 de /releases/latest é INDISPONÍVEL, não ATUALIZADO; metadata sintética de Build71 jamais representa uma release real. Mesmo 200 coerente é metadata não autenticada editorialmente, nunca install authorization.
+
+## Validação CI fechada em 21/11/2026 UTC
+
+GitHub Actions #44859883589: **SUCCESS** no commit de código bd0095b18177fc28b1a7d86fbf89a5d253e05e0e.
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44859883589
+
+- Os testes macOS compilaram e executaram o novo observador Swift com o próprio parser e fixture sintético Build70→71; resultado aponta metadados NÃO autenticados, não autorização de IPA.
+- Os testes já existentes de parser de GitHub Releases e URLSession com resposta injetada passaram, incluindo HTTP 404/403, assets inválidos, URL do asset fora do repositório, SHA ausente, múltiplos assets e sem chave editorial.
+- A compilação ARM64 para deployment target iOS 12 foi aprovada; o binário de prévia permaneceu no runner. Nenhum DEB ou IPA foi publicado, assinado para distribuição ou instalado.
+- As travas de produção foram verificadas: liveInstallationEnabled=false, productionPublicKeyX963=nil, independentlyProvisionedSPKISHA256=nil.
+- O job live-public-metadata-only foi SKIPPED intencionalmente, porque não houve workflow_dispatch com a opção explícita. Este resultado NÃO prova uma transação HTTPS real do novo executável em CI nem transporte TLS no iPad.
+
+A lista de Releases foi consultada separadamente pelo conector GitHub: [] no momento da verificação. Logo, não há Release observável para o canal público neste momento, mas isso não demonstra publicação, autenticação ou instalação. `GET /releases/latest` / status HTTP ainda não foi executado pelo novo observador.
+
+**Decisão seguinte:** antes de ligar consultas ao serviço CX já instalado, revisar limites de rede e autenticação editorial, executar opcionalmente a checagem live somente leitura no CI, e avaliar um laboratório de HTTPS físico separado. Não transformar respostas de metadata em WRNOTE2 como se houvesse atualização verificada, não modificar o daemon físico existente e não presumir que UID mobile 501 oferece armazenamento imutável contra clientes do mesmo UID.
