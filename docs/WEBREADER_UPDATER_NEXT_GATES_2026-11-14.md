@@ -93,3 +93,19 @@ https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358
 https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850395
 
 O serviço CX continua laboratório não instalado no iPad; o método Swift checkOnlyConnection é opt-in e não é chamado automaticamente pela UI. Todos os relatórios positivos são somente avisos locais, não atualização validada nem instalação permitida. Nenhum package/Release/Build71; Build70 e dados intactos.
+
+
+## Marco CZ — laboratório físico isolado do serviço check-only (21/11/2026 UTC)
+
+A fase CZ criou um pacote de QA separado do leitor e separado do PING legado. O objetivo é testar de forma opt-in a execução de um serviço launchd persistente no iPad iOS12.5.8/Chimera, sem executar AppInst ou atribuir autoridade a respostas locais.
+
+- DEB: WebReader-Chimera-CheckOnly-CX-iOS12-QA.deb, package ID com.example.webreader.checkonlylab, v0.1.0.
+- Contém somente /usr/local/libexec/webreader-checkonly (assinado ad hoc, mobile, modo 0755, executa serve ou probe) e /Library/LaunchDaemons/com.example.webreader.checkonlylab.plist, além dos diretórios pais.
+- Usa porta local 38973, distinta da PING 38971; comando explícito em NewTerm como mobile: /usr/local/libexec/webreader-checkonly probe. Uma resposta NOTE é mero aviso de recepção sem consulta real ao GitHub, RATE indica rate limit. Nenhuma atualização é instalada.
+- Empacotamento aproveita a correção Build61 FIX1 dos diretórios exigidos pelo dpkg no Chimera. O postinst carrega apenas seu próprio label via launchctl; prerm descarrega o mesmo label. Uma instalação física ainda exige decisão/ação explícita do proprietário.
+- CI SUCCESS quatro jobs: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44856655031, artifact ID 14687618052. DEB SHA-256 dd3c56c53fcb26fd8cbd31d3d23e28fe41be79b28c0ec7c3719a84404d15bc8e, verificado após extração.
+- Detalhes, status e remoção: docs/WEBREADER_CHIMERA_CHECKONLY_TRANSPORT_LAB_2026-11-20.md.
+
+**Limites:** pacote foi compilado e auditado em CI, NÃO foi instalado no iPad; a viabilidade física permanece em aberto. Nunca tratar PONG/NOTE como publisher trust, identidade de peer, disponibilidade de Release ou autorização de instalação. A API Swift checkOnlyConnection do WebReader não tem UI e não é chamada automaticamente.
+
+**Hard stops:** Build70, biblioteca, banco e downloads intactos; main sem modificações, PR #90 Draft; liveInstallationEnabled=false; nenhuma Build71, GitHub Release ou AppInst real executado em CI. A fase CZ prepara apenas a QA física separada; não autoriza instalar o DEB sem intervenção explícita do proprietário.
