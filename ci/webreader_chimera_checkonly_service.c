@@ -12,7 +12,11 @@
  * cannot inherit privileges, install apps, execute subprocesses, or write
  * the user's files. Compile for the device only AFTER reviewing the lab.
  */
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE 1
+#else
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include "build70_cw_shared_dispatch.h"
 #include <arpa/inet.h>
 #include <errno.h>
