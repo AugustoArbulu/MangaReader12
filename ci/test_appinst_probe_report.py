@@ -267,6 +267,41 @@ class SafeSpawnReportTests(unittest.TestCase):
             with self.subTest(report=sample_report):
                 self.assertFalse(classify_report(sample_report)["report_accepted"])
 
+    def test_physical_build5_ios1258_self_spawn_eperm(self):
+        # Literal owner report, 2026-11-20 local, first button only.
+        # EPERM on signed main self-spawn is observed; it is NOT a
+        # result from /usr/bin/appinst, nor installation authorization.
+        physical = "\n".join([
+            HEADER,
+            "iOS: 12.5.8",
+            "UID: 501 | EUID: 501",
+            "APPINST_META_LSTAT=ERRNO_1",
+            "APPINST_META_XOK=ERRNO_1",
+            "APPINST_META_ADVISORY=YES",
+            "CHILD_PATH=FOUND",
+            "CHILD_LSTAT=REGULAR",
+            "CHILD_MODE_EXEC=NO",
+            "CHILD_ACCESS_XOK=ERRNO_1",
+            "SPAWN_LOCAL=PRECHECK_FAILED",
+            FOOTER,
+            "SELF_MAIN=REGULAR_EXEC",
+            "SPAWN_SELF=NEGADO (1 (Operation not permitted))",
+        ]) + "\n"
+        result = classify_report(physical)
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["local_child"], "PRECHECK_FAILED")
+        self.assertEqual(result["child_precheck"]["lstat"], "REGULAR")
+        self.assertEqual(result["child_precheck"]["executable_bits"], "NO")
+        self.assertEqual(result["self_probe"]["main_executable"], "REGULAR_EXEC")
+        self.assertEqual(result["self_probe"]["result"], "NEGADO")
+        self.assertFalse(result["direct_appinst_execution_verified"])
+        self.assertFalse(result["installer_authorized"])
+        self.assertFalse(result["installation_performed"])
+        # Additional lines are not allowed to promote a denied launch.
+        self.assertFalse(classify_report(
+            physical + "APPINST_EXECUTADO=SIM\n"
+        )["report_accepted"])
+
     def test_nonstring_rejected(self):
         self.assertFalse(classify_report(None)["report_accepted"])
 
