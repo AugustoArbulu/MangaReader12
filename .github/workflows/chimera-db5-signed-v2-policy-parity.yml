@@ -14,6 +14,9 @@ on:
       - 'ci/test_webreader_update_manifest.py'
       - 'ci/test_native_webreader_update_verifier.py'
       - 'ci/test_native_webreader_signed_release_trust_gate.py'
+      - 'ci/test_native_webreader_signed_production_discovery.py'
+      - 'ci/test_native_webreader_signed_production_envelope_binding.py'
+      - 'MangaReader12/Core/WebReaderSignedProductionEnvelopeBinding.swift'
   workflow_dispatch:
 
 permissions:
@@ -61,6 +64,8 @@ jobs:
         run: |
           python3 ci/test_native_webreader_update_verifier.py
           python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_webreader_signed_production_discovery.py
+          python3 ci/test_native_webreader_signed_production_envelope_binding.py
       - name: Cross-compile amended verifier for iOS12 ARM64
         run: |
           xcrun --sdk iphoneos swiftc -parse-as-library \
