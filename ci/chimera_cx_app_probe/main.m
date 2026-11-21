@@ -67,7 +67,7 @@ static NSString *WRDAStatusText(WR_DA_Result status) {
     text.translatesAutoresizingMaskIntoConstraints = NO;
     text.editable = NO;
     text.selectable = YES;
-    text.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
+    text.font = [UIFont fontWithName:@"Menlo-Regular" size:14] ?: [UIFont systemFontOfSize:14];
     text.layer.borderColor = [UIColor lightGrayColor].CGColor;
     text.layer.borderWidth = 1;
     text.layer.cornerRadius = 8;
