@@ -140,3 +140,14 @@ Artifact único de QA: WebReader-Chimera-CheckOnly-CX-iOS12-QA, ID 14687618052.
 Um primeiro teste host falhou porque o CLI probe não recebia a porta efêmera; foi corrigido permitindo porta dinâmica apenas sob WR_CX_HOST_TEST_PORT, proibido no alvo iOS. A execução final acima passou.
 
 **Status após CI:** arquivo DEB está disponível para teste opt-in, mas **NÃO foi instalado no iPad**; nenhum serviço foi executado no dispositivo, nenhuma IPA foi instalada nem atualização de WebReader aplicada. A autorização do proprietário ainda é necessária para instalar o DEB e rodar a QA física. O pacote não substitui a Build61 PING nem habilita instalação automática.
+
+
+## QA física informada pelo proprietário — 21/11/2026 UTC
+
+O proprietário confirmou no chat que os testes guiados do pacote CZ/CX no iPad iOS12.5.8/Chimera **deram certo** após instalar e executar as verificações pelo NewTerm 2. Este é um **relato de sucesso físico do usuário**; não foram anexadas as linhas reais de saída nem capturas nesta interação. Portanto, NÃO transcrever os valores esperados NOTE/RATE como logs efetivamente capturados ou declarar status de `dpkg -s` observado de forma independente.
+
+Interpretação estrita: os testes de instalação e comunicação local foram relatados como concluídos; ainda **não foi validada** a independência do serviço após fechar totalmente o NewTerm, depois de reabrir o terminal, nem após reinicialização/rejailbreak. Tampouco há teste de solicitação a partir de um app iOS sandboxed, pois o cliente Swift CX ainda não tem UI na Build70 instalada.
+
+**Próximo ensaio não instalador:** fechar completamente o NewTerm, aguardar um pouco (idealmente 60 s para passar o rate limit), abrir novamente como usuário mobile e executar `whoami` seguido de `/usr/local/libexec/webreader-checkonly probe`. Registrar a saída. NOTE ou RATE indica resposta do serviço; UNAVAILABLE ou falha requer interromper, sem reinstalar ou modificar a Build70. Não fazer reboot apenas para este teste.
+
+O código continua sem AppInst e sem capacidade de instalação; não interpretar este êxito como autorização de release, publisher ou execução de IPA.
