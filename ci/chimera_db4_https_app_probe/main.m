@@ -112,14 +112,14 @@ static NSString *WRDB4SafeHeader(NSHTTPURLResponse *response, NSString *key) {
     NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
     NSString *details = [NSString stringWithFormat:
         @"WR_DB4_HTTP_REACHED=YES\n"
-         "WR_DB4_HTTP_STATUS=%ld\n"
-         "WR_DB4_CONTENT_TYPE=%@\n"
-         "WR_DB4_RATELIMIT_REMAINING=%@\n"
-         "WR_DB4_RATELIMIT_LIMIT=%@\n"
-         "WR_DB4_RATELIMIT_RESOURCE=%@\n"
-         "WR_DB4_RETRY_AFTER=%@\n"
-         "WR_DB4_SERVER=%@\n"
-         "WR_DB4_HTTP_RESPONSE_BODY=NOT_READ\n",
+         @"WR_DB4_HTTP_STATUS=%ld\n"
+         @"WR_DB4_CONTENT_TYPE=%@\n"
+         @"WR_DB4_RATELIMIT_REMAINING=%@\n"
+         @"WR_DB4_RATELIMIT_LIMIT=%@\n"
+         @"WR_DB4_RATELIMIT_RESOURCE=%@\n"
+         @"WR_DB4_RETRY_AFTER=%@\n"
+         @"WR_DB4_SERVER=%@\n"
+         @"WR_DB4_HTTP_RESPONSE_BODY=NOT_READ\n",
          (long)http.statusCode,
          WRDB4SafeHeader(http, @"content-type"),
          WRDB4SafeHeader(http, @"x-ratelimit-remaining"),
@@ -136,7 +136,7 @@ static NSString *WRDB4SafeHeader(NSHTTPURLResponse *response, NSString *key) {
     (void)session; (void)task;
     NSString *message = error
         ? [NSString stringWithFormat:@"WR_DB4_HTTP_REACHED=NO\n"
-                "WR_DB4_ERROR_DOMAIN=%@\nWR_DB4_ERROR_CODE=%ld",
+                @"WR_DB4_ERROR_DOMAIN=%@\nWR_DB4_ERROR_CODE=%ld",
                 error.domain, (long)error.code]
         : @"WR_DB4_HTTP_REACHED=NO\nWR_DB4_ERROR=NO_HEADERS";
     [self finish:message];
@@ -163,8 +163,8 @@ static NSString *WRDB4SafeHeader(NSHTTPURLResponse *response, NSString *key) {
     intro.numberOfLines = 0;
     intro.font = [UIFont systemFontOfSize:15];
     intro.text = @"Teste HTTPS isolado no iOS 12. Uma consulta GET ao GitHub, "
-                  "somente para ler o status HTTP e cabecalhos. "
-                  "Nao baixa o corpo, nao verifica publisher nem instala IPA.";
+                  @"somente para ler o status HTTP e cabecalhos. "
+                  @"Nao baixa o corpo, nao verifica publisher nem instala IPA.";
     [self.view addSubview:intro];
 
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -229,14 +229,14 @@ static NSString *WRDB4SafeHeader(NSHTTPURLResponse *response, NSString *key) {
             if (!strongSelf) return;
             strongSelf.report = [NSString stringWithFormat:
                 @"WebReader DB4 HTTPS QA\n"
-                 "Bundle=%@\n"
-                 "iOS=%@\n"
-                 "UID=%u EUID=%u\n"
-                 "Origin=%@\n"
-                 "%@\n"
-                 "WR_DB4_PUBLISHER_AUTHENTICATED=NO\n"
-                 "WR_DB4_IPA_DOWNLOADED=NO\n"
-                 "WR_DB4_INSTALL=NEVER\n",
+                 @"Bundle=%@\n"
+                 @"iOS=%@\n"
+                 @"UID=%u EUID=%u\n"
+                 @"Origin=%@\n"
+                 @"%@\n"
+                 @"WR_DB4_PUBLISHER_AUTHENTICATED=NO\n"
+                 @"WR_DB4_IPA_DOWNLOADED=NO\n"
+                 @"WR_DB4_INSTALL=NEVER\n",
                  [NSBundle mainBundle].bundleIdentifier ?: @"unknown",
                  [UIDevice currentDevice].systemVersion,
                  (unsigned)getuid(), (unsigned)geteuid(),
