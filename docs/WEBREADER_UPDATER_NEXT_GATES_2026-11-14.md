@@ -146,3 +146,16 @@ O usuário forneceu saída real do aplicativo descartável `com.example.WebReade
 Gate de transporte da fase DA: **APROVADO (hardware real)**. Não repetir provas de `posix_spawn` nem exigir novo teste de conexão em NewTerm antes de avançar. Próximo trabalho: diferenciar `check-only` do transporte (que não consulta versões) de um futuro serviço independente que verifica Release de origem fixa, autenticidade/editorial, antirreplay e disponibilidade — sem misturar aviso local com autorização de instalação.
 
 Continuam pendentes: nenhum reboot/rejailbreak medido, identidade de processo remoto não autenticada, publisher trust de produção ausente, real instalação IPA pelo helper não implementada, consentimento seguro e preservação de biblioteca não demonstrados. Manter Build70, main e PR #90 Draft, sem habilitar `liveInstallationEnabled` ou publicar Build71.
+
+
+## Marco pós-DA DB2 — observação de GitHub Releases reutilizando parser iOS12 (21/11/2026 UTC)
+
+O transporte físico DA app → serviço CX foi aprovado; para a próxima etapa foi criado **observador read-only externo**, sem alterar ou reiniciar o serviço instalado. O identificador **DB2** é deliberado: a fase histórica Build70 DB (10/11/2026) trata de UID custody e não deve ser sobrescrita.
+
+Arquivos novos: `ci/webreader_cx_release_observer.swift`, `ci/test_webreader_cx_release_observer.py`, `.github/workflows/chimera-db2-fixed-release-observer.yml`; documentação em `docs/WEBREADER_POST_DA_DB2_RELEASE_OBSERVER_2026-11-21.md`.
+
+O observador Swift reaproveita `WebReaderUpdateChecker.swift` e `WebReaderGitHubReleaseParser.swift`. `--selftest` usa fixtures sintéticos sem rede; `--live` é uma ação explícita que faz um GET só ao endereço fixo `https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest`. Mesmo quando encontra metadata de build maior, rotula o resultado `UNTRUSTED_NEWER_METADATA`, nunca publisher verificado, IPA baixada ou instalação permitida. HTTP 404/403 permanecem erros/ausência de Release acessível, não confirmação de atualização.
+
+GitHub Actions `#44859883589` **SUCCESS**: testes com Swift nativo no macOS, regressões de URLSession/parser e compilação do observador para ARM64 iOS 12. O job opcional de consulta live do observador ficou SKIPPED, por ausência de `workflow_dispatch` com opt-in. Separadamente, a API GitHub do repositório foi consultada: lista de Releases `[]`, `/releases/latest` HTTP 404 no instante verificado. Isso não foi um request realizado pelo novo executável.
+
+**Próximo gate:** testar HTTPS real a partir do observador de laboratório e, futuramente, do iPad; não instalar nova versão de CX, não acionar AppInst, nem promover metadata GitHub à identidade editorial. Publisher pin ainda nil, check-only sem permissão, main/Build70 intocadas. Antes de instalação real permanecem gates de custódia entre UIDs, assinatura editorial, consentimento e recuperação de dados.
