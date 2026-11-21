@@ -61,3 +61,35 @@ Mesmo se a DB4 comunicar com api.github.com, o GitHub HTTPS e seu SHA não auten
 - Nenhuma Build70, serviço CX, app DA ou branch `main` foi alterado; nenhuma Release ou atualização publicada.
 
 **Estado físico:** DB4 pronta para ensaio manual opcional. A autorização explícita do proprietário para instalar o aplicativo descartável NÃO pode ser inferida da CI verde. Resultado de HTTP/TLS no iPad ainda não existe nesta data.
+
+
+## QA FÍSICA DB4 — usuário forneceu relatório completo (21/11/2026 UTC)
+
+O proprietário instalou a IPA de QA independente no iPad e copiou o relatório real do aplicativo. Texto preservado integralmente:
+
+```text
+WebReader DB4 HTTPS QA
+Bundle=com.example.WebReaderDB4HTTPSProbe
+iOS=12.5.8
+UID=501 EUID=501
+Origin=https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest
+WR_DB4_HTTP_REACHED=YES
+WR_DB4_HTTP_STATUS=404
+WR_DB4_CONTENT_TYPE=application/json; charset=utf-8
+WR_DB4_RATELIMIT_REMAINING=58
+WR_DB4_RATELIMIT_LIMIT=60
+WR_DB4_RATELIMIT_RESOURCE=core
+WR_DB4_RETRY_AFTER=MISSING
+WR_DB4_SERVER=github.com
+WR_DB4_HTTP_RESPONSE_BODY=NOT_READ
+
+WR_DB4_PUBLISHER_AUTHENTICATED=NO
+WR_DB4_IPA_DOWNLOADED=NO
+WR_DB4_INSTALL=NEVER
+```
+
+**Interpretação rigorosa:** no dispositivo iOS 12.5.8, a aplicação separada e sandboxed, executando UID/EUID 501, fez uma requisição HTTPS por URLSession ao URL fixo `/releases/latest`, recebeu status **HTTP 404**, com `x-ratelimit-remaining=58`, `x-ratelimit-limit=60`, `x-ratelimit-resource=core`, sem Retry-After. O limite da API **não estava esgotado na resposta desse iPad**. Não foi lido o corpo e não há prova de release oficial, de assinatura editorial ou instalação.
+
+A observação é consistente com a ausência de Releases retornada pelo conector GitHub para esse repositório. O HTTP 403 do runner macOS em DB3 é **específico daquela execução**; o usuário não reproduziu o 403 no iPad. Não afirmar que o 403 do runner foi causado por rate limiting, nem que a resposta 404 é status de atualização do WebReader. A lista de Releases pode mudar e o 404 pode resultar de outros estados de acesso.
+
+**Gate DB4 físico: APROVADO.** O iOS12 conseguiu fazer HTTPS ao GitHub e receber cabeçalhos. Não repetir o mesmo teste sem hipótese nova, não exigir reinício do iPad. O próximo desenvolvimento deve focar política de publicação e verificação de manifesto assinado com raiz editorial independente, sem misturar resposta pública de GitHub com permissão de instalação. CX e DA continuam em suas versões aprovadas, a Build70/Library intocadas.
