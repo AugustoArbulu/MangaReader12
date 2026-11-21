@@ -63,7 +63,7 @@ def classify_report(raw: str) -> dict:
             return outcome
         result_match = re.fullmatch(
             r"(OK|NEGADO|FALHA_DO_SELF|WAITPID_INDISPONIVEL|TIMEOUT|PRECHECK_FAILED)"
-            r"(?: \\([^\\r\\n]{1,180}\\))?",
+            r"(?: \([^\r\n]{1,180}\))?",
             self_result,
         )
         if result_match is None:
