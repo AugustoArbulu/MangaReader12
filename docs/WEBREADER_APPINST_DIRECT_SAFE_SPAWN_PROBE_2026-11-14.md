@@ -74,3 +74,9 @@ RESULTADO: child inválido ou não executável.
 - `ci/appinst_probe_report.py` distingue exatamente a falha anterior Build3, o pré-teste Build4 e o lançamento do filho, recusando relatórios manipulados e qualquer promoção a autorização de instalação. Testes sintéticos incluem as variantes e negativas.
 - `ci/test_appinst_direct_probe.py` passa a exigir modo executável do filho dentro da IPA, além dos demais invariantes. Build da IPA diagnóstica incrementada de 3 para **4**, com bundle ID separado da Build70.
 - **Nenhuma Build71, Release pública ou atualização do WebReader foi criada.** Permanecem `main` intacta, PR Draft, `liveInstallationEnabled=false`, banco/biblioteca/arquivos offline não alterados. Próximo passo físico apenas com a IPA diagnóstica Build4 depois de CI verde: executar o primeiro botão e copiar o relatório. O segundo botão opcional continua desnecessário.
+
+### Build4 CI e pacote verificados (21/11/2026 UTC)
+
+- GitHub Actions [#44845878702](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44845878702): **SUCCESS**, parser histórico + Build4, clang ARM64/iOS12, `codesign`, contrato de não execução do AppInst pelo primeiro botão, verificação de ZIP/entitlements e upload de artifact.
+- Artifact `WebReader-Appinst-Direto-iOS12-TEST` ID `14682527986`. IPA `WebReader-Appinst-Direto-iOS12-adhoc.ipa` de 18.156 bytes; SHA-256 `db3682dc58506864edfc9b2441ec18a293fd32e5f4922f7e9c99e07c293d7b3e`, conferido com `.sha256` após extração do arquivo do workflow. `CFBundleVersion=4`, `MinimumOSVersion=12.0`, ID isolado `com.example.WebReaderAppinstDirectProbe`; `WRSpawnChild` modo Unix `0100755` no ZIP.
+- **Ainda falta teste físico Build4.** A Build3 encerrou no pré-teste; nenhum AppInst foi executado. O comportamento de `posix_spawn` e do bundle instalado no iPad continua desconhecido. Instale Build4 *apenas como diagnóstico separado* e execute o primeiro botão.
