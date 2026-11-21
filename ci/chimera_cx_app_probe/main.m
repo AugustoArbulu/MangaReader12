@@ -14,23 +14,23 @@ static NSString *WRDAStatusText(WR_DA_Result status) {
     switch (status) {
         case WR_DA_NOTE:
             return @"WR_DA=NOTICE_ACCEPTED\n"
-                    "Servico CX respondeu. Nenhuma Release consultada; nenhuma IPA instalada.";
+                    @"Servico CX respondeu. Nenhuma Release consultada; nenhuma IPA instalada.";
         case WR_DA_RATE:
             return @"WR_DA=RATE_LIMITED\n"
-                    "Limite de frequencia do CX. Nenhuma instalacao.";
+                    @"Limite de frequencia do CX. Nenhuma instalacao.";
         case WR_DA_DENY:
             return @"WR_DA=DENIED\n"
-                    "O servico CX rejeitou o aviso. Nenhuma instalacao.";
+                    @"O servico CX rejeitou o aviso. Nenhuma instalacao.";
         case WR_DA_UNAVAILABLE:
             return @"WR_DA=UNAVAILABLE\n"
-                    "Servico CX indisponivel na porta 38973. Nenhuma instalacao.";
+                    @"Servico CX indisponivel na porta 38973. Nenhuma instalacao.";
         case WR_DA_BAD_RESPONSE:
             return @"WR_DA=PROTOCOL_REJECTED\n"
-                    "Resposta incompleta, desconhecida ou com bytes extras.";
+                    @"Resposta incompleta, desconhecida ou com bytes extras.";
         case WR_DA_TRANSPORT_ERROR:
         default:
             return @"WR_DA=TRANSPORT_ERROR\n"
-                    "Falha de comunicacao local. Nenhuma instalacao.";
+                    @"Falha de comunicacao local. Nenhuma instalacao.";
     }
 }
 
@@ -51,7 +51,7 @@ static NSString *WRDAStatusText(WR_DA_Result status) {
     description.numberOfLines = 0;
     description.font = [UIFont systemFontOfSize:16];
     description.text = @"Teste isolado do servico CX em 127.0.0.1:38973.\n"
-                        "Nao busca releases, nao instala IPAs e nao altera o WebReader.";
+                        @"Nao busca releases, nao instala IPAs e nao altera o WebReader.";
     [self.view addSubview:description];
 
     UIButton *test = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -99,8 +99,8 @@ static NSString *WRDAStatusText(WR_DA_Result status) {
         [copy.heightAnchor constraintGreaterThanOrEqualToConstant:44]
     ]];
     self.report = @"WR_DA=READY\n"
-                   "Pressione Testar comunicacao CX.\n"
-                   "Nenhuma solicitação e enviada automaticamente.";
+                   @"Pressione Testar comunicacao CX.\n"
+                   @"Nenhuma solicitação e enviada automaticamente.";
     self.reportView.text = self.report;
 }
 
@@ -112,14 +112,14 @@ static NSString *WRDAStatusText(WR_DA_Result status) {
         WR_DA_Result result = wr_da_probe();
         NSString *report = [NSString stringWithFormat:
             @"WebReader CX Sandbox QA\n"
-             "Bundle: %@\n"
-             "iOS: %@\n"
-             "UID: %u | EUID: %u\n"
-             "Destino: 127.0.0.1:38973\n"
-             "Comando: WRCHK2 (7 bytes, LF)\n"
-             "%@\n"
-             "WR_DA_INSTALL=NEVER\n"
-             "WR_DA_PUBLISHER_AUTHENTICATED=NO\n",
+             @"Bundle: %@\n"
+             @"iOS: %@\n"
+             @"UID: %u | EUID: %u\n"
+             @"Destino: 127.0.0.1:38973\n"
+             @"Comando: WRCHK2 (7 bytes, LF)\n"
+             @"%@\n"
+             @"WR_DA_INSTALL=NEVER\n"
+             @"WR_DA_PUBLISHER_AUTHENTICATED=NO\n",
              [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown",
              [[UIDevice currentDevice] systemVersion],
              (unsigned)getuid(), (unsigned)geteuid(),
