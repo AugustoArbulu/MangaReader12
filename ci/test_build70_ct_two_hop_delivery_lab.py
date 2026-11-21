@@ -71,6 +71,18 @@ class CTTwoHopTests(unittest.TestCase):
         with self.assertRaises(CTReviewRejected):
             self.run_review(after_second_copy=swap)
 
+    def test_identical_replacement_is_rejected_at_each_handoff(self):
+        def replace(path):
+            path.rename(path.with_suffix(".old"))
+            path.write_bytes(ORIGINAL)
+
+        with self.assertRaisesRegex(CTReviewRejected, "previous reviewed copy"):
+            self.run_review(after_first_copy=replace)
+        for path in self.review.iterdir():
+            path.unlink()
+        with self.assertRaisesRegex(CTReviewRejected, "second reviewed copy"):
+            self.run_review(after_second_copy=replace)
+
     def test_second_inplace_mutation_before_final_readback_rejected(self):
         with self.assertRaises(CTReviewRejected):
             self.run_review(after_second_copy=lambda path: path.write_bytes(ALTERED))

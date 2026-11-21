@@ -88,8 +88,12 @@ def _regular(info, expected_size: int):
         raise CTReviewRejected("unsafe source or output file identity")
 
 
+def _identity(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
 def _copy_checked(src_dir: int, src_leaf: str, dest_dir: int, dest_leaf: str,
-                  expected_sha: str, expected_size: int) -> str:
+                  expected_sha: str, expected_size: int, *, source_identity=None) -> tuple:
     """Copy once by descriptor and verify source *and* copy (review only)."""
     if not (type(src_leaf) is str and type(dest_leaf) is str
             and re.fullmatch(r"[a-z0-9-]{1,60}\.fake", src_leaf)
@@ -97,10 +101,12 @@ def _copy_checked(src_dir: int, src_leaf: str, dest_dir: int, dest_leaf: str,
         raise CTReviewRejected("only fixed synthetic fixture leaf names")
     src_fd, dst_fd = -1, -1
     try:
-        src_fd = os.open(src_leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        src_fd = os.open(src_leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
                          dir_fd=src_dir)
         before = os.fstat(src_fd)
         _regular(before, expected_size)
+        if source_identity is not None and _identity(before) != source_identity:
+            raise CTReviewRejected("source differs from the previous reviewed copy")
         # Exclusive creation: do not remove a partially created output on error.
         dst_fd = os.open(dest_leaf, os.O_CREAT | os.O_EXCL | os.O_WRONLY |
                          os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dest_dir)
@@ -129,16 +135,17 @@ def _copy_checked(src_dir: int, src_leaf: str, dest_dir: int, dest_leaf: str,
                 or not hmac.compare_digest(sha.hexdigest(), expected_sha)):
             raise CTReviewRejected("source changed, renamed or digest differed")
         os.fsync(dst_fd)
-        _regular(os.fstat(dst_fd), expected_size)
-        os.close(dst_fd)
-        dst_fd = -1
+        written = os.fstat(dst_fd)
+        _regular(written, expected_size)
         # Independently check the destination by reopening inside the held
         # directory FD. This is NOT a guarantee about subsequent consumers.
-        check_fd = os.open(dest_leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        check_fd = os.open(dest_leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
                            dir_fd=dest_dir)
         try:
             check_stat = os.fstat(check_fd)
             _regular(check_stat, expected_size)
+            if _identity(check_stat) != _identity(written):
+                raise CTReviewRejected("readback differs from the written copy")
             h = hashlib.sha256()
             while True:
                 b = os.read(check_fd, BLOCK)
@@ -158,7 +165,7 @@ def _copy_checked(src_dir: int, src_leaf: str, dest_dir: int, dest_leaf: str,
         finally:
             os.close(check_fd)
         os.fsync(dest_dir)
-        return expected_sha
+        return _identity(check_stat)
     except OSError as exc:
         raise CTReviewRejected("two-hop source/copy I/O rejected") from exc
     finally:
@@ -186,20 +193,24 @@ def two_hop_review(*, source_dir: Path, review_dir: Path, second_dir: Path,
         src, review, second = fds
         name1 = "review-" + expected_sha256[:24] + ".fake"
         name2 = "handoff-" + expected_sha256[:24] + ".fake"
-        _copy_checked(src, "candidate.fake", review, name1,
+        first_identity = _copy_checked(src, "candidate.fake", review, name1,
                       expected_sha256, expected_size)
         if after_first_copy is not None:
             after_first_copy(review_dir / name1)
-        _copy_checked(review, name1, second, name2,
-                      expected_sha256, expected_size)
+        second_identity = _copy_checked(
+            review, name1, second, name2, expected_sha256, expected_size,
+            source_identity=first_identity
+        )
         if after_second_copy is not None:
             after_second_copy(second_dir / name2)
         # Check final output after any injected lab mutation.
-        final_fd = os.open(name2, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        final_fd = os.open(name2, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
                            dir_fd=second)
         try:
             stat_final = os.fstat(final_fd)
             _regular(stat_final, expected_size)
+            if _identity(stat_final) != second_identity:
+                raise CTReviewRejected("final readback differs from the second reviewed copy")
             h = hashlib.sha256()
             while True:
                 piece = os.read(final_fd, BLOCK)

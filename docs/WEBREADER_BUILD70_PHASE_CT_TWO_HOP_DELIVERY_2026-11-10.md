@@ -47,3 +47,7 @@ Um processo com o **mesmo UID** pode alterar seus próprios arquivos 0400, e um 
 - Ambos os jobs mantiveram produção sem chave pública/pin provisionado e `liveInstallationEnabled=false`.
 
 **Decisão para a próxima fase:** preparar uma matriz de confiança e isolamento do helper **sem executar instalação**. A resposta segura é distinguir três propriedades separadas: (a) integridade verificada antes de entregar o objeto; (b) proteção de escrita durante a vida útil do consumidor final; (c) aprovação editorial + consentimento local + anti-replay, todos sob custódia independente do app. Nenhuma das três pode ser inferida exclusivamente de chmod, UID igual ou digest de um arquivo já fechado.
+
+## Continuidade após DB5
+
+O laboratório agora vincula cada leitura à identidade da cópia escrita. A segunda etapa exige o mesmo dispositivo, inode, tamanho e timestamps da primeira cópia revisada. A leitura final verifica os mesmos atributos da segunda cópia. Substituições por arquivos de conteúdo idêntico são recusadas nos dois pontos de transferência. A cobertura é de laboratório no host. Para estabelecer a mesma garantia no iPad, ainda é preciso observar a abertura e o consumo pelo serviço real e comprovar a custódia até o fim dessa leitura.
