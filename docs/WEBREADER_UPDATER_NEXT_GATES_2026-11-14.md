@@ -257,3 +257,9 @@ Encerrar a rodada de comandos que dependem de `lsof`. Antes de qualquer ensaio c
 O proprietário reportou `WR_SELF_FD=CONTROL_LISTED` no app separado `com.example.WebReaderSelfFDProbe`. A [execução de QA](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44867440037) compilou e assinou ad hoc a IPA iOS 12 ARM64. SHA-256 da IPA entregue: `265828bc975f7a4e7768c8f32e39204b9e691c5c20c74cac2dc58a7b8cb91bba`.
 
 O código resolveu `proc_pidinfo` e encontrou, na consulta `PROC_PIDLISTFDS` do próprio PID, o descritor de controle aberto para `/dev/null`. Isso encerra a prova de disponibilidade e funcionamento para o próprio processo nessa configuração. Para avaliar a leitura do instalador, o próximo controle deve investigar a consulta de um processo separado antes de medir `installd`. Nenhum descritor do serviço nem arquivo IPA foi observado nesse teste.
+
+### Retorno físico da sondagem em dois apps
+
+O proprietário reportou `WR_PEER_FD=TARGET_UNCONFIRMED` no Observador dos [apps de QA emparelhados](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44868046146). O diagnóstico usa `proc_name` para conferir o nome exato `WRFDTarget` antes e depois de consultar `proc_pidinfo`. O mesmo status cobre falha de leitura de nome, nome inesperado e insucesso na reconfirmação. Assim, esse retorno não distingue PID antigo ou processo encerrado, leitura de nome indisponível, e falha posterior à consulta. Ele não prova que a consulta de descritores de outro processo foi negada.
+
+A próxima sonda deve distinguir as etapas de identificação e, se necessário, adicionar um sinal independente de que o alvo segue vivo com o mesmo PID. Evitar repetir a mesma build como prova de acesso ao `installd`. Nenhuma instalação pelo WebReader nem observação de IPA em `installd` ocorreu.
