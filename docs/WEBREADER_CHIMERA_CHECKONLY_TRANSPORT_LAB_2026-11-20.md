@@ -74,3 +74,17 @@ O arquivo de produção já existente MangaReader12/Core/WebReaderAppinstSocket.
 ci/test_native_webreader_checkonly_transport.py compila o mesmo arquivo Swift real num harness macOS e comunica-se com o serviço C da fase CX compilado no host. Cenários: aviso, rate limit, servidor ausente, frame literal com half-close, respostas desconhecidas/forjadas, bytes extras, truncamento e invariantes sem instalador. O workflow chimera-checkonly-transport-lab.yml executa essa suíte no macOS e valida também o servidor C em Linux/macOS e compilação ARM64/iOS12. O workflow MVP do atualizador recompila o app para iOS12 sem produzir IPA.
 
 Nenhum pacote para iPad é entregue nesta fase. O serviço CX permanece laboratório; o PING físico Build61 FIX1 não foi modificado. A integração UI e download real com publisher confiável ficam para outro gate. Esta fase não autoriza ativar WebReaderAppinstSocket.install, WRINST1 ou publicar Build71/Release. A Build70 física permanece preservada.
+
+
+### Validação CY (21/11/2026 UTC)
+
+GitHub Actions #44850850358: SUCCESS, 3/3 jobs.
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358
+
+- Linux e macOS: serviço C CX com framing, EOF, rate-limit e inputs adversariais passou.
+- macOS: o arquivo Swift real WebReaderAppinstSocket.swift foi compilado contra um harness e conectado ao processo C real. Foram exercitadas confirmações, limites, ausência de servidor, envio fixo seguido de shutdown(SHUT_WR), respostas sintéticas truncadas/forjadas/com sufixo adicional e invariantes sem instalação.
+- macOS/Xcode: serviço nativo prévia ARM64 para iOS12 compilado, sem assinatura/distribuição.
+
+A primeira tentativa do cliente Swift falhou por exclusividade de acesso ao array de resposta dentro de withUnsafeMutableBytes; corrigido movendo o cálculo de remaining para fora da closure. A execução final acima passou. O workflow MVP separado compila o app inteiro para iOS12 sem IPA (resultado próprio a consultar antes de declarar aprovação integral).
+
+Este resultado NÃO é ensaio físico iOS12/Chimera, não significa disponibilidade do serviço no iPad, não autentica o peer e não concede qualquer permissão de instalação. A UI do app não chama ainda a nova função.
