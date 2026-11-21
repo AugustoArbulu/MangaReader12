@@ -86,6 +86,12 @@ enum WebReaderUpdateManifestVerifier {
         else {
             throw WebReaderUpdateValidationError.invalidEnvelope
         }
+        // Production must never accept the legacy v1 format, even when a
+        // caller bypasses the higher-level production-only trust gate.
+        // This matches the existing Python release policy.
+        guard expectedChannel != "production" || envelopeVersion == 2 else {
+            throw WebReaderUpdateValidationError.invalidEnvelope
+        }
         guard publicKeyX963.count == 65, publicKeyX963.first == 0x04 else {
             throw WebReaderUpdateValidationError.invalidPublicKey
         }
@@ -161,10 +167,7 @@ enum WebReaderUpdateManifestVerifier {
             let sha = manifest["sha256"] as? String,
             validPattern(sha, pattern: "^[0-9a-f]{64}$"),
             let date = manifest["publishedAt"] as? String,
-            validPattern(
-                date,
-                pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
-            ),
+            validUTCTimestamp(date),
             let notes = manifest["releaseNotes"] as? [String],
             notes.count <= 20, notes.allSatisfy({ !$0.isEmpty && $0.count <= 240 })
         else {
@@ -201,7 +204,40 @@ enum WebReaderUpdateManifestVerifier {
         guard !value.isEmpty, value.count % 4 == 0,
             validPattern(value, pattern: "^[A-Za-z0-9+/]+={0,2}$")
         else { return nil }
-        return Data(base64Encoded: value, options: [])
+        // Equivalent Base64 strings must not represent the same signed
+        // payload/signature. Reject nonzero unused padding bits.
+        guard let decoded = Data(base64Encoded: value, options: []),
+              decoded.base64EncodedString() == value else { return nil }
+        return decoded
+    }
+
+    private static func validUTCTimestamp(_ text: String) -> Bool {
+        guard validPattern(
+            text,
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        ), let year = Int(text.prefix(4)), year >= 1,
+           let month = Int(text.dropFirst(5).prefix(2)),
+           let day = Int(text.dropFirst(8).prefix(2)),
+           let hour = Int(text.dropFirst(11).prefix(2)),
+           let minute = Int(text.dropFirst(14).prefix(2)),
+           let second = Int(text.dropFirst(17).prefix(2)),
+           let utc = TimeZone(secondsFromGMT: 0)
+        else { return false }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        let input = DateComponents(
+            calendar: calendar, timeZone: utc, year: year, month: month,
+            day: day, hour: hour, minute: minute, second: second
+        )
+        // Calendar.date(from:) normalizes impossible dates; require an exact
+        // UTC round trip to reject February 30, hour 24, second 60, etc.
+        guard let value = calendar.date(from: input) else { return false }
+        let roundTrip = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: value
+        )
+        return roundTrip.year == year && roundTrip.month == month &&
+            roundTrip.day == day && roundTrip.hour == hour &&
+            roundTrip.minute == minute && roundTrip.second == second
     }
 
     private static func exactInteger(_ object: Any?) -> Int? {
