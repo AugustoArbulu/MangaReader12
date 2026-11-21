@@ -13,11 +13,11 @@ import sys
 MAX_REPORT_BYTES = 8192
 HEADER = "WebReader • Spawn local sem appinst"
 NO_INSTALL = "APPINST_EXECUTADO=NAO | INSTALACAO=NAO"
-STATES = {"OK", "NEGADO", "FALHA_DO_CHILD", "WAITPID_INDISPONIVEL", "TIMEOUT"}
+STATES = {"OK", "NEGADO", "FALHA_DO_CHILD", "WAITPID_INDISPONIVEL", "TIMEOUT", "PRECHECK_FAILED"}
 META_RE = re.compile(r"^(?:REGULAR|NOT_REGULAR|ERRNO_[0-9]{1,5})$")
 XOK_RE = re.compile(r"^(?:YES|ERRNO_[0-9]{1,5})$")
 SPAWN_RE = re.compile(
-    r"^SPAWN_LOCAL=(OK|NEGADO|FALHA_DO_CHILD|WAITPID_INDISPONIVEL|TIMEOUT)"
+    r"^SPAWN_LOCAL=(OK|NEGADO|FALHA_DO_CHILD|WAITPID_INDISPONIVEL|TIMEOUT|PRECHECK_FAILED)"
     r"(?: \([^\r\n]{1,180}\))?$"
 )
 
@@ -45,7 +45,7 @@ def classify_report(raw: str) -> dict:
     lines = raw.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
-    if len(lines) not in (8, 9) or lines[0] != HEADER:
+    if len(lines) not in (7, 8, 9, 12, 13) or lines[0] != HEADER:
         return outcome
     if any(not line or line != line.strip() for line in lines):
         return outcome
@@ -54,32 +54,116 @@ def classify_report(raw: str) -> dict:
     identity = re.fullmatch(r"UID: ([0-9]{1,10}) \| EUID: ([0-9]{1,10})", lines[2])
     if identity is None or int(identity.group(2)) == 0:
         return outcome
-    if lines[5] != "APPINST_META_ADVISORY=YES" or lines[7] != NO_INSTALL:
+    if lines[5] != "APPINST_META_ADVISORY=YES":
         return outcome
-    spawn, meta, xok = lines[6], lines[3], lines[4]
+    meta, xok = lines[3], lines[4]
     if not meta.startswith("APPINST_META_LSTAT=") or not xok.startswith("APPINST_META_XOK="):
         return outcome
-    found = SPAWN_RE.fullmatch(spawn)
     m = meta.split("=", 1)[1]
     a = xok.split("=", 1)[1]
-    if not found or not META_RE.fullmatch(m) or not XOK_RE.fullmatch(a):
+    if not META_RE.fullmatch(m) or not XOK_RE.fullmatch(a):
         return outcome
-    state = found.group(1)
-    if state not in STATES:
-        return outcome
-    if state == "OK":
-        if len(lines) != 9 or lines[8] != "Não prova acesso a /usr/bin/appinst.":
+
+    # The physical Build3 report can stop before spawning the child; it
+    # intentionally has no install footer. Accept only exact known text and
+    # classify it as a preflight failure, never as process execution.
+    if len(lines) == 7:
+        if lines[6] not in (
+            "RESULTADO: child inválido ou não executável.",
+            "RESULTADO: child de teste ausente.",
+        ):
             return outcome
-    elif len(lines) != 8:
+        outcome["report_accepted"] = True
+        outcome["local_child"] = "precheck_unclassified"
+        outcome["appinst_metadata"] = {"lstat": m, "access_x_ok": a, "advisory_only": True}
+        outcome["next_step"] = (
+            "O Build3 parou antes de posix_spawn. Verificar a IPA Build4 com "
+            "diagnostico separado de bundle, lstat, bits e access(X_OK)."
+        )
+        return outcome
+
+    is_v4 = len(lines) in (12, 13)
+    if is_v4:
+        if lines[11] != NO_INSTALL:
+            return outcome
+        child_path, child_lstat, child_mode, child_access = lines[6:10]
+        if child_path not in ("CHILD_PATH=FOUND", "CHILD_PATH=MISSING"):
+            return outcome
+        if not child_lstat.startswith("CHILD_LSTAT=") or not child_mode.startswith(
+            "CHILD_MODE_EXEC="
+        ) or not child_access.startswith("CHILD_ACCESS_XOK="):
+            return outcome
+        lstat_value = child_lstat.split("=", 1)[1]
+        mode_value = child_mode.split("=", 1)[1]
+        access_value = child_access.split("=", 1)[1]
+        if not re.fullmatch(r"(?:REGULAR|NOT_REGULAR|NOT_CHECKED|ERRNO_[0-9]{1,5})",
+                            lstat_value):
+            return outcome
+        if mode_value not in ("YES", "NO", "UNKNOWN"):
+            return outcome
+        if not re.fullmatch(r"(?:YES|NOT_CHECKED|ERRNO_[0-9]{1,5})", access_value):
+            return outcome
+        spawn = lines[10]
+        found = SPAWN_RE.fullmatch(spawn)
+        if not found:
+            return outcome
+        state = found.group(1)
+        if child_path == "CHILD_PATH=MISSING":
+            if (lstat_value, mode_value, access_value, state) != (
+                "NOT_CHECKED", "UNKNOWN", "NOT_CHECKED", "PRECHECK_FAILED"
+            ):
+                return outcome
+        elif lstat_value == "REGULAR":
+            if mode_value not in ("YES", "NO"):
+                return outcome
+            if (mode_value == "NO") != (state == "PRECHECK_FAILED"):
+                return outcome
+        else:
+            if mode_value != "UNKNOWN" or state != "PRECHECK_FAILED" or (
+                access_value == "NOT_CHECKED"
+            ):
+                return outcome
+        if child_path == "CHILD_PATH=FOUND" and (
+            lstat_value == "NOT_CHECKED" or access_value == "NOT_CHECKED"
+        ):
+            return outcome
+        details = {
+            "path": child_path.split("=", 1)[1],
+            "lstat": lstat_value,
+            "executable_bits": mode_value,
+            "access_x_ok": access_value,
+            "advisory_only": True,
+        }
+        extra = lines[12:]
+    else:
+        if lines[7] != NO_INSTALL:
+            return outcome
+        found = SPAWN_RE.fullmatch(lines[6])
+        if not found:
+            return outcome
+        state = found.group(1)
+        details = None
+        extra = lines[8:]
+    if state in ("OK", "FALHA_DO_CHILD"):
+        if extra != ["Não prova acesso a /usr/bin/appinst."]:
+            return outcome
+    elif extra:
         return outcome
     outcome["report_accepted"] = True
     outcome["local_child"] = state
+    if is_v4:
+        outcome["child_precheck"] = details
     outcome["appinst_metadata"] = {
         "lstat": m,
         "access_x_ok": a,
         "advisory_only": True,
     }
-    if state == "OK":
+    if state == "PRECHECK_FAILED":
+        outcome["next_step"] = (
+            "A falha ocorreu antes de posix_spawn; não há prova de sandbox "
+            "de execução. Confira os campos CHILD_* para localizar a etapa."
+        )
+    elif state == "OK":
         outcome["next_step"] = (
             "O child local iniciou; isso NAO prova execucao de /usr/bin/appinst. "
             "A instalacao in-app continua bloqueada ate QA fisico separado."
