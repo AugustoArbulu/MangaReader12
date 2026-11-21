@@ -19,7 +19,7 @@ def sample(spawn="OK", lstat="REGULAR", xok="YES"):
         f"SPAWN_LOCAL={spawn}",
         FOOTER,
     ]
-    if spawn == "OK":
+    if spawn in ("OK", "FALHA_DO_CHILD"):
         lines.append("Não prova acesso a /usr/bin/appinst.")
     return "\n".join(lines) + "\n"
 
@@ -205,8 +205,7 @@ class SafeSpawnReportTests(unittest.TestCase):
                 claim + "\n")["report_accepted"])
 
     def test_v3_child_failure_with_advisory_line(self):
-        report = sample("FALHA_DO_CHILD") + "Não prova acesso a /usr/bin/appinst.\n"
-        self.assertTrue(classify_report(report)["report_accepted"])
+        self.assertTrue(classify_report(sample("FALHA_DO_CHILD"))["report_accepted"])
 
     def test_nonstring_rejected(self):
         self.assertFalse(classify_report(None)["report_accepted"])
