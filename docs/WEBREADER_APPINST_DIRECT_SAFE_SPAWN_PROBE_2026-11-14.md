@@ -114,3 +114,10 @@ Esse segundo controle é útil porque o executável principal já inicia normalm
 O parser offline passa a tratar as duas linhas como resultado separado; nenhum desfecho marca `installer_authorized`, `direct_appinst_execution_verified` ou `installation_performed` como verdadeiro. Testes sintéticos cobrem o relatório físico exato da Build4, sucessos e falhas da Build5, estados contraditórios e tentativas de acrescentar autorização falsa.
 
 **Dependências:** checar sucesso do workflow `appinst-direct-test.yml` da Build5, integridade do artifact de diagnóstico e depois solicitar teste físico **somente do primeiro botão**, sem usar `appinst --help`. `main`, PR Draft, `liveInstallationEnabled=false`, Build70, biblioteca e dados offline preservados.
+
+### Build5 — CI aprovada, artifact de diagnóstico confirmado (21/11/2026 UTC)
+
+- [GitHub Actions #44846854127](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44846854127): **SUCCESS**. O job macOS compilou ARM64 com iOS mínimo 12.0, assinou ad hoc o aplicativo isolado, verificou o entitlement efetivo, executou regressões do parser e auditoria estática da distinção entre `WRSpawnChild`, self-spawn e caminho opcional `appinst --help`.
+- Artifact `WebReader-Appinst-Direto-iOS12-TEST`, ID `14683820118`, incluía `WebReader-Appinst-Direto-iOS12-adhoc.ipa` (**18.723 bytes**) e `WebReader-Appinst-Direto-iOS12-adhoc.ipa.sha256`. SHA-256 verificado após download: `719bb054e279bdbc55c30067acfd5f5dc9bf4ce37b5eaf3b31fbc2b90ae6a92a`.
+- Verificação independente do pacote ZIP: `CFBundleVersion=5`, `MinimumOSVersion=12.0`, `CFBundleIdentifier=com.example.WebReaderAppinstDirectProbe`; executável principal e `WRSpawnChild` contêm modo Unix `0755` **no ZIP**, o que não demonstra permissões pós-instalação.
+- `main` e o WebReader Build70 real não foram alterados. Próximo teste permitido no iPad: instalar apenas a IPA diagnóstica Build5 e tocar **1. Testar processo local (sem appinst)**; copiar o relatório completo, inclusive `SELF_MAIN` e `SPAWN_SELF`. Não clicar no segundo botão. Mesmo resultado positivo de self-spawn não autoriza execução do AppInst ou instalação de IPA.
