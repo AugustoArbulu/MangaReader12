@@ -226,3 +226,12 @@ O DEB de referência voltou a passar na verificação do SHA-256 fixado. A extra
 Esses elementos são compatíveis com a sequência da fonte de referência na [fase CS](WEBREADER_BUILD70_PHASE_CS_APPINST_PATH_BOUNDARY_2026-11-10.md). A inspeção confirma a presença dos seletores no executável correspondente ao hash observado. A ordem efetiva das chamadas, o caminho aberto pelo serviço Apple, as permissões vigentes e o tempo de custódia no iOS 12 ainda não foram observados. Uma próxima prova física exigiria um ensaio separado com pacote descartável aprovado e evidência da identidade do arquivo no ponto de leitura pelo serviço. Uma observação da cópia feita pelo AppInst, isoladamente, não encerra esse gate.
 
 A análise foi somente leitura e não executou o binário. A instalação automática continua desativada.
+
+### Pré-teste de visibilidade do serviço Apple
+
+O app descartável existente (Bundle ID `com.example.WebReaderAppinstDisposableTest`) verifica versão e persistência de uma preferência. Sua tela não fornece evidência sobre a leitura da IPA. Antes de montar um ensaio de instalação, o [pré-teste](../ci/observe_installd_visibility.sh) verifica apenas se o `lsof` presente no iPad lista `installd` na sessão mobile do NewTerm. Ele emite apenas um status, sem enviar caminhos ou PIDs. Não exige elevação, instalação ou captura contínua.
+
+- `PROCESS_LISTED`: o processo apareceu nessa consulta. Em um ensaio posterior, uma observação de descritor poderia identificar um arquivo aberto, mas uma consulta pontual pode perder aberturas breves.
+- `LSOF_UNAVAILABLE` ou `NOT_OBSERVED`: a sessão atual não forneceu a observação. A distinção entre serviço ausente, visibilidade insuficiente e outras limitações depende de evidência adicional. O resultado não justifica iniciar uma instalação.
+
+Para fechar o gate, o ensaio terá de ligar o hash conferido antes da transferência ao objeto de arquivo aberto pelo serviço e observar a custódia durante o consumo. Um registro de sucesso do app descartável ou do AppInst fornece evidência de funcionamento, mas deixa o vínculo dos bytes em aberto.
