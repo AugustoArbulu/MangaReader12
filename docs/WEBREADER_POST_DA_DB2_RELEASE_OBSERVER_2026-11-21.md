@@ -45,3 +45,10 @@ https://github.com/AugustoArbulu/MangaReader12/actions/runs/44859883589
 A lista de Releases foi consultada separadamente pelo conector GitHub: [] no momento da verificação. Logo, não há Release observável para o canal público neste momento, mas isso não demonstra publicação, autenticação ou instalação. `GET /releases/latest` / status HTTP ainda não foi executado pelo novo observador.
 
 **Decisão seguinte:** antes de ligar consultas ao serviço CX já instalado, revisar limites de rede e autenticação editorial, executar opcionalmente a checagem live somente leitura no CI, e avaliar um laboratório de HTTPS físico separado. Não transformar respostas de metadata em WRNOTE2 como se houvesse atualização verificada, não modificar o daemon físico existente e não presumir que UID mobile 501 oferece armazenamento imutável contra clientes do mesmo UID.
+
+
+## Verificação externa do endpoint real (21/11/2026 UTC)
+
+A consulta direta via conector GitHub à API `GET https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest` retornou **HTTP 404** com `{"message":"Not Found","status":"404"}`. A lista `/releases` do mesmo repositório devolveu `[]`. É evidência externa da ausência de uma Release pública acessível no momento verificado, mas não é execução de HTTPS pelo novo binário DB2 nem prova de que o repositório sempre permanecerá sem Releases.
+
+Classificação segura: `NO_ACCESSIBLE_LATEST_RELEASE_HTTP_404`, nunca `UP_TO_DATE`, `SIGNED_PUBLISHER` ou `INSTALL_AUTHORIZED`. Nenhum asset, IPA ou Release foi criado.
