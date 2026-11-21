@@ -109,3 +109,12 @@ A fase CZ criou um pacote de QA separado do leitor e separado do PING legado. O 
 **Limites:** pacote foi compilado e auditado em CI, NÃO foi instalado no iPad; a viabilidade física permanece em aberto. Nunca tratar PONG/NOTE como publisher trust, identidade de peer, disponibilidade de Release ou autorização de instalação. A API Swift checkOnlyConnection do WebReader não tem UI e não é chamada automaticamente.
 
 **Hard stops:** Build70, biblioteca, banco e downloads intactos; main sem modificações, PR #90 Draft; liveInstallationEnabled=false; nenhuma Build71, GitHub Release ou AppInst real executado em CI. A fase CZ prepara apenas a QA física separada; não autoriza instalar o DEB sem intervenção explícita do proprietário.
+
+
+## Marco CZ — primeira QA física relatada pelo usuário (21/11/2026 UTC)
+
+O proprietário informou que **os testes guiados do .deb CX no Chimera deram certo**. Esta é uma confirmação por relato, sem captura nem linhas de terminal anexadas; não registrar saída NOTE/RATE ou `dpkg` como evidência documental independente. O pacote é o laboratório `com.example.webreader.checkonlylab`, não substitui o PING da Build61 e não contém instalador.
+
+**Próximo gate objetivo:** confirmar independência da sessão do NewTerm: fechar totalmente o aplicativo de terminal, reabrir em mobile, executar `whoami` e `/usr/local/libexec/webreader-checkonly probe`, compartilhar os resultados. Após esse gate, avaliar um cliente iOS de QA separado para exercitar a comunicação a partir da sandbox, sem tocar na Build70, em vez de habilitar instalação.
+
+Ainda não demonstrados: reinício/rejailbreak, app sandboxed comunicando-se com CX, atualização real, publisher verificado, assinatura editorial, consentimento independente, custódia do IPA e execução do AppInst pelo helper. Manter PR #90 Draft, main intacta e `liveInstallationEnabled=false`.
