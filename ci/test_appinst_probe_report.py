@@ -24,6 +24,27 @@ def sample(spawn="OK", lstat="REGULAR", xok="YES"):
     return "\n".join(lines) + "\n"
 
 
+def sample_v4(spawn="PRECHECK_FAILED", path="FOUND", lstat="ERRNO_1",
+              mode="UNKNOWN", access="ERRNO_1"):
+    lines = [
+        HEADER,
+        "iOS: 12.5.8",
+        "UID: 501 | EUID: 501",
+        "APPINST_META_LSTAT=ERRNO_1",
+        "APPINST_META_XOK=ERRNO_1",
+        "APPINST_META_ADVISORY=YES",
+        f"CHILD_PATH={path}",
+        f"CHILD_LSTAT={lstat}",
+        f"CHILD_MODE_EXEC={mode}",
+        f"CHILD_ACCESS_XOK={access}",
+        f"SPAWN_LOCAL={spawn}",
+        FOOTER,
+    ]
+    if spawn in ("OK", "FALHA_DO_CHILD"):
+        lines.append("Não prova acesso a /usr/bin/appinst.")
+    return "\n".join(lines) + "\n"
+
+
 class SafeSpawnReportTests(unittest.TestCase):
     def test_success_only_proves_local_child(self):
         report = classify_report(sample())
@@ -120,6 +141,72 @@ class SafeSpawnReportTests(unittest.TestCase):
              "APPINST_META_XOK=YES\n", "APPINST_META_XOK=YES\n\n"))["report_accepted"])
         self.assertFalse(classify_report(sample().replace(
              "SPAWN_LOCAL=OK", " SPAWN_LOCAL=OK"))["report_accepted"])
+
+    def test_physical_build3_precheck_result_supported(self):
+        old_report = "\n".join([
+            HEADER, "iOS: 12.5.8", "UID: 501 | EUID: 501",
+            "APPINST_META_LSTAT=ERRNO_1", "APPINST_META_XOK=ERRNO_1",
+            "APPINST_META_ADVISORY=YES",
+            "RESULTADO: child inválido ou não executável.",
+        ]) + "\n"
+        result = classify_report(old_report)
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["local_child"], "precheck_unclassified")
+        self.assertFalse(result["direct_appinst_execution_verified"])
+        self.assertFalse(result["installer_authorized"])
+        self.assertFalse(result["installation_performed"])
+
+    def test_v4_child_lstat_denied_precheck(self):
+        result = classify_report(sample_v4())
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["local_child"], "PRECHECK_FAILED")
+        self.assertEqual(result["child_precheck"]["lstat"], "ERRNO_1")
+        self.assertFalse(result["installer_authorized"])
+
+    def test_v4_missing_child_and_nonexecutable(self):
+        missing = classify_report(sample_v4(
+            path="MISSING", lstat="NOT_CHECKED", mode="UNKNOWN",
+            access="NOT_CHECKED"))
+        self.assertTrue(missing["report_accepted"])
+        self.assertEqual(missing["child_precheck"]["path"], "MISSING")
+        nonexec = classify_report(sample_v4(
+            lstat="REGULAR", mode="NO", access="ERRNO_13"))
+        self.assertTrue(nonexec["report_accepted"])
+        self.assertEqual(nonexec["local_child"], "PRECHECK_FAILED")
+
+    def test_v4_child_spawn_modes_not_installer_authorization(self):
+        for state in ("OK", "FALHA_DO_CHILD",
+                      "NEGADO (1 (Operation not permitted))",
+                      "WAITPID_INDISPONIVEL (10 (No child processes))", "TIMEOUT"):
+            with self.subTest(state=state):
+                report = classify_report(sample_v4(
+                    spawn=state, lstat="REGULAR", mode="YES", access="ERRNO_1"))
+                self.assertTrue(report["report_accepted"])
+                self.assertFalse(report["direct_appinst_execution_verified"])
+                self.assertFalse(report["installer_authorized"])
+                self.assertFalse(report["installation_performed"])
+
+    def test_v4_impossible_states_fail_closed(self):
+        for report in (
+            sample_v4(spawn="OK"),
+            sample_v4(lstat="REGULAR", mode="YES"),
+            sample_v4(lstat="REGULAR", mode="UNKNOWN"),
+            sample_v4(path="MISSING"),
+            sample_v4(access="NOT_CHECKED"),
+            sample_v4(lstat="NOT_CHECKED"),
+            sample_v4(spawn="OK", lstat="REGULAR", mode="NO"),
+        ):
+            with self.subTest(report=report):
+                self.assertFalse(classify_report(report)["report_accepted"])
+
+    def test_v4_extra_install_claims_rejected(self):
+        for claim in ("APPINST_EXECUTADO=SIM", "INSTALACAO=SIM", "WRDONE1"):
+            self.assertFalse(classify_report(sample_v4() +
+                claim + "\n")["report_accepted"])
+
+    def test_v3_child_failure_with_advisory_line(self):
+        report = sample("FALHA_DO_CHILD") + "Não prova acesso a /usr/bin/appinst.\n"
+        self.assertTrue(classify_report(report)["report_accepted"])
 
     def test_nonstring_rejected(self):
         self.assertFalse(classify_report(None)["report_accepted"])
