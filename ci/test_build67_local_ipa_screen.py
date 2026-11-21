@@ -107,8 +107,15 @@ class LocalIPAScreenContractTests(unittest.TestCase):
         self.assertIn("Espaço insuficiente para copiar a IPA", UI)
         self.assertIn("IPA excede o limite de 512 MB", UI)
         self.assertIn("Não foi possível criar a cópia local de QA", UI)
-        self.assertIn("self.manualImportStatus = failureReason", UI)
+        self.assertIn('self.manualImportStatus = source.lastPathComponent + " • " + failureReason', UI)
         self.assertIn("let old = self.manualIPAReview", UI)
+
+    def test_new_import_result_distinguishes_an_older_reviewed_copy(self):
+        self.assertIn("selectedFileName: sourceURL.lastPathComponent", STAGING)
+        self.assertIn("receipt.selectedFileName", UI)
+        self.assertIn("receipt.expectedSHA256.prefix(12)", UI)
+        self.assertIn("Cópia anterior disponível:", UI)
+        self.assertIn("previous.selectedFileName", UI)
 
     def test_no_privileged_install_or_external_network(self):
         for forbidden in (

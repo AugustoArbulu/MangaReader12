@@ -579,6 +579,7 @@ enum WebReaderLocalIPAReviewError: Error {
 
 struct WebReaderLocalIPAReview {
     let copiedIPAURL: URL
+    let selectedFileName: String
     let build: Int
     let expectedSHA256: String
     let ipaBytes: Int64
@@ -802,7 +803,8 @@ enum WebReaderLocalIPAReviewer {
         }
         keep = true
         return WebReaderLocalIPAReview(
-            copiedIPAURL: saved, build: report.build,
+            copiedIPAURL: saved, selectedFileName: sourceURL.lastPathComponent,
+            build: report.build,
             expectedSHA256: expectedSHA256, ipaBytes: candidateSize,
             zipEntries: report.zipEntries,
             stagingDevice: UInt64(destinationAfter.st_dev),

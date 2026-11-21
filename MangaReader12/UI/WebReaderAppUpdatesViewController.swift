@@ -506,8 +506,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     "Conferindo novamente antes de compartilhar…" :
                     "Compartilhar IPA local conferida"
                 cell.detailTextLabel?.text =
-                    "Build " + String(receipt.build) + " • " +
-                    String(receipt.zipEntries) + " entradas ZIP • uso manual"
+                    receipt.selectedFileName + " • Build " + String(receipt.build) +
+                    " • SHA-256 " + String(receipt.expectedSHA256.prefix(12)) + "…"
                 if !manualReviewInProgress && !manualImportInProgress {
                     cell.accessoryType = .disclosureIndicator
                     cell.selectionStyle = .default
@@ -1069,9 +1069,14 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                         WebReaderLocalIPAReviewer.discard(old)
                     }
                     self.manualIPAReview = receipt
-                    self.manualImportStatus = "SHA-256, ZIP e identidade conferidos"
+                    self.manualImportStatus = receipt.selectedFileName +
+                        " • SHA-256, ZIP e identidade conferidos"
                 } else {
-                    self.manualImportStatus = failureReason
+                    self.manualImportStatus = source.lastPathComponent + " • " + failureReason
+                    if let previous = self.manualIPAReview {
+                        self.manualImportStatus += " • Cópia anterior disponível: " +
+                            previous.selectedFileName
+                    }
                 }
                 self.tableView.reloadData()
             }
@@ -1550,8 +1555,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             "2. Selecione Compartilhar IPA conferida e escolha Filza " +
             "ou Salvar em Arquivos, se disponível.\n" +
             "3. Se salvou em Arquivos, use Importar IPA local para conferir " +
-            "e selecione a cópia salva antes de abrir no Filza.\n" +
-            "4. Abra a IPA no Filza e toque em Install.\n" +
+            "e selecione a cópia salva. Após a aprovação, use Compartilhar IPA " +
+            "local conferida para enviar ao Filza a cópia revisada.\n" +
+            "4. No Filza, abra a IPA recebida e toque em Install.\n" +
             "Não remova o WebReader instalado. Exporte o backup da " +
             "biblioteca (.mr12backup), mas lembre-se: ele NÃO inclui " +
             "as páginas offline. Restaurar o backup apaga downloads; " +
