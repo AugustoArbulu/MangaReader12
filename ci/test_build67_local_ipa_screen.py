@@ -36,6 +36,18 @@ class LocalIPAScreenContractTests(unittest.TestCase):
         self.assertIn("expectedBuild: expectedBuild", UI)
         self.assertIn("expectedSHA256: expectedSHA", UI)
 
+    def test_copied_ipa_review_prefills_only_the_current_staged_release(self):
+        prompt = UI.split("private func promptLocalIPAImport()", 1)[1].split(
+            "func documentPicker(", 1
+        )[0]
+        self.assertIn("let staged = stagedUpdate, availableUpdate == staged", prompt)
+        self.assertIn("stagedIPAURL != nil", prompt)
+        self.assertIn("field.text = stagedReference.map { String($0.build) }", prompt)
+        self.assertIn("field.text = stagedReference?.sha256", prompt)
+        self.assertIn('UIAlertAction(title: "Selecionar IPA"', prompt)
+        row = UI.split("case (6, 0):", 1)[1].split("case (6, 1):", 1)[0]
+        self.assertIn("cell.detailTextLabel?.text = manualImportStatus", row)
+
     def test_private_release_metadata_not_reclassified(self):
         self.assertIn("case manualLocalFile", MANIFEST)
         self.assertIn("expected.provenance = .manualLocalFile", STAGING)

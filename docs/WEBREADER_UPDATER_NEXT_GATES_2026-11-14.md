@@ -281,3 +281,9 @@ Encerrar a repetição do mesmo teste com Observador em sandbox. Uma futura obse
 O estado da IPA baixada guarda os metadados completos do candidato, incluindo origem. Compartilhamento e recibo verificam esses metadados e a seleção atual tanto antes da auditoria quanto na conclusão assíncrona. Para produção assinada, a conclusão também exige que o envelope autenticado permaneça o mesmo. Um pedido duplicado durante a revisão encerra imediatamente sem apagar o estado da IPA. A comparação dos metadados do envelope e do candidato usa a mesma igualdade estrutural.
 
 A auditoria SHA-256 e ZIP continua anterior à entrega manual. A cópia e a leitura no Filza permanecem fora dessa garantia. O AppInst segue desativado e a raiz editorial real permanece ausente.
+
+### Conferência da cópia após salvar em Arquivos
+
+O roteiro manual indica como selecionar a cópia salva em Arquivos na revisão de IPA local. Quando a tela ainda tem a IPA baixada vinculada ao lançamento atual, o formulário preenche Build e SHA-256 a partir dessa referência. A seleção do arquivo continua explícita e usa a auditoria local existente. Sem referência em memória, é possível informar Build e SHA-256 da origem manualmente. O resultado da tentativa mais recente aparece na linha de importação, inclusive se houver uma IPA anterior ainda revisada.
+
+Essa conferência verifica a cópia selecionada contra os bytes esperados. A leitura posterior pelo Filza e pelo serviço de instalação permanece fora da observação. Nenhuma instalação automática ou raiz editorial de produção foi habilitada.

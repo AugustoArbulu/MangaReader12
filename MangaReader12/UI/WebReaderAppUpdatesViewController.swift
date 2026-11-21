@@ -494,8 +494,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (6, 0):
             cell.textLabel?.text = manualImportInProgress ?
                 "Conferindo IPA local…" : "Importar IPA local para conferir"
-            cell.detailTextLabel?.text =
-                "Arquivos/Filza • informe Build e SHA-256 do artefato QA"
+            cell.detailTextLabel?.text = manualImportStatus
             if !manualImportInProgress && !manualReviewInProgress {
                 cell.accessoryType = .disclosureIndicator
                 cell.selectionStyle = .default
@@ -955,20 +954,30 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private func promptLocalIPAImport() {
         guard !isIPCDiagnostic, !manualImportInProgress,
               !manualReviewInProgress else { return }
+        let stagedReference: WebReaderVerifiedUpdate?
+        if !stagingIPA, !verifyingExport, stagedIPAURL != nil,
+           let staged = stagedUpdate, availableUpdate == staged {
+            stagedReference = staged
+        } else {
+            stagedReference = nil
+        }
+        let guidance = stagedReference == nil ?
+            "Informe a Build e o SHA-256 obtidos da origem da IPA." :
+            "A Build e o SHA-256 abaixo vêm da IPA baixada. Selecione a cópia salva em Arquivos para compará-la."
         let alert = UIAlertController(
             title: "Conferir IPA local",
-            message: "Informe a Build e o SHA-256 exato que aparece no " +
-                "artefato do GitHub Actions. Isso verifica os bytes e o pacote, " +
-                "mas NÃO autentica o editor nem instala o aplicativo.",
+            message: guidance + " A conferência local NÃO autentica o editor nem instala o aplicativo.",
             preferredStyle: .alert
         )
         alert.addTextField { field in
-            field.placeholder = "Build (ex.: 67)"
+            field.placeholder = "Build"
+            field.text = stagedReference.map { String($0.build) }
             field.keyboardType = .numberPad
             field.autocorrectionType = .no
         }
         alert.addTextField { field in
             field.placeholder = "SHA-256 (64 caracteres hexadecimais)"
+            field.text = stagedReference?.sha256
             field.keyboardType = .asciiCapable
             field.autocapitalizationType = .none
             field.autocorrectionType = .no
@@ -1540,7 +1549,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         let text = "1. Toque em Baixar e conferir IPA.\n" +
             "2. Selecione Compartilhar IPA conferida e escolha Filza " +
             "ou Salvar em Arquivos, se disponível.\n" +
-            "3. Abra a IPA no Filza e toque em Install.\n" +
+            "3. Se salvou em Arquivos, use Importar IPA local para conferir " +
+            "e selecione a cópia salva antes de abrir no Filza.\n" +
+            "4. Abra a IPA no Filza e toque em Install.\n" +
             "Não remova o WebReader instalado. Exporte o backup da " +
             "biblioteca (.mr12backup), mas lembre-se: ele NÃO inclui " +
             "as páginas offline. Restaurar o backup apaga downloads; " +
