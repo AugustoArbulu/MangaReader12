@@ -210,3 +210,11 @@ O preview CG tem uma modalidade `--verify-only` que executa a mesma revisão do 
 Os testes físicos de execução direta não chegaram a executar AppInst. O próximo dado de custódia é a identidade do arquivo presente no iPad. O coletor [observe_appinst_identity.sh](../ci/observe_appinst_identity.sh) consulta, em NewTerm, o SHA-256 de `/usr/bin/appinst`, o proprietário registrado para esse caminho e o status, versão e arquitetura do pacote `ai.akemi.appinst`. A consulta de pacote pode ficar indisponível e o SHA-256 ainda pode ser reportado. O coletor não roda AppInst, não exige root e não copia o binário.
 
 Comparar o SHA-256 recebido com o executável extraído em memória de um DEB previamente auditado pelo `ci/compare_appinst_fingerprint.py`. Um match vincula o digest relatado ao payload daquele pacote. A procedência do pacote, o executável efetivamente invocado pelo fluxo futuro e os bytes consumidos pelo instalador continuam dependendo de evidências próprias.
+
+### Resultado físico no iPad — 21/11/2026 (horário de Brasília)
+
+A captura do NewTerm mostra `/usr/bin/appinst` com SHA-256 `f0d17a033391b7f687285a892572662e2bca581766dbdc8bf463c1d517bd3147` e `dpkg-query` para `ai.akemi.appinst` retornando `install ok installed | 2.1.1 | iphoneos-arm`.
+
+O comparador confirmou o mesmo SHA-256 no executável do DEB Legacy-Me previamente auditado. O SHA-256 do **DEB** foi revalidado separadamente como `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`. O resultado vincula o binário observado ao payload do espelho e encerra a comparação de identidade para esta observação. A procedência oficial do DEB segue sem confirmação.
+
+A captura não executou o AppInst. O próximo gate de custódia é estabelecer qual arquivo o serviço de instalação efetivamente abre e por quanto tempo os bytes ficam protegidos. A instalação automática permanece desativada.
