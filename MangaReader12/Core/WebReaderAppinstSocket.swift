@@ -60,6 +60,121 @@ enum WebReaderAppinstSocket {
         }
     }
 
+    // CX transport. Exactly WRCHK2 + LF is a check NOTICE, not a release
+    // lookup. An untrusted local server response is never update authority.
+    // This API does not run automatically, access files, call appinst, pass
+    // paths/URLs/hashes/versions, or permit installation.
+    enum CheckOnlyResult: Equatable {
+        case unavailable
+        case noticeAccepted
+        case rateLimited
+        case denied
+        case protocolRejected
+        case transportFailure
+
+        var text: String {
+            switch self {
+            case .unavailable:
+                return "Serviço CX de teste indisponível; nenhuma instalação"
+            case .noticeAccepted:
+                return "Aviso local aceito; versão NÃO consultada e IPA NÃO instalada"
+            case .rateLimited:
+                return "Aviso local limitado; nenhuma atualização consultada"
+            case .denied:
+                return "Serviço CX rejeitou o aviso; nenhuma instalação"
+            case .protocolRejected:
+                return "Resposta CX não reconhecida; nenhuma instalação"
+            case .transportFailure:
+                return "Conexão CX incompleta ou recusada; nenhuma instalação"
+            }
+        }
+    }
+
+    /// Optional explicit read-only experiment; UI has no automatic call site.
+    static func checkOnlyConnection(
+        completion: @escaping (CheckOnlyResult) -> Void
+    ) {
+        DispatchQueue.global(qos: .utility).async {
+            let result = checkOnlyExchange(port: 38973)
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+#if WEBREADER_HOST_TEST
+    /// Only a macOS harness may override the port with a fresh test socket.
+    static func hostCheckOnlyProbe(port: UInt16) -> CheckOnlyResult {
+        return checkOnlyExchange(port: port)
+    }
+#endif
+
+    private static func checkOnlyExchange(port: UInt16) -> CheckOnlyResult {
+        // Loopback only. The remote process is NOT authenticated by TCP,
+        // and any WRNOTE2 may come from an unrelated local client/service.
+        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return .transportFailure }
+        defer { _ = Darwin.close(fd) }
+        var noSigPipe: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0
+        else { return .transportFailure }
+        var timeout = timeval(tv_sec: 3, tv_usec: 0)
+        guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0,
+              setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                         socklen_t(MemoryLayout<timeval>.size)) == 0
+        else { return .transportFailure }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr = in_addr(s_addr: UInt32(0x7f000001).bigEndian)
+        let connected = withUnsafePointer(to: &address) { ptr -> Int32 in
+            return ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0
+        else { return .unavailable }
+
+        // Wire protocol is EXACTLY seven bytes, fixed and non-parameterized.
+        let request = Array("WRCHK2\n".utf8)
+        var sent = 0
+        while sent < request.count {
+            let n = request.withUnsafeBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                return Darwin.send(fd, base.advanced(by: sent),
+                                   request.count - sent, 0)
+            }
+            guard n > 0 else { return .transportFailure }
+            sent += n
+        }
+        // Mandatory EOF in write direction. The CX service refuses to
+        // acknowledge a valid prefix followed by a late extra command.
+        guard Darwin.shutdown(fd, SHUT_WR) == 0 else { return .transportFailure }
+
+        var response = [UInt8](repeating: 0, count: 8)
+        var received = 0
+        while received < response.count {
+            let n = response.withUnsafeMutableBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                return Darwin.recv(fd, base.advanced(by: received),
+                                   response.count - received, 0)
+            }
+            if n <= 0 { return .protocolRejected }
+            received += n
+        }
+        // Do not accept a valid eight-byte prefix with extra response bytes.
+        var tail: UInt8 = 0
+        let extra = Darwin.recv(fd, &tail, 1, 0)
+        guard extra == 0 else { return .protocolRejected }
+
+        if response == Array("WRNOTE2\n".utf8) { return .noticeAccepted }
+        if response == Array("WRRATE2\n".utf8) { return .rateLimited }
+        if response == Array("WRDENY2\n".utf8) { return .denied }
+        return .protocolRejected
+    }
+
     // Build62 security gate: a localhost PONG, GitHub account digest or
     // HMAC pairing code DOES NOT authenticate the requesting iOS app.
     // Until a separately reviewed installer-side publisher and peer policy
