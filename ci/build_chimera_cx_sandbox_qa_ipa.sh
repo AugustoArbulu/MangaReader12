@@ -20,7 +20,7 @@ mkdir -p "$APP"
 xcrun --sdk iphoneos clang \
     -arch arm64 -miphoneos-version-min=12.0 \
     -fobjc-arc -Os -Wall -Wextra -Werror \
-    -framework UIKit -framework Foundation \
+    -framework UIKit -framework Foundation -framework CoreGraphics \
     ci/chimera_cx_app_probe/main.m \
     ci/chimera_cx_app_probe/cx_client.c \
     -o "$APP/WRCXSandbox"
