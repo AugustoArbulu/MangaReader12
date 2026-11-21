@@ -11,6 +11,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from webreader_helper_review_snapshot import (
     protected_review_snapshot, ReviewSnapshotRejected,
@@ -132,6 +133,49 @@ class ProtectedReviewSnapshotTests(unittest.TestCase):
             os.replace(replacement, self.src)
         with self.assertRaises(ReviewSnapshotRejected):
             self.stage(on_first_chunk=replace_name)
+
+    def test_identical_replacement_is_not_the_written_inode(self):
+        target = self.staging / ("WebReader-review-build71-" + self.digest[:20] + ".ipa")
+        replacement = self.root / "replacement.ipa"
+        replacement.write_bytes(DATA)
+        replacement.chmod(0o400)
+        real_fstat = os.fstat
+
+        def stat_output(fd):
+            result = real_fstat(fd)
+            if replacement.exists() and target.exists() and result.st_ino == target.stat().st_ino:
+                os.replace(replacement, target)
+            return result
+
+        with patch("webreader_helper_review_snapshot.os.fstat", side_effect=stat_output):
+            with self.assertRaisesRegex(ReviewSnapshotRejected, "path changed"):
+                self.stage()
+        self.assertEqual(target.read_bytes(), DATA)
+
+    def test_readback_checks_written_bytes(self):
+        real_write = os.write
+
+        def altered_write(fd, chunk):
+            return real_write(fd, b"X" + bytes(chunk[1:]))
+
+        with patch("webreader_helper_review_snapshot.os.write", side_effect=altered_write):
+            with self.assertRaisesRegex(ReviewSnapshotRejected, "output digest"):
+                self.stage()
+
+    def test_staging_path_still_names_the_opened_directory(self):
+        moved = self.root / "moved"
+        real_fsync = os.fsync
+
+        def sync(fd):
+            real_fsync(fd)
+            if stat.S_ISDIR(os.fstat(fd).st_mode):
+                self.staging.rename(moved)
+                self.staging.mkdir(mode=0o700)
+
+        with patch("webreader_helper_review_snapshot.os.fsync", side_effect=sync):
+            with self.assertRaisesRegex(ReviewSnapshotRejected, "path changed"):
+                self.stage()
+        self.assertEqual(list(self.staging.iterdir()), [])
 
     def test_too_small_non_zip_source_cannot_fake_a_successful_sha(self):
         self.src.write_bytes(b"BAD")

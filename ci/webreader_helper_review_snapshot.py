@@ -83,7 +83,6 @@ def protected_review_snapshot(*, source_path: Path, staging_directory: Path,
     source_fd = -1
     output_fd = -1
     basename = "WebReader-review-build" + str(requested_build) + "-" + expected_sha256[:20] + ".ipa"
-    created = False
     try:
         # Open directory by FD; all subsequent writes occur relative to it.
         # Ancestor directories are NOT proven trustworthy by this prototype.
@@ -98,9 +97,8 @@ def protected_review_snapshot(*, source_path: Path, staging_directory: Path,
         named = os.stat(source_path, follow_symlinks=False)
         if _identity(before) != _identity(named):
             raise ReviewSnapshotRejected("source filename changed before copy")
-        outflags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | flags
+        outflags = os.O_RDWR | os.O_CREAT | os.O_EXCL | flags
         output_fd = os.open(basename, outflags, 0o600, dir_fd=directory_fd)
-        created = True
         copied = 0
         sha = hashlib.sha256()
         first = True
@@ -128,29 +126,38 @@ def protected_review_snapshot(*, source_path: Path, staging_directory: Path,
                 or copied != expected_size
                 or sha.hexdigest() != expected_sha256):
             raise ReviewSnapshotRejected("source changed or verified digest mismatched")
-        # A second digest of the copied file (not just input) catches errors
-        # from the copy path. This is STILL NOT a durable immutable handle.
+        # Rehash the inode opened for writing, without reopening its name.
+        os.fchmod(output_fd, 0o400)
         os.fsync(output_fd)
         out_stat = os.fstat(output_fd)
         if (not stat.S_ISREG(out_stat.st_mode) or out_stat.st_size != expected_size
-                or out_stat.st_uid != os.getuid() or out_stat.st_nlink != 1):
+                or out_stat.st_uid != folder.st_uid or out_stat.st_nlink != 1
+                or stat.S_IMODE(out_stat.st_mode) != 0o400):
             raise ReviewSnapshotRejected("review output identity failed")
-        os.close(output_fd)
-        output_fd = -1
-        readback_fd = os.open(basename, os.O_RDONLY | flags, dir_fd=directory_fd)
-        try:
-            image = hashlib.sha256()
-            while True:
-                part = os.read(readback_fd, _CHUNK)
-                if not part: break
-                image.update(part)
-            if image.hexdigest() != expected_sha256:
-                raise ReviewSnapshotRejected("copied output digest mismatch")
-            os.fchmod(readback_fd, 0o400)
-            os.fsync(readback_fd)
-        finally:
-            os.close(readback_fd)
+        os.lseek(output_fd, 0, os.SEEK_SET)
+        image = hashlib.sha256()
+        remaining = expected_size
+        while remaining:
+            part = os.read(output_fd, min(_CHUNK, remaining))
+            if not part:
+                raise ReviewSnapshotRejected("copied output was truncated")
+            remaining -= len(part)
+            image.update(part)
+        if os.read(output_fd, 1) or image.hexdigest() != expected_sha256:
+            raise ReviewSnapshotRejected("copied output digest or size mismatch")
         os.fsync(directory_fd)
+        finished = os.fstat(output_fd)
+        named_output = os.stat(basename, dir_fd=directory_fd, follow_symlinks=False)
+        named_folder = os.stat(staging_directory, follow_symlinks=False)
+        if (_identity(out_stat) != _identity(finished)
+                or _identity(finished) != _identity(named_output)
+                or finished.st_nlink != 1
+                or stat.S_IMODE(finished.st_mode) != 0o400
+                or finished.st_uid != folder.st_uid
+                or (folder.st_dev, folder.st_ino) != (named_folder.st_dev, named_folder.st_ino)
+                or stat.S_IMODE(named_folder.st_mode) != 0o700
+                or named_folder.st_uid != folder.st_uid):
+            raise ReviewSnapshotRejected("review output or staging path changed")
         return ReviewSnapshotReceipt(
             requested_build, expected_sha256, copied, basename
         )
