@@ -1,0 +1,49 @@
+name: WebReader iOS12 self descriptor QA
+
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - '.github/workflows/chimera-self-fd-ios12-qa.yml'
+      - 'ci/self_fd_app/**'
+      - 'ci/webreader_self_fd_visibility.c'
+      - 'ci/build_webreader_self_fd_ipa.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  build-qa:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and build isolated app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          bash ci/build_webreader_self_fd_ipa.sh
+      - name: Validate app bundle and deployment target
+        run: |
+          ipa=WebReader-SelfFD-iOS12-adhoc.ipa
+          shasum -a 256 -c "$ipa.sha256"
+          python3 - <<'PY'
+          import plistlib, zipfile
+          with zipfile.ZipFile("WebReader-SelfFD-iOS12-adhoc.ipa") as z:
+              root = "Payload/WRSelfFD.app/"
+              info = plistlib.loads(z.read(root + "Info.plist"))
+              assert info["CFBundleIdentifier"] == "com.example.WebReaderSelfFDProbe"
+              assert info["MinimumOSVersion"] == "12.0"
+              from pathlib import Path
+              Path("WRSelfFD-audit").write_bytes(z.read(root + "WRSelfFD"))
+          PY
+          xcrun otool -l WRSelfFD-audit > load.txt
+          grep -Eq 'minos 12.0|version 12.0' load.txt
+          ! grep -q LC_DYLD_CHAINED_FIXUPS load.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-SelfFD-iOS12-QA
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-SelfFD-iOS12-adhoc.ipa
+            WebReader-SelfFD-iOS12-adhoc.ipa.sha256

@@ -15,17 +15,15 @@ _Static_assert(sizeof(struct fd_record) == 8, "unexpected XNU record layout");
 
 typedef int (*pid_info_fn)(int, int, uint64_t, void *, int);
 
-int main(void) {
+const char *wr_self_fd_status(void) {
     pid_info_fn query = (pid_info_fn)dlsym(RTLD_DEFAULT, "proc_pidinfo");
     if (query == NULL) {
-        puts("WR_SELF_FD=API_UNAVAILABLE");
-        return 0;
+        return "WR_SELF_FD=API_UNAVAILABLE";
     }
 
     int control = open("/dev/null", O_RDONLY);
     if (control < 0) {
-        puts("WR_SELF_FD=CONTROL_UNAVAILABLE");
-        return 0;
+        return "WR_SELF_FD=CONTROL_UNAVAILABLE";
     }
 
     struct fd_record records[capacity];
@@ -33,16 +31,20 @@ int main(void) {
     close(control);
     if (bytes <= 0 || bytes > (int)sizeof(records) ||
         bytes % (int)sizeof(records[0]) != 0) {
-        puts("WR_SELF_FD=QUERY_UNAVAILABLE");
-        return 0;
+        return "WR_SELF_FD=QUERY_UNAVAILABLE";
     }
 
     for (int i = 0; i < bytes / (int)sizeof(records[0]); i++) {
         if (records[i].fd == control) {
-            puts("WR_SELF_FD=CONTROL_LISTED");
-            return 0;
+            return "WR_SELF_FD=CONTROL_LISTED";
         }
     }
-    puts("WR_SELF_FD=CONTROL_NOT_OBSERVED");
+    return "WR_SELF_FD=CONTROL_NOT_OBSERVED";
+}
+
+#ifndef WR_SELF_FD_APP
+int main(void) {
+    puts(wr_self_fd_status());
     return 0;
 }
+#endif
