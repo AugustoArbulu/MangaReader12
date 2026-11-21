@@ -138,3 +138,11 @@ CI SUCCESS 3/3: https://github.com/AugustoArbulu/MangaReader12/actions/runs/4485
 **Próximo gate físico:** usuário instala apenas a IPA descartável por Filza+AppSync, abre WebReader CX Teste e toca no botão de conexão (sem instalar nada pelo próprio app), depois copia relatório. NOTICE ou RATE demonstra acesso ao serviço CX a partir da sandbox; UNAVAILABLE sugere restrição de rede ou listener e requer diagnóstico. Não alterar Build70, PING Build61 ou DEB CX, e não executar AppInst no app. Ainda não testado após reboot/rejailbreak.
 
 Preservar main, PR #90 Draft, WebReaderAppinstSocket.liveInstallationEnabled=false, pins nil, nenhuma Build71/Release.
+
+## Marco DA — comunicação app iOS 12 → serviço CX comprovada fisicamente (21/11/2026 UTC)
+
+O usuário forneceu saída real do aplicativo descartável `com.example.WebReaderCXSandboxProbe` em iOS **12.5.8**, **UID/EUID 501/501**, conexão `127.0.0.1:38973`, quadro `WRCHK2` de sete bytes, resultado **`WR_DA=NOTICE_ACCEPTED`**, com `WR_DA_INSTALL=NEVER` e `WR_DA_PUBLISHER_AUTHENTICATED=NO`. Esse resultado comprova o canal de comunicação do app de QA com o serviço CX local no iPad. Texto integral preservado em `docs/WEBREADER_DA_SANDBOX_CX_QA_2026-11-21.md`.
+
+Gate de transporte da fase DA: **APROVADO (hardware real)**. Não repetir provas de `posix_spawn` nem exigir novo teste de conexão em NewTerm antes de avançar. Próximo trabalho: diferenciar `check-only` do transporte (que não consulta versões) de um futuro serviço independente que verifica Release de origem fixa, autenticidade/editorial, antirreplay e disponibilidade — sem misturar aviso local com autorização de instalação.
+
+Continuam pendentes: nenhum reboot/rejailbreak medido, identidade de processo remoto não autenticada, publisher trust de produção ausente, real instalação IPA pelo helper não implementada, consentimento seguro e preservação de biblioteca não demonstrados. Manter Build70, main e PR #90 Draft, sem habilitar `liveInstallationEnabled` ou publicar Build71.
