@@ -45,6 +45,13 @@ def sample_v4(spawn="PRECHECK_FAILED", path="FOUND", lstat="ERRNO_1",
     return "\n".join(lines) + "\n"
 
 
+def sample_v5(self_main="REGULAR_EXEC", self_spawn="NEGADO (1 (Operation not permitted))"):
+    return sample_v4(spawn="PRECHECK_FAILED", path="FOUND", lstat="REGULAR",
+                     mode="NO", access="ERRNO_1") + (
+        f"SELF_MAIN={self_main}\nSPAWN_SELF={self_spawn}\n"
+    )
+
+
 class SafeSpawnReportTests(unittest.TestCase):
     def test_success_only_proves_local_child(self):
         report = classify_report(sample())
@@ -206,6 +213,59 @@ class SafeSpawnReportTests(unittest.TestCase):
 
     def test_v3_child_failure_with_advisory_line(self):
         self.assertTrue(classify_report(sample("FALHA_DO_CHILD"))["report_accepted"])
+
+    def test_build4_physical_report_exact(self):
+        physical = "\n".join([
+            HEADER, "iOS: 12.5.8", "UID: 501 | EUID: 501",
+            "APPINST_META_LSTAT=ERRNO_1", "APPINST_META_XOK=ERRNO_1",
+            "APPINST_META_ADVISORY=YES",
+            "CHILD_PATH=FOUND", "CHILD_LSTAT=REGULAR",
+            "CHILD_MODE_EXEC=NO", "CHILD_ACCESS_XOK=ERRNO_1",
+            "SPAWN_LOCAL=PRECHECK_FAILED", FOOTER,
+        ]) + "\n"
+        result = classify_report(physical)
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["child_precheck"]["executable_bits"], "NO")
+        self.assertFalse(result["direct_appinst_execution_verified"])
+
+    def test_build5_self_launch_denied_is_not_appinst_denied(self):
+        result = classify_report(sample_v5())
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["local_child"], "PRECHECK_FAILED")
+        self.assertEqual(result["self_probe"]["main_executable"], "REGULAR_EXEC")
+        self.assertEqual(result["self_probe"]["result"], "NEGADO")
+        self.assertFalse(result["direct_appinst_execution_verified"])
+        self.assertFalse(result["installer_authorized"])
+        self.assertFalse(result["installation_performed"])
+
+    def test_build5_self_launch_allowed_is_not_install_permission(self):
+        result = classify_report(sample_v5(self_spawn="OK"))
+        self.assertTrue(result["report_accepted"])
+        self.assertEqual(result["self_probe"]["result"], "OK")
+        self.assertFalse(result["installer_authorized"])
+
+    def test_build5_self_precheck_failed(self):
+        for main_state in ("REGULAR_NOEXEC", "NOT_REGULAR", "MISSING",
+                           "ERRNO_1", "ERRNO_13"):
+            with self.subTest(main_state=main_state):
+                result = classify_report(sample_v5(self_main=main_state,
+                                                   self_spawn="PRECHECK_FAILED"))
+                self.assertTrue(result["report_accepted"])
+                self.assertFalse(result["installation_performed"])
+
+    def test_build5_signed_main_states_fail_closed(self):
+        for sample_report in (
+            sample_v5(self_main="REGULAR_NOEXEC", self_spawn="OK"),
+            sample_v5(self_spawn="PRECHECK_FAILED"),
+            sample_v5(self_main="INVALID_ID", self_spawn="PRECHECK_FAILED"),
+            sample_v5(self_spawn="AppInst"),
+            sample_v5() + "INSTALACAO=SIM\n",
+            sample_v5().replace("SELF_MAIN=REGULAR_EXEC\n", ""),
+            sample_v5().replace("SPAWN_SELF=NEGADO (1 (Operation not permitted))",
+                                "SPAWN_SELF=NEGADO\nSPAWN_SELF=OK"),
+        ):
+            with self.subTest(report=sample_report):
+                self.assertFalse(classify_report(sample_report)["report_accepted"])
 
     def test_nonstring_rejected(self):
         self.assertFalse(classify_report(None)["report_accepted"])
