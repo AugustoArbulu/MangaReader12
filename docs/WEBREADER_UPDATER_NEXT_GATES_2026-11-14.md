@@ -127,3 +127,14 @@ Após fechar completamente o NewTerm e abri-lo novamente, o proprietário relato
 **Próximo gate:** validar uma solicitação de check-only partindo de um aplicativo iOS sandboxed descartável e com Bundle ID separado. Deve usar somente protocolo WRCHK2 + LF e interpretar confirmação como diagnóstico, não autenticação, disponibilidade de Release ou autorização de instalação. Não mexer na Build70.
 
 Persistência após reinício/rejailbreak, autenticação de publisher, instalação real e verificação de consumo dos bytes continuam pendentes. Manter PR #90 Draft, main e Build70 intactas, liveInstallationEnabled=false.
+
+
+## Marco DA — cliente iOS sandboxed separado pronto para QA física (21/11/2026 UTC)
+
+Fase DA implementou e compilou um aplicativo iOS12 ARM64 com Bundle ID exclusivo com.example.WebReaderCXSandboxProbe e nome WebReader CX Teste. O cliente usa exatamente WRCHK2+LF para localhost 38973, acionado manualmente pelo botão Testar comunicacao CX. Nunca fornece IPA, caminho, hash, URL ou comando de instalação. O relatório mostra NOTICE_ACCEPTED, RATE_LIMITED ou falha, sem inferir versão disponível.
+
+CI SUCCESS 3/3: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44859172297. Artifact QA ID 14688662029. IPA SHA256 8fba25d3176b3d617c04f10470b5698b32de6bbd47f6929d5f2ba181dd138a1a. Documentação detalhada: docs/WEBREADER_DA_SANDBOX_CX_QA_2026-11-21.md.
+
+**Próximo gate físico:** usuário instala apenas a IPA descartável por Filza+AppSync, abre WebReader CX Teste e toca no botão de conexão (sem instalar nada pelo próprio app), depois copia relatório. NOTICE ou RATE demonstra acesso ao serviço CX a partir da sandbox; UNAVAILABLE sugere restrição de rede ou listener e requer diagnóstico. Não alterar Build70, PING Build61 ou DEB CX, e não executar AppInst no app. Ainda não testado após reboot/rejailbreak.
+
+Preservar main, PR #90 Draft, WebReaderAppinstSocket.liveInstallationEnabled=false, pins nil, nenhuma Build71/Release.
