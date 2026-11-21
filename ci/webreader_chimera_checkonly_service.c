@@ -201,7 +201,7 @@ finish:
  * sandboxed app; sends no data other than WRCHK2\n to the local check-only
  * service. This is intentionally NOT an update or installation command.
  */
-static int probe(void) {
+static int probe(uint16_t port) {
     int fd = -1, result = 6;
     struct sockaddr_in addr;
     struct timeval timeout = {3, 0};
@@ -227,7 +227,7 @@ static int probe(void) {
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons(WR_CX_PORT);
+    addr.sin_port = htons(port);
 #ifdef __APPLE__
     addr.sin_len = (uint8_t)sizeof(addr);
 #endif
@@ -266,6 +266,17 @@ finish:
 }
 
 int main(int argc, char **argv) {
+#if defined(WR_CX_HOST_TEST_PORT)
+    // A dynamic test port is permitted ONLY on an unprivileged host build.
+    // Device binaries do not compile this branch (see TARGET_OS_IPHONE).
+    if (argc == 3 && strcmp(argv[1], "probe") == 0) {
+        char *end = NULL;
+        unsigned long number = strtoul(argv[2], &end, 10);
+        if (argv[2][0] == '\0' || *end != '\0' ||
+            number == 0 || number > 65535) return 2;
+        return probe((uint16_t)number);
+    }
+#endif
     if (argc != 2) {
         fputs("Usage: webreader-checkonly selftest | serve | probe\n", stderr);
         return 2;
@@ -277,6 +288,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(argv[1], "serve") == 0) return serve();
-    if (strcmp(argv[1], "probe") == 0) return probe();
+    if (strcmp(argv[1], "probe") == 0) return probe(WR_CX_PORT);
     return 2;
 }
