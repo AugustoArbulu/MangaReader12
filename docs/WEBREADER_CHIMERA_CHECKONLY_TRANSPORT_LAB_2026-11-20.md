@@ -151,3 +151,12 @@ Interpretação estrita: os testes de instalação e comunicação local foram r
 **Próximo ensaio não instalador:** fechar completamente o NewTerm, aguardar um pouco (idealmente 60 s para passar o rate limit), abrir novamente como usuário mobile e executar `whoami` seguido de `/usr/local/libexec/webreader-checkonly probe`. Registrar a saída. NOTE ou RATE indica resposta do serviço; UNAVAILABLE ou falha requer interromper, sem reinstalar ou modificar a Build70. Não fazer reboot apenas para este teste.
 
 O código continua sem AppInst e sem capacidade de instalação; não interpretar este êxito como autorização de release, publisher ou execução de IPA.
+
+
+## Persistência entre sessões do NewTerm — confirmado por relato (21/11/2026 UTC)
+
+O proprietário seguiu a etapa de fechar completamente o NewTerm 2, aguardar e abrir novamente; depois informou **"funcionou"** ao executar o diagnóstico CX. Assim, a comunicação local do serviço CHECK_ONLY permaneceu acessível após encerrar e reabrir a sessão do terminal, sem necessidade relatada de reiniciar manualmente o daemon. Registro baseado na confirmação do usuário, **sem transcrição de saída do terminal**. Não atribuir saída NOTE/RATE específica não compartilhada.
+
+**Aprovação restrita:** persistência do serviço entre sessões do NewTerm / disponibilidade do listener CX em contexto de diagnóstico CLI. Ainda NÃO testado após reboot/rejailbreak, nem comunicação a partir de app iOS sandboxed. A API Swift CX existe na branch de desenvolvimento e passou em macOS, mas não foi executada na Build70 física.
+
+**Próxima fase proposta:** aplicativo descartável de QA (Bundle ID independente), chamado pelo usuário, que envia unicamente WRCHK2 + LF à porta 38973 e apresenta NOTE/RATE/DENY ou erro; sem instalação de IPA, sem publisher trust, sem acesso a dados do leitor. Não substituir a Build70 nem ativar WebReaderAppinstSocket.install.
