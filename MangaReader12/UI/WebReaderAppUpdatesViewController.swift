@@ -1089,7 +1089,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     }
 
     private func shareLocalIPA() {
-        guard !isIPCDiagnostic, !manualImportInProgress,
+        guard !isIPCDiagnostic, !localQASpaceBusy, !manualImportInProgress,
               !manualReviewInProgress, let receipt = manualIPAReview else { return }
         manualReviewInProgress = true
         tableView.reloadData()
@@ -1102,7 +1102,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             )) != nil
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.manualReviewInProgress = false
+                var sharing = false
+                defer {
+                    if !sharing {
+                        self.manualReviewInProgress = false
+                        self.tableView.reloadData()
+                    }
+                }
                 guard self.manualIPAReview?.copiedIPAURL ==
                     receipt.copiedIPAURL else { return }
                 if !safe {
@@ -1110,7 +1116,6 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     self.manualIPAReview = nil
                     self.manualImportStatus =
                         "IPA local alterada; importe e confira novamente"
-                    self.tableView.reloadData()
                     return
                 }
                 let share = UIActivityViewController(
@@ -1122,8 +1127,24 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     popover.sourceView = self.tableView
                     popover.sourceRect = self.tableView.rectForRow(at: index)
                 }
-                self.tableView.reloadData()
-                guard self.view.window != nil else { return }
+                guard self.view.window != nil, self.presentedViewController == nil
+                else { return }
+                share.completionWithItemsHandler = { [weak self] _, completed, _, error in
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        self.manualReviewInProgress = false
+                        if error != nil {
+                            self.manualImportStatus = "Falha no compartilhamento da IPA"
+                        } else if !completed {
+                            self.manualImportStatus = "Compartilhamento cancelado"
+                        } else {
+                            self.manualImportStatus = receipt.selectedFileName +
+                                " • SHA-256, ZIP e identidade conferidos"
+                        }
+                        self.tableView.reloadData()
+                    }
+                }
+                sharing = true
                 self.present(share, animated: true)
             }
         }
@@ -1571,7 +1592,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     }
 
     private func shareStagedIPA(_ url: URL) {
-        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport else { return }
+        guard !isIPCDiagnostic, !releaseCacheBusy, !stagingIPA, !verifyingExport else { return }
         guard let update = availableUpdate,
               stagedIPAURL == url, stagedUpdate == update,
               FileManager.default.fileExists(atPath: url.path) else {
@@ -1606,23 +1627,25 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             )) != nil
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.verifyingExport = false
+                var sharing = false
+                defer {
+                    if !sharing {
+                        self.verifyingExport = false
+                        self.tableView.reloadData()
+                    }
+                }
                 guard self.stagedIPAURL == url, self.stagedUpdate == update,
                       self.availableUpdate == update,
                       update.provenance != .signedManifest ||
                         self.authenticatedSignedEnvelopeData == signedEnvelope else {
-                    self.tableView.reloadData()
                     return
                 }
                 if !valid {
                     self.stagedIPAURL = nil
                     self.stagedUpdate = nil
                     self.ipaStatus = "IPA alterada ou inválida; baixe novamente"
-                    self.tableView.reloadData()
                     return
                 }
-                self.tableView.reloadData()
-                guard self.view.window != nil else { return }
                 let activity = UIActivityViewController(activityItems: [url],
                     applicationActivities: nil)
                 if let popover = activity.popoverPresentationController {
@@ -1630,6 +1653,23 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     popover.sourceRect = self.tableView.rectForRow(
                         at: IndexPath(row: 2, section: 2))
                 }
+                guard self.view.window != nil, self.presentedViewController == nil
+                else { return }
+                activity.completionWithItemsHandler = { [weak self] _, completed, _, error in
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        self.verifyingExport = false
+                        if error != nil {
+                            self.ipaStatus = "Falha no compartilhamento da IPA"
+                        } else if !completed {
+                            self.ipaStatus = "Compartilhamento cancelado"
+                        } else {
+                            self.ipaStatus = "SHA-256 e estrutura IPA conferidos • instalação manual"
+                        }
+                        self.tableView.reloadData()
+                    }
+                }
+                sharing = true
                 self.present(activity, animated: true)
             }
         }

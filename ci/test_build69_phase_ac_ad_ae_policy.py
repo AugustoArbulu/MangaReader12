@@ -60,6 +60,22 @@ class Build69SecurityRegression(unittest.TestCase):
             self.assertIn("self.availableUpdate == update", finish)
             self.assertIn("self.authenticatedSignedEnvelopeData == signedEnvelope", finish)
 
+    def test_manual_handoff_keeps_review_busy_until_share_completion(self):
+        for name, next_name, flag in (
+            ("shareLocalIPA()", "copyLocalIPAHash()", "manualReviewInProgress"),
+            ("shareStagedIPA(", "copyStagedIPAReceipt()", "verifyingExport"),
+        ):
+            body = UI.split("private func " + name, 1)[1].split(
+                "private func " + next_name, 1
+            )[0]
+            completion = body.split(".completionWithItemsHandler", 1)[1]
+            self.assertIn("if !sharing {", body)
+            self.assertIn("self.presentedViewController == nil", body)
+            self.assertIn("self." + flag + " = false", completion)
+            self.assertIn("if error != nil", completion)
+            self.assertIn("else if !completed", completion)
+            self.assertLess(completion.index("sharing = true"), completion.index("self.present("))
+
     def test_cdn_redirects_require_get_and_no_credentials(self):
         segment = STAGER.split("willPerformHTTPRedirection response:", 1)[1].split(
             "didReceive response: URLResponse", 1
