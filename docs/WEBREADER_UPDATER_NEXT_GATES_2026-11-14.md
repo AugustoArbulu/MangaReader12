@@ -218,3 +218,11 @@ A captura do NewTerm mostra `/usr/bin/appinst` com SHA-256 `f0d17a033391b7f68728
 O comparador confirmou o mesmo SHA-256 no executável do DEB Legacy-Me previamente auditado. O SHA-256 do **DEB** foi revalidado separadamente como `5997771183c39eb8b5e13fc2bb511b1dfcb7eb39d3f10c9092ab088ec34aae09`. O resultado vincula o binário observado ao payload do espelho e encerra a comparação de identidade para esta observação. A procedência oficial do DEB segue sem confirmação.
 
 A captura não executou o AppInst. O próximo gate de custódia é estabelecer qual arquivo o serviço de instalação efetivamente abre e por quanto tempo os bytes ficam protegidos. A instalação automática permanece desativada.
+
+### Análise estática do AppInst identificado
+
+O DEB de referência voltou a passar na verificação do SHA-256 fixado. A extração em memória confirmou que o executável de 370.064 bytes conserva o SHA-256 observado no iPad. A fatia Mach-O ARM64 contém, na seção Objective-C `__objc_methname`, os seletores `createDirectoryAtPath:withIntermediateDirectories:attributes:error:`, `copyItemAtPath:toPath:error:` e `installApplication:withOptions:error:`. O binário também contém `LSApplicationWorkspace`, `_zip_open` e a mensagem de falha ao copiar a IPA para um diretório temporário.
+
+Esses elementos são compatíveis com a sequência da fonte de referência na [fase CS](WEBREADER_BUILD70_PHASE_CS_APPINST_PATH_BOUNDARY_2026-11-10.md). A inspeção confirma a presença dos seletores no executável correspondente ao hash observado. A ordem efetiva das chamadas, o caminho aberto pelo serviço Apple, as permissões vigentes e o tempo de custódia no iOS 12 ainda não foram observados. Uma próxima prova física exigiria um ensaio separado com pacote descartável aprovado e evidência da identidade do arquivo no ponto de leitura pelo serviço. Uma observação da cópia feita pelo AppInst, isoladamente, não encerra esse gate.
+
+A análise foi somente leitura e não executou o binário. A instalação automática continua desativada.
