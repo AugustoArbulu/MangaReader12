@@ -235,3 +235,9 @@ O app descartável existente (Bundle ID `com.example.WebReaderAppinstDisposableT
 - `LSOF_UNAVAILABLE` ou `NOT_OBSERVED`: a sessão atual não forneceu a observação. A distinção entre serviço ausente, visibilidade insuficiente e outras limitações depende de evidência adicional. O resultado não justifica iniciar uma instalação.
 
 Para fechar o gate, o ensaio terá de ligar o hash conferido antes da transferência ao objeto de arquivo aberto pelo serviço e observar a custódia durante o consumo. Um registro de sucesso do app descartável ou do AppInst fornece evidência de funcionamento, mas deixa o vínculo dos bytes em aberto.
+
+### Retorno físico do pré-teste
+
+O proprietário reportou `WR_INSTALLD_VISIBILITY=PROCESS_LISTED` em NewTerm no iPad com Chimera. A consulta listou o comando exato `installd` na sessão usada. Continuam em aberto a visibilidade de descritores numerados de arquivos regulares e a capacidade de capturar a abertura da IPA durante uma instalação descartável.
+
+A próxima verificação de leitura usa `lsof -a -c installd -Fpcft` em repouso e conta apenas registros `tREG` de descritores numerados do comando exato `installd`. O resultado não divulga PID nem caminhos. Uma contagem positiva demonstra a visibilidade de ao menos um descritor de arquivo regular naquela consulta. Zero é inconclusivo, pois a amostra pode simplesmente não conter arquivos regulares abertos. Nenhuma instalação é necessária para essa leitura.
