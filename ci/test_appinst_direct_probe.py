@@ -36,7 +36,7 @@ def main():
         assert info["CFBundleIdentifier"] != "com.example.MangaReader12"
         assert info["CFBundleDisplayName"] == "WebReader appinst Test"
         assert info["MinimumOSVersion"] == "12.0"
-        assert info["CFBundleVersion"] == "3"
+        assert info["CFBundleVersion"] == "4"
         assert info["CFBundleExecutable"] == "WRAppinstDirect"
         assert "UIBackgroundModes" not in info
         assert "UIFileSharingEnabled" not in info
@@ -46,6 +46,8 @@ def main():
         assert child[:4] == b"\xcf\xfa\xed\xfe"
         assert struct.unpack_from("<I", child, 4)[0] == 0x0100000C
         assert len(child) > 2048
+        # ZIP bit check: success here doesn't prove iOS sandbox access.
+        assert ((archive.getinfo(CHILD).external_attr >> 16) & 0o111) != 0
     source = SOURCE.read_text()
     assert '"/usr/bin/appinst"' in source
     assert 'WRRunBundledChildProbe' in source
@@ -60,6 +62,11 @@ def main():
     assert 'APPINST_META_LSTAT=REGULAR' in metadata
     assert 'APPINST_META_XOK=YES' in metadata
     assert 'APPINST_META_ADVISORY=YES' in metadata
+    for required in ("CHILD_PATH=FOUND", "CHILD_PATH=MISSING",
+                     "CHILD_LSTAT=ERRNO_", "CHILD_LSTAT=REGULAR",
+                     "CHILD_MODE_EXEC=YES", "CHILD_MODE_EXEC=NO",
+                     "CHILD_ACCESS_XOK=ERRNO_", "SPAWN_LOCAL=PRECHECK_FAILED"):
+        assert required in first_probe, required
     assert "lstat(tool, &state)" in metadata and "access(tool, X_OK)" in metadata
     for forbidden in ("posix_spawn(", "fork(", "system(", "execve(", "installApplication:", "unlink(", "remove("):
         assert forbidden not in metadata, forbidden
