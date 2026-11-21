@@ -156,10 +156,11 @@ enum WebReaderAppinstSocket {
         var response = [UInt8](repeating: 0, count: 8)
         var received = 0
         while received < response.count {
+            let remaining = response.count - received
             let n = response.withUnsafeMutableBytes { buffer -> Int in
                 guard let base = buffer.baseAddress else { return -1 }
                 return Darwin.recv(fd, base.advanced(by: received),
-                                   response.count - received, 0)
+                                   remaining, 0)
             }
             if n <= 0 { return .protocolRejected }
             received += n
