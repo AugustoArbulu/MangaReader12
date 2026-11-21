@@ -118,3 +118,12 @@ O proprietário informou que **os testes guiados do .deb CX no Chimera deram cer
 **Próximo gate objetivo:** confirmar independência da sessão do NewTerm: fechar totalmente o aplicativo de terminal, reabrir em mobile, executar `whoami` e `/usr/local/libexec/webreader-checkonly probe`, compartilhar os resultados. Após esse gate, avaliar um cliente iOS de QA separado para exercitar a comunicação a partir da sandbox, sem tocar na Build70, em vez de habilitar instalação.
 
 Ainda não demonstrados: reinício/rejailbreak, app sandboxed comunicando-se com CX, atualização real, publisher verificado, assinatura editorial, consentimento independente, custódia do IPA e execução do AppInst pelo helper. Manter PR #90 Draft, main intacta e `liveInstallationEnabled=false`.
+
+
+## Marco CZ — serviço persistente entre sessões do terminal (21/11/2026 UTC)
+
+Após fechar completamente o NewTerm e abri-lo novamente, o proprietário relatou **sucesso no probe CX**. Considerar aprovado por relato o gate de independência da sessão do NewTerm; não há captura do resultado exato. A comunicação do serviço CX no Chimera funciona em contexto CLI sem que o terminal original permaneça aberto.
+
+**Próximo gate:** validar uma solicitação de check-only partindo de um aplicativo iOS sandboxed descartável e com Bundle ID separado. Deve usar somente protocolo WRCHK2 + LF e interpretar confirmação como diagnóstico, não autenticação, disponibilidade de Release ou autorização de instalação. Não mexer na Build70.
+
+Persistência após reinício/rejailbreak, autenticação de publisher, instalação real e verificação de consumo dos bytes continuam pendentes. Manter PR #90 Draft, main e Build70 intactas, liveInstallationEnabled=false.
