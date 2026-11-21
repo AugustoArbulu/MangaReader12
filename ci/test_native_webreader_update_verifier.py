@@ -274,6 +274,74 @@ check(!WebReaderStrictJSON.accepts(Data(
 reject(good, key: Data())
 reject(Data(repeating: 0, count: 65537))
 
+
+// DB5: production API must never accept signed legacy v1, including a
+// manually constructed v1 envelope with a valid production channel claim.
+var productionV1 = payload
+productionV1["channel"] = "production"
+do {
+    _ = try WebReaderUpdateManifestVerifier.verify(
+        envelopeData: signedEnvelope(productionV1),
+        publicKeyX963: publicX963,
+        installedBuild: 56, installedIOS: systemVersion,
+        expectedChannel: "production"
+    )
+    fatalError("production erroneously accepted signed v1")
+} catch is WebReaderUpdateValidationError {
+    // Correct: higher-level publisher gate is not the only v2 enforcement.
+}
+var productionV2 = v2
+productionV2["channel"] = "production"
+let approvedV2 = try! WebReaderUpdateManifestVerifier.verify(
+    envelopeData: signedEnvelope(productionV2),
+    publicKeyX963: publicX963,
+    installedBuild: 56, installedIOS: systemVersion,
+    expectedChannel: "production"
+)
+check(approvedV2.build == 66, "valid production v2 signed fixture")
+
+// Dates are semantic UTC Gregorian timestamps, not just a regex match.
+for badDate in [
+    "2026-02-29T01:02:03Z", "2024-02-30T01:02:03Z",
+    "2026-13-01T01:02:03Z", "2026-00-01T01:02:03Z",
+    "2026-11-31T01:02:03Z", "2026-11-01T24:02:03Z",
+    "2026-11-01T01:60:03Z", "2026-11-01T01:02:60Z",
+    "0000-01-01T00:00:00Z"
+] {
+    var invalidDate = v2
+    invalidDate["publishedAt"] = badDate
+    reject(signedEnvelope(invalidDate))
+}
+var leapYearRelease = v2
+leapYearRelease["publishedAt"] = "2024-02-29T23:59:59Z"
+check(accept(signedEnvelope(leapYearRelease)).build == 66,
+      "legitimate leap-day UTC signature must verify")
+
+// Unused Base64 padding bits must be zero. Foundation can decode aliases
+// to identical signed payload bytes; canonical encoding rejects the alias.
+var signedPayload = json(payload)
+while signedPayload.count % 3 != 1 {
+    signedPayload.append(0x20) // signed trailing JSON whitespace
+}
+let canonicalEnvelope = signedRawPayload(signedPayload)
+check(accept(canonicalEnvelope).build == 57, "padded signed bytes accepted")
+var noncanonical = try! JSONSerialization.jsonObject(
+    with: canonicalEnvelope
+) as! [String: Any]
+var encodedChars = Array(noncanonical["payload"] as! String)
+check(encodedChars.suffix(2) == ["=", "="], "two Base64 padding chars expected")
+let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+let position = encodedChars.count - 3
+let index = alphabet.firstIndex(of: encodedChars[position])!
+check(index % 16 == 0, "canonical Base64 residual must be zero")
+encodedChars[position] = alphabet[index + 1]
+let aliasedBase64 = String(encodedChars)
+check(Data(base64Encoded: aliasedBase64)! == signedPayload,
+      "padded alias decodes to same signature-covered bytes")
+noncanonical["payload"] = aliasedBase64
+reject(json(noncanonical)) // signature would otherwise verify
+print("PASS DB5 Swift native: production v2, Gregorian UTC, canonical Base64")
+
 print("PASS iOS12 native WebReader signed manifest and fail-closed policy")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-native-signature-") as folder:
