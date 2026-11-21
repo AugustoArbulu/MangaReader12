@@ -196,9 +196,78 @@ finish:
     return result;
 }
 
+/*
+ * Explicit CLI-only physical QA. Runs as mobile under NewTerm, not inside the
+ * sandboxed app; sends no data other than WRCHK2\n to the local check-only
+ * service. This is intentionally NOT an update or installation command.
+ */
+static int probe(void) {
+    int fd = -1, result = 6;
+    struct sockaddr_in addr;
+    struct timeval timeout = {3, 0};
+    const uint8_t request[WR_CW_FRAME_BYTES] = {'W','R','C','H','K','2','\n'};
+    uint8_t response[9] = {0};
+    size_t sent = 0, received = 0;
+    ssize_t count;
+    int nosigpipe = 1;
+    if (!accepted_identity()) return 2;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) goto finish;
+#ifdef SO_NOSIGPIPE
+    if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe,
+                   sizeof(nosigpipe)) != 0) goto finish;
+#else
+    (void)nosigpipe;
+    (void)signal(SIGPIPE, SIG_IGN);
+#endif
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                   sizeof(timeout)) != 0 ||
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                   sizeof(timeout)) != 0) goto finish;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(WR_CX_PORT);
+#ifdef __APPLE__
+    addr.sin_len = (uint8_t)sizeof(addr);
+#endif
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        puts("WR_CX_PROBE=UNAVAILABLE");
+        result = 3;
+        goto finish;
+    }
+    while (sent < sizeof(request)) {
+        count = send(fd, request + sent, sizeof(request) - sent, 0);
+        if (count <= 0) goto finish;
+        sent += (size_t)count;
+    }
+    if (shutdown(fd, SHUT_WR) != 0) goto finish;
+    while (received < 8) {
+        count = recv(fd, response + received, 8 - received, 0);
+        if (count <= 0) goto finish;
+        received += (size_t)count;
+    }
+    count = recv(fd, response + 8, 1, 0);
+    if (count != 0) goto finish;
+    if (memcmp(response, "WRNOTE2\n", 8) == 0) {
+        puts("WR_CX_PROBE=NOTE_ONLY_NO_RELEASE_CHECK_NO_INSTALL");
+        result = 0;
+    } else if (memcmp(response, "WRRATE2\n", 8) == 0) {
+        puts("WR_CX_PROBE=RATE_LIMITED_NO_INSTALL");
+        result = 0;
+    } else if (memcmp(response, "WRDENY2\n", 8) == 0) {
+        puts("WR_CX_PROBE=DENIED_NO_INSTALL");
+        result = 5;
+    }
+finish:
+    if (fd >= 0) (void)close(fd);
+    if (result == 6) puts("WR_CX_PROBE=PROTOCOL_OR_TRANSPORT_FAILURE_NO_INSTALL");
+    return result;
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fputs("Usage: webreader-checkonly selftest | serve\n", stderr);
+        fputs("Usage: webreader-checkonly selftest | serve | probe\n", stderr);
         return 2;
     }
     if (strcmp(argv[1], "selftest") == 0) {
@@ -208,5 +277,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(argv[1], "serve") == 0) return serve();
+    if (strcmp(argv[1], "probe") == 0) return probe();
     return 2;
 }
