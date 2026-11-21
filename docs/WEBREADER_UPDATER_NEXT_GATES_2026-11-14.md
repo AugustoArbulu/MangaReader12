@@ -64,3 +64,18 @@ O serviço de laboratório aceita SOMENTE sete bytes WRCHK2+LF no localhost 127.
 CI SUCCESS 3/3: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44849062382 — Linux/macOS QA real de socket e compilação ARM64 iOS12. Sem novo DEB/IPA, sem instalação em dispositivo, sem Release e sem alterar WebReader/Build70. A prévia iOS compilada em CI não foi assinada/distribuída.
 
 Próximo gate: revisar transporte sem confundi-lo com autorização e projetar, somente após aprovação, um pacote de teste isolado, sem permissão de instalar, com identidade/porta distintas do PING Build61. Jamais substituir o PING já validado antes de testar coexistência. Para atualização automática real, continuam exigidos pin editorial, origem fixa, antireplay, custódia dos bytes, consentimento independente, QA de aplicativo descartável, recuperação e preservação do SQLite.
+
+
+## Marco CY — cliente Swift real para o transporte CX (21/11/2026 UTC)
+
+O WebReaderAppinstSocket.swift, já parte do projeto nativo, recebeu a API não automática checkOnlyConnection(completion:) e o resultado tipado CheckOnlyResult. Trata somente avisos check-only sem instalação:
+
+- porta fixa 38973 no endereço 127.0.0.1; request fixo sete bytes WRCHK2+LF;
+- shutdown(SHUT_WR) obriga EOF após frame; resposta de exatamente oito bytes com EOF, validando somente WRNOTE2/WRRATE2/WRDENY2;
+- retornos são apenas diagnóstico de evento local não autenticado, sem afirmar checagem real de atualização; nenhum caminho/URL/hash/código/IPA pode ser inserido no quadro;
+- nenhuma chamada ao AppInst, nenhuma integração UI automática e nenhum pacote no iPad.
+- porta variável apenas em WEBREADER_HOST_TEST para testes isolados.
+
+CI da fase CY: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44850850358 — SUCCESS 3/3, incluindo Swift real para C real no macOS, tentativas de respostas falsas/truncadas/extras e crosscompile de servidor iOS12. A compilação do app inteiro é verificada separadamente no workflow WebReader updater MVP.
+
+Próxima etapa: comprovar a compilação integral, depois definir UX somente de diagnóstico, e planejar um pacote de QA físico separado com consentimento do usuário, reutilizando a experiência Build61 FIX1, sem sobrescrever o serviço PING existente. Não conectar botão de instalação nem criar Release/Build71 enquanto as provas de publisher, bytes consumidos, autorização independente, backup e instalação descartável faltarem.
