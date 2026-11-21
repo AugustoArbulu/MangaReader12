@@ -77,7 +77,6 @@ jobs:
             MangaReader12/Core/WebReaderProductionPublisherTrust.swift \
             MangaReader12/Core/WebReaderUpdateChecker.swift \
             MangaReader12/Core/WebReaderGitHubReleaseParser.swift \
-            MangaReader12/Core/WebReaderAppinstSocket.swift \
             -emit-module -o "$RUNNER_TEMP/WebReaderDB5Verifier.swiftmodule"
       - name: Refuse distribution artifact or installation
         run: |
