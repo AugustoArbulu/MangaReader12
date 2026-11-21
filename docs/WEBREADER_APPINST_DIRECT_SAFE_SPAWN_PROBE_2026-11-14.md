@@ -50,3 +50,27 @@ Exemplo de uso no checkout, após copiar o relatório para um arquivo de texto l
 
 ## Interpretador validado no macOS
 [GitHub Actions #43558301424](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43558301424) **SUCCESS**. Executou os 13 testes sintéticos do parser de relatório e compilou/assinou/auditou novamente a IPA diagnóstica iOS12 ARM64 (sem chamar AppInst). Artefato `WebReader-Appinst-Direto-iOS12-TEST` ID `14099590502`. **O código do app de teste não mudou** nessa execução; a adição foi apenas para analisar o texto copiado e negar interpretações inseguras. Continua pendente o relatório físico do iPad.
+
+## Retorno físico em 20/11/2026 (iPad iOS 12.5.8; Build3 diagnóstica)
+
+O proprietário testou **somente o primeiro botão**, com o relatório literal:
+
+```text
+WebReader • Spawn local sem appinst
+iOS: 12.5.8
+UID: 501 | EUID: 501
+APPINST_META_LSTAT=ERRNO_1
+APPINST_META_XOK=ERRNO_1
+APPINST_META_ADVISORY=YES
+RESULTADO: child inválido ou não executável.
+```
+
+**Interpretação estrita:** o código encerrou **antes de** `posix_spawn`, na validação conjunta de `pathForResource`, `lstat`, `S_ISREG` e bits `0111`. Portanto, o resultado NÃO prova que o iOS/Chimera bloqueia lançamento do filho, nem que o `appinst` é inexequível. O `ERRNO_1` para metadados de `/usr/bin/appinst` é consultivo e não diz qual etapa do filho falhou. Conferência local da IPA original Build3: `Payload/WRAppinstDirect.app/WRSpawnChild` estava presente no ZIP e a entrada registrava modo Unix `0100755`. Isso não garante atributos/visibilidade do arquivo **após instalar no iPad**.
+
+### Correção diagnóstica Build4 (branch PR #90; ainda requer CI e retorno físico)
+
+- O primeiro botão, *sem appinst*, produz agora campos independentes `CHILD_PATH`, `CHILD_LSTAT`, `CHILD_MODE_EXEC`, `CHILD_ACCESS_XOK`, `SPAWN_LOCAL` e marcador `APPINST_EXECUTADO=NAO | INSTALACAO=NAO`, inclusive quando o pré-teste falha.
+- `access(X_OK)` apenas informa uma observação consultiva. Se `lstat` identifica arquivo regular com bits executáveis, o aplicativo ainda tenta `posix_spawn` do *filho local*, mesmo que `access(X_OK)` seja negado. Não altera permissões do bundle e não executa `/usr/bin/appinst`.
+- `ci/appinst_probe_report.py` distingue exatamente a falha anterior Build3, o pré-teste Build4 e o lançamento do filho, recusando relatórios manipulados e qualquer promoção a autorização de instalação. Testes sintéticos incluem as variantes e negativas.
+- `ci/test_appinst_direct_probe.py` passa a exigir modo executável do filho dentro da IPA, além dos demais invariantes. Build da IPA diagnóstica incrementada de 3 para **4**, com bundle ID separado da Build70.
+- **Nenhuma Build71, Release pública ou atualização do WebReader foi criada.** Permanecem `main` intacta, PR Draft, `liveInstallationEnabled=false`, banco/biblioteca/arquivos offline não alterados. Próximo passo físico apenas com a IPA diagnóstica Build4 depois de CI verde: executar o primeiro botão e copiar o relatório. O segundo botão opcional continua desnecessário.
