@@ -48,3 +48,16 @@ Proposta: reproduzir apenas o status HTTP e poucos cabeçalhos de diagnóstico n
 ## Limites da aprovação
 
 Mesmo se a DB4 comunicar com api.github.com, o GitHub HTTPS e seu SHA não autenticam independentemente o publisher. Permanecem pendentes: pin P-256/SPKI independente, consentimento de instalação fora do cliente não confiável, custódia do mesmo arquivo instalado, anti-replay/downgrade, separação efetiva de armazenamento entre UIDs, backup/recovery e prova de instalação descartável. Manter WebReaderAppinstSocket.liveInstallationEnabled=false, productionPublicKeyX963=nil e independentlyProvisionedSPKISHA256=nil, sem Build71 e sem alteração da main.
+
+
+## CI e artifact final (21/11/2026 UTC)
+
+- GitHub Actions DB4: https://github.com/AugustoArbulu/MangaReader12/actions/runs/44860617523 — **SUCCESS 2/2** (escopo estático no Ubuntu e build/auditoria ARM64 iOS12 no macOS), no commit `fc128c216af05d88bb0727bd9e05b093cacf3c78`.
+- Artifact: `WebReader-DB4-HTTPS-Only-iOS12-QA`, ID **14689757266**; ZIP contém uma IPA e seu `.sha256`, sem DEB, biblioteca ou recursos do WebReader. Disponibilidade de artifact GitHub Actions até 05/12/2026 UTC.
+- Nome da IPA: `WebReader-DB4-HTTPS-Only-iOS12-adhoc.ipa`; **18.193 bytes**.
+- SHA-256 recalculado depois de baixar e extrair ZIP na sessão: `602b03dfe1c9638eaa683bdeb366e8f7e2bd815fd07b9580d966e9ec4e5584f8`, igual ao manifesto publicado pela CI.
+- Info.plist extraído e verificado: `CFBundleIdentifier=com.example.WebReaderDB4HTTPSProbe`, `MinimumOSVersion=12.0`; conteúdo inclui só executável, Info.plist e CodeResources/assinatura.
+- A auditoria macOS `test_chimera_db4_https_qa_ipa.py` comprovou assinatura ad hoc e único entitlement `application-identifier`, cabeçalhos lidos por `NSURLSession` sem corpo, e ausência de comandos/símbolos de instalador. Nenhuma rede externa foi acionada pelo aplicativo em CI; sua requisição real ocorrerá somente após toque do proprietário no iPad.
+- Nenhuma Build70, serviço CX, app DA ou branch `main` foi alterado; nenhuma Release ou atualização publicada.
+
+**Estado físico:** DB4 pronta para ensaio manual opcional. A autorização explícita do proprietário para instalar o aplicativo descartável NÃO pode ser inferida da CI verde. Resultado de HTTP/TLS no iPad ainda não existe nesta data.
