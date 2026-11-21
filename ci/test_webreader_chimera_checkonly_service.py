@@ -157,6 +157,31 @@ class ChimeraCheckOnlyServiceTests(unittest.TestCase):
         self.setUp()
         self.assertEqual(self.exchange(FRAME), ACK)
 
+    def test_mobile_cli_probe_notice_then_rate_limit(self):
+        first = subprocess.run([str(self.binary), "probe"],
+                               capture_output=True, text=True, timeout=6)
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("NOTE_ONLY_NO_RELEASE_CHECK_NO_INSTALL", first.stdout)
+        second = subprocess.run([str(self.binary), "probe"],
+                                capture_output=True, text=True, timeout=6)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn("RATE_LIMITED_NO_INSTALL", second.stdout)
+        self.assertIsNone(self.server.poll())
+
+    def test_cli_probe_cannot_install_or_call_shell(self):
+        for command in ("install", "update", "/tmp/bad.ipa", "WRINST1"):
+            result = subprocess.run([str(self.binary), command],
+                                    capture_output=True, text=True, timeout=4)
+            self.assertNotEqual(result.returncode, 0)
+        source = SERVER.read_text()
+        cli_source = source.split("static int probe(void) {", 1)[1].split(
+            "int main(int argc,", 1)[0]
+        for forbidden in ("posix_spawn(", "execve(", "system(", "popen(",
+                          "appinst(", "open(", "fopen(", "chmod(", "chown(",
+                          "installApplication:", "unlink(", "rename("):
+            self.assertNotIn(forbidden, cli_source)
+        self.assertIn("WR_CX_PROBE=NOTE_ONLY_NO_RELEASE_CHECK_NO_INSTALL", source)
+
     def test_static_security_gate(self):
         source = SERVER.read_text()
         assert "htonl(INADDR_LOOPBACK)" in source
