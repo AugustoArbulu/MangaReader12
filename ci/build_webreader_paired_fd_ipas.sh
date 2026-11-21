@@ -27,7 +27,8 @@ Path(app, "Info.plist").write_bytes(plistlib.dumps({
     "CFBundleExecutable": exe, "CFBundleIdentifier": bundle,
     "CFBundleName": title, "CFBundleDisplayName": title,
     "CFBundlePackageType": "APPL", "CFBundleInfoDictionaryVersion": "6.0",
-    "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0",
+    "CFBundleVersion": "1" if role == "Target" else "2",
+    "CFBundleShortVersionString": "1.0" if role == "Target" else "1.1",
     "MinimumOSVersion": "12.0", "LSRequiresIPhoneOS": True,
     "UIDeviceFamily": [1, 2], "UIRequiredDeviceCapabilities": ["arm64"],
 }))

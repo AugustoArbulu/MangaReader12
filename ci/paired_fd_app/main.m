@@ -1,5 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
+#import <errno.h>
+#import <signal.h>
 #import <fcntl.h>
 #import <limits.h>
 #import <stdint.h>
@@ -14,25 +16,48 @@ struct fd_record {
 typedef int (*proc_name_fn)(int, void *, uint32_t);
 typedef int (*proc_info_fn)(int, int, uint64_t, void *, int);
 
+static NSString *targetNameFailure(proc_name_fn name, int pid, NSString *stage) {
+    char executable[256] = {0};
+    errno = 0;
+    int length = name(pid, executable, sizeof(executable));
+    int nameError = errno;
+    if (length > 0) {
+        if (strncmp(executable, "WRFDTarget", sizeof(executable)) == 0) return nil;
+        return [NSString stringWithFormat:@"%@_NAME_MISMATCH", stage];
+    }
+
+    // Signal 0 only checks existence/permission, without delivering a signal.
+    errno = 0;
+    int live = kill(pid, 0);
+    int liveError = errno;
+    NSString *pidState = @"UNKNOWN";
+    if (live == 0 || liveError == EPERM) pidState = @"PRESENT";
+    if (live < 0 && liveError == ESRCH) pidState = @"NOT_FOUND";
+    errno = 0;
+    int selfLength = name(getpid(), executable, sizeof(executable));
+    return [NSString stringWithFormat:@"%@_NAME_UNAVAILABLE_ERRNO_%d_PID_%@_SELF_%@",
+            stage, nameError, pidState, selfLength > 0 ? @"OK" : @"UNAVAILABLE"];
+}
+
 static NSString *observeControl(int pid, int fd) {
     proc_name_fn name = (proc_name_fn)dlsym(RTLD_DEFAULT, "proc_name");
     proc_info_fn info = (proc_info_fn)dlsym(RTLD_DEFAULT, "proc_pidinfo");
-    if (!name || !info) return @"API_UNAVAILABLE";
+    if (!name) return @"NAME_API_UNAVAILABLE";
+    if (!info) return @"FD_API_UNAVAILABLE";
 
-    char executable[256] = {0};
-    if (name(pid, executable, sizeof(executable)) <= 0 ||
-        strncmp(executable, "WRFDTarget", sizeof(executable)) != 0)
-        return @"TARGET_UNCONFIRMED";
+    NSString *failure = targetNameFailure(name, pid, @"BEFORE");
+    if (failure) return failure;
 
     struct fd_record records[1024];
+    errno = 0;
     int size = info(pid, 1, 0, records, sizeof(records));
-    memset(executable, 0, sizeof(executable));
-    if (name(pid, executable, sizeof(executable)) <= 0 ||
-        strncmp(executable, "WRFDTarget", sizeof(executable)) != 0)
-        return @"TARGET_UNCONFIRMED";
-    if (size <= 0 || size > (int)sizeof(records) ||
-        size % (int)sizeof(records[0]) != 0)
-        return @"QUERY_UNAVAILABLE";
+    int queryError = errno;
+    failure = targetNameFailure(name, pid, @"AFTER");
+    if (failure) return failure;
+    if (size <= 0)
+        return [NSString stringWithFormat:@"FD_QUERY_UNAVAILABLE_ERRNO_%d", queryError];
+    if (size > (int)sizeof(records) || size % (int)sizeof(records[0]) != 0)
+        return @"FD_QUERY_INVALID_LAYOUT";
     for (int i = 0; i < size / (int)sizeof(records[0]); i++) {
         if (records[i].fd == fd) return @"CONTROL_FD_NUMBER_LISTED";
     }
@@ -68,7 +93,7 @@ static NSString *observeControl(int pid, int fd) {
         return;
     }
     [self.input resignFirstResponder];
-    self.report.text = [@"WR_PEER_FD=" stringByAppendingString:
+    self.report.text = [@"WR_PEER_FD_V2=" stringByAppendingString:
                         observeControl((int)pid, (int)fd)];
 }
 #endif

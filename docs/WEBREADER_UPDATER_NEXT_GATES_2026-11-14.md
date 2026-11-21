@@ -263,3 +263,9 @@ O código resolveu `proc_pidinfo` e encontrou, na consulta `PROC_PIDLISTFDS` do 
 O proprietário reportou `WR_PEER_FD=TARGET_UNCONFIRMED` no Observador dos [apps de QA emparelhados](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44868046146). O diagnóstico usa `proc_name` para conferir o nome exato `WRFDTarget` antes e depois de consultar `proc_pidinfo`. O mesmo status cobre falha de leitura de nome, nome inesperado e insucesso na reconfirmação. Assim, esse retorno não distingue PID antigo ou processo encerrado, leitura de nome indisponível, e falha posterior à consulta. Ele não prova que a consulta de descritores de outro processo foi negada.
 
 A próxima sonda deve distinguir as etapas de identificação e, se necessário, adicionar um sinal independente de que o alvo segue vivo com o mesmo PID. Evitar repetir a mesma build como prova de acesso ao `installd`. Nenhuma instalação pelo WebReader nem observação de IPA em `installd` ocorreu.
+
+### Observador v2
+
+O Observador v2 distingue ausência das APIs, nome inesperado, falha de leitura antes ou depois da consulta, falha da consulta de descritores e layout inválido. Uma falha de leitura de nome acrescenta o errno, um teste de existência com sinal zero e o controle de leitura do próprio nome. O sinal zero não entrega sinal algum. Só é feita a consulta de descritores quando a leitura inicial devolve o nome esperado. O resultado positivo exige reconfirmação posterior e descreve apenas o número de descritor do controle.
+
+O alvo v1 já instalado continua compatível. Atualizar somente o Observador, reabrir o Alvo, anotar o código atual e mudar de app sem encerrá-lo. Coletar apenas a linha `WR_PEER_FD_V2=…`. Nenhum teste consulta `installd` ou o arquivo de uma IPA em instalação.
