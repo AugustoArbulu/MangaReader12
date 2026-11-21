@@ -1,0 +1,81 @@
+name: WebReader DB5 signed v2 policy and parser parity (no install)
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-db5-signed-v2-policy-parity.yml'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'MangaReader12/Core/WebReaderStrictJSON.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12/Core/WebReaderProductionPublisherTrust.swift'
+      - 'ci/webreader_update_manifest.py'
+      - 'ci/test_webreader_update_manifest.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/test_native_webreader_signed_release_trust_gate.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-publisher-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute real ephemeral P256/OpenSSL v1-v2 signed manifest policy
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_webreader_update_manifest.py' -v
+      - name: Assert production never auto-enrolls editorial pin
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          trust = Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          checker = Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          bridge = Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in trust
+          assert 'static let productionTrustGeneration = 0' in trust
+          assert 'static let liveInstallationEnabled = false' in bridge
+          assert 'DispatchQueue.main.async { completion(.rejected) }' in bridge
+          print('PASS: owner publisher trust absent; installer disabled')
+          PY
+
+  native-swift-verified-policy:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Compile and execute actual signed Swift Security.framework verifier
+        run: |
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+      - name: Cross-compile amended verifier for iOS12 ARM64
+        run: |
+          xcrun --sdk iphoneos swiftc -parse-as-library \
+            -target arm64-apple-ios12.0 \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            MangaReader12/Core/WebReaderStrictJSON.swift \
+            MangaReader12/Core/WebReaderUpdateManifestVerifier.swift \
+            MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift \
+            MangaReader12/Core/WebReaderProductionPublisherTrust.swift \
+            MangaReader12/Core/WebReaderUpdateChecker.swift \
+            MangaReader12/Core/WebReaderGitHubReleaseParser.swift \
+            MangaReader12/Core/WebReaderAppinstSocket.swift \
+            -emit-module -o "$RUNNER_TEMP/WebReaderDB5Verifier.swiftmodule"
+      - name: Refuse distribution artifact or installation
+        run: |
+          test ! -e WebReader-DB5.ipa
+          test ! -e WebReader-DB5.deb
+          echo 'PASS: DB5 code and tests only; no IPA, DEB, AppInst or physical install'
