@@ -1,0 +1,92 @@
+name: WebReader post-DA DB2 fixed GitHub Release observer (read-only)
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-db2-fixed-release-observer.yml'
+      - 'ci/webreader_cx_release_observer.swift'
+      - 'ci/test_webreader_cx_release_observer.py'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderStrictJSON.swift'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+  workflow_dispatch:
+    inputs:
+      live_public_metadata_probe:
+        description: 'Read-only explicit GET to fixed public GitHub Release API (no IPA)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline-native-transport:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Execute real Swift iOS12 parser with synthetic release metadata
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_webreader_cx_release_observer.py' -v
+          python3 ci/test_public_github_release_parser.py
+          python3 ci/test_native_webreader_update_checker.py
+      - name: Cross-compile independent observer for iOS12 ARM64, never package
+        run: |
+          xcrun --sdk iphoneos swiftc -parse-as-library \
+            -target arm64-apple-ios12.0 \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            MangaReader12/Core/WebReaderStrictJSON.swift \
+            MangaReader12/Core/WebReaderUpdateManifestVerifier.swift \
+            MangaReader12/Core/WebReaderUpdateChecker.swift \
+            MangaReader12/Core/WebReaderGitHubReleaseParser.swift \
+            ci/webreader_cx_release_observer.swift \
+            -o "$RUNNER_TEMP/webreader-db2-ios12-UNSIGNED"
+          file "$RUNNER_TEMP/webreader-db2-ios12-UNSIGNED"
+          xcrun otool -hv "$RUNNER_TEMP/webreader-db2-ios12-UNSIGNED" \
+            | grep ARM64
+      - name: Verify installer and production keys stay unavailable
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          bridge = Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          checker = Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          trust = Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in bridge
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in trust
+          assert not list(Path('.').glob('WebReader*.ipa'))
+          assert not list(Path('.').glob('WebReader*.deb'))
+          print('PASS: no installed helper updates, release publication or AppInst')
+          PY
+
+  optional-live-public-metadata-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.live_public_metadata_probe == true
+    needs: offline-native-transport
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: Compile same read-only checker, no app packaging
+        run: |
+          xcrun swiftc -parse-as-library \
+            MangaReader12/Core/WebReaderStrictJSON.swift \
+            MangaReader12/Core/WebReaderUpdateManifestVerifier.swift \
+            MangaReader12/Core/WebReaderUpdateChecker.swift \
+            MangaReader12/Core/WebReaderGitHubReleaseParser.swift \
+            ci/webreader_cx_release_observer.swift \
+            -o "$RUNNER_TEMP/db2-observer"
+      - name: One explicit HTTPS GET, fixed public metadata endpoint only
+        run: |
+          "$RUNNER_TEMP/db2-observer" --live
+          echo 'Live public metadata is NEVER publisher identity or install permission.'
