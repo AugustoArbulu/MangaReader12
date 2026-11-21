@@ -121,3 +121,40 @@ O parser offline passa a tratar as duas linhas como resultado separado; nenhum d
 - Artifact `WebReader-Appinst-Direto-iOS12-TEST`, ID `14683820118`, incluía `WebReader-Appinst-Direto-iOS12-adhoc.ipa` (**18.723 bytes**) e `WebReader-Appinst-Direto-iOS12-adhoc.ipa.sha256`. SHA-256 verificado após download: `719bb054e279bdbc55c30067acfd5f5dc9bf4ce37b5eaf3b31fbc2b90ae6a92a`.
 - Verificação independente do pacote ZIP: `CFBundleVersion=5`, `MinimumOSVersion=12.0`, `CFBundleIdentifier=com.example.WebReaderAppinstDirectProbe`; executável principal e `WRSpawnChild` contêm modo Unix `0755` **no ZIP**, o que não demonstra permissões pós-instalação.
 - `main` e o WebReader Build70 real não foram alterados. Próximo teste permitido no iPad: instalar apenas a IPA diagnóstica Build5 e tocar **1. Testar processo local (sem appinst)**; copiar o relatório completo, inclusive `SELF_MAIN` e `SPAWN_SELF`. Não clicar no segundo botão. Mesmo resultado positivo de self-spawn não autoriza execução do AppInst ou instalação de IPA.
+
+## Fechamento físico Build5 — self-spawn recebeu EPERM no iPad (20/11/2026 America/Sao_Paulo)
+
+O proprietário executou **apenas o primeiro botão** da IPA Build5 no iPad iOS 12.5.8 com Chimera. Relatório literal:
+
+```text
+WebReader • Spawn local sem appinst
+iOS: 12.5.8
+UID: 501 | EUID: 501
+APPINST_META_LSTAT=ERRNO_1
+APPINST_META_XOK=ERRNO_1
+APPINST_META_ADVISORY=YES
+CHILD_PATH=FOUND
+CHILD_LSTAT=REGULAR
+CHILD_MODE_EXEC=NO
+CHILD_ACCESS_XOK=ERRNO_1
+SPAWN_LOCAL=PRECHECK_FAILED
+APPINST_EXECUTADO=NAO | INSTALACAO=NAO
+SELF_MAIN=REGULAR_EXEC
+SPAWN_SELF=NEGADO (1 (Operation not permitted))
+```
+
+### Observado versus não demonstrado
+
+1. `WRSpawnChild`: arquivo regular encontrado, mas sem bits executáveis (`CHILD_MODE_EXEC=NO`). O programa **não** tentou iniciá-lo: `SPAWN_LOCAL=PRECHECK_FAILED`. Na IPA ZIP Build5 o executável auxiliar tinha bits `0755`; não podemos atribuir a diferença a uma etapa específica da instalação sem prova.
+2. Binário principal do **aplicativo de teste**: `SELF_MAIN=REGULAR_EXEC` confirma arquivo regular com bits de execução. Entretanto, a tentativa controlada de `posix_spawn` **dentro do app**, usando seu próprio executável assinado e o argumento inerte `--wr-safe-self-child`, falhou com `EPERM=1`.
+3. O retorno físico demonstra **negação de self-spawn nessa configuração concreta de sandbox/assinatura/iOS12/Chimera**. Não prova a causa exata do `EPERM`, nem uma impossibilidade universal de `posix_spawn`, de helpers fora da sandbox, de uma instalação por sistema, ou de métodos OTA.
+4. `APPINST_META_LSTAT=ERRNO_1` e `APPINST_META_XOK=ERRNO_1` são somente consultas consultivas a `/usr/bin/appinst`. **Nenhuma execução do AppInst foi realizada**, nenhuma IPA foi fornecida e nenhum aplicativo foi instalado ou atualizado por esse teste.
+5. O relatório físico é salvo como fixture literal em `ci/test_appinst_probe_report.py`, que exige que `direct_appinst_execution_verified=false`, `installer_authorized=false`, `installation_performed=false`.
+
+### Decisão operacional
+
+**Encerrar os testes repetidos de execução direta dentro do app como caminho crítico do atualizador.** Há evidência física de `EPERM` mesmo com bits executáveis no binário principal; repetir IPAs ad hoc sem nova hipótese não melhora a viabilidade. Não pedir ao usuário para executar o segundo botão `appinst --help`, nem para aplicar `chmod`, mudar sandbox ou substituir o WebReader principal.
+
+A atualização in-app ainda pode oferecer a parte **sem instalação**: detectar uma Release aprovada, verificar versão e autenticidade, baixar e conferir a IPA, disponibilizar transferência manual. Porém, para dispensar Filza/PC **com instalação automática**, será necessário estudar e validar em **aplicativo descartável** uma via de instalação mediada pelo sistema/jailbreak ou serviço autônomo que não dependa de `posix_spawn` no sandbox do app. O desenho de helper da Fase CN requer origem fixa, manifesto assinado, verificação independente dos bytes que realmente chegam ao instalador, antirreplay e consentimento confiável. O `TOKEN_UNAVAILABLE` físico da Fase CM impede usar credenciais do peer como prova suficiente de autorização. **Não habilitar** `WRINST1` nem `WebReaderAppinstSocket.install`.
+
+**Invariantes após retorno:** `main` intocada, PR #90 Draft, `liveInstallationEnabled=false`, `productionPublicKeyX963=nil`, `independentlyProvisionedSPKISHA256=nil`. Sem Build71, Release, appinst real, alteração da Build70 instalada, SQLite, biblioteca ou downloads. Não há nova IPA de diagnóstico necessária para este resultado.
