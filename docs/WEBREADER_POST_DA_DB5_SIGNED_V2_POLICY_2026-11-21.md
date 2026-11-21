@@ -31,3 +31,20 @@ Data: 21/11/2026 UTC. Trabalho exclusivamente em feat/chimera-updater-phase1-pro
 ## Gate de validação
 
 GitHub Actions dedicado: https://github.com/AugustoArbulu/MangaReader12/actions/workflows/chimera-db5-signed-v2-policy-parity.yml. Registrar o RUN ID e resultado após CI. Não substituir referência por 'verde' antes de obter conclusão dos jobs.
+
+
+## CI definitiva aprovada em 21/11/2026 UTC
+
+**GitHub Actions #44861557092 — SUCCESS, 3/3 jobs**, commit de código `68ef3cdb5014185e1c00fdcdb3de6545fed3c6fb`:
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44861557092
+
+- Ubuntu: todos os testes Python com chaves temporárias e regressões de manifestos P-256 **PASS**.
+- macOS: todos os testes Python equivalentes **PASS**.
+- macOS Swift: verificador Security.framework real, trust gate v2 independente de SPKI, produção sem chave e vínculo do envelope ao metadata de IPA **PASS**. Logs incluem `PASS DB5 Swift native: production v2, Gregorian UTC, canonical Base64`.
+- Compilação do conjunto de verificadores Swift como módulo **ARM64 target iOS 12.0** **PASS**.
+- Validações constantes: `liveInstallationEnabled=false`, chave pública de produção e pin independentes `nil`, geração de confiança 0.
+- Nenhuma IPA, DEB, Release ou operação AppInst produzida/executada.
+
+O workflow anterior #44861439733 falhou **somente no crosscompile auxiliar**: o arquivo WebReaderAppinstSocket.swift fora incluído isoladamente, mas dependia de WebReaderHelperPingProbe.swift, que não integrava esse teste. Todos os testes Swift/assinatura/Python anteriores a esse passo passaram. O commit `68ef3cdb5014185e1c00fdcdb3de6545fed3c6fb` removeu a dependência não relacionada da compilação isolada; as travas de AppInst permanecem verificadas em análise estática. A CI final confirmou novamente todo o conjunto.
+
+**Gate DB5 aprovado:** os validadores Python e Swift ficam alinhados em produção v2, data UTC real e Base64 canônico, sem enrolar qualquer chave editorial verdadeira. Próximo trabalho distinto deve avaliar autorização do proprietário e custódia real dos bytes, ou a gestão independente da chave editorial, sem habilitar instalação com os testes DB5.
