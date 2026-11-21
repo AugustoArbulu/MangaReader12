@@ -99,7 +99,7 @@ assert 'Aguardando política independente de autorização e chave editorial' in
 assert 'if selectedSection == 2, indexPath.row == 3 {' in screen
 assert "showFilzaInstructions()" in screen
 assert 'if selectedSection == 2, indexPath.row == 4 { return }' in screen
-assert 'self.stagedSHA256 = update.sha256' in screen
+assert 'self.stagedUpdate = update' in screen
 assert "WebReaderAppinstSocket.swift in Sources" in project
 assert '"Copiar comando appinst (manual)"' not in screen
 assert 'copyManualAppinstCommand(' not in screen
@@ -114,7 +114,7 @@ assert 'let downloader = WebReaderIPAStager(' in screen
 assert 'verifiedUpdate: update,' in screen
 assert 'onProgress:' in screen
 assert 'downloader.stage { [weak self, weak downloader] result in' in screen
-assert 'let current = availableUpdate' in screen
+assert 'availableUpdate == update' in screen
 # Signed production downloads require the exact authenticated envelope,
 # not merely a publisher-key-present flag.
 assert "selectedSignedUpdateIsBound(update)" in screen

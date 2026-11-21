@@ -24,7 +24,7 @@ enum WebReaderUpdateProvenance: Equatable {
     case manualLocalFile
 }
 
-struct WebReaderVerifiedUpdate {
+struct WebReaderVerifiedUpdate: Equatable {
     let build: Int
     let minimumIOS: String
     let ipaURL: URL

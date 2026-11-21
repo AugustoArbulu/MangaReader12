@@ -35,7 +35,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var verifyingExport = false
     private var stagedIPAURL: URL?
     private var ipaStatus = "Aguardando consulta aos metadados do GitHub"
-    private var stagedSHA256: String?
+    private var stagedUpdate: WebReaderVerifiedUpdate?
     // Local, manually selected QA IPAs are separate from GitHub releases:
     // a matching owner-entered SHA-256 does NOT authenticate the publisher.
     private var manualIPAReview: WebReaderLocalIPAReview?
@@ -764,7 +764,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         checking = true
         authenticatedSignedEnvelopeData = nil
         stagedIPAURL = nil
-        stagedSHA256 = nil
+        stagedUpdate = nil
         tableView.reloadData()
 
         let current = WebReaderUpdateChecker(
@@ -894,7 +894,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         authenticatedSignedEnvelopeData = nil
         lastResult = .disabled
         stagedIPAURL = nil
-        stagedSHA256 = nil
+        stagedUpdate = nil
         tableView.reloadData()
         let signed = WebReaderProductionSignedReleaseChecker(
             installedBuild: installedBuild,
@@ -1472,10 +1472,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
               (update.provenance == .publicGitHubRelease ||
                 (update.provenance == .signedManifest &&
                  selectedSignedUpdateIsBound(update))),
-              let current = availableUpdate,
-              current.build == update.build, current.sha256 == update.sha256,
-              current.provenance == update.provenance,
-              current.ipaURL == update.ipaURL
+              availableUpdate == update
         else { return }
         stagingIPA = true
         ipaStatus = "Baixando e verificando hash, versão e conteúdo da IPA"
@@ -1507,11 +1504,11 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 switch result {
                 case .staged(let url):
                     self.stagedIPAURL = url
-                    self.stagedSHA256 = update.sha256
+                    self.stagedUpdate = update
                     self.ipaStatus = "SHA-256 e estrutura IPA conferidos • instalação manual"
                 case .failed(let failure):
                     self.stagedIPAURL = nil
-                    self.stagedSHA256 = nil
+                    self.stagedUpdate = nil
                     self.ipaStatus = self.stageFailureMessage(failure)
                 }
                 self.tableView.reloadData()
@@ -1557,13 +1554,13 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     }
 
     private func shareStagedIPA(_ url: URL) {
-        guard !isIPCDiagnostic, !verifyingExport,
-              let update = availableUpdate,
-              stagedIPAURL == url, stagedSHA256 == update.sha256,
+        guard !isIPCDiagnostic, !stagingIPA, !verifyingExport else { return }
+        guard let update = availableUpdate,
+              stagedIPAURL == url, stagedUpdate == update,
               FileManager.default.fileExists(atPath: url.path) else {
             ipaStatus = "IPA indisponível; baixe novamente"
             stagedIPAURL = nil
-            stagedSHA256 = nil
+            stagedUpdate = nil
             tableView.reloadData()
             return
         }
@@ -1593,10 +1590,16 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.verifyingExport = false
-                guard self.stagedIPAURL == url else { return }
+                guard self.stagedIPAURL == url, self.stagedUpdate == update,
+                      self.availableUpdate == update,
+                      update.provenance != .signedManifest ||
+                        self.authenticatedSignedEnvelopeData == signedEnvelope else {
+                    self.tableView.reloadData()
+                    return
+                }
                 if !valid {
                     self.stagedIPAURL = nil
-                    self.stagedSHA256 = nil
+                    self.stagedUpdate = nil
                     self.ipaStatus = "IPA alterada ou inválida; baixe novamente"
                     self.tableView.reloadData()
                     return
@@ -1622,7 +1625,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               let update = availableUpdate,
               let url = stagedIPAURL,
-              stagedSHA256 == update.sha256 else { return }
+              stagedUpdate == update else { return }
         verifyingExport = true
         tableView.reloadData()
         let currentBuild = installedBuild
@@ -1647,11 +1650,17 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.verifyingExport = false
-                guard self.stagedIPAURL == url else { return }
+                guard self.stagedIPAURL == url, self.stagedUpdate == update,
+                      self.availableUpdate == update,
+                      update.provenance != .signedManifest ||
+                        self.authenticatedSignedEnvelopeData == signedEnvelope else {
+                    self.tableView.reloadData()
+                    return
+                }
                 guard let report = report,
                       report.verifiedSHA256 == update.sha256 else {
                     self.stagedIPAURL = nil
-                    self.stagedSHA256 = nil
+                    self.stagedUpdate = nil
                     self.ipaStatus = "IPA local modificada; baixe novamente"
                     self.tableView.reloadData()
                     return

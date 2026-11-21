@@ -63,7 +63,7 @@ class ManualUpdateControls(unittest.TestCase):
             "WebReaderNativeIPAAuditor.inspect(",
             "report.verifiedSHA256 == update.sha256",
             "self.stagedIPAURL == url",
-            "stagedSHA256 == update.sha256",
+            "stagedUpdate == update",
             "IPA local modificada; baixe novamente",
             "WebReader • recibo de integridade, NÃO de instalação",
             "Instalação automática: NÃO autorizada e NÃO realizada",

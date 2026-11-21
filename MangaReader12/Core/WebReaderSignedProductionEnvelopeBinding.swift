@@ -48,13 +48,6 @@ enum WebReaderSignedProductionEnvelopeBinding {
                 expectedChannel: "production"
               )
         else { return false }
-        let verified = signed.update
-        return verified.build == update.build &&
-            verified.minimumIOS == update.minimumIOS &&
-            verified.ipaURL == update.ipaURL &&
-            verified.ipaSize == update.ipaSize &&
-            verified.sha256 == update.sha256 &&
-            verified.publishedAt == update.publishedAt &&
-            verified.releaseNotes == update.releaseNotes
+        return signed.update == update
     }
 }

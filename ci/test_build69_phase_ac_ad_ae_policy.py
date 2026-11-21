@@ -47,6 +47,19 @@ class Build69SecurityRegression(unittest.TestCase):
         self.assertIn("WebReaderLocalIPAReviewer.recheck(", LOCAL + UI)
         self.assertIn("O_NOFOLLOW | O_NONBLOCK", LOCAL)
 
+    def test_sharing_and_receipt_require_same_selection_after_review(self):
+        for name, next_name in (
+            ("shareStagedIPA(", "copyStagedIPAReceipt()"),
+            ("copyStagedIPAReceipt()", "runOneAppTest()"),
+        ):
+            body = UI.split("private func " + name, 1)[1].split(
+                "private func " + next_name, 1
+            )[0]
+            finish = body.split("DispatchQueue.main.async", 1)[1]
+            self.assertIn("self.stagedUpdate == update", finish)
+            self.assertIn("self.availableUpdate == update", finish)
+            self.assertIn("self.authenticatedSignedEnvelopeData == signedEnvelope", finish)
+
     def test_cdn_redirects_require_get_and_no_credentials(self):
         segment = STAGER.split("willPerformHTTPRedirection response:", 1)[1].split(
             "didReceive response: URLResponse", 1

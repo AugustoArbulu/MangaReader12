@@ -275,3 +275,9 @@ O alvo v1 já instalado continua compatível. Atualizar somente o Observador, re
 O proprietário reportou `WR_PEER_FD_V2=BEFORE_NAME_UNAVAILABLE_ERRNO_1_PID_PRESENT_SELF_OK` na [IPA do Observador v2](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44868614925). O teste de existência indicou um processo com aquele PID, a leitura do próprio nome teve sucesso e `proc_name` para o PID informado retornou sem nome com `EPERM` (1). O nome do Alvo não pôde ser confirmado. Esse ramo retorna antes de chamar `proc_pidinfo` para o outro PID. A causa exata da restrição e o comportamento da consulta de descritores entre processos permanecem indeterminados.
 
 Encerrar a repetição do mesmo teste com Observador em sandbox. Uma futura observação do instalador precisaria de uma ferramenta aprovada num contexto com acesso verificável ao serviço. A checagem assinada e a entrega manual da IPA podem avançar separadamente. A instalação automática segue desativada.
+
+### Entrega manual vinculada à seleção revisada
+
+O estado da IPA baixada guarda os metadados completos do candidato, incluindo origem. Compartilhamento e recibo verificam esses metadados e a seleção atual tanto antes da auditoria quanto na conclusão assíncrona. Para produção assinada, a conclusão também exige que o envelope autenticado permaneça o mesmo. Um pedido duplicado durante a revisão encerra imediatamente sem apagar o estado da IPA. A comparação dos metadados do envelope e do candidato usa a mesma igualdade estrutural.
+
+A auditoria SHA-256 e ZIP continua anterior à entrega manual. A cópia e a leitura no Filza permanecem fora dessa garantia. O AppInst segue desativado e a raiz editorial real permanece ausente.
