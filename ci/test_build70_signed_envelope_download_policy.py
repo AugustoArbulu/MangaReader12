@@ -73,10 +73,9 @@ class SignedEnvelopeContinuityPolicy(unittest.TestCase):
 
     def test_cryptographic_reference_compares_all_signed_metadata(self):
         s = (CORE / "WebReaderSignedProductionEnvelopeBinding.swift").read_text()
-        for attr in ("build", "minimumIOS", "ipaURL", "ipaSize", "sha256",
-                     "publishedAt", "releaseNotes"):
-            with self.subTest(attr=attr):
-                self.assertIn(f"verified.{attr} == update.{attr}", s)
+        model = (CORE / "WebReaderUpdateManifestVerifier.swift").read_text()
+        self.assertIn("struct WebReaderVerifiedUpdate: Equatable {", model)
+        self.assertIn("return signed.update == update", s)
         self.assertIn("expectedChannel: \"production\"", s)
         self.assertIn("update.provenance == .signedManifest", s)
         self.assertIn("WebReaderProductionPublisherTrust.isProvisioned", s)
