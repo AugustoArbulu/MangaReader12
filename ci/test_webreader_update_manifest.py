@@ -77,6 +77,72 @@ class ManifestProtocolTests(unittest.TestCase):
             validate(self.envelope(payload or self.base, sign=not tamper),
                      self.pinned)
 
+    def test_db5_production_cannot_accept_signed_v1(self):
+        v1 = dict(self.base, channel="production")
+        with self.assertRaises(ManifestRejected):
+            validate(
+                self.envelope(v1), self.pinned,
+                installed_build=56, expected_channel="production"
+            )
+        v2 = dict(self.v2(), channel="production")
+        accepted = validate(
+            self.envelope(v2), self.pinned,
+            installed_build=65, expected_channel="production"
+        )
+        self.assertEqual(accepted["schemaVersion"], 2)
+
+    def test_db5_actual_gregorian_utc_calendar(self):
+        for published in (
+            "2026-02-29T01:02:03Z", "2024-02-30T01:02:03Z",
+            "2026-13-01T01:02:03Z", "2026-00-01T01:02:03Z",
+            "2026-11-31T01:02:03Z", "2026-11-01T24:02:03Z",
+            "2026-11-01T01:60:03Z", "2026-11-01T01:02:60Z",
+            "0000-01-01T00:00:00Z",
+        ):
+            with self.subTest(published=published):
+                self.rejected(dict(self.v2(), publishedAt=published))
+        valid = dict(self.v2(), publishedAt="2024-02-29T23:59:59Z")
+        self.assertEqual(
+            validate(self.envelope(valid), self.pinned,
+                     installed_build=65)["build"], 66
+        )
+
+    def test_db5_signed_base64_padding_alias_rejected(self):
+        # Generate a *genuinely signed* valid JSON payload with trailing
+        # whitespace, ensuring == padding on its Base64 representation.
+        # Replacing the final nonpadding symbol with an equivalent one
+        # leaves the decoded bytes and ECDSA signature unchanged.
+        raw = encode(self.base)
+        while len(raw) % 3 != 1:
+            raw += b" "
+        path = self.root / "db5-canonical-payload.json"
+        signature_path = self.root / "db5-canonical-signature.der"
+        path.write_bytes(raw)
+        subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", str(self.private),
+             "-out", str(signature_path), str(path)],
+            check=True, capture_output=True, timeout=15
+        )
+        envelope = {
+            "schemaVersion": 1, "algorithm": "ecdsa-p256-sha256",
+            "payload": base64.b64encode(raw).decode("ascii"),
+            "signature": base64.b64encode(signature_path.read_bytes()).decode("ascii"),
+        }
+        self.assertEqual(
+            validate(encode(envelope), self.pinned)["build"], 57
+        )
+        canonical = envelope["payload"]
+        self.assertTrue(canonical.endswith("=="))
+        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        position = len(canonical) - 3
+        index = alphabet.index(canonical[position])
+        self.assertEqual(index % 16, 0)
+        alias = canonical[:position] + alphabet[index + 1] + canonical[position+1:]
+        self.assertEqual(base64.b64decode(alias), raw)
+        envelope["payload"] = alias
+        with self.assertRaises(ManifestRejected):
+            validate(encode(envelope), self.pinned)
+
     def test_valid_newer_signed_manifest(self):
         actual = validate(self.envelope(self.base), self.pinned)
         self.assertEqual(actual["build"], 57)
