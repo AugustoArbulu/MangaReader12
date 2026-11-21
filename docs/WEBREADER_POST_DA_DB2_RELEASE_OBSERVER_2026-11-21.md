@@ -52,3 +52,30 @@ A lista de Releases foi consultada separadamente pelo conector GitHub: [] no mom
 A consulta direta via conector GitHub à API `GET https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest` retornou **HTTP 404** com `{"message":"Not Found","status":"404"}`. A lista `/releases` do mesmo repositório devolveu `[]`. É evidência externa da ausência de uma Release pública acessível no momento verificado, mas não é execução de HTTPS pelo novo binário DB2 nem prova de que o repositório sempre permanecerá sem Releases.
 
 Classificação segura: `NO_ACCESSIBLE_LATEST_RELEASE_HTTP_404`, nunca `UP_TO_DATE`, `SIGNED_PUBLISHER` ou `INSTALL_AUTHORIZED`. Nenhum asset, IPA ou Release foi criado.
+
+
+## Fase DB3 — HTTPS REAL pelo observador Swift em CI (21/11/2026 UTC)
+
+GitHub Actions #44860381932: SUCCESS no commit `ac08fb4f0463afa459ecef780769bc10a4abf7cf`:
+https://github.com/AugustoArbulu/MangaReader12/actions/runs/44860381932
+
+O novo workflow de **escopo único** `.github/workflows/chimera-db3-live-release-metadata-one-shot.yml` executou `--live` do mesmo `ci/webreader_cx_release_observer.swift`, compilado no macOS, fazendo uma transação HTTPS real por URLSession para a URL fixa. Não forneceu URL, token, cookie, caminho de IPA ou credencial ao executável.
+
+Saída observada e CONFIRMADA nos logs da CI:
+
+```text
+WR_DB2_SOURCE=FIXED_PUBLIC_GITHUB_HTTPS_METADATA_ONLY
+WR_DB2_OBSERVATION=UNEXPECTED_HTTP_403
+WR_DB2_PUBLIC_RELEASE_IS_SIGNED_PUBLISHER=NO
+WR_DB2_OWNER_TRUST_PROVISIONED=NO
+WR_DB2_PEER_AUTHENTICATED=NO
+WR_DB2_IPA_DOWNLOADED=NO
+WR_DB2_INSTALL_AUTHORIZED=NO
+WR_DB2_INSTALL_PERFORMED=NO
+```
+
+**Interpretação:** a URLSession macOS alcançou uma resposta HTTP 403. Não temos ainda os cabeçalhos HTTP necessários para atribuir a recusa a limite da API, firewall, política de acesso ou outro fator. A consulta separada pelo conector GitHub, em contexto autenticado diferente, retornou `/releases/latest` HTTP 404 e lista de Releases vazia. **Não reconciliar as duas observações inventando causa**. O verificador nunca converteu erro HTTP em `upToDate`, `updateAvailable`, assinatura editorial ou instalação permitida.
+
+Os testes sintéticos e o crosscompile iOS12 da DB2 continuam válidos. DB3 executou somente um GET, nenhuma criação de Release, IPA ou DEB, nenhuma modificação de branch main, Build70 física, serviço CX ou app DA instalado. Um resultado 403 prova resposta HTTP do ambiente de CI, mas **não prova acesso HTTPS pelo iPad**.
+
+**Próxima hipótese testável:** diagnóstico read-only dos cabeçalhos do HTTP 403 (rate limit/retry-after) e/ou do status HTTPS no iPad usando cliente isolado, sem substituir DA/CX e sem habilitar instalador.
