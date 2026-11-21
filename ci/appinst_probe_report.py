@@ -45,6 +45,36 @@ def classify_report(raw: str) -> dict:
     lines = raw.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
+
+    # Build5 appends a separately scoped self-spawn of the ALREADY SIGNED
+    # main binary (not a resource, appinst or an installable helper).
+    # Validate the exact suffix before handing the historical core report
+    # to the Build3/Build4 parser.
+    self_probe = None
+    if len(lines) >= 2 and lines[-2].startswith("SELF_MAIN="):
+        if len(lines) not in (14, 15) or not lines[-1].startswith("SPAWN_SELF="):
+            return outcome
+        main_state = lines[-2].split("=", 1)[1]
+        self_result = lines[-1].split("=", 1)[1]
+        if not re.fullmatch(
+            r"(?:REGULAR_EXEC|REGULAR_NOEXEC|NOT_REGULAR|MISSING|ERRNO_[0-9]{1,5}|INVALID_ID)",
+            main_state,
+        ):
+            return outcome
+        result_match = re.fullmatch(
+            r"(OK|NEGADO|FALHA_DO_SELF|WAITPID_INDISPONIVEL|TIMEOUT|PRECHECK_FAILED)"
+            r"(?: \\([^\\r\\n]{1,180}\\))?",
+            self_result,
+        )
+        if result_match is None:
+            return outcome
+        self_state = result_match.group(1)
+        if (main_state == "REGULAR_EXEC") == (self_state == "PRECHECK_FAILED"):
+            return outcome
+        if main_state == "INVALID_ID":
+            return outcome
+        self_probe = {"main_executable": main_state, "result": self_state}
+        lines = lines[:-2]
     if len(lines) not in (7, 8, 9, 12, 13) or lines[0] != HEADER:
         return outcome
     if any(not line or line != line.strip() for line in lines):
@@ -151,6 +181,8 @@ def classify_report(raw: str) -> dict:
         return outcome
     outcome["report_accepted"] = True
     outcome["local_child"] = state
+    if self_probe is not None:
+        outcome["self_probe"] = self_probe
     if is_v4:
         outcome["child_precheck"] = details
     outcome["appinst_metadata"] = {
