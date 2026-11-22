@@ -19,7 +19,13 @@ enum WebReaderUpdateValidationError: Error {
 
 enum WebReaderUpdateProvenance: Equatable {
     case signedManifest
+    case privateGitHubRelease
     case publicGitHubRelease
+
+    var isGitHubRelease: Bool {
+        return self == .publicGitHubRelease || self == .privateGitHubRelease
+    }
+
     // User-selected local IPA from Files/Filza. No release/editor authentication.
     case manualLocalFile
 }

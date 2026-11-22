@@ -2,6 +2,7 @@ name: iOS 12 Milestone 0
 
 on:
   push:
+    branches-ignore: [feat/webreader-private-updates]
     # Changes confined to read-only Build70 data auditors or documentation
     # never need a heavyweight iOS compile or diagnostic IPA artifact.
     paths-ignore:

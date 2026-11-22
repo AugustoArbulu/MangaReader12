@@ -37,6 +37,7 @@ enum WebReaderUpdateCheckResult {
 /// Explicit, one-shot check. Never automatically performs network operations.
 /// An injectable URLProtocol allows 100% offline tests with temporary keys.
 final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
+    private let privateToken: String?
     private let manifestURL: URL
     private let usePublicGitHubReleases: Bool
     private let pinnedPublicKeyX963: Data?
@@ -59,8 +60,9 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         installedBuild: Int,
         installedIOS: OperatingSystemVersion,
         protocolClasses: [AnyClass]? = nil,
-        usePublicGitHubReleases: Bool = false
+        usePublicGitHubReleases: Bool = false, privateToken: String? = nil
     ) {
+        self.privateToken = privateToken
         self.manifestURL = manifestURL
         self.usePublicGitHubReleases = usePublicGitHubReleases
         self.pinnedPublicKeyX963 = publicKeyX963
@@ -116,6 +118,10 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("WebReader-iOS12-PersonalUpdater", forHTTPHeaderField: "User-Agent")
+        if let token = privateToken, usePublicGitHubReleases {
+            request.url = URL(string: WebReaderGitHubReleaseParser.privateAPI)!
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
         let task = session.dataTask(with: request)
         self.session = session
         self.currentTask = task
@@ -219,10 +225,29 @@ final class WebReaderUpdateChecker: NSObject, URLSessionDataDelegate, URLSession
             finish(.failed(.transport))
             return
         }
+        if privateToken != nil, usePublicGitHubReleases,
+           task.originalRequest?.url?.absoluteString == WebReaderGitHubReleaseParser.privateAPI {
+            guard WebReaderStrictJSON.accepts(bytes),
+                  let repo = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+                  repo["visibility"] as? String == "private",
+                  repo["full_name"] as? String == WebReaderGitHubReleaseParser.privateRepo,
+                  var request = task.originalRequest else {
+                finish(.failed(.invalidGitHubRelease))
+                return
+            }
+            request.url = URL(string: WebReaderGitHubReleaseParser.privateAPI + "/releases/latest")!
+            let next = session.dataTask(with: request)
+            stateLock.lock()
+            accumulatedData = Data()
+            currentTask = next
+            stateLock.unlock()
+            next.resume()
+            return
+        }
         if usePublicGitHubReleases {
             finish(WebReaderGitHubReleaseParser.parse(
                 bytes, installedBuild: installedBuild,
-                installedIOS: installedIOS
+                installedIOS: installedIOS, privateChannel: privateToken != nil
             ))
             return
         }

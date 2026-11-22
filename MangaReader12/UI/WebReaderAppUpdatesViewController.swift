@@ -18,6 +18,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var offlineSampleOffset = 0
     private var signedChannelStatus =
         "Chave editorial independente ainda não provisionada • sem requisições"
+    private var privateReleaseToken: String?
     private var checking = false
     private var lastResult: WebReaderUpdateCheckResult?
     private var httpsProbe: WebReaderReleaseHTTPSProbe?
@@ -185,7 +186,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
         switch sectionType(section) {
         case 1:
-            return "A consulta pública usa apenas GitHub Releases, sem " +
+            return "O botão Verificar atualizações consulta seu repositório privado no GitHub, sem " +
                 "autenticação editorial. O canal assinado exige chave e pin " +
                 "conferidos independentemente; Builds privadas do Actions " +
                 "continuam manuais, sem token no aplicativo."
@@ -256,7 +257,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         case (1, 0):
             cell.textLabel?.text = "Canal de lançamentos"
             cell.detailTextLabel?.text =
-                "GitHub Releases • HTTPS • sem autenticação editorial independente"
+                "WebReader-Updates • acesso privado pelo GitHub"
 
         case (1, 1):
             cell.textLabel?.text = "Abrir GitHub Releases"
@@ -607,8 +608,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             case .unsupportedManifestURL: return "Endereço do canal não autorizado"
             case .transport: return "Não foi possível acessar o manifesto HTTPS"
             case .unexpectedHTTPStatus(let status):
+                if status == 401 || status == 403 { return "Acesso recusado. Confira o token de leitura e tente novamente." }
                 if status == 404 {
-                    return "HTTP 404: nenhuma Release pública acessível; não há IPA para baixar"
+                    return "Sem acesso ao repositório privado ou sem versão publicada."
                 }
                 return "Resposta HTTP " + String(status)
             case .unexpectedContentType:
@@ -706,7 +708,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         }
         if selectedSection == 1, indexPath.row == 1 {
             let url = URL(string:
-                "https://github.com/AugustoArbulu/MangaReader12/releases"
+                "https://github.com/AugustoArbulu/WebReader-Updates/releases"
             )!
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             return
@@ -764,7 +766,42 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
               !isIPCDiagnostic, !checking, !signedChannelBusy,
               !stagingIPA, !verifyingExport
         else { return }
+        if privateReleaseToken != nil {
+            checkPrivateReleases()
+            return
+        }
+        let prompt = UIAlertController(title: "Acesso às atualizações privadas",
+            message: "Use um token de leitura do repositório WebReader-Updates. Ele será usado apenas enquanto esta tela estiver aberta.", preferredStyle: .alert)
+        prompt.addTextField {
+            $0.isSecureTextEntry = true
+            $0.autocapitalizationType = .none
+            $0.autocorrectionType = .no
+            $0.placeholder = "Token de acesso"
+        }
+        prompt.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+        prompt.addAction(UIAlertAction(title: "Verificar", style: .default) { [weak self, weak prompt] _ in
+            guard let token = prompt?.textFields?.first?.text,
+                  token.hasPrefix("github_pat_"), token.utf8.count <= 256,
+                  token.range(of: "^[A-Za-z0-9_]+$", options: .regularExpression) != nil else {
+                self?.ipaTokenError()
+                return
+            }
+            self?.privateReleaseToken = token
+            self?.checkPrivateReleases()
+        })
+        present(prompt, animated: true)
+    }
+
+    private func ipaTokenError() {
+        let alert = UIAlertController(title: "Token inválido", message: "Use um token de acesso refinado do GitHub.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func checkPrivateReleases() {
+        guard let token = privateReleaseToken else { return }
         checking = true
+        lastResult = nil
         authenticatedSignedEnvelopeData = nil
         stagedIPAURL = nil
         stagedUpdate = nil
@@ -773,7 +810,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         let current = WebReaderUpdateChecker(
             installedBuild: installedBuild,
             installedIOS: ProcessInfo.processInfo.operatingSystemVersion,
-            usePublicGitHubReleases: true
+            usePublicGitHubReleases: true, privateToken: token
         )
         checker = current
         current.check { [weak self] result in
@@ -781,6 +818,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 guard let self = self, self.checker === current else { return }
                 self.checker = nil
                 self.checking = false
+                if case .failed = result { self.privateReleaseToken = nil }
                 self.lastResult = result
                 self.tableView.reloadData()
             }
@@ -1485,12 +1523,12 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private func confirmIPADownload() {
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
               let update = availableUpdate,
-              (update.provenance == .publicGitHubRelease ||
+              (update.provenance.isGitHubRelease ||
                 (update.provenance == .signedManifest &&
                  selectedSignedUpdateIsBound(update)))
         else { return }
         let mb = Double(update.ipaSize) / (1024 * 1024)
-        let channelNotice = update.provenance == .publicGitHubRelease ?
+        let channelNotice = update.provenance.isGitHubRelease ?
             "Metadados do GitHub não têm assinatura editorial independente. " :
             "O manifesto ECDSA será revalidado antes do download. "
         let message = String(format:
@@ -1508,7 +1546,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
 
     private func startIPADownload(_ update: WebReaderVerifiedUpdate) {
         guard !isIPCDiagnostic, !stagingIPA, !verifyingExport,
-              (update.provenance == .publicGitHubRelease ||
+              (update.provenance.isGitHubRelease ||
                 (update.provenance == .signedManifest &&
                  selectedSignedUpdateIsBound(update))),
               availableUpdate == update
@@ -1520,6 +1558,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         downloadSessionID = id
         let downloader = WebReaderIPAStager(
             verifiedUpdate: update,
+            privateToken: privateReleaseToken,
             signedManifestEnvelopeData: update.provenance == .signedManifest ?
                 authenticatedSignedEnvelopeData : nil,
             onProgress: { [weak self] percent in
@@ -1623,7 +1662,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     )
                 } ?? false
             } else {
-                signatureIsBound = update.provenance == .publicGitHubRelease
+                signatureIsBound = update.provenance.isGitHubRelease
             }
             let valid = signatureIsBound && (try? WebReaderNativeIPAAuditor.inspect(
                 ipaURL: url, signedUpdate: update,
@@ -1702,7 +1741,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                     )
                 } ?? false
             } else {
-                signatureIsBound = update.provenance == .publicGitHubRelease
+                signatureIsBound = update.provenance.isGitHubRelease
             }
             let report = signatureIsBound ? (try? WebReaderNativeIPAAuditor.inspect(
                 ipaURL: url, signedUpdate: update,
@@ -1728,8 +1767,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 }
                 self.tableView.reloadData()
                 guard self.view.window != nil else { return }
-                let provenance = update.provenance == .publicGitHubRelease ?
-                    "GitHub Release público; editor NÃO autenticado" :
+                let provenance = update.provenance.isGitHubRelease ?
+                    "GitHub Release; editor NÃO autenticado" :
                     "Manifesto de produção ECDSA v2 verificado pela chave editorial compilada"
                 let lines = [
                     "WebReader • recibo de integridade, NÃO de instalação",

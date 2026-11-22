@@ -27,7 +27,7 @@ class PersonalUpdaterMVPContract(unittest.TestCase):
     def test_no_release_is_not_misreported_as_up_to_date(self):
         self.assertIn("finish(.failed(.unexpectedHTTPStatus(http.statusCode)))",CHECKER)
         self.assertIn("if status == 404",UI)
-        self.assertIn("HTTP 404: nenhuma Release pública acessível; não há IPA para baixar",UI)
+        self.assertIn("Sem acesso ao repositório privado ou sem versão publicada.",UI)
         self.assertNotIn("case .unexpectedHTTPStatus(404): return .upToDate",CHECKER)
 
     def test_download_requires_consent_then_integrity_and_manual_share(self):

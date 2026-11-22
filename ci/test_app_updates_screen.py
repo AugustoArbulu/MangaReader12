@@ -44,9 +44,9 @@ assert "statusDescription" in screen
 assert "update.releaseNotes.joined(" in screen
 assert "Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\")" in screen
 assert "Verificar atualizações" in screen
-assert "GitHub Releases • HTTPS • sem autenticação editorial independente" in screen
+assert "WebReader-Updates • acesso privado pelo GitHub" in screen
 assert "instalação pelo Chimera ainda está em desenvolvimento" in screen
-assert "A consulta pública usa apenas GitHub Releases" in screen
+assert "O botão Verificar atualizações consulta seu repositório privado" in screen
 assert "Builds privadas do Actions" in screen
 assert "Verificar canal assinado" in screen
 assert "Abrir Builds privadas no GitHub Actions" in screen
@@ -107,7 +107,7 @@ assert 'UIPasteboard.general.string = "appinst "' not in screen
 assert '"Como instalar pelo Filza"' in screen
 assert '"Instalação manual no Filza"' in screen
 assert '"Baixar e conferir IPA"' in screen
-assert "update.provenance == .publicGitHubRelease" in screen
+assert "update.provenance.isGitHubRelease" in screen
 assert '"Compartilhar IPA conferida"' in screen
 assert 'UIAlertController(title: "Baixar IPA?"' in screen
 assert 'let downloader = WebReaderIPAStager(' in screen
@@ -124,15 +124,15 @@ assert "WebReaderSignedProductionEnvelopeBinding.swift in Sources" in project
 assert 'stager?.cancel()' in screen
 assert 'UIActivityViewController(activityItems: [url]' in screen
 # Public Release discovery is not independent publisher authentication.
-assert '"GitHub Releases • HTTPS • sem autenticação editorial independente"' in screen
-assert '"HTTP 404: nenhuma Release pública acessível; não há IPA para baixar"' in screen
+assert '"WebReader-Updates • acesso privado pelo GitHub"' in screen
+assert '"Sem acesso ao repositório privado ou sem versão publicada."' in screen
 assert '"Metadados do GitHub não têm assinatura editorial independente. "' in screen
 assert '"SHA-256 e estrutura IPA conferidos • instalação manual"' in screen
 assert "verifyingExport" in screen
 assert "WebReaderNativeIPAAuditor.inspect(" in screen
 assert 'self.ipaStatus = "IPA alterada ou inválida; baixe novamente"' in screen
 assert 'guard self.view.window != nil else { return }' in screen
-assert '"https://github.com/AugustoArbulu/MangaReader12/releases"' in screen
+assert '"https://github.com/AugustoArbulu/WebReader-Updates/releases"' in screen
 assert 'guard !isIPCDiagnostic' in screen
 # No automatic installation, root helper or shell execution in UIKit.
 for forbidden in ("appinst(", "Process(", "posix_spawn(", "dlopen(", "system("):

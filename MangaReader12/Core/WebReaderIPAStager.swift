@@ -58,10 +58,12 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
     private var lastProgressBucket = 0
     private var lastSpaceCheckAt: Int64 = 0
     private var digest = CC_SHA256_CTX()
+    private let privateToken: String?
     private var redirects = 0
 
     init(
         verifiedUpdate: WebReaderVerifiedUpdate,
+        privateToken: String? = nil,
         signedManifestEnvelopeData: Data? = nil,
         destinationDirectory: URL = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
@@ -74,6 +76,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         beforeFinalCommit: (() -> Void)? = nil,
         afterFinalCommit: (() -> Void)? = nil
     ) {
+        self.privateToken = privateToken
         self.update = verifiedUpdate
         self.signedManifestEnvelopeData = signedManifestEnvelopeData
         self.destinationDirectory = destinationDirectory
@@ -109,7 +112,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             }
         }
         guard WebReaderUpdateChannel.isConfigured ||
-            update.provenance == .publicGitHubRelease ||
+            update.provenance.isGitHubRelease ||
             testProtocolClasses != nil else {
             callback(.failed(.disabled))
             return
@@ -131,6 +134,13 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             // Both old and new asset naming conventions are public/unsigned
             // *metadata*. Neither grants publisher authentication.
             allowedPaths = [legacyPath, signedV2Path]
+        case .privateGitHubRelease:
+            guard privateToken != nil,
+                  WebReaderGitHubReleaseParser.isPrivateAssetURL(update.ipaURL) else {
+                callback(.failed(.invalidRelease))
+                return
+            }
+            allowedPaths = [update.ipaURL.path]
         case .manualLocalFile:
             // Imported Files/Filza IPAs have a separate audited local route.
             allowedPaths = []
@@ -139,7 +149,7 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
             url: update.ipaURL, resolvingAgainstBaseURL: false
         ),
             components.scheme == "https",
-            components.host == "github.com",
+            components.host == (update.provenance == .privateGitHubRelease ? "api.github.com" : "github.com"),
             components.user == nil, components.password == nil,
             components.port == nil, components.query == nil,
             components.fragment == nil,
@@ -238,6 +248,9 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         var request = URLRequest(url: update.ipaURL)
         request.httpMethod = "GET"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        if update.provenance == .privateGitHubRelease, let token = privateToken {
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
         let task = newSession.dataTask(with: request)
         self.session = newSession
         self.currentTask = task
@@ -299,6 +312,10 @@ final class WebReaderIPAStager: NSObject, URLSessionDataDelegate, URLSessionTask
         redirects += current ? 1 : 0
         let redirectCount = redirects
         stateLock.unlock()
+        var request = request
+        if update.provenance == .privateGitHubRelease {
+            request.setValue(nil, forHTTPHeaderField: "Authorization")
+        }
         guard current, redirectCount <= 2,
             let url = request.url,
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),

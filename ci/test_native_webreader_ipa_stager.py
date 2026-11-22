@@ -44,6 +44,7 @@ func sha256(_ data: Data) -> String {
 
 final class IPAStubProtocol: URLProtocol {
     static let lock = NSLock()
+    static var expectedPrivateToken: String?
     static var requests = 0
     static var status = 200
     static var mime = "application/octet-stream"
@@ -60,6 +61,10 @@ final class IPAStubProtocol: URLProtocol {
     }
     override func startLoading() {
         IPAStubProtocol.lock.lock()
+        if let token = IPAStubProtocol.expectedPrivateToken {
+            check(request.url?.absoluteString == WebReaderGitHubReleaseParser.privateAPI + "/releases/assets/123", "private asset endpoint")
+            check(request.value(forHTTPHeaderField: "Authorization") == "Bearer " + token, "private download authorization")
+        }
         IPAStubProtocol.requests += 1
         let status = IPAStubProtocol.status
         let mime = IPAStubProtocol.mime
@@ -144,11 +149,11 @@ let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
 defer { try? FileManager.default.removeItem(at: scratch) }
 func run(
     _ metadata: WebReaderVerifiedUpdate, useTransport: Bool = true,
-    testFreeBytes: Int64? = nil, testInstalledBuild: Int? = nil,
+    privateToken: String? = nil, testFreeBytes: Int64? = nil, testInstalledBuild: Int? = nil,
     progress: ((Int) -> Void)? = nil
 ) -> WebReaderIPAStageResult {
     let stager = WebReaderIPAStager(
-        verifiedUpdate: metadata, destinationDirectory: scratch,
+        verifiedUpdate: metadata, privateToken: privateToken, destinationDirectory: scratch,
         testProtocolClasses: useTransport ? [IPAStubProtocol.self] : nil,
         testAvailableSpace: testFreeBytes,
         testInstalledBuild: testInstalledBuild, onProgress: progress
@@ -509,6 +514,20 @@ check(try! Data(contentsOf: orphaned) == originalPartialBytes,
 try! FileManager.default.removeItem(at: orphaned)
 check(try! FileManager.default.contentsOfDirectory(atPath: scratch.path).isEmpty,
       "fixture recovery leaves no files outside synthetic test scope")
+var privateUpdate = WebReaderVerifiedUpdate(build: good.build, minimumIOS: good.minimumIOS,
+    ipaURL: URL(string: WebReaderGitHubReleaseParser.privateAPI + "/releases/assets/123")!,
+    ipaSize: good.ipaSize, sha256: good.sha256, publishedAt: good.publishedAt,
+    releaseNotes: [], provenance: .privateGitHubRelease)
+let beforePrivate = IPAStubProtocol.requests
+fail(privateUpdate, .invalidRelease)
+check(IPAStubProtocol.requests == beforePrivate, "missing credential must not download")
+IPAStubProtocol.expectedPrivateToken = "offline"
+switch run(privateUpdate, privateToken: "offline", testInstalledBuild: 56) {
+case .staged(let file):
+    check(try! Data(contentsOf: file) == sample, "private asset bytes verified")
+    try! FileManager.default.removeItem(at: file)
+default: fatalError("private asset staging failed")
+}
 print("PASS native IPA stager: signed SHA256 plus complete ZIP/Info.plist identity checks, zero real network")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-stage-integration-") as dir:

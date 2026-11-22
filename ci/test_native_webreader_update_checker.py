@@ -25,6 +25,7 @@ func asJSON(_ value: [String: Any]) -> Data {
 
 final class StubManifestURLProtocol: URLProtocol {
     static let lock = NSLock()
+    static var repoResponse: Data?
     static var requests = 0
     static var responseStatus = 200
     static var contentType = "application/json"
@@ -39,7 +40,16 @@ final class StubManifestURLProtocol: URLProtocol {
         StubManifestURLProtocol.requests += 1
         let status = StubManifestURLProtocol.responseStatus
         let type = StubManifestURLProtocol.contentType
-        let bytes = StubManifestURLProtocol.responseBody
+        var bytes = StubManifestURLProtocol.responseBody
+        if let metadata = StubManifestURLProtocol.repoResponse {
+            check(request.value(forHTTPHeaderField: "Authorization") == "Bearer offline",
+                  "private requests carry the scoped test credential")
+            if request.url?.absoluteString == WebReaderGitHubReleaseParser.privateAPI {
+                bytes = metadata
+            } else {
+                check(request.url?.absoluteString == WebReaderGitHubReleaseParser.privateAPI + "/releases/latest", "unexpected private endpoint")
+            }
+        }
         StubManifestURLProtocol.lock.unlock()
 
         let response = HTTPURLResponse(
@@ -193,11 +203,11 @@ StubManifestURLProtocol.responseBody = asJSON([
 expectFailure(.invalidSignedManifest)
 
 // Public personal channel: no publisher key or GitHub token, URLProtocol only.
-func runPublicGitHubCheck() -> WebReaderUpdateCheckResult {
+func runPublicGitHubCheck(token: String? = nil) -> WebReaderUpdateCheckResult {
     let checker = WebReaderUpdateChecker(
         installedBuild: 56, installedIOS: ios,
         protocolClasses: [StubManifestURLProtocol.self],
-        usePublicGitHubReleases: true
+        usePublicGitHubReleases: true, privateToken: token
     )
     let done = DispatchSemaphore(value: 0)
     var outcome: WebReaderUpdateCheckResult?
@@ -307,6 +317,26 @@ case .failed(.invalidGitHubRelease): break
 default: fatalError("invalid GitHub release JSON must fail")
 }
 
+StubManifestURLProtocol.responseStatus = 200
+StubManifestURLProtocol.contentType = "application/json"
+let repoName = WebReaderGitHubReleaseParser.privateRepo
+var privateAsset = githubAsset(adHocName)
+privateAsset["browser_download_url"] = "https://github.com/" + repoName + "/releases/download/build57/" + adHocName
+privateAsset["url"] = WebReaderGitHubReleaseParser.privateAPI + "/releases/assets/123"
+privateAsset["id"] = 123
+StubManifestURLProtocol.responseBody = githubRelease([privateAsset])
+StubManifestURLProtocol.repoResponse = asJSON(["full_name":repoName, "visibility":"private"])
+switch runPublicGitHubCheck(token:"offline") {
+case .updateAvailable(let item): check(item.provenance == .privateGitHubRelease && item.ipaURL.lastPathComponent == "123", "private release asset")
+default: fatalError("private two-request check failed")
+}
+StubManifestURLProtocol.repoResponse = asJSON(["full_name":repoName, "visibility":"public"])
+let countBeforePublic = StubManifestURLProtocol.requests
+switch runPublicGitHubCheck(token:"offline") {
+case .failed(.invalidGitHubRelease): break
+default: fatalError("public repo must be rejected")
+}
+check(StubManifestURLProtocol.requests == countBeforePublic + 1, "stop before discovering a public release")
 print("PASS: signed channel remains closed; public GitHub API is bounded and SHA-bound")
 '''
 with tempfile.TemporaryDirectory(prefix="webreader-update-checker-") as work:

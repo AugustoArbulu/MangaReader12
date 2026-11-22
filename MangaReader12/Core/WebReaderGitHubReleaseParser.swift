@@ -10,13 +10,23 @@ enum WebReaderGitHubReleaseParser {
     static let apiURL = URL(string:
         "https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest"
     )!
+    static let privateRepo = "AugustoArbulu/WebReader-Updates"
+    static let privateAPI = "https://api.github.com/repos/" + privateRepo
+    static func isPrivateAssetURL(_ url: URL) -> Bool {
+        let prefix = privateAPI + "/releases/assets/"
+        let value = url.absoluteString
+        guard value.hasPrefix(prefix), let id = Int64(value.dropFirst(prefix.count)),
+              id > 0 else { return false }
+        return value == prefix + String(id)
+    }
+
     private static let legacyAssetName = "WebReader-iOS12-unsigned.ipa"
     private static let fixedRepo = "/AugustoArbulu/MangaReader12/releases/download/"
     private static let maximumIPA: Int64 = 512 * 1024 * 1024
 
     static func parse(
         _ bytes: Data, installedBuild: Int,
-        installedIOS: OperatingSystemVersion
+        installedIOS: OperatingSystemVersion, privateChannel: Bool = false
     ) -> WebReaderUpdateCheckResult {
         guard !bytes.isEmpty, bytes.count <= 128 * 1024,
               WebReaderStrictJSON.accepts(bytes),
@@ -54,6 +64,7 @@ enum WebReaderGitHubReleaseParser {
             return .failed(.invalidGitHubRelease)
         }
         let asset = selected[0]
+        let downloadPath = privateChannel ? "/" + privateRepo + "/releases/download/" : fixedRepo
         guard let selectedAssetName = asset["name"] as? String,
               allowedAssetNames.contains(selectedAssetName),
               asset["state"] as? String == "uploaded",
@@ -72,9 +83,21 @@ enum WebReaderGitHubReleaseParser {
               components.port == nil, components.query == nil,
               components.fragment == nil,
               components.percentEncodedPath ==
-                fixedRepo + tag + "/" + selectedAssetName
+                downloadPath + tag + "/" + selectedAssetName
         else { return .failed(.invalidGitHubRelease) }
 
+        var downloadURL = url
+        if privateChannel {
+            guard selectedAssetName == adHocAssetName,
+                  let assetAPI = asset["url"] as? String,
+                  let api = URL(string: assetAPI), isPrivateAssetURL(api),
+                  let id = asset["id"] as? NSNumber,
+                  CFGetTypeID(id) != CFBooleanGetTypeID(),
+                  api.lastPathComponent == id.stringValue else {
+                return .failed(.invalidGitHubRelease)
+            }
+            downloadURL = api
+        }
         let digest = String(digestField.dropFirst(7))
         guard digest.range(
             of: "^[0-9a-f]{64}$", options: .regularExpression
@@ -92,11 +115,11 @@ enum WebReaderGitHubReleaseParser {
         guard build > installedBuild else { return .upToDate }
         var update = WebReaderVerifiedUpdate(
             build: build, minimumIOS: "12.0",
-            ipaURL: url, ipaSize: number.int64Value,
+            ipaURL: downloadURL, ipaSize: number.int64Value,
             sha256: digest, publishedAt: published,
             releaseNotes: notes.isEmpty ? ["Release oficial do GitHub"] : notes
         )
-        update.provenance = .publicGitHubRelease
+        update.provenance = privateChannel ? .privateGitHubRelease : .publicGitHubRelease
         return .updateAvailable(update)
     }
 }

@@ -2,7 +2,7 @@ name: WebReader updater MVP - release, verify, export (no IPA publishing)
 on:
   workflow_dispatch:
   push:
-    branches: [feat/chimera-updater-phase1-protocol-audit]
+    branches: [feat/chimera-updater-phase1-protocol-audit, feat/webreader-private-updates]
     paths:
       - '.github/workflows/webreader-updater-mvp-no-install.yml'
       - 'ci/test_webreader_updater_mvp_scope.py'
