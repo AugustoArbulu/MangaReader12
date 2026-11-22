@@ -1,0 +1,52 @@
+name: WebReader Build70 Phase EF Offline Image Payload Triage (host only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ef_offline_payload_triage.py'
+      - 'ci/test_build70_ef_offline_payload_triage.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EF_OFFLINE_IMAGE_PAYLOAD_TRIAGE_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-ef-payload-triage.yml'
+permissions:
+  contents: read
+jobs:
+  offline-image-host-triage:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run EA, ED and EF synthetic image-file triage tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ed_portable_vs_external_library.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ef_offline_payload_triage.py' -v
+      - name: Confirm image signatures are not decoding or install authority
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          ef = Path("ci/build70_ef_offline_payload_triage.py").read_text()
+          swift = Path("MangaReader12/Downloads/ChapterDownloadManager.swift").read_text()
+          assert "WebPImageDecoder.image(from: data) != nil" in swift
+          assert "CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete" in swift
+          assert "fullImageDecodeAttempted" in ef
+          assert "iOS12ImageDecodeVerified" in ef
+          for item in ("installationAuthorized", "restorationAuthorized",
+                       "readyToDistributeIPA", "readyToInstallIPA",
+                       "automaticUpdaterEnabled"):
+              assert '"'+item+'": False' in ef
+          assert not Path("ci/build71_owner_approved_qa_trigger.txt").exists()
+          assert "static let productionPublicKeyX963: Data? = nil" in Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          print("PASS EF: header checks only; no iPad, no IPA, no appinst, no trust")
+          PY

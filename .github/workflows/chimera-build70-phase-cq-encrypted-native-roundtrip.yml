@@ -1,0 +1,79 @@
+name: WebReader Build70 Phase CQ Cross-Language Encrypted Owner Native QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/test_build70_cq_owner_encrypted_native_signed_roundtrip.py'
+      - 'ci/webreader_owner_offline_v2_signer.py'
+      - 'ci/webreader_owner_key_ceremony.py'
+      - 'ci/build69_production_release_preflight.py'
+      - 'MangaReader12/Core/WebReaderSignedIPAReview.swift'
+      - 'MangaReader12/Core/WebReaderNativeIPAAuditor.swift'
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - '.github/workflows/chimera-build70-phase-cq-encrypted-native-roundtrip.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr70-cq-cross-language-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-adversarial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local test dependency without secret or release
+        run: python -m pip install --disable-pip-version-check --no-input cryptography==46.0.4
+      - name: Revalidate Windows-compatible encrypted owner signer controls
+        run: |
+          python -m unittest discover -s ci -p 'test_webreader_owner_key_ceremony.py' -v
+          python -m unittest discover -s ci -p 'test_webreader_owner_offline_v2_signer.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("ci/test_build70_cq_owner_encrypted_native_signed_roundtrip.py").read_text()
+          assert "make_fake_native_signed_ipa" in source
+          assert "review_production_release(" in source
+          assert "WebReaderSignedIPAReview.inspectReadOnly(" in source
+          assert "TemporaryDirectory(" in source
+          for forbidden in ("appinst(", "sudo appinst", "create_release(", "git push", "WRINST1"):
+              assert forbidden not in source
+          print("PASS CQ Linux: fake-only encrypted roundtrip, no installer")
+          PY
+
+  macos-real-native-synthetic-archive:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pin Xcode toolchain capable of compiling thin iOS12 ARM64
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Install cryptography only for ephemeral lab key material
+        run: python -m pip install --disable-pip-version-check --no-input cryptography==46.0.4
+      - name: Full disposable encrypted-owner v2 signing -> codesign -> Swift same-FD ZIP review
+        run: python ci/test_build70_cq_owner_encrypted_native_signed_roundtrip.py --verify-fixture-only
+      - name: Ensure no production trust root nor executable installer enabled
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          updater = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          publisher = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          appinst = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          assert 'static let productionPublicKeyX963: Data? = nil' in updater
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in publisher
+          assert 'static let liveInstallationEnabled = false' in appinst
+          print("PASS CQ: ephemeral-only, no editorial pin, no IPA release, no appinst")
+          PY

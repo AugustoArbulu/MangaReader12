@@ -1,13 +1,421 @@
 import Foundation
 import ImageIO
+import Darwin
+
+// BEGIN OFFLINE_PATH_RELOCATION
+// Absolute paths persisted in SQLite can outlive their iOS app container UUID.
+// Derive the only trusted path from the current Application Support directory.
+enum OfflineDownloadPath {
+    static func safeComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(
+            CharacterSet(charactersIn: "._-")
+        )
+        let result = value.unicodeScalars.map { scalar -> String in
+            return allowed.contains(scalar) ? String(scalar) : "_"
+        }.joined()
+        return result.isEmpty || result == "." || result == ".." ? "item" : result
+    }
+
+    static func chapterDirectory(
+        applicationSupport: URL,
+        sourceID: String,
+        mangaID: String,
+        chapterID: String
+    ) -> URL {
+        return applicationSupport
+            .appendingPathComponent("MangaReader12", isDirectory: true)
+            .appendingPathComponent("Downloads", isDirectory: true)
+            .appendingPathComponent(safeComponent(sourceID), isDirectory: true)
+            .appendingPathComponent(safeComponent(mangaID), isDirectory: true)
+            .appendingPathComponent(safeComponent(chapterID), isDirectory: true)
+    }
+}
+// END OFFLINE_PATH_RELOCATION
+
+// BEGIN BUILD70_EQ_CANONICAL_OWNERSHIP
+// iOS file-system normalization can map distinct source IDs to the same
+// physical chapter directory. Refuse destructive operations and offline
+// reads whenever two persisted download rows claim an equivalent path.
+// This is intentionally conservative for case/Unicode variants.
+enum WebReaderOfflineCanonicalOwnership {
+    private static let comparisonLocale = Locale(identifier: "en_US_POSIX")
+
+    private static func components(
+        sourceID: String, mangaID: String, chapterID: String
+    ) -> [String] {
+        return [sourceID, mangaID, chapterID].map { raw in
+            OfflineDownloadPath.safeComponent(raw)
+                .precomposedStringWithCanonicalMapping
+                .folding(
+                    options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                    locale: comparisonLocale
+                )
+        }
+    }
+
+    static func collides(
+        sourceID: String, mangaID: String, chapterID: String,
+        recorded: [DownloadListRecord]
+    ) -> Bool {
+        let requestedIdentity = [sourceID, mangaID, chapterID]
+        let requestedPath = components(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
+        )
+        return recorded.contains { item in
+            let identity = [item.sourceID, item.sourceMangaID, item.sourceChapterID]
+            if identity == requestedIdentity { return false }
+            return components(
+                sourceID: item.sourceID, mangaID: item.sourceMangaID,
+                chapterID: item.sourceChapterID
+            ) == requestedPath
+        }
+    }
+}
+// END BUILD70_EQ_CANONICAL_OWNERSHIP
+
+// BEGIN BUILD70_ER_DELETION_PREFLIGHT
+// User consent alone does not authorize recursively deleting unrelated
+// material that happens to reside in the canonical offline chapter folder.
+// Admission is metadata-only: no file contents, network or SQLite mutation.
+enum WebReaderOfflineDeletionPreflight {
+    enum Verdict: Equatable {
+        case absent
+        case allowed
+        case unsafe
+    }
+
+    private static func stable(_ a: stat, _ b: stat) -> Bool {
+        return a.st_dev == b.st_dev && a.st_ino == b.st_ino &&
+            a.st_mode == b.st_mode && a.st_nlink == b.st_nlink &&
+            a.st_size == b.st_size &&
+            a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec &&
+            a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec &&
+            a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
+    }
+
+    // An absent chapter directory is metadata-only, not proof that the
+    // ancestor chain is safe. A source/manga symlink with a missing child
+    // must never be treated as permission to retire a SQLite download row.
+    private static func absentWithSafeAncestors(directory: URL) -> Bool {
+        var existingAncestors: [(String, stat)] = []
+        var absentAncestors: [String] = []
+        var parent = directory.deletingLastPathComponent()
+        for _ in 0..<4 {
+            var info = stat()
+            if Darwin.lstat(parent.path, &info) == 0 {
+                guard (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+                    return false
+                }
+                existingAncestors.append((parent.path, info))
+            } else if errno == ENOENT {
+                absentAncestors.append(parent.path)
+            } else {
+                return false
+            }
+            parent.deleteLastPathComponent()
+        }
+
+        // Recheck both absent and existing path states before allowing
+        // metadata-only cleanup; no file or SQLite operations happen here.
+        var leaf = stat()
+        guard Darwin.lstat(directory.path, &leaf) != 0,
+              errno == ENOENT else { return false }
+        for (path, original) in existingAncestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) == 0,
+                  stable(original, current) else { return false }
+        }
+        for path in absentAncestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) != 0,
+                  errno == ENOENT else { return false }
+        }
+        return true
+    }
+
+    static func inspect(
+        directory: URL,
+        sourceID: String,
+        mangaID: String,
+        chapterID: String,
+        fileManager: FileManager = .default
+    ) -> Verdict {
+        var before = stat()
+        if Darwin.lstat(directory.path, &before) != 0 {
+            guard errno == ENOENT else { return .unsafe }
+            return absentWithSafeAncestors(directory: directory) ? .absent : .unsafe
+        }
+        guard (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            return .unsafe
+        }
+
+        // Reject symlinked parent components from the chapter directory
+        // up through the app's MangaReader12 directory. Checking only the
+        // leaf misses a substituted manga/source/Downloads parent.
+        var ancestors: [(String, stat)] = []
+        var parent = directory.deletingLastPathComponent()
+        for _ in 0..<4 {
+            var info = stat()
+            guard Darwin.lstat(parent.path, &info) == 0,
+                  (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+                return .unsafe
+            }
+            ancestors.append((parent.path, info))
+            parent.deleteLastPathComponent()
+        }
+
+        let fd = Darwin.open(
+            directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard fd >= 0 else { return .unsafe }
+        defer { _ = Darwin.close(fd) }
+        var opened = stat()
+        guard Darwin.fstat(fd, &opened) == 0,
+              stable(before, opened) else { return .unsafe }
+
+        guard let names = try? fileManager.contentsOfDirectory(
+            atPath: directory.path
+        ), names.count <= 100_001 else { return .unsafe }
+        for name in names {
+            let maximumBytes: Int64
+            if name == "_download-plan.json" {
+                maximumBytes = 16 * 1024 * 1024
+            } else if name == WebReaderOfflineCompletionReceipt.filename {
+                maximumBytes = 64
+            } else {
+                guard name.range(
+                    of: "^page-[0-9]{5}\\.bin$",
+                    options: .regularExpression
+                ) != nil,
+                let index = Int(name.dropFirst(5).prefix(5)),
+                index < WebReaderOfflinePageInventory.maximumPages else {
+                    return .unsafe
+                }
+                maximumBytes = 20 * 1024 * 1024
+            }
+
+            var item = stat()
+            guard Darwin.fstatat(fd, name, &item, AT_SYMLINK_NOFOLLOW) == 0,
+                  (item.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+                  item.st_nlink == 1,
+                  item.st_size > 0,
+                  item.st_size <= maximumBytes else { return .unsafe }
+        }
+
+        // ER metadata-only name checks are insufficient for a foreign
+        // _download-plan.json. Reuse the bounded BQ reader and the real
+        // Codable model: a plan for any different identity or a malformed
+        // interrupted transfer must not be erased in a confirmed delete.
+        if names.contains("_download-plan.json") {
+            guard let data = try? WebReaderOfflineRecoveryPlanReader.read(
+                from: directory.appendingPathComponent("_download-plan.json")
+            ), let plan = try? JSONDecoder().decode(
+                DownloadRecoveryPlan.self, from: data
+            ), plan.schemaVersion == 1,
+               plan.sourceID == sourceID,
+               plan.manifest.id == sourceID,
+               plan.manga.id == mangaID,
+               plan.chapter.id == chapterID,
+               !plan.pages.isEmpty,
+               plan.pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages
+            else { return .unsafe }
+        }
+
+        // Count-only completion receipts are not arbitrary 64-byte blobs.
+        // If present, require contiguous page names and the exact receipt
+        // text/count. Legacy folders without a receipt stay deletable after
+        // the same explicit consent and path-ownership checks.
+        if names.contains(WebReaderOfflineCompletionReceipt.filename) {
+            guard let pages = try? WebReaderOfflinePageInventory.inspect(
+                directory: directory, fileManager: fileManager
+            ), (try? WebReaderOfflineCompletionReceipt.verifyIfPresent(
+                directory: directory, actualPages: pages.count,
+                fileManager: fileManager
+            )) == true else { return .unsafe }
+        }
+
+        var afterFD = stat()
+        var afterPath = stat()
+        guard Darwin.fstat(fd, &afterFD) == 0,
+              Darwin.lstat(directory.path, &afterPath) == 0,
+              stable(before, afterFD),
+              stable(before, afterPath) else { return .unsafe }
+        for (path, original) in ancestors {
+            var current = stat()
+            guard Darwin.lstat(path, &current) == 0,
+                  stable(original, current) else { return .unsafe }
+        }
+        return .allowed
+    }
+}
+// END BUILD70_ER_DELETION_PREFLIGHT
+
+// BEGIN BUILD70_FF_INERT_READONLY_DELETION_BRIDGE
+// FF: compile-time-off integration seam for the future copy-only audit.
+// This is not a deletion implementation. No UI, network, filesystem writes,
+// SQLite writes, or application installation are performed by this gate.
+// If somebody opts into the diagnostic mode prematurely, the existing
+// destructive routes fail closed rather than trusting a preliminary verdict.
+enum WebReaderOfflineDeletionV2ShadowGate {
+    static let diagnosticCopyPreviewEnabled = false
+
+    enum Preview: Equatable {
+        case requiresReview
+        case provisionalCopyOnly
+    }
+
+    static func rejectLegacyDestructionWhenPreviewEnabled() throws {
+        if diagnosticCopyPreviewEnabled {
+            throw ChapterDownloadError.unsafeOfflineDeletionContents
+        }
+    }
+
+    // Non-authoritative, read-only diagnostic. A provisional result is never
+    // permission to remove files, retire rows, or skip the FD snapshot gate.
+    static func previewForAudit(
+        record: DownloadListRecord,
+        allRecords: [DownloadListRecord],
+        directory: URL,
+        fileManager: FileManager = .default
+    ) -> Preview {
+        guard record.state == "completed",
+              allRecords.contains(where: {
+                  $0.sourceID == record.sourceID &&
+                  $0.sourceMangaID == record.sourceMangaID &&
+                  $0.sourceChapterID == record.sourceChapterID
+              }),
+              !WebReaderOfflineCanonicalOwnership.collides(
+                  sourceID: record.sourceID,
+                  mangaID: record.sourceMangaID,
+                  chapterID: record.sourceChapterID,
+                  recorded: allRecords
+              ) else { return .requiresReview }
+
+        // A plan can embed authorization headers or URL tokens. Checking only
+        // headers is insufficient; any plan makes a chapter non-copyable.
+        guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path),
+              !names.contains("_download-plan.json") else {
+            return .requiresReview
+        }
+        let verdict = WebReaderOfflineDeletionPreflight.inspect(
+            directory: directory,
+            sourceID: record.sourceID,
+            mangaID: record.sourceMangaID,
+            chapterID: record.sourceChapterID,
+            fileManager: fileManager
+        )
+        return verdict == .allowed ? .provisionalCopyOnly : .requiresReview
+    }
+}
+// END BUILD70_FF_INERT_READONLY_DELETION_BRIDGE
+
+// BEGIN BUILD70_FG_READONLY_BATCH_PREVIEW
+// No database reads or writes are performed here. The caller supplies a
+// previously obtained snapshot of rows, which may itself become stale.
+// Results are only provisional and must never authorize filesystem mutation.
+struct WebReaderOfflineDeletionV2AuditItem {
+    let sourceID: String
+    let sourceMangaID: String
+    let sourceChapterID: String
+    let decision: WebReaderOfflineDeletionV2ShadowGate.Preview
+}
+enum WebReaderOfflineDeletionV2AuditError: Error {
+    case tooManyRecords
+}
+// END BUILD70_FG_READONLY_BATCH_PREVIEW
+
+// BEGIN BUILD70_EL_SAFE_PARTIAL_RETRY
+// Normal chapter/batch downloads must preserve any preexisting local data.
+// The Downloads retry flow supplies the explicit user-confirmed override.
+enum ChapterDownloadExistingDataPolicy: Equatable {
+    case preserve
+    case replaceAfterExplicitUserConfirmation
+}
+
+/// Admission audit only. Does not decode or modify stored page data.
+/// Unexpected leaves, symlinks, special files and completed receipts
+/// must never be erased by a retry, even after user confirmation.
+enum WebReaderPartialRetryFolderAudit {
+    private static func sameIdentity(_ a: stat, _ b: stat) -> Bool {
+        return a.st_dev == b.st_dev && a.st_ino == b.st_ino &&
+            a.st_mode == b.st_mode && a.st_nlink == b.st_nlink &&
+            a.st_size == b.st_size &&
+            a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec &&
+            a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec &&
+            a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
+    }
+
+    static func canReplace(
+        directory: URL,
+        plannedPages: Int,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard plannedPages > 0, plannedPages <= 5_000 else { return false }
+        var before = stat()
+        guard Darwin.lstat(directory.path, &before) == 0,
+              (before.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+            return false
+        }
+        let fd = Darwin.open(
+            directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard fd >= 0 else { return false }
+        defer { _ = Darwin.close(fd) }
+
+        var opened = stat()
+        guard Darwin.fstat(fd, &opened) == 0,
+              sameIdentity(before, opened) else { return false }
+        guard let names = try? fileManager.contentsOfDirectory(
+            atPath: directory.path
+        ), names.count <= plannedPages + 1 else { return false }
+
+        for name in names {
+            let isPlan = name == "_download-plan.json"
+            if !isPlan {
+                guard name.range(
+                    of: "^page-[0-9]{5}\\.bin$",
+                    options: .regularExpression
+                ) != nil,
+                let index = Int(name.dropFirst(5).prefix(5)),
+                index < plannedPages else { return false }
+            }
+            var item = stat()
+            guard Darwin.fstatat(
+                fd, name, &item, AT_SYMLINK_NOFOLLOW
+            ) == 0,
+            (item.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+            item.st_nlink == 1, item.st_size > 0,
+            item.st_size <= (isPlan ? 16 * 1024 * 1024 : 20 * 1024 * 1024)
+            else { return false }
+        }
+
+        var afterFD = stat()
+        var afterPath = stat()
+        guard Darwin.fstat(fd, &afterFD) == 0,
+              Darwin.lstat(directory.path, &afterPath) == 0,
+              sameIdentity(before, afterFD),
+              sameIdentity(before, afterPath) else { return false }
+        return true
+    }
+}
+// END BUILD70_EL_SAFE_PARTIAL_RETRY
 
 enum ChapterDownloadError: Error, LocalizedError {
     case applicationSupportUnavailable
     case emptyPages
+    case tooManyPages
     case httpStatus(Int)
     case missingCompletedFiles
     case invalidImagePayload
+    case oversizedImagePayload
     case alreadyScheduled
+    case alreadyCompleted
+    case existingLocalDataRequiresReview
+    case unsafeExistingLocalData
+    case ambiguousOfflineChapterPath
+    case unsafeOfflineDeletionContents
     case downloadInProgress
 
     var errorDescription: String? {
@@ -16,14 +424,28 @@ enum ChapterDownloadError: Error, LocalizedError {
             return "Application Support directory is unavailable."
         case .emptyPages:
             return "This chapter returned no pages to download."
+        case .tooManyPages:
+            return "O capítulo excede o limite de 5.000 páginas por download recuperável. Nenhum arquivo foi modificado."
         case .httpStatus(let status):
             return "Image server returned HTTP \(status) during download."
         case .missingCompletedFiles:
-            return "The downloaded chapter files are missing."
+            return "O capítulo offline está incompleto: uma ou mais páginas estão ausentes, vazias ou inválidas. Nenhum arquivo foi apagado."
         case .invalidImagePayload:
             return "O servidor retornou uma página inválida ou um documento HTML em vez de uma imagem. O capítulo não foi marcado como completo."
+        case .oversizedImagePayload:
+            return "A página excede o limite de 20 MiB por imagem offline. O capítulo não foi marcado como completo e os arquivos existentes foram preservados."
         case .alreadyScheduled:
             return "Este capítulo já está na fila de downloads."
+        case .alreadyCompleted:
+            return "O capítulo já está marcado como baixado. Para refazer, remova manualmente o download na área Downloads. Nenhum arquivo foi apagado."
+        case .existingLocalDataRequiresReview:
+            return "Já existem páginas ou metadados offline. Abra Downloads e confirme a reinicialização. Preserve uma cópia externa antes de substituir. Nenhum arquivo foi apagado."
+        case .unsafeExistingLocalData:
+            return "A pasta offline contém arquivos inesperados ou inseguros. Nenhum arquivo foi apagado. Preserve a pasta para revisão."
+        case .ambiguousOfflineChapterPath:
+            return "Duas obras ou capítulos podem compartilhar a mesma pasta offline. Operação bloqueada para proteger os arquivos. Nenhuma página foi apagada."
+        case .unsafeOfflineDeletionContents:
+            return "A pasta contém arquivos não reconhecidos, links ou metadados inesperados. Exclusão bloqueada. Faça uma cópia externa antes de revisar; nenhuma página foi apagada."
         case .downloadInProgress:
             return "Pause o download antes de removê-lo."
         }
@@ -99,6 +521,10 @@ private struct DownloadRecoveryPlan: Codable {
     let pages: [Page]
     let manifest: SourceManifest
     let queueOrder: Int
+    // Optional for backward compatibility with existing Build69/70 plans.
+    // A confirmed in-place retry must NEVER trust pre-existing page indices
+    // after an interrupted process: they may belong to an older attempt.
+    let requiresFullReplay: Bool?
 }
 
 // A job keeps the HTTP client alive while the queue is active. An interrupted
@@ -114,6 +540,7 @@ private final class ChapterDownloadJob {
     let client: HTTPClient
     let manifest: SourceManifest
     var queueOrder: Int
+    let requiresFullReplay: Bool
     let progress: (Double) -> Void
     let completion: (Result<[Page], Error>) -> Void
     var nextIndex = 0
@@ -130,6 +557,7 @@ private final class ChapterDownloadJob {
         directory: URL,
         manifest: SourceManifest,
         queueOrder: Int,
+        requiresFullReplay: Bool = false,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
@@ -141,6 +569,7 @@ private final class ChapterDownloadJob {
         self.directory = directory
         self.manifest = manifest
         self.queueOrder = queueOrder
+        self.requiresFullReplay = requiresFullReplay
         self.client = HTTPClient(policy: HTTPPolicy(
             allowedDomains: manifest.domains,
             timeout: 30,
@@ -198,34 +627,32 @@ final class ChapterDownloadManager {
     }
 
     private func savePlan(for job: ChapterDownloadJob) throws {
+        guard job.pages.count > 0,
+              job.pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages else {
+            throw ChapterDownloadError.tooManyPages
+        }
         let plan = DownloadRecoveryPlan(
             schemaVersion: 1, sourceID: job.sourceID,
             manga: job.manga, chapter: job.chapter, pages: job.pages,
-            manifest: job.manifest, queueOrder: job.queueOrder
+            manifest: job.manifest, queueOrder: job.queueOrder,
+            requiresFullReplay: job.requiresFullReplay ? true : nil
         )
         let data = try JSONEncoder().encode(plan)
-        let url = planURL(for: job.directory)
-        try data.write(to: url, options: .atomic)
-        // This file can contain authentication headers; keep device file
-        // protection, while allowing the queue to restore after first unlock.
-        try? fileManager.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: url.path
+        // Match the BQ reader's maximum before touching any existing plan.
+        // The writer publishes a complete private 0600 temporary file via
+        // atomic rename, including when Prioritize changes queue order.
+        try WebReaderOfflineRecoveryPlanWriter.write(
+            data: data, to: planURL(for: job.directory)
         )
     }
 
     private func completedPagePrefix(in directory: URL, count: Int) -> Int {
-        var index = 0
-        while index < count {
-            let path = directory.appendingPathComponent(
-                String(format: "page-%05d.bin", index)
-            ).path
-            guard let attributes = try? fileManager.attributesOfItem(atPath: path),
-                  let size = attributes[.size] as? NSNumber,
-                  size.intValue > 0 else { break }
-            index += 1
-        }
-        return index
+        // A resumable download may contain only an initial subset. Never
+        // reuse a symlink, directory, zero-byte file or oversized file as an
+        // already validated page after an interrupted transfer.
+        return WebReaderOfflineResumePrefix.count(
+            directory: directory, plannedPages: count, fileManager: fileManager
+        )
     }
 
     private func restorePreviousSession() throws {
@@ -244,8 +671,19 @@ final class ChapterDownloadManager {
                     mangaID: record.sourceMangaID,
                     chapterID: record.sourceChapterID
                 )
-                guard record.localPath == expected.path else { continue }
-                let data = try Data(contentsOf: planURL(for: expected))
+                guard record.localPath == expected.path,
+                      !WebReaderOfflineCanonicalOwnership.collides(
+                          sourceID: record.sourceID,
+                          mangaID: record.sourceMangaID,
+                          chapterID: record.sourceChapterID,
+                          recorded: records
+                      ) else { continue }
+                // Recovery metadata is untrusted after an interrupted
+                // transfer. Reject symlink/FIFO/oversized plans without
+                // removing the offline page files already on disk.
+                let data = try WebReaderOfflineRecoveryPlanReader.read(
+                    from: planURL(for: expected)
+                )
                 let plan = try JSONDecoder().decode(DownloadRecoveryPlan.self, from: data)
                 guard plan.schemaVersion == 1,
                       plan.sourceID == record.sourceID,
@@ -265,9 +703,13 @@ final class ChapterDownloadManager {
                     manga: plan.manga, chapter: plan.chapter,
                     pages: plan.pages, directory: expected,
                     manifest: plan.manifest, queueOrder: plan.queueOrder,
+                    requiresFullReplay: plan.requiresFullReplay == true,
                     progress: { _ in }, completion: { _ in }
                 )
-                job.nextIndex = completedPagePrefix(
+                // A restarted confirmed retry cannot distinguish old page
+                // bytes from new ones merely by filename and nonzero size.
+                // Replay all pages from zero until the download completes.
+                job.nextIndex = job.requiresFullReplay ? 0 : completedPagePrefix(
                     in: expected, count: plan.pages.count
                 )
                 job.state = record.state == "paused" ? "paused" : "queued"
@@ -305,12 +747,19 @@ final class ChapterDownloadManager {
         chapter: Chapter,
         pages: [Page],
         manifest: SourceManifest,
+        existingDataPolicy: ChapterDownloadExistingDataPolicy = .preserve,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<[Page], Error>) -> Void
     ) {
         guard !pages.isEmpty else {
             DispatchQueue.main.async {
                 completion(.failure(ChapterDownloadError.emptyPages))
+            }
+            return
+        }
+        guard pages.count <= WebReaderOfflineResumePrefix.maximumPlannedPages else {
+            DispatchQueue.main.async {
+                completion(.failure(ChapterDownloadError.tooManyPages))
             }
             return
         }
@@ -327,21 +776,60 @@ final class ChapterDownloadManager {
             }
 
             do {
+                guard !WebReaderOfflineCanonicalOwnership.collides(
+                    sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id,
+                    recorded: try self.repository.listDownloads()
+                ) else {
+                    throw ChapterDownloadError.ambiguousOfflineChapterPath
+                }
+                // A second download tap must not silently erase a completed
+                // chapter, including old Build68 pages without a receipt.
+                // The operator can explicitly remove it from Downloads first.
+                if let existing = try self.repository.record(
+                    sourceID: sourceID,
+                    sourceMangaID: manga.id,
+                    sourceChapterID: chapter.id
+                ), existing.state == "completed" {
+                    throw ChapterDownloadError.alreadyCompleted
+                }
                 let directory = try self.chapterDirectory(
                     sourceID: sourceID, mangaID: manga.id, chapterID: chapter.id
                 )
-                // Retrying a failed download starts from zero; normal
-                // in-session pause/resume preserves the original directory.
-                if self.fileManager.fileExists(atPath: directory.path) {
-                    try self.fileManager.removeItem(at: directory)
-                }
-                try self.fileManager.createDirectory(
-                    at: directory, withIntermediateDirectories: true, attributes: nil
+                // No implicit overwrite on chapter taps or batch queues.
+                // The explicit Downloads retry may replace *individual* pages
+                // via later validated atomic writes, but it must never erase
+                // the existing chapter folder as a preparation step. If source
+                // resolution, plan encoding or SQLite fails, old page bytes stay.
+                let existingDirectory = self.fileManager.fileExists(
+                    atPath: directory.path
                 )
+                if existingDirectory {
+                    guard existingDataPolicy == .replaceAfterExplicitUserConfirmation,
+                          let previous = try self.repository.record(
+                              sourceID: sourceID,
+                              sourceMangaID: manga.id,
+                              sourceChapterID: chapter.id
+                          ),
+                          previous.state == "failed" || previous.state == "paused" else {
+                        throw ChapterDownloadError.existingLocalDataRequiresReview
+                    }
+                    guard WebReaderPartialRetryFolderAudit.canReplace(
+                        directory: directory, plannedPages: pages.count,
+                        fileManager: self.fileManager
+                    ) else {
+                        throw ChapterDownloadError.unsafeExistingLocalData
+                    }
+                } else {
+                    try self.fileManager.createDirectory(
+                        at: directory, withIntermediateDirectories: true,
+                        attributes: nil
+                    )
+                }
                 let job = ChapterDownloadJob(
                     key: key, sourceID: sourceID, manga: manga,
                     chapter: chapter, pages: pages, directory: directory,
                     manifest: manifest, queueOrder: self.nextQueueOrder,
+                    requiresFullReplay: existingDirectory,
                     progress: progress, completion: completion
                 )
                 try self.savePlan(for: job)
@@ -456,6 +944,20 @@ final class ChapterDownloadManager {
         guard runningKey == job.key, job.state == "downloading" else { return }
         if job.nextIndex >= job.pages.count {
             do {
+                // A successful HTTP queue is not proof that all page files
+                // still exist. Check the exact sequence before recording a
+                // completed chapter in SQLite; preserve all files on failure.
+                let committed = try WebReaderOfflinePageInventory.inspect(
+                    directory: job.directory, fileManager: fileManager
+                )
+                guard committed.count == job.pages.count else {
+                    throw ChapterDownloadError.missingCompletedFiles
+                }
+                // New Build69 downloads carry an optional count-only
+                // receipt. Old Build68 chapters never require one.
+                try WebReaderOfflineCompletionReceipt.write(
+                    directory: job.directory, expectedPages: job.pages.count
+                )
                 try repository.setState(
                     sourceID: job.sourceID, manga: job.manga, chapter: job.chapter,
                     state: "completed", progress: 1,
@@ -532,6 +1034,15 @@ final class ChapterDownloadManager {
                         return
                     }
 
+                    // The resume prefix accepts pages up to 20 MiB. Keep
+                    // the same ceiling at download time, or a page saved
+                    // successfully could become unrecoverable after restart.
+                    guard !response.data.isEmpty,
+                          Int64(response.data.count) <=
+                            WebReaderOfflineResumePrefix.maximumPageBytes else {
+                        self.fail(job, error: ChapterDownloadError.oversizedImagePayload)
+                        return
+                    }
                     guard ChapterDownloadImageValidator.canStore(
                         data: response.data, headers: response.headers
                     ) else {
@@ -596,29 +1107,129 @@ final class ChapterDownloadManager {
             sourceID: sourceID,
             sourceMangaID: mangaID,
             sourceChapterID: chapterID
-        ), record.state == "completed",
-          let localPath = record.localPath else {
-            return nil
+        ), record.state == "completed" else { return nil }
+
+        // Never expose another downloaded chapter's bytes through a
+        // colliding normalized directory, or rebind this DB row to it.
+        guard !WebReaderOfflineCanonicalOwnership.collides(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+            recorded: try repository.listDownloads()
+        ) else {
+            throw ChapterDownloadError.ambiguousOfflineChapterPath
         }
 
-        let directory = URL(fileURLWithPath: localPath, isDirectory: true)
-        guard fileManager.fileExists(atPath: directory.path) else { return nil }
-
-        let files = try fileManager.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
+        // Do not follow the obsolete stored absolute local_path from Build56.
+        let directory = try chapterDirectory(
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
         )
-        .filter { $0.lastPathComponent.hasPrefix("page-") && $0.pathExtension == "bin" }
-        .sorted { $0.lastPathComponent < $1.lastPathComponent }
-
-        guard !files.isEmpty else {
+        // A completed record with a missing directory is not an uncached
+        // chapter. Report missing local data instead of falling back to web.
+        guard fileManager.fileExists(atPath: directory.path) else {
             throw ChapterDownloadError.missingCompletedFiles
         }
 
+        // A completed SQLite row does not prove every local page survived.
+        // Reject gaps, empty files and symbolic links instead of renumbering
+        // a sparse list and accidentally showing an incomplete chapter.
+        let files: [URL]
+        do {
+            files = try WebReaderOfflinePageInventory.inspect(
+                directory: directory, fileManager: fileManager
+            )
+        } catch {
+            throw ChapterDownloadError.missingCompletedFiles
+        }
+
+        // Verify the expected total page count when this is a newly
+        // completed Build69 chapter. A legacy Build68 folder has no receipt
+        // and is still readable. Failure never changes the local files.
+        do {
+            try WebReaderOfflineCompletionReceipt.verifyIfPresent(
+                directory: directory, actualPages: files.count,
+                fileManager: fileManager
+            )
+        } catch {
+            throw ChapterDownloadError.missingCompletedFiles
+        }
+
+        // Repair only the DB location for real downloaded pages, without
+        // moving/deleting files or starting a network request. Reading must
+        // still succeed when this opportunistic metadata update fails.
+        if record.localPath != directory.path {
+            try? repository.rebindCompletedPath(
+                sourceID: sourceID,
+                sourceMangaID: mangaID,
+                sourceChapterID: chapterID,
+                currentPath: directory.path
+            )
+        }
         return files.enumerated().map { index, url in
             Page(index: index, imageUrl: url.absoluteString, headers: [:])
         }
     }
+
+    // BEGIN BUILD70_FH_READONLY_SQLITE_TO_PREVIEW
+    // One pass through a dedicated READONLY SQLite connection, followed by
+    // the FG provisional worker-serialized preflight. Not a locked or
+    // durable FS+SQLite transaction. Callers must never use it as deletion
+    // authority, and the method has intentionally NO production/UI caller.
+    func previewOfflineDeletionCandidatesFromSQLiteReadOnly()
+        throws -> [WebReaderOfflineDeletionV2AuditItem] {
+        let rows = try repository.listDownloadsForAuditReadOnly()
+        return try previewOfflineDeletionCandidates(from: rows)
+    }
+    // END BUILD70_FH_READONLY_SQLITE_TO_PREVIEW
+
+    // BEGIN BUILD70_FG_READONLY_MANAGER_PREVIEW
+    // Accepts supplied metadata only: does not open SQLite, initialize the
+    // shared manager, change the download queue, or modify file contents.
+    // Always treat results as stale immediately after return.
+    func previewOfflineDeletionCandidates(
+        from recorded: [DownloadListRecord]
+    ) throws -> [WebReaderOfflineDeletionV2AuditItem] {
+        return try worker.sync {
+            guard recorded.count <= 5_000 else {
+                throw WebReaderOfflineDeletionV2AuditError.tooManyRecords
+            }
+            let busy = runningKey != nil || !pending.isEmpty || !jobs.isEmpty
+            let keys = recorded.map {
+                jobKey(
+                    sourceID: $0.sourceID,
+                    mangaID: $0.sourceMangaID,
+                    chapterID: $0.sourceChapterID
+                )
+            }
+            var keyCounts: [String: Int] = [:]
+            for key in keys { keyCounts[key, default: 0] += 1 }
+
+            return recorded.enumerated().map { index, record in
+                let decision: WebReaderOfflineDeletionV2ShadowGate.Preview
+                if busy || keyCounts[keys[index]] != 1 {
+                    decision = .requiresReview
+                } else if let directory = try? chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                ) {
+                    decision = WebReaderOfflineDeletionV2ShadowGate.previewForAudit(
+                        record: record,
+                        allRecords: recorded,
+                        directory: directory,
+                        fileManager: fileManager
+                    )
+                } else {
+                    decision = .requiresReview
+                }
+                return WebReaderOfflineDeletionV2AuditItem(
+                    sourceID: record.sourceID,
+                    sourceMangaID: record.sourceMangaID,
+                    sourceChapterID: record.sourceChapterID,
+                    decision: decision
+                )
+            }
+        }
+    }
+    // END BUILD70_FG_READONLY_MANAGER_PREVIEW
 
     func remove(
         sourceID: String,
@@ -626,25 +1237,54 @@ final class ChapterDownloadManager {
         chapterID: String
     ) throws {
         try worker.sync {
+            try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
             let key = jobKey(sourceID: sourceID, mangaID: mangaID, chapterID: chapterID)
             if runningKey == key {
                 throw ChapterDownloadError.downloadInProgress
             }
-            let removedJob = jobs.removeValue(forKey: key)
-            pending.removeAll { $0 == key }
-            if let record = try repository.record(
-                sourceID: sourceID,
-                sourceMangaID: mangaID,
-                sourceChapterID: chapterID
-            ), let localPath = record.localPath,
-               fileManager.fileExists(atPath: localPath) {
-                try fileManager.removeItem(atPath: localPath)
+            // A confirmed delete cannot erase a different title's pages,
+            // nor an orphan directory without an existing exact DB owner.
+            let rows = try repository.listDownloads()
+            guard rows.contains(where: {
+                $0.sourceID == sourceID &&
+                $0.sourceMangaID == mangaID &&
+                $0.sourceChapterID == chapterID
+            }),
+            !WebReaderOfflineCanonicalOwnership.collides(
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+                recorded: rows
+            ) else {
+                throw ChapterDownloadError.ambiguousOfflineChapterPath
             }
+            // Validate the exact current chapter folder *before* changing
+            // the in-memory queue or deleting any database row. Unknown
+            // leaves, nested directories, symlinks, hardlinks and swapped
+            // parent folders are not ours to remove, even with consent.
+            let current = try chapterDirectory(
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
+            )
+            let verdict = WebReaderOfflineDeletionPreflight.inspect(
+                directory: current,
+                sourceID: sourceID, mangaID: mangaID, chapterID: chapterID,
+                fileManager: fileManager
+            )
+            guard verdict != .unsafe else {
+                throw ChapterDownloadError.unsafeOfflineDeletionContents
+            }
+            if verdict == .allowed {
+                try fileManager.removeItem(at: current)
+            }
+            // Only after filesystem removal succeeds may SQLite and
+            // in-memory queue state be retired. If SQLite rejects deletion,
+            // leave pending/jobs untouched instead of silently losing the
+            // only retained completion callback on this app session.
             try repository.remove(
                 sourceID: sourceID,
                 sourceMangaID: mangaID,
                 sourceChapterID: chapterID
             )
+            let removedJob = jobs.removeValue(forKey: key)
+            pending.removeAll { $0 == key }
             // If a queued/paused job is explicitly removed, release its
             // retained caller closure instead of leaving it waiting forever.
             if let job = removedJob {
@@ -656,34 +1296,130 @@ final class ChapterDownloadManager {
         }
     }
 
+    // BEGIN BUILD70_ET_BOUNDED_BULK_DELETE
+    // Called only from the separately confirmed Data/Storage destructive UI.
+    // Do not remove the entire Downloads tree: unknown and orphan content
+    // is not necessarily owned by our database and must be preserved.
+    // Every known chapter is reviewed BEFORE the first deletion.
+    func removeAllConfirmed() throws -> Int {
+        return try worker.sync {
+            try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
+            guard runningKey == nil, pending.isEmpty else {
+                throw ChapterDownloadError.downloadInProgress
+            }
+
+            let rows = try repository.listDownloads()
+            var planned: [(
+                record: DownloadListRecord,
+                directory: URL,
+                verdict: WebReaderOfflineDeletionPreflight.Verdict
+            )] = []
+            var seenKeys = Set<String>()
+
+            for record in rows {
+                guard record.state == "completed" ||
+                      record.state == "failed" ||
+                      record.state == "paused" else {
+                    throw ChapterDownloadError.downloadInProgress
+                }
+                let key = jobKey(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                // Never merge duplicate database identities or ambiguous
+                // queue key encodings into a single destructive operation.
+                guard seenKeys.insert(key).inserted,
+                      !WebReaderOfflineCanonicalOwnership.collides(
+                          sourceID: record.sourceID,
+                          mangaID: record.sourceMangaID,
+                          chapterID: record.sourceChapterID,
+                          recorded: rows
+                      ) else {
+                    throw ChapterDownloadError.ambiguousOfflineChapterPath
+                }
+
+                let directory = try chapterDirectory(
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID
+                )
+                let verdict = WebReaderOfflineDeletionPreflight.inspect(
+                    directory: directory,
+                    sourceID: record.sourceID,
+                    mangaID: record.sourceMangaID,
+                    chapterID: record.sourceChapterID,
+                    fileManager: fileManager
+                )
+                guard verdict != .unsafe else {
+                    throw ChapterDownloadError.unsafeOfflineDeletionContents
+                }
+                planned.append((
+                    record: record, directory: directory, verdict: verdict
+                ))
+            }
+
+            // If a live in-memory job no longer has a matching database
+            // record, abort instead of leaving it capable of writing pages
+            // into a chapter the bulk command just deleted.
+            guard Set(jobs.keys).isSubset(of: seenKeys) else {
+                throw ChapterDownloadError.downloadInProgress
+            }
+
+            // Re-check each entry immediately before deletion. A changed
+            // folder or an unknown file must never trigger recursive root
+            // removal. Directory ancestors may be left empty intentionally.
+            for item in planned {
+                let actual = WebReaderOfflineDeletionPreflight.inspect(
+                    directory: item.directory,
+                    sourceID: item.record.sourceID,
+                    mangaID: item.record.sourceMangaID,
+                    chapterID: item.record.sourceChapterID,
+                    fileManager: fileManager
+                )
+                guard actual == item.verdict else {
+                    throw ChapterDownloadError.unsafeOfflineDeletionContents
+                }
+                if actual == .allowed {
+                    try fileManager.removeItem(at: item.directory)
+                }
+                try repository.remove(
+                    sourceID: item.record.sourceID,
+                    sourceMangaID: item.record.sourceMangaID,
+                    sourceChapterID: item.record.sourceChapterID
+                )
+
+                let key = jobKey(
+                    sourceID: item.record.sourceID,
+                    mangaID: item.record.sourceMangaID,
+                    chapterID: item.record.sourceChapterID
+                )
+                if let job = jobs.removeValue(forKey: key) {
+                    DispatchQueue.main.async {
+                        job.completion(.failure(HTTPClientError.cancelled))
+                    }
+                }
+            }
+            // No file-system root erase, no SQLite DELETE FROM downloads,
+            // and no bulk removal of unknown/orphan folders at any point.
+            return planned.count
+        }
+    }
+    // END BUILD70_ET_BOUNDED_BULK_DELETE
+
     private func chapterDirectory(
         sourceID: String,
         mangaID: String,
         chapterID: String
     ) throws -> URL {
-        guard let base = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
+        guard let support = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
         ).first else {
             throw ChapterDownloadError.applicationSupportUnavailable
         }
-
-        return base
-            .appendingPathComponent("MangaReader12", isDirectory: true)
-            .appendingPathComponent("Downloads", isDirectory: true)
-            .appendingPathComponent(safeComponent(sourceID), isDirectory: true)
-            .appendingPathComponent(safeComponent(mangaID), isDirectory: true)
-            .appendingPathComponent(safeComponent(chapterID), isDirectory: true)
-    }
-
-    private func safeComponent(_ value: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(
-            CharacterSet(charactersIn: "._-")
+        return OfflineDownloadPath.chapterDirectory(
+            applicationSupport: support,
+            sourceID: sourceID, mangaID: mangaID, chapterID: chapterID
         )
-        let scalars = value.unicodeScalars.map { scalar -> String in
-            return allowed.contains(scalar) ? String(scalar) : "_"
-        }
-        let result = scalars.joined()
-        return result.isEmpty ? "item" : result
     }
 }

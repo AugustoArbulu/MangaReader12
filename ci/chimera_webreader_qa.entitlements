@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Build64 personal QA: copy EXACT installed Build56 application-identifier
+       as reported by Filza on 2026-11-06. An ad-hoc signature is not a
+       provisioning profile and does not prove publisher/team identity. -->
+  <key>application-identifier</key>
+  <string>AR5SFJC432.com.example.MangaReader12.AR5SFJC432</string>
+</dict>
+</plist>

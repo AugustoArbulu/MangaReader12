@@ -1,0 +1,49 @@
+name: WebReader Build70 Phase EH SQLite Relationships (host only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_eh_sqlite_relational_integrity.py'
+      - 'ci/test_build70_eh_sqlite_relational_integrity.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EH_SQLITE_RELATIONS_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-eh-sqlite-relationships.yml'
+permissions:
+  contents: read
+jobs:
+  sqlite-relational-readonly:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test 21 EA, 20 ED and EH adversarial cases
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ed_portable_vs_external_library.py' -v
+          python -m unittest discover -s ci -p 'test_build70_eh_sqlite_relational_integrity.py' -v
+      - name: No installation, restoration or publication permissions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path("ci/build70_eh_sqlite_relational_integrity.py").read_text()
+          for needle in ("PRAGMA foreign_key_check", "PRAGMA integrity_check",
+                         '"installationAuthorized": False',
+                         '"restorationAuthorized": False',
+                         '"readyToDistributeIPA": False',
+                         '"automaticUpdaterEnabled": False'):
+              assert needle in src, needle
+          assert not Path("ci/build71_owner_approved_qa_trigger.txt").exists()
+          assert "static let productionPublicKeyX963: Data? = nil" in Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          print("PASS EH: host-only relational check; trust, trigger and installation disabled")
+          PY

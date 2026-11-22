@@ -39,6 +39,17 @@ let longWebtoon = check(1000, 30000, 24_000_000, 32_768)!
 ok(longWebtoon.0 > 0 && longWebtoon.1 > 0, "vertical accepted")
 ok(longWebtoon.0 * longWebtoon.1 <= 24_000_000, "page memory")
 ok(longWebtoon.1 <= 32_768, "page max dimension")
+let stripLimits = ImageCompatibilityGeometry.decodeLimits(
+    width: 1000, height: 30000, maxPixels: 24_000_000, maxDimension: 32_768,
+    limitTallStrips: true)
+let bounded = check(1000, 30000, stripLimits.pixels, stripLimits.dimension)!
+ok(bounded.0 * bounded.1 <= 8_000_000 && bounded.1 <= 12_288, "tall strip budget")
+ok(abs(Double(bounded.1) / Double(bounded.0) - 30) < 0.1, "full image proportions")
+let regularLimits = ImageCompatibilityGeometry.decodeLimits(
+    width: 1000, height: 3000, maxPixels: 24_000_000, maxDimension: 32_768,
+    limitTallStrips: true)
+ok(regularLimits.pixels == 24_000_000 && regularLimits.dimension == 32_768,
+   "regular pages keep their budget")
 let largeCover = check(2500, 2000, 420 * 420, 420)!
 ok(max(largeCover.0, largeCover.1) <= 420, "cover bound")
 ok(largeCover.0 * largeCover.1 <= 420 * 420, "cover memory")

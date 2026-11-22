@@ -47,6 +47,49 @@ enum ReaderScaleMode: Int {
     }
 }
 
+// Width of the continuous Webtoon strip, independent of paged-reader zoom.
+// Fraction is based on the actual reader viewport, not the full device screen.
+enum ReaderWebtoonWidth: Int {
+    case adaptive = 0
+    case full = 1
+    case wide = 2
+    case comfortable = 3
+    case narrow = 4
+
+    var title: String {
+        switch self {
+        case .adaptive: return "Adaptável (100% em pé, 75% deitado)"
+        case .full: return "100% (largura total)"
+        case .wide: return "85%"
+        case .comfortable: return "75%"
+        case .narrow: return "60%"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .adaptive: return "Adaptável"
+        case .full: return "100%"
+        case .wide: return "85%"
+        case .comfortable: return "75%"
+        case .narrow: return "60%"
+        }
+    }
+
+    func fraction(for viewport: CGSize) -> CGFloat {
+        switch self {
+        case .adaptive:
+            // Portrait retains the exact Build69 rendering width. Landscape
+            // narrows the tall-strip art instead of stretching it to the iPad.
+            return viewport.width > viewport.height ? 0.75 : 1.0
+        case .full: return 1.0
+        case .wide: return 0.85
+        case .comfortable: return 0.75
+        case .narrow: return 0.60
+        }
+    }
+}
+
 final class ReaderPreferences {
     static let shared = ReaderPreferences()
 
@@ -58,6 +101,7 @@ final class ReaderPreferences {
     private let keepScreenOnKey = "reader.keepScreenOn"
     private let tapZonesKey = "reader.tapZones"
     private let webtoonGapKey = "reader.webtoonGap"
+    private let webtoonWidthKey = "reader.webtoon.widthMode"
     private let doubleTapZoomKey = "reader.doubleTapZoom"
     private let scaleModeKey = "reader.scaleMode"
     private let trimMarginsKey = "reader.trimMargins"
@@ -118,6 +162,14 @@ final class ReaderPreferences {
     var webtoonGapEnabled: Bool {
         get { return bool(forKey: webtoonGapKey, defaultValue: false) }
         set { defaults.set(newValue, forKey: webtoonGapKey) }
+    }
+
+    var webtoonWidth: ReaderWebtoonWidth {
+        get {
+            return ReaderWebtoonWidth(rawValue: defaults.integer(forKey: webtoonWidthKey))
+                ?? .adaptive
+        }
+        set { defaults.set(newValue.rawValue, forKey: webtoonWidthKey) }
     }
 
     var doubleTapZoomEnabled: Bool {

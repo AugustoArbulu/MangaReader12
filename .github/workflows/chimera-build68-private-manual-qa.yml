@@ -1,0 +1,197 @@
+name: WebReader Build68 PRIVATE Manual IPA for Filza — Audited, Never Installed
+
+# Isolated ONE candidate from the experimental branch. Its triggering
+# commit is the immutable provenance of the artifact in the Actions run.
+# This workflow is NOT a public GitHub Release and never installs an app.
+# Trigger file is created ONCE only after sources, tests and documentation.
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build68_candidate_trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build68-private-manual-ipa-candidate
+  cancel-in-progress: true
+
+jobs:
+  verify-package-and-publish-private-artifact:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - name: Checkout immutable candidate source
+        uses: actions/checkout@v4
+
+      - name: Strict candidate branch, trigger and no-install invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feat/chimera-updater-phase1-protocol-audit"
+          test "$GITHUB_EVENT_NAME" = "push"
+          test -f ci/build68_candidate_trigger.txt
+          grep -Fxq 'WEBREADER_BUILD68_PRIVATE_MANUAL_QA_ONLY_NO_RELEASE_NO_INSTALL' ci/build68_candidate_trigger.txt
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test -f docs/WEBREADER_BUILD68_PRIVATE_MANUAL_QA_CHECKLIST_2026-11-08.md
+          echo "PASS: candidate at $GITHUB_SHA is branch-only, no helper install and no publisher trust"
+
+      - name: Select iOS12 compatible Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Run strict manual IPA delivery, existing library and updater tests
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_rehearsal_readonly_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_private_manual_qa_delivery.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_qa_workflow_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_z_download_budget_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_aa_ab_manual_controls.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_w_production_publisher_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build68_phase_y_monotonic_preview_policy.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_native_webreader_ipa_download_budget.py
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_webreader_signed_ipa_joint_audit.py
+
+      - name: Prepare app icon and bounded legacy iOS12 WebP support
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+
+      - name: Compile complete Debug ARM64 iOS12 (no install)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-manual-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+          test -f "$RUNNER_TEMP/wr68-manual-debug/Build/Products/Debug-iphoneos/MangaReader12.app/MangaReader12"
+
+      - name: Compile complete Release ARM64 iOS12 (no install)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-manual-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+          test -f "$RUNNER_TEMP/wr68-manual-release/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
+
+      - name: Verify unmodified app bundle ID, minimum OS and version-56 source project
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-manual-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+
+      - name: Create isolated ad-hoc Build68 IPA for MANUAL review only
+        run: |
+          bash ci/package_webreader_build68_rehearsal.sh \
+            "$RUNNER_TEMP/wr68-manual-release/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Build68-iOS12-adhoc.ipa
+
+      - name: Audit exact ad-hoc code seal, entitlements, ARM64, ZIP, SHA and identity
+        run: |
+          python3 ci/audit_webreader_build68_rehearsal.py \
+            WebReader-Build68-iOS12-adhoc.ipa \
+            --sha256-file WebReader-Build68-iOS12-adhoc.ipa.sha256 \
+            --report WebReader-Build68-private-rehearsal-audit.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('WebReader-Build68-private-rehearsal-audit.json').read_text())
+          assert d['status'] == 'PASS'
+          assert d['build'] == 68 and d['upgradesFromObservedBuild'] == 66
+          assert d['minimumIOS'] == '12.0'
+          assert d['bundleID'] == 'com.example.MangaReader12'
+          assert d['applicationIdentifier'] == 'AR5SFJC432.com.example.MangaReader12.AR5SFJC432'
+          for field in ('nativeAdHocCodeIntegrityVerified',
+                        'thinArm64Verified', 'sameInstalledEntitlementIdentifier'):
+              assert d[field] is True, field
+          for field in ('productionPublisherAuthenticated',
+                        'releaseManifestIndependentlySigned',
+                        'ios12DeviceInstallTested', 'userConsentVerified',
+                        'helperPeerAuthenticated', 'installationAuthorized',
+                        'installationPerformed', 'approvedForAutomaticRelease'):
+              assert d[field] is False, field
+          print('PASS: Build68 native code seal and manual QA only')
+          PY
+
+      - name: Rehash exact immutable IPA before owner-visible private transfer
+        run: |
+          python3 ci/build68_private_manual_qa_delivery.py \
+            WebReader-Build68-iOS12-adhoc.ipa \
+            --sha256-file WebReader-Build68-iOS12-adhoc.ipa.sha256 \
+            --audit-json WebReader-Build68-private-rehearsal-audit.json \
+            --delivery-report WebReader-Build68-private-manual-qa-delivery.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('WebReader-Build68-private-manual-qa-delivery.json').read_text())
+          assert r['privateManualQAArtifactEligible'] is True
+          assert r['build'] == 68 and r['installedBuildReference'] == 66
+          assert r['checksumReverificationRequiredAfterTransfer'] is True
+          assert r['userBackupAndRollbackRequiredBeforeInstall'] is True
+          assert r['artifact'] == 'WebReader-Build68-iOS12-adhoc.ipa'
+          for flag in ('releasePublisherAuthenticated', 'automaticUpdateEnabled',
+                       'deviceInstallValidated', 'userApprovedInstallation',
+                       'privilegedHelperAuthenticated', 'installationAuthorized',
+                       'installationPerformed'):
+              assert r[flag] is False, flag
+          print('PASS: exact SHA-256 rechecked, no installation authority')
+          PY
+
+      - name: Bind immutable candidate commit and run to transfer receipt
+        env:
+          QA_SHA: ${{ github.sha }}
+          QA_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          checked = json.loads(Path('WebReader-Build68-private-manual-qa-delivery.json').read_text())
+          source_sha = os.environ['QA_SHA']
+          assert len(source_sha) == 40 and all(c in '0123456789abcdef' for c in source_sha)
+          print('SOURCE_SHA=' + source_sha)
+          out = {
+              'sourceCommit': source_sha,
+              'githubActionsRun': int(os.environ['QA_RUN_ID']),
+              'branch': 'feat/chimera-updater-phase1-protocol-audit',
+              'qaArtifact': checked['artifact'],
+              'sha256': checked['sha256'],
+              'build': 68,
+              'upgradeFromReferenceBuild': 66,
+              'publicationChannel': 'PRIVATE_GITHUB_ACTIONS_ARTIFACT_ONLY',
+              'deviceInstallTested': False,
+              'releasePublisherAuthenticated': False,
+              'installationAuthorized': False,
+              'installationPerformed': False
+          }
+          Path('WebReader-Build68-source-provenance.json').write_text(
+              json.dumps(out, sort_keys=True, indent=2) + '\n'
+          )
+          PY
+
+      - name: Upload PRIVATE short-lived IPA and verification receipts for owner Filza QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build68-PRIVATE-ManualQA-Filza-iOS12
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-Build68-iOS12-adhoc.ipa
+            WebReader-Build68-iOS12-adhoc.ipa.sha256
+            WebReader-Build68-private-rehearsal-audit.json
+            WebReader-Build68-private-manual-qa-delivery.json
+            WebReader-Build68-source-provenance.json
+            docs/WEBREADER_BUILD68_PRIVATE_MANUAL_QA_CHECKLIST_2026-11-08.md

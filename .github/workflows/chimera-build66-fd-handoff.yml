@@ -1,0 +1,100 @@
+name: WebReader Build66 Phase H SCM_RIGHTS Peer Ownership QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build66_scm_rights_handoff_lab.c'
+      - 'ci/build66_fd_handoff_findings.py'
+      - 'ci/test_build66_fd_handoff_findings.py'
+      - 'ci/test_build66_scm_rights_handoff_lab.py'
+      - 'ci/build66_temporal_peer_report.py'
+      - 'ci/test_build66_temporal_peer_report.py'
+      - 'ci/test_build66_temporal_scm_rights_lab.py'
+      - 'ci/build66_independent_peer_report.py'
+      - 'ci/test_build66_separate_signed_peer_lab.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build66_scm_rights_handoff_lab.c'
+      - 'ci/build66_fd_handoff_findings.py'
+      - 'ci/test_build66_fd_handoff_findings.py'
+      - 'ci/test_build66_scm_rights_handoff_lab.py'
+      - 'ci/build66_temporal_peer_report.py'
+      - 'ci/test_build66_temporal_peer_report.py'
+      - 'ci/test_build66_temporal_scm_rights_lab.py'
+      - 'ci/build66_independent_peer_report.py'
+      - 'ci/test_build66_separate_signed_peer_lab.py'
+      - '.github/workflows/chimera-build66-fd-handoff.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr66-phase-h-scm-rights-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-safety-and-report-matrix:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise all origin and sender evidence outcomes
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_fd_handoff_findings.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_temporal_peer_report.py' -v
+      - name: Verify no installer and explicit SCM_RIGHTS handoff
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          c = Path("ci/build66_scm_rights_handoff_lab.c").read_text()
+          p = Path("ci/build66_fd_handoff_findings.py").read_text()
+          for expected in ("SCM_RIGHTS", "CMSG_FIRSTHDR", "sendmsg(",
+                           "recvmsg(", "handoff_origin(", "handoff_receiver(",
+                           'send(received_fd, "WRHELLO1"', "LOCAL_PEERTOKEN",
+                           "csops_audittoken", "FINAL_INSTALL_AUTHORIZATION=DENIED"):
+              assert expected in c, expected
+          for forbidden in ("appinst(", "/usr/bin/appinst", "posix_spawn(",
+                            "execve(", "system(", "setuid(", "setgid(",
+                            "chown(", "launchctl", "WRINST1"):
+              assert forbidden not in c, forbidden
+          assert "current_writer_authenticated: bool = False" in p
+          assert "installation_authorized: bool = False" in p
+          temporal = Path("ci/build66_temporal_peer_report.py").read_text()
+          assert "current_writer_authenticated: bool = False" in temporal
+          assert "installation_authorized: bool = False" in temporal
+          assert "A_B_A_MESSAGE_SENDER_REBINDING_OBSERVED" in temporal
+          print("PASS: a transferred socket cannot authorize installations")
+          PY
+
+  separate-executable-macos-handoff:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select validated native Apple toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Verify report-policy matrix on macOS
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_fd_handoff_findings.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_independent_peer_report.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_temporal_peer_report.py' -v
+      - name: Observe independently executed A-connects/B-writes with SCM_RIGHTS
+        run: python3 ci/test_build66_scm_rights_handoff_lab.py
+      - name: Measure A-B-A message sender identity while transferred fd stays open
+        run: python3 ci/test_build66_temporal_scm_rights_lab.py
+      - name: Confirm production installation remains disabled
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: diagnostic-only; no IPA, privileged helper or installation'

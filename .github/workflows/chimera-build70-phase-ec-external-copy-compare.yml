@@ -1,0 +1,49 @@
+name: WebReader Build70 Phase EC Full External Data Copy Comparison (read only)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ec_full_container_dual_copy.py'
+      - 'ci/test_build70_ec_full_container_dual_copy.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_EC_FULL_EXTERNAL_COPY_COMPARE_2026-11-12.md'
+      - '.github/workflows/chimera-build70-phase-ec-external-copy-compare.yml'
+permissions:
+  contents: read
+jobs:
+  offline-host-compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: EA and EC synthetic copies, tests without deployment
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ea_external_copy_audit.py' -v
+          python -m unittest discover -s ci -p 'test_build70_ec_full_container_dual_copy.py' -v
+      - name: Preserve release and installer prohibition
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code = Path('ci/build70_ec_full_container_dual_copy.py').read_text()
+          assert 'EC_STOP_EXTERNAL_COPIES_DIFFER' in code
+          for token in ('"installationAuthorized": False',
+                        '"readyToDistributeIPA": False',
+                        '"readyToInstallIPA": False',
+                        '"restorationAuthorized": False',
+                        '"automaticUpdaterEnabled": False'):
+              assert token in code, token
+          assert not Path('ci/build71_owner_approved_qa_trigger.txt').exists()
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS EC: no trigger, no installer, no trusted publisher, no IPA')
+          PY

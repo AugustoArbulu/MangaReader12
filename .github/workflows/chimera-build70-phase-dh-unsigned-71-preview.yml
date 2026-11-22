@@ -1,0 +1,86 @@
+name: WebReader Build70 Phase DH Unsigned Build71 QA Preview (NO IPA)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dh_unsigned_build71_preview.py'
+      - 'ci/test_build70_dh_unsigned_build71_preview.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DH_BUILD71_UNSIGNED_PREVIEW_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dh_unsigned_build71_preview.py'
+      - 'ci/test_build70_dh_unsigned_build71_preview.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DH_BUILD71_UNSIGNED_PREVIEW_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dh-unsigned-71-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-unsigned-qa-source-and-malicious-fixtures:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Build71 unsigned metadata/identity and code hard-stop tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dh_unsigned_build71_preview.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dg_inapp_self_identity.py' -v
+      - name: Preserve production pin/installer and last validated Build70 baseline
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code = Path('ci/build70_dh_unsigned_build71_preview.py').read_text()
+          assert 'BASELINE_PHYSICAL = 70' in code
+          assert 'PROPOSED_QA = 71' in code
+          assert 'ownerDistributionApprovalRecorded' in code
+          assert 'deviceInstallabilityProven' in code
+          assert 'installationAuthorized' in code
+          assert 'installationPerformed' in code
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          print('PASS DH: Build71 PREVIEW, not signing, IPA, distribution or installation')
+          PY
+
+  macos-build71-metadata-only-no-packaging:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin iOS12 Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Compile SHA-pinned WebP and offline approved icon
+        run: |
+          bash ci/prepare_libwebp_ios.sh
+          python3 ci/prepare_webreader_icons.py
+      - name: Build unsigned Build71 app OUTSIDE checkout; do not package or upload
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MangaReader12.xcodeproj -scheme MangaReader12 \
+            -configuration Debug -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr-dh-71-preview" \
+            CURRENT_PROJECT_VERSION=71 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build > "$RUNNER_TEMP/wr-dh-build.log" 2>&1 \
+            || { tail -n 160 "$RUNNER_TEMP/wr-dh-build.log"; exit 1; }
+          grep 'BUILD SUCCEEDED' "$RUNNER_TEMP/wr-dh-build.log"
+          python3 ci/build70_dh_unsigned_build71_preview.py \
+            --unsigned-app "$RUNNER_TEMP/wr-dh-71-preview/Build/Products/Debug-iphoneos/MangaReader12.app"
+          echo 'PASS DH: no codesign, no IPA/DEB, no upload-artifact, no appinst or Release'

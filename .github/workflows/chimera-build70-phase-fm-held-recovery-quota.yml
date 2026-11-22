@@ -1,0 +1,74 @@
+name: WebReader Build70 FM - held FD recovery and bounded quota (synthetic)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/build70_fm_held_recovery_budget.py'
+      - 'ci/test_build70_fm_held_recovery_budget.py'
+      - 'ci/labs/webreader-ev-fd/**'
+      - '.github/workflows/chimera-build70-phase-fm-held-recovery-quota.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wr-build70-fm-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-recovery-no-delete:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm all production switches remain locked
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let currentSchemaVersion = 1' MangaReader12/Database/SQLiteDatabase.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+      - name: Validate 40 checksums in isolated EV-FD lab
+        working-directory: ci/labs/webreader-ev-fd
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path.cwd()
+          lines=Path('SHA256SUMS').read_text().splitlines()
+          assert len(lines)==40,len(lines)
+          for entry in lines:
+              digest,name=entry.split('  ',1)
+              file=(root/name).resolve()
+              assert file.is_relative_to(root) and file.is_file(),name
+              assert hashlib.sha256(file.read_bytes()).hexdigest()==digest,name
+          print('FM_BUNDLE_SHA256_40_PASS')
+          PY
+      - name: Verify 40 FM FD/SQLite/quota adversarial tests
+        run: python -m unittest discover -s ci -p 'test_build70_fm_held_recovery_budget.py' -v
+      - name: Repeat 20 FL, 36 FK and 30 FJ safety regressions
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fl_*.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fk_late_window_evidence.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fj_paired_readonly_reconciliation.py' -q
+      - name: Recheck 17 FI journal and 2 real-Swift SQLite WAL tests
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_fi_readonly_shadow_audit.py' -q
+          python -m unittest discover -s ci -p 'test_build70_fi_native_wal_snapshot.py' -q
+      - name: Repeat full EV-FD 250 synthetic tests
+        working-directory: ci/labs/webreader-ev-fd
+        run: python -m unittest discover -s ci -p 'test_build70_*.py' -q
+      - name: Apple iOS12 standalone Swift FD typecheck (no IPA)
+        if: runner.os == 'macOS'
+        run: |
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/labs/webreader-ev-fd/ci/build70_ev_fd_quarantine.swift
+      - name: Confirm no tracked files changed during tests
+        run: git diff --exit-code -- .

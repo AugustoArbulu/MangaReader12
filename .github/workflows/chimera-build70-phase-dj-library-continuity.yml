@@ -1,0 +1,84 @@
+name: WebReader Build70 Phase DJ Physical Continuity Report Audit (no install)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_dj_continuity_report_compare.py'
+      - 'ci/test_build70_dj_continuity_report_compare.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DJ_LIBRARY_CONTINUITY_2026-11-10.md'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build70_dj_continuity_report_compare.py'
+      - 'ci/test_build70_dj_continuity_report_compare.py'
+      - 'docs/WEBREADER_BUILD70_PHASE_DJ_LIBRARY_CONTINUITY_2026-11-10.md'
+      - '.github/workflows/chimera-build70-phase-dj-library-continuity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-count-report-audit:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run strict read-only before/after clipboard counter parser
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_dj_continuity_report_compare.py' -v
+      - name: Verify user report labels and all nine SQL counters match app source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "ci")
+          from build70_dj_continuity_report_compare import (
+            COUNT_LABELS, HEADER, NOTE, DB_HEALTH, FOOTER,
+            BEFORE_BUILD, AFTER_BUILD, IOS_VERSION,
+          )
+          source = Path("MangaReader12/Core/WebReaderUpgradeContinuitySnapshot.swift").read_text()
+          assert len(COUNT_LABELS) == 9
+          for token in (HEADER, NOTE, DB_HEALTH, *FOOTER):
+              assert token in source, token
+          for label in COUNT_LABELS:
+              assert '"'+label+'"' in source, label
+          assert BEFORE_BUILD == 70 and AFTER_BUILD == 71
+          assert IOS_VERSION == "12.5.8"
+          assert 'SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX' in source
+          assert 'BEGIN DEFERRED;' in source
+          assert 'ROLLBACK;' in source
+          assert 'sqlite3_db_readonly(opened, "main") == 1' in source
+          print("PASS DJ: source snapshot protocol matches nine existing read-only DB counters")
+          PY
+      - name: Verify publisher and installer remain default-deny
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('ci/build70_dj_continuity_report_compare.py').read_text()
+          for expected in ('"originalReportsAuthenticated": False',
+                           '"offlinePageImageBytesVerified": False',
+                           '"libraryTitlesOrProgressIntegrityVerified": False',
+                           '"ownerQADistributionApprovalRecorded": False',
+                           '"readyToDistributeIPA": False',
+                           '"readyToInstallIPA": False',
+                           '"installationAuthorized": False',
+                           '"installationPerformed": False'):
+              assert expected in src, expected
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DJ: count comparison cannot authorize QA, publisher or appinst')
+          PY

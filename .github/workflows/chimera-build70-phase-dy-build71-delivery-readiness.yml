@@ -1,0 +1,54 @@
+name: WebReader Build70 Phase DY Build71 One-Shot QA Delivery Readiness (NO package)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - 'ci/build71_owner_approved_actions_qa_package.py'
+      - 'ci/test_build71_dy_owner_approved_qa_contract.py'
+      - '.github/workflows/chimera-build71-owner-approved-one-shot-qa.yml'
+      - '.github/workflows/chimera-build70-phase-dy-build71-delivery-readiness.yml'
+      - 'docs/WEBREADER_BUILD70_PHASE_DY_ONE_SHOT_BUILD71_QA_DELIVERY_2026-11-11.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owner-trigger-host-negative-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate 18 DY host regressions without packaging
+        run: |
+          python -m unittest discover -s ci -p 'test_build71_dy_owner_approved_qa_contract.py' -v
+          python -m unittest discover -s ci -p 'test_build70_di_build71_private_qa_host.py' -v
+          python -m unittest discover -s ci -p 'test_build70_dv_shadow_ds_integration.py' -v
+      - name: Require the owner-only delivery trigger to be absent in development
+        run: |
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          python - <<'PY'
+          from pathlib import Path
+          w=Path('.github/workflows/chimera-build71-owner-approved-one-shot-qa.yml').read_text()
+          src=Path('ci/build71_owner_approved_actions_qa_package.py').read_text()
+          assert "paths:\n      - 'ci/build71_owner_approved_qa_trigger.txt'" in w
+          assert 'workflow_dispatch:' not in w
+          assert 'git diff --name-only HEAD^ HEAD' in w
+          assert 'CURRENT_PROJECT_VERSION=71' in w
+          assert 'actions/upload-artifact@v4' in w
+          assert '"ownerIdentityCryptographicallyAuthenticatedByTrigger": False' in src
+          assert '"installationAuthorized": False' in src
+          assert 'static let productionPublicKeyX963: Data? = nil' in Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in Path('MangaReader12/Core/WebReaderProductionPublisherTrust.swift').read_text()
+          assert 'static let liveInstallationEnabled = false' in Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          print('PASS DY: Build71 delivery is prepared but NO owner trigger exists')
+          PY

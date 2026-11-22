@@ -1,0 +1,86 @@
+name: WebReader Build67 — Local IPA Import + Full iOS12 Compile (No Release)
+
+# FROZEN: Build67 is the already generated QA candidate, not to be rebuilt
+# under this version number from later experimental commits.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr67-local-import-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-installer-security-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check manual import UI, isolated copies and frozen Build66 delivery
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build67_local_ipa_screen.py' -v
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_build54_branding.py
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+          python3 - <<'PY'
+          from pathlib import Path
+          staging = Path('MangaReader12/Core/WebReaderIPAStager.swift').read_text()
+          appinst = Path('MangaReader12/Core/WebReaderAppinstSocket.swift').read_text()
+          signing = Path('MangaReader12/Core/WebReaderUpdateChecker.swift').read_text()
+          legacy = Path('.github/workflows/chimera-build66-private-manual-qa.yml').read_text()
+          assert 'static let liveInstallationEnabled = false' in appinst
+          assert 'static let productionPublicKeyX963: Data? = nil' in signing
+          assert 'case manualLocalFile' in Path(
+              'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift').read_text()
+          assert 'WebReaderLocalIPAReviewer' in staging
+          assert 'test "$GITHUB_SHA" = "0939a5d7a480b2daa18d5a653a8ecf69f305f013"' in legacy
+          assert '  push:' not in legacy
+          print('PASS: Build66 frozen, Build67 manual importer cannot enable installation')
+          PY
+
+  native-swift-and-ios12-build:
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Apple environment
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Test real Swift local import and mutation-resistant sharing
+        run: |
+          python3 ci/test_native_webreader_local_ipa_review.py
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_native_webreader_update_checker.py
+          python3 ci/test_public_github_release_parser.py
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_chimera_build62_install_admission.py
+      - name: Prepare app icons and pinned iOS12 image dependency
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Full Debug ARM64 compilation for iOS12
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr67-debug" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Full Release ARM64 compilation for iOS12
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr67-release" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Verify unchanged production identity and installer gates
+        run: |
+          ./ci/verify_binary.sh "$RUNNER_TEMP/wr67-release/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: full iOS12 Build67 development compile; no IPA published or installed'

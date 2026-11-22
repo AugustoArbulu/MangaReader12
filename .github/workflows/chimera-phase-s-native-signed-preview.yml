@@ -1,0 +1,71 @@
+name: WebReader Phase S — Native Signed V2 Read-only Preview iOS12
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Core/WebReaderSignedReleaseTrustGate.swift'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'MangaReader12/Core/WebReaderStrictJSON.swift'
+      - 'MangaReader12.xcodeproj/project.pbxproj'
+      - 'ci/test_native_webreader_signed_release_trust_gate.py'
+      - 'ci/test_build68_signed_trust_gate_policy.py'
+      - '.github/workflows/chimera-phase-s-native-signed-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-phase-s-native-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-install-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce pinned public-key gate, no privileged helper or production trust root
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build68_signed_trust_gate_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_phase_q_release_cache_policy.py' -v
+          python3 ci/test_app_updates_screen.py
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: native v2 preview is read-only; no key enrolled and no install'
+
+  native-security-and-ios12:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS12-capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Test real CommonCrypto + Security.framework signed-v2 gate
+        run: |
+          python3 ci/test_native_webreader_signed_release_trust_gate.py
+          python3 ci/test_native_build68_release_public_key_handoff.py
+          python3 ci/test_native_webreader_update_verifier.py
+          python3 ci/test_native_webreader_ipa_auditor.py
+      - name: Prepare icons and bounded WebP library
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile full WebReader for ARM64 iOS12 (no IPA)
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wr68-phase-s" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
+      - name: Verify identity and installation lock remain unchanged
+        run: |
+          ./ci/verify_binary.sh \
+            "$RUNNER_TEMP/wr68-phase-s/Build/Products/Release-iphoneos/MangaReader12.app"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          echo 'PASS: iOS12 build only. No IPA, release, appinst or device operation'

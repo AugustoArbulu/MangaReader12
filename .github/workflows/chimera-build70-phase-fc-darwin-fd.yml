@@ -1,0 +1,77 @@
+name: WebReader Build70 FC - macOS Darwin fd compatibility (synthetic)
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-build70-phase-fc-darwin-fd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  darwin-fd-smoke:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record Apple toolchain and check iOS 12 SDK target
+        shell: bash
+        run: |
+          xcodebuild -version
+          swiftc --version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Compile Darwin fd preflight for macOS and iOS12 without installation
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/webreader_fc_darwin_fd.swift" <<'SWIFT'
+          import Foundation
+          import Darwin
+          @main enum SyntheticDarwinFDProbe {
+              static func main() throws {
+                  let f = FileManager.default
+                  let root = f.temporaryDirectory.appendingPathComponent("webreader-fc-" + UUID().uuidString)
+                  try f.createDirectory(at: root, withIntermediateDirectories: false)
+                  defer { try? f.removeItem(at: root) }
+                  let parent = Darwin.open(root.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                  guard parent >= 0 else { fatalError("cannot open synthetic parent") }
+                  defer { _ = Darwin.close(parent) }
+                  guard Darwin.mkdirat(parent, "original", mode_t(0o700)) == 0,
+                        Darwin.mkdirat(parent, "occupied", mode_t(0o700)) == 0 else {
+                      fatalError("synthetic mkdirat failed")
+                  }
+                  var original = stat()
+                  guard Darwin.fstatat(parent, "original", &original, AT_SYMLINK_NOFOLLOW) == 0,
+                        (original.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
+                      fatalError("synthetic fstatat failed")
+                  }
+                  // Destination exclusivity is NOT a source inode CAS.
+                  let result = Darwin.renameatx_np(parent, "original", parent, "occupied", UInt32(RENAME_EXCL))
+                  guard result == -1 && errno == EEXIST else {
+                      fatalError("RENAME_EXCL did not reject an occupied destination")
+                  }
+                  var originalAfter = stat(), occupiedAfter = stat()
+                  guard Darwin.fstatat(parent, "original", &originalAfter, AT_SYMLINK_NOFOLLOW) == 0,
+                        Darwin.fstatat(parent, "occupied", &occupiedAfter, AT_SYMLINK_NOFOLLOW) == 0,
+                        original.st_ino == originalAfter.st_ino,
+                        originalAfter.st_ino != occupiedAfter.st_ino,
+                        Darwin.fsync(parent) == 0 else {
+                      fatalError("native metadata unexpectedly changed")
+                  }
+                  print("FC_DARWIN_FD_SYNTHETIC_PASS")
+              }
+          }
+          SWIFT
+          xcrun swiftc -parse-as-library "$RUNNER_TEMP/webreader_fc_darwin_fd.swift" -o "$RUNNER_TEMP/webreader_fc_darwin_fd"
+          "$RUNNER_TEMP/webreader_fc_darwin_fd"
+          IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$IOS_SDK" -parse-as-library -typecheck "$RUNNER_TEMP/webreader_fc_darwin_fd.swift"
+      - name: Production install authority remains disabled (read-only)
+        shell: bash
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+          echo 'FC_NO_IPA_NO_INSTALL_NO_USER_DATA_PASS'

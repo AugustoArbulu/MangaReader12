@@ -1,0 +1,107 @@
+name: WebReader Build65 Offline Chapter Repair QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'ci/test_build65_offline_relocation.py'
+      - 'ci/package_webreader_build65_qa_ipa.sh'
+      - 'ci/test_webreader_build65_qa_ipa.py'
+      - 'ci/check_build65_upgrade_compatibility.py'
+      - 'ci/test_build65_upgrade_compatibility.py'
+      - '.github/workflows/chimera-build65-offline-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build65-offline-experimental
+  cancel-in-progress: false
+
+jobs:
+  signed-manual-qa-only:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+      - name: Select Xcode16.4 iOS12 toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Regression test for legacy download paths (native Swift on host)
+        run: |
+          python3 ci/test_build65_offline_relocation.py
+          python3 ci/test_build65_upgrade_compatibility.py
+      - name: Audit readonly updater and installer security
+        run: |
+          python3 ci/test_app_updates_screen.py
+          python3 ci/test_chimera_build62_install_admission.py
+          python3 ci/test_native_webreader_ipa_stager.py
+      - name: Generate offline app icons and pinned WebP
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          ./ci/prepare_libwebp_ios.sh
+      - name: Compile updated Swift application for ARM64 iOS12
+        run: |
+          xcodebuild \
+            -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Build65" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+          test -f "$RUNNER_TEMP/DerivedData-Build65/Build/Products/Release-iphoneos/MangaReader12.app/MangaReader12"
+      - name: Sign Build65 QA with installed WebReader app identity (no install)
+        run: |
+          bash ci/package_webreader_build65_qa_ipa.sh \
+            "$RUNNER_TEMP/DerivedData-Build65/Build/Products/Release-iphoneos/MangaReader12.app" \
+            WebReader-Build65-iOS12-adhoc.ipa
+      - name: Audit archive, SHA256, entitlement, minimum iOS and ARM64
+        run: |
+          python3 ci/test_webreader_build65_qa_ipa.py \
+            WebReader-Build65-iOS12-adhoc.ipa \
+            --sha256-file WebReader-Build65-iOS12-adhoc.ipa.sha256 \
+            > WebReader-Build65-QA-audit.json
+          cat WebReader-Build65-QA-audit.json
+      - name: Verify exact identity against installed app before publishing
+        id: upgrade_identity
+        run: |
+          python3 ci/check_build65_upgrade_compatibility.py \
+            WebReader-Build65-QA-audit.json \
+            --output WebReader-Build65-identity-gate.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          with open("WebReader-Build65-identity-gate.json") as fh:
+              report = json.load(fh)
+          print("approved=" + str(report["upgradeIdentityMatch"]).lower())
+          PY
+      - name: Publish test IPA only on verified identity match
+        if: steps.upgrade_identity.outputs.approved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build65-OfflineRepair-ManualQA-iOS12
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-Build65-iOS12-adhoc.ipa
+            WebReader-Build65-iOS12-adhoc.ipa.sha256
+            WebReader-Build65-QA-audit.json
+            WebReader-Build65-identity-gate.json
+      - name: Publish only rejection report if identity differs
+        if: steps.upgrade_identity.outputs.approved != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-Build65-BlockedQA
+          if-no-files-found: error
+          path: |
+            WebReader-Build65-QA-audit.json
+            WebReader-Build65-identity-gate.json

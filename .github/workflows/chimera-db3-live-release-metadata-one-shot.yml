@@ -1,0 +1,99 @@
+name: WebReader DB3 one-shot real GitHub HTTPS metadata check (no install)
+
+# Explicitly scoped to this workflow file: a change to other project code
+# cannot re-trigger a live request. Never a cron; no privileged credentials.
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-db3-live-release-metadata-one-shot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  one-shot-macos-swift-urlsession:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS12-capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Compile SAME Swift observer already approved in DB2
+        shell: bash
+        run: |
+          xcrun swiftc -parse-as-library \
+            MangaReader12/Core/WebReaderStrictJSON.swift \
+            MangaReader12/Core/WebReaderUpdateManifestVerifier.swift \
+            MangaReader12/Core/WebReaderUpdateChecker.swift \
+            MangaReader12/Core/WebReaderGitHubReleaseParser.swift \
+            ci/webreader_cx_release_observer.swift \
+            -o "$RUNNER_TEMP/db3-observer"
+          "$RUNNER_TEMP/db3-observer" --selftest \
+            | grep -F 'WR_DB2_SYNTHETIC_PARSER_SELFTEST=PASS'
+
+      - name: Execute ONE real GET via URLSession, fixed GitHub API only
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/db3-observer" --live | tee "$RUNNER_TEMP/db3-observation.txt"
+          python3 - "$RUNNER_TEMP/db3-observation.txt" <<'PY'
+          from pathlib import Path
+          import sys
+          lines = Path(sys.argv[1]).read_text().strip().splitlines()
+          values = {}
+          for item in lines:
+              if "=" not in item:
+                  raise SystemExit("Unexpected observer output")
+              key, value = item.split("=", 1)
+              if key in values:
+                  raise SystemExit("Duplicate observer field")
+              values[key] = value
+          required = {
+              "WR_DB2_SOURCE": "FIXED_PUBLIC_GITHUB_HTTPS_METADATA_ONLY",
+              "WR_DB2_PUBLIC_RELEASE_IS_SIGNED_PUBLISHER": "NO",
+              "WR_DB2_OWNER_TRUST_PROVISIONED": "NO",
+              "WR_DB2_PEER_AUTHENTICATED": "NO",
+              "WR_DB2_IPA_DOWNLOADED": "NO",
+              "WR_DB2_INSTALL_AUTHORIZED": "NO",
+              "WR_DB2_INSTALL_PERFORMED": "NO",
+          }
+          if any(values.get(k) != v for k, v in required.items()):
+              raise SystemExit("DB3 authority / fixed-origin field mismatch")
+          status = values.get("WR_DB2_OBSERVATION", "")
+          # The GitHub API currently has no latest Release. Do not assume
+          # that stays true; accept a coherent parsed metadata status too,
+          # explicitly WITHOUT authenticating a publisher.
+          acceptable = (
+              status == "NO_ACCESSIBLE_LATEST_RELEASE_HTTP_404"
+              or status == "METADATA_NOT_NEWER_UNTRUSTED"
+              or status.startswith("UNTRUSTED_NEWER_METADATA_BUILD_")
+              or (status.startswith("UNEXPECTED_HTTP_")
+                  and status.removeprefix("UNEXPECTED_HTTP_").isdigit())
+              or status == "INVALID_UNTRUSTED_METADATA"
+          )
+          if not acceptable:
+              raise SystemExit("HTTPS not demonstrated: " + status)
+          print("PASS: Swift URLSession received HTTP metadata or HTTP error from fixed endpoint")
+          print("PASS: zero IPA download, zero installer, zero publisher authority")
+          PY
+
+      - name: Confirm no bundled build, IPA, DEB, release or signing key
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          bridge = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          trust = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          checker = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in bridge
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in trust
+          assert "static let productionPublicKeyX963: Data? = nil" in checker
+          assert not list(Path(".").glob("WebReader*.ipa"))
+          assert not list(Path(".").glob("WebReader*.deb"))
+          print("PASS: read-only metadata lab, not an iPad deployment")
+          PY

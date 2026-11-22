@@ -1,0 +1,79 @@
+name: WebReader Build66 Phase I Queued Stream Peer QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build66_scm_rights_handoff_lab.c'
+      - 'ci/build66_queued_peer_report.py'
+      - 'ci/test_build66_queued_peer_report.py'
+      - 'ci/test_build66_queued_scm_rights_lab.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build66_scm_rights_handoff_lab.c'
+      - 'ci/build66_queued_peer_report.py'
+      - 'ci/test_build66_queued_peer_report.py'
+      - 'ci/test_build66_queued_scm_rights_lab.py'
+      - '.github/workflows/chimera-build66-queued-stream.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-parser:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Negative reports and non-authoritative classifications
+        run: python3 -m unittest discover -s ci -p 'test_build66_queued_peer_report.py' -v
+      - name: Check protocol guard and installation disconnect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("ci/build66_scm_rights_handoff_lab.c").read_text()
+          model = Path("ci/build66_queued_peer_report.py").read_text()
+          for required in (
+              "origin_queued(", "receiver_queued(", "serve_queued(",
+              "SCM_RIGHTS", "LOCAL_PEERTOKEN", "csops_audittoken",
+              "send(gate_fd, \"G\"", "NO_SECOND_SAMPLE",
+              "FINAL_INSTALL_AUTHORIZATION=DENIED",
+          ):
+              assert required in source, required
+          for forbidden in (
+              "/usr/bin/appinst", "appinst(", "posix_spawn(", "system(",
+              "execve(", "setuid(", "setgid(", "chown(", "launchctl"
+          ):
+              assert forbidden not in source, forbidden
+          assert "stream_frames_authenticated: bool = False" in model
+          assert "installation_authorized: bool = False" in model
+          print("PASS: timed stream observations cannot authorize install")
+          PY
+
+  native-macos-queued-stream:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select validated native toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Replay fail-closed parser matrix
+        run: python3 -m unittest discover -s ci -p 'test_build66_queued_peer_report.py' -v
+      - name: Compile signed independent peers and test two queued frames
+        run: python3 ci/test_build66_queued_scm_rights_lab.py
+      - name: Confirm existing Phase H temporal experiment still passes
+        run: python3 ci/test_build66_temporal_scm_rights_lab.py
+      - name: Confirm production gates remain disabled
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          echo 'PASS: no production updater installation capability enabled'

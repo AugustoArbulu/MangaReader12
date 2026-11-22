@@ -32,6 +32,12 @@ final class SQLiteDatabase {
         try queue.sync {
             try openIfNeeded()
             try executeUnlocked("PRAGMA foreign_keys = ON;")
+            // Refuse a newer database BEFORE enabling WAL or attempting writes.
+            // Existing schema-v1 databases retain the original open path.
+            let foundVersion = try userVersionUnlocked()
+            guard foundVersion <= Self.currentSchemaVersion else {
+                throw SQLiteDatabaseError.unsupportedSchemaVersion(foundVersion)
+            }
             try executeUnlocked("PRAGMA journal_mode = WAL;")
             try migrateUnlocked()
         }
@@ -66,6 +72,63 @@ final class SQLiteDatabase {
         }
     }
 
+
+    // BEGIN BUILD70_FH_STRICT_READONLY_SQLITE
+    // Independent READONLY handle: no openAndMigrate, SQLITE_OPEN_CREATE,
+    // journal-mode changes, or writes to the library schema. SQLite may
+    // require OS-managed WAL/-shm coordination; this is a logical read-only
+    // guarantee, NOT a byte-for-byte no-filesystem-write attestation.
+    func withStrictReadOnlyConnection<T>(
+        _ read: (OpaquePointer) throws -> T
+    ) throws -> T {
+        var raw: OpaquePointer?
+        let result = sqlite3_open_v2(
+            path, &raw, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil
+        )
+        guard result == SQLITE_OK, let connection = raw else {
+            if let raw = raw { _ = sqlite3_close(raw) }
+            throw SQLiteDatabaseError.openFailed(code: result)
+        }
+        defer { _ = sqlite3_close(connection) }
+
+        guard sqlite3_db_readonly(connection, "main") == 1 else {
+            throw SQLiteDatabaseError.connectionUnavailable
+        }
+        guard sqlite3_exec(connection, "PRAGMA query_only = ON;", nil, nil, nil) == SQLITE_OK,
+              sqlite3_exec(connection, "BEGIN TRANSACTION;", nil, nil, nil) == SQLITE_OK else {
+            throw sqliteError(connection)
+        }
+        var committed = false
+        defer {
+            if !committed {
+                _ = sqlite3_exec(connection, "ROLLBACK;", nil, nil, nil)
+            }
+        }
+
+        let found: Int
+        do {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                connection, "PRAGMA user_version;", -1, &statement, nil
+            ) == SQLITE_OK else { throw sqliteError(connection) }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                throw sqliteError(connection)
+            }
+            found = Int(sqlite3_column_int(statement, 0))
+        }
+        guard found == Self.currentSchemaVersion else {
+            throw SQLiteDatabaseError.auditRequiresSchemaV1(found)
+        }
+        let value = try read(connection)
+        guard sqlite3_exec(connection, "COMMIT;", nil, nil, nil) == SQLITE_OK else {
+            throw sqliteError(connection)
+        }
+        committed = true
+        return value
+    }
+    // END BUILD70_FH_STRICT_READONLY_SQLITE
+
     func close() {
         queue.sync {
             if let handle = handle {
@@ -94,6 +157,9 @@ final class SQLiteDatabase {
 
     private func migrateUnlocked() throws {
         let version = try userVersionUnlocked()
+        guard version <= Self.currentSchemaVersion else {
+            throw SQLiteDatabaseError.unsupportedSchemaVersion(version)
+        }
         guard version < Self.currentSchemaVersion else { return }
 
         try executeUnlocked("BEGIN IMMEDIATE TRANSACTION;")
@@ -265,6 +331,9 @@ final class SQLiteDatabase {
 enum SQLiteDatabaseError: Error, LocalizedError {
     case applicationSupportUnavailable
     case connectionUnavailable
+    case unsupportedSchemaVersion(Int)
+    case auditRequiresSchemaV1(Int)
+    case auditRecordLimitExceeded
     case openFailed(code: Int32)
     case executionFailed(code: Int32, message: String)
 
@@ -274,6 +343,12 @@ enum SQLiteDatabaseError: Error, LocalizedError {
             return "Application Support directory is unavailable."
         case .connectionUnavailable:
             return "SQLite connection is unavailable."
+        case .unsupportedSchemaVersion(let version):
+            return "Library schema version \(version) is newer than this WebReader build. The database was not migrated. Do not restore or downgrade automatically."
+        case .auditRequiresSchemaV1(let version):
+            return "Read-only offline audit requires schema v1; found schema \(version). No migration was performed."
+        case .auditRecordLimitExceeded:
+            return "Read-only offline audit exceeds the maximum number of records."
         case .openFailed(let code):
             return "Could not open SQLite database (code \(code))."
         case .executionFailed(let code, let message):
@@ -2159,6 +2234,97 @@ final class DownloadRepository {
         }
     }
 
+    // Only completed records are rebound, and only after real local page
+    // files were observed. Keep existing update timestamps and read progress.
+    func rebindCompletedPath(
+        sourceID: String,
+        sourceMangaID: String,
+        sourceChapterID: String,
+        currentPath: String
+    ) throws {
+        try database.openAndMigrate()
+        try database.withConnection { handle in
+            let statement = try prepareStatement(
+                """
+                UPDATE downloads SET local_path = ?
+                WHERE state = 'completed'
+                  AND chapter_id IN (
+                    SELECT c.internal_id FROM chapters c
+                    JOIN manga m ON m.internal_id = c.manga_id
+                    WHERE m.source_id = ? AND m.source_manga_id = ?
+                      AND c.source_chapter_id = ?
+                  );
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+            try bindText(currentPath, index: 1, statement: statement)
+            try bindText(sourceID, index: 2, statement: statement)
+            try bindText(sourceMangaID, index: 3, statement: statement)
+            try bindText(sourceChapterID, index: 4, statement: statement)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(handle)
+            }
+        }
+    }
+
+    // BEGIN BUILD70_FH_READONLY_DOWNLOAD_ROWS
+    // Snapshot for the inert FG preview API only. Never call
+    // openAndMigrate() or the normal listDownloads() from this method.
+    // Cap enforced BEFORE constructing an unbounded array.
+    func listDownloadsForAuditReadOnly() throws -> [DownloadListRecord] {
+        return try database.withStrictReadOnlyConnection { handle in
+            let statement = try prepareStatement(
+                """
+                SELECT
+                    m.source_id, m.source_manga_id, m.title, m.cover,
+                    c.source_chapter_id, c.name,
+                    CASE WHEN d.state = 'completed' AND c.downloaded <> 1
+                         THEN 'inconsistent-completed' ELSE d.state END,
+                    d.progress, d.local_path, d.updated_at
+                FROM downloads d
+                JOIN chapters c ON c.internal_id = d.chapter_id
+                JOIN manga m ON m.internal_id = c.manga_id
+                ORDER BY d.updated_at DESC, m.title COLLATE NOCASE ASC
+                LIMIT 5001;
+                """,
+                handle: handle
+            )
+            defer { sqlite3_finalize(statement) }
+            var records: [DownloadListRecord] = []
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+                guard step == SQLITE_ROW,
+                      let sourceID = columnText(statement, index: 0),
+                      let sourceMangaID = columnText(statement, index: 1),
+                      let mangaTitle = columnText(statement, index: 2),
+                      let sourceChapterID = columnText(statement, index: 4),
+                      let chapterName = columnText(statement, index: 5),
+                      let state = columnText(statement, index: 6) else {
+                    throw sqliteError(handle)
+                }
+                guard records.count < 5_000 else {
+                    throw SQLiteDatabaseError.auditRecordLimitExceeded
+                }
+                records.append(DownloadListRecord(
+                    sourceID: sourceID,
+                    sourceMangaID: sourceMangaID,
+                    mangaTitle: mangaTitle,
+                    cover: columnText(statement, index: 3),
+                    sourceChapterID: sourceChapterID,
+                    chapterName: chapterName,
+                    state: state,
+                    progress: sqlite3_column_double(statement, 7),
+                    localPath: columnText(statement, index: 8),
+                    updatedAt: sqlite3_column_double(statement, 9)
+                ))
+            }
+            return records
+        }
+    }
+    // END BUILD70_FH_READONLY_DOWNLOAD_ROWS
+
     func listDownloads() throws -> [DownloadListRecord] {
         try database.openAndMigrate()
 
@@ -2238,15 +2404,45 @@ final class DownloadRepository {
     }
 
     func removeMissingFiles(fileManager: FileManager = .default) throws -> Int {
+        try WebReaderOfflineDeletionV2ShadowGate.rejectLegacyDestructionWhenPreviewEnabled()
         let records = try listDownloads()
+        guard let support = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first else { return 0 }
         var removed = 0
-
         for record in records {
-            guard let path = record.localPath,
-                  !fileManager.fileExists(atPath: path) else {
+            // A path collision must never silently rebind a completed
+            // record to another chapter's files or remove its metadata.
+            // Leave both records untouched for owner review.
+            if WebReaderOfflineCanonicalOwnership.collides(
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID,
+                recorded: records
+            ) { continue }
+            let expected = OfflineDownloadPath.chapterDirectory(
+                applicationSupport: support,
+                sourceID: record.sourceID,
+                mangaID: record.sourceMangaID,
+                chapterID: record.sourceChapterID
+            )
+            if record.state == "completed",
+               let contents = try? fileManager.contentsOfDirectory(atPath: expected.path),
+               contents.contains(where: { $0.hasPrefix("page-") && $0.hasSuffix(".bin") }) {
+                if record.localPath != expected.path {
+                    try rebindCompletedPath(
+                        sourceID: record.sourceID,
+                        sourceMangaID: record.sourceMangaID,
+                        sourceChapterID: record.sourceChapterID,
+                        currentPath: expected.path
+                    )
+                }
                 continue
             }
-
+            // An old container UUID is not proof that files are gone.
+            // Preserve ambiguous legacy rows instead of deleting downloads.
+            guard record.localPath == expected.path else { continue }
+            guard !fileManager.fileExists(atPath: expected.path) else { continue }
             try remove(
                 sourceID: record.sourceID,
                 sourceMangaID: record.sourceMangaID,
@@ -2254,7 +2450,6 @@ final class DownloadRepository {
             )
             removed += 1
         }
-
         return removed
     }
 
@@ -2266,50 +2461,74 @@ final class DownloadRepository {
         try database.openAndMigrate()
 
         try database.withConnection { handle in
-            let find = try prepareStatement(
-                """
-                SELECT c.internal_id
-                FROM chapters c
-                JOIN manga m ON m.internal_id = c.manga_id
-                WHERE m.source_id = ?
-                  AND m.source_manga_id = ?
-                  AND c.source_chapter_id = ?
-                LIMIT 1;
-                """,
-                handle: handle
-            )
-            defer { sqlite3_finalize(find) }
+            // Keep the download row and chapters.downloaded flag in the
+            // same SQLite transaction. If either statement fails, both
+            // changes roll back; no half-retired metadata survives.
+            try executeSQLite("BEGIN IMMEDIATE TRANSACTION;", handle: handle)
+            do {
+                var selectedChapterID: Int64?
+                do {
+                    let find = try prepareStatement(
+                        """
+                        SELECT c.internal_id
+                        FROM chapters c
+                        JOIN manga m ON m.internal_id = c.manga_id
+                        WHERE m.source_id = ?
+                          AND m.source_manga_id = ?
+                          AND c.source_chapter_id = ?
+                        LIMIT 1;
+                        """,
+                        handle: handle
+                    )
+                    defer { sqlite3_finalize(find) }
 
-            try bindText(sourceID, index: 1, statement: find)
-            try bindText(sourceMangaID, index: 2, statement: find)
-            try bindText(sourceChapterID, index: 3, statement: find)
+                    try bindText(sourceID, index: 1, statement: find)
+                    try bindText(sourceMangaID, index: 2, statement: find)
+                    try bindText(sourceChapterID, index: 3, statement: find)
+                    let step = sqlite3_step(find)
+                    if step == SQLITE_ROW {
+                        selectedChapterID = sqlite3_column_int64(find, 0)
+                    } else if step != SQLITE_DONE {
+                        throw sqliteError(handle)
+                    }
+                }
 
-            guard sqlite3_step(find) == SQLITE_ROW else { return }
-            let chapterID = sqlite3_column_int64(find, 0)
+                if let chapterID = selectedChapterID {
+                    // Each statement is finalized before COMMIT rather than
+                    // leaving an active SELECT cursor open during commit.
+                    do {
+                        let delete = try prepareStatement(
+                            "DELETE FROM downloads WHERE chapter_id = ?;",
+                            handle: handle
+                        )
+                        defer { sqlite3_finalize(delete) }
+                        guard sqlite3_bind_int64(delete, 1, chapterID) == SQLITE_OK,
+                              sqlite3_step(delete) == SQLITE_DONE else {
+                            throw sqliteError(handle)
+                        }
+                    }
 
-            let delete = try prepareStatement(
-                "DELETE FROM downloads WHERE chapter_id = ?;",
-                handle: handle
-            )
-            defer { sqlite3_finalize(delete) }
+                    do {
+                        let mark = try prepareStatement(
+                            "UPDATE chapters SET downloaded = 0 WHERE internal_id = ?;",
+                            handle: handle
+                        )
+                        defer { sqlite3_finalize(mark) }
+                        guard sqlite3_bind_int64(mark, 1, chapterID) == SQLITE_OK,
+                              sqlite3_step(mark) == SQLITE_DONE else {
+                            throw sqliteError(handle)
+                        }
+                    }
+                }
 
-            guard sqlite3_bind_int64(delete, 1, chapterID) == SQLITE_OK,
-                  sqlite3_step(delete) == SQLITE_DONE else {
-                throw sqliteError(handle)
-            }
-
-            let mark = try prepareStatement(
-                "UPDATE chapters SET downloaded = 0 WHERE internal_id = ?;",
-                handle: handle
-            )
-            defer { sqlite3_finalize(mark) }
-
-            guard sqlite3_bind_int64(mark, 1, chapterID) == SQLITE_OK,
-                  sqlite3_step(mark) == SQLITE_DONE else {
-                throw sqliteError(handle)
+                try executeSQLite("COMMIT;", handle: handle)
+            } catch {
+                try? executeSQLite("ROLLBACK;", handle: handle)
+                throw error
             }
         }
     }
+
 }
 
 private func ensureReadingRows(

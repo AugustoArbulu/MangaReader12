@@ -1,0 +1,100 @@
+name: WebReader DA CX sandbox check-only QA (separate iOS12 IPA)
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-da-cx-sandbox-qa.yml'
+      - 'ci/chimera_cx_app_probe/**'
+      - 'ci/build_chimera_cx_sandbox_qa_ipa.sh'
+      - 'ci/test_chimera_cx_sandbox_client.py'
+      - 'ci/test_chimera_cx_sandbox_ipa.py'
+      - 'ci/webreader_chimera_checkonly_service.c'
+      - 'ci/build70_cw_checkonly_core.c'
+      - 'ci/build70_cw_shared_dispatch.c'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-da-transport:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check actual DA C transport against CX and forged local peers
+        run: |
+          python3 -m unittest discover -s ci \
+            -p 'test_chimera_cx_sandbox_client.py' -v
+      - name: Assert app and WebReader installation hard stops
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          client = Path("ci/chimera_cx_app_probe/cx_client.c").read_text()
+          app = Path("ci/chimera_cx_app_probe/main.m").read_text()
+          bridge = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          checker = Path("MangaReader12/Core/WebReaderUpdateChecker.swift").read_text()
+          trust = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          assert 'static let liveInstallationEnabled = false' in bridge
+          assert 'static let productionPublicKeyX963: Data? = nil' in checker
+          assert 'static let independentlyProvisionedSPKISHA256: String? = nil' in trust
+          assert 'WR_DA_PORT 38973u' in client
+          assert 'WRCHK2' in client
+          assert 'get_global_queue' in app
+          assert 'CFBundle' not in client
+          for forbidden in ("posix_spawn(", "objc_msgSend(", "installApplication:",
+                            "WRINST1", "NSURLSession", "sqlite3_open"):
+              assert forbidden not in client and forbidden not in app, forbidden
+          print("PASS isolated DA app does not acquire install authority")
+          PY
+
+  build-ad-hoc-da-ipa:
+    runs-on: macos-15
+    timeout-minutes: 20
+    needs: host-da-transport
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select iOS 12-capable Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Build signed independent iOS12 sandbox QA app
+        run: |
+          bash ci/build_chimera_cx_sandbox_qa_ipa.sh
+          python3 ci/test_chimera_cx_sandbox_ipa.py
+      - name: Inspect Mach-O minimum OS and absence of install/system APIs
+        shell: bash
+        run: |
+          TEMP="$(mktemp -d)"
+          trap 'rm -rf "$TEMP"' EXIT
+          ditto -x -k WebReader-CX-Sandbox-DA-iOS12-adhoc.ipa "$TEMP"
+          BINARY="$TEMP/Payload/WRCXSandbox.app/WRCXSandbox"
+          xcrun otool -l "$BINARY" > "$TEMP/load.txt"
+          grep -Eq 'minos 12.0|version 12.0' "$TEMP/load.txt"
+          if grep -q LC_DYLD_CHAINED_FIXUPS "$TEMP/load.txt"; then exit 1; fi
+          xcrun nm -u "$BINARY" > "$TEMP/symbols.txt"
+          python3 - "$TEMP/symbols.txt" <<'PY'
+          from pathlib import Path
+          import sys
+          syms = Path(sys.argv[1]).read_text()
+          for forbidden in ("_posix_spawn", "_fork", "_execve", "_system",
+                            "_dlopen", "_objc_msgSendSuper2_stret",
+                            "_LSApplicationWorkspace", "_sqlite3_open"):
+              assert forbidden not in syms, forbidden
+          print("PASS ARM64 iOS12, no process installer or data access")
+          PY
+      - name: Upload separate opt-in DA sandbox IPA and digest (not a Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-DA-CX-Sandbox-iOS12-QA
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-CX-Sandbox-DA-iOS12-adhoc.ipa
+            WebReader-CX-Sandbox-DA-iOS12-adhoc.ipa.sha256

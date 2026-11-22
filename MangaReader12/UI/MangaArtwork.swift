@@ -159,7 +159,10 @@ enum WebPImageDecoder {
         return UIImage(cgImage: cgImage)
     }
 
-    static func image(from data: Data, maxPixels: Int = maximumReaderPixels) -> UIImage? {
+    static func image(
+        from data: Data, maxPixels: Int = maximumReaderPixels,
+        limitTallStrips: Bool = false
+    ) -> UIImage? {
         guard isWebP(data) else { return UIImage(data: data) }
         guard data.count >= 20, data.count <= maxInputBytes,
               maxPixels >= 1 else { return nil }
@@ -179,13 +182,17 @@ enum WebPImageDecoder {
         // Decode oversized public pages at a bounded resolution rather than
         // rejecting the entire chapter. Never allocate source-size RGBA first.
         guard w <= 128_000_000 / h else { return nil }
+        let limits = ImageCompatibilityGeometry.decodeLimits(
+            width: w, height: h, maxPixels: maxPixels,
+            maxDimension: 32_768, limitTallStrips: limitTallStrips
+        )
         guard let scaled = ImageCompatibilityGeometry.scaled(
-            width: w, height: h, maxPixels: maxPixels, maxDimension: 32_768
+            width: w, height: h, maxPixels: limits.pixels, maxDimension: limits.dimension
         ) else { return nil }
         let scaledWidth = scaled.0, scaledHeight = scaled.1
         let stride = scaledWidth * 4
         let totalBytes = stride * scaledHeight
-        guard totalBytes <= maxPixels * 4 else { return nil }
+        guard totalBytes <= limits.pixels * 4 else { return nil }
         let needsScaling = scaledWidth != w || scaledHeight != h
 
         // Explicit BGRA output avoids libwebp's implicit large allocations.
@@ -243,6 +250,16 @@ enum WebPImageDecoder {
 // Pure math shared by WebP and ImageIO; independently compiled on host Swift.
 // Reject impossible sizes before allocating any decoded pixel buffers.
 enum ImageCompatibilityGeometry {
+    static func decodeLimits(
+        width: Int, height: Int, maxPixels: Int, maxDimension: Int,
+        limitTallStrips: Bool
+    ) -> (pixels: Int, dimension: Int) {
+        // Multiple visible strips can coexist even when NSCache evicts them.
+        guard limitTallStrips, width > 0, Double(height) / Double(width) >= 4
+        else { return (maxPixels, maxDimension) }
+        return (min(maxPixels, 8_000_000), min(maxDimension, 12_288))
+    }
+
     static func scaled(
         width: Int, height: Int, maxPixels: Int, maxDimension: Int
     ) -> (Int, Int)? {
@@ -285,13 +302,14 @@ enum ImageCompatibilityDecoder {
 
     static func page(_ data: Data) -> UIImage? {
         if WebPImageDecoder.isWebP(data) {
-            return WebPImageDecoder.image(from: data)
+            return WebPImageDecoder.image(from: data, limitTallStrips: true)
         }
-        return native(data, maxPixels: readerPixelBudget, maxDimension: 32_768)
+        return native(data, maxPixels: readerPixelBudget, maxDimension: 32_768,
+                      limitTallStrips: true)
     }
 
     private static func native(
-        _ data: Data, maxPixels: Int, maxDimension: Int
+        _ data: Data, maxPixels: Int, maxDimension: Int, limitTallStrips: Bool = false
     ) -> UIImage? {
         guard !data.isEmpty, data.count <= maximumEncodedBytes else { return nil }
         // PDF, AVIF, challenges and arbitrary HTML never fall back to
@@ -305,11 +323,16 @@ enum ImageCompatibilityDecoder {
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
                   as? [String: Any],
               let width = properties[kCGImagePropertyPixelWidth as String] as? NSNumber,
-              let height = properties[kCGImagePropertyPixelHeight as String] as? NSNumber,
-              let size = ImageCompatibilityGeometry.scaled(
-                width: width.intValue, height: height.intValue,
-                maxPixels: maxPixels, maxDimension: maxDimension
-              ) else { return nil }
+              let height = properties[kCGImagePropertyPixelHeight as String] as? NSNumber
+        else { return nil }
+        let limits = ImageCompatibilityGeometry.decodeLimits(
+            width: width.intValue, height: height.intValue, maxPixels: maxPixels,
+            maxDimension: maxDimension, limitTallStrips: limitTallStrips
+        )
+        guard let size = ImageCompatibilityGeometry.scaled(
+            width: width.intValue, height: height.intValue,
+            maxPixels: limits.pixels, maxDimension: limits.dimension
+        ) else { return nil }
         let needsScaling = size.0 != width.intValue || size.1 != height.intValue
         let bitmap: CGImage?
         if needsScaling {
@@ -330,7 +353,8 @@ enum ImageCompatibilityDecoder {
             )
         }
         guard let image = bitmap, image.width > 0, image.height > 0,
-              image.width <= maxPixels / image.height else { return nil }
+              image.width <= limits.pixels / image.height,
+              max(image.width, image.height) <= limits.dimension else { return nil }
         return UIImage(cgImage: image)
     }
 }

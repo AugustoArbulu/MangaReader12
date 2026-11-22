@@ -1,0 +1,84 @@
+name: WebReader DB4 iOS12 sandbox HTTPS header-only QA (separate IPA)
+
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-db4-ios12-https-qa.yml'
+      - 'ci/chimera_db4_https_app_probe/**'
+      - 'ci/build_chimera_db4_https_qa_ipa.sh'
+      - 'ci/test_chimera_db4_https_qa_ipa.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-scope-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject arbitrary host, IPA downloads, installer or unsafe entitlements
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          src = Path("ci/chimera_db4_https_app_probe/main.m").read_text()
+          ent = plistlib.loads(Path("ci/chimera_db4_https_app_probe/qa.entitlements").read_bytes())
+          assert ent == {"application-identifier":
+              "WRTEST0001.com.example.WebReaderDB4HTTPSProbe"}
+          assert src.count("https://api.github.com/repos/AugustoArbulu/MangaReader12/releases/latest") == 1
+          assert "URLSessionResponseCancel" in src
+          assert "completionHandler(nil)" in src
+          assert "WR_DB4_INSTALL=NEVER" in src
+          assert "@selector(runProbe)" in src
+          assert "UIBackgroundModes" not in src
+          for token in ["posix_spawn(", "installApplication:", "/usr/bin/appinst",
+                        "WRINST1", "downloadTask", "sqlite3_open", "createFileAtPath",
+                        "NSURLSessionDownloadTask", "writeToFile:", "system("]:
+              assert token not in src, token
+          bridge = Path("MangaReader12/Core/WebReaderAppinstSocket.swift").read_text()
+          publisher = Path("MangaReader12/Core/WebReaderProductionPublisherTrust.swift").read_text()
+          assert "static let liveInstallationEnabled = false" in bridge
+          assert "static let independentlyProvisionedSPKISHA256: String? = nil" in publisher
+          print("PASS DB4: read-only, one fixed GitHub endpoint and no install")
+          PY
+
+  build-ios12-qa:
+    needs: static-scope-lab
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build signed isolated DB4 app and audit contents
+        run: |
+          bash ci/build_chimera_db4_https_qa_ipa.sh
+          python3 ci/test_chimera_db4_https_qa_ipa.py
+
+      - name: Check minimum iOS12 and no chained fixups
+        shell: bash
+        run: |
+          TEMP="$(mktemp -d)"
+          trap 'rm -rf "$TEMP"' EXIT
+          ditto -x -k WebReader-DB4-HTTPS-Only-iOS12-adhoc.ipa "$TEMP"
+          EXEC="$TEMP/Payload/WRDB4HTTPS.app/WRDB4HTTPS"
+          xcrun otool -l "$EXEC" > "$TEMP/load.txt"
+          grep -Eq 'minos 12.0|version 12.0' "$TEMP/load.txt"
+          if grep -q LC_DYLD_CHAINED_FIXUPS "$TEMP/load.txt"; then exit 1; fi
+
+      - name: Publish isolated optional QA artifact, never GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebReader-DB4-HTTPS-Only-iOS12-QA
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            WebReader-DB4-HTTPS-Only-iOS12-adhoc.ipa
+            WebReader-DB4-HTTPS-Only-iOS12-adhoc.ipa.sha256

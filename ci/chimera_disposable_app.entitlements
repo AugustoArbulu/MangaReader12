@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Lab-only synthetic App ID prefix for the two isolated throwaway apps.
+         Not an Apple Developer Team ID or production provisioning profile.
+         The exact same string must be used for v1 and v2 to test upgrades.
+         AppSync on the personal jailbroken iOS12 device may allow ad hoc
+         code signatures. Do not reuse these entitlements for WebReader. -->
+    <key>application-identifier</key>
+    <string>WRQA000001.com.example.WebReaderAppinstDisposableTest</string>
+</dict>
+</plist>

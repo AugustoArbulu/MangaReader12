@@ -1,0 +1,38 @@
+name: WebReader Build70 - EX synthetic SQLite and Swift journal QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build70_ev_recoverable_quarantine_lab.py'
+      - 'ci/test_build70_ev_recoverable_quarantine.py'
+      - 'ci/build70_ev_fd_quarantine.swift'
+      - 'ci/test_build70_ev_native_swift_fd.py'
+      - 'ci/build70_ex_persistent_journal_bridge.py'
+      - 'ci/test_build70_ex_persistent_journal_bridge.py'
+      - '.github/workflows/webreader-build70-phase-ex-journal-native-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-fd-and-sqlite:
+    name: EX synthetic (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Swift available
+        run: swiftc --version
+      - name: EV journal reference QA
+        run: python3 ci/test_build70_ev_recoverable_quarantine.py -v
+      - name: EW native Swift fd QA
+        run: python3 ci/test_build70_ev_native_swift_fd.py -v
+      - name: EX journal Swift bridge QA (no real app data)
+        run: python3 ci/test_build70_ex_persistent_journal_bridge.py -v

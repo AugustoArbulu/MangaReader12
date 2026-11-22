@@ -1,0 +1,75 @@
+name: WebReader Build70 FE - EV-FD full synthetic regression (no app changes)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'ci/labs/webreader-ev-fd/**'
+      - '.github/workflows/chimera-build70-phase-fe-evfd-full-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build70-fe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ci/labs/webreader-ev-fd
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONWARNINGS: 'ignore::ResourceWarning'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm lab checksums before running any tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root = Path('.').resolve()
+          count = 0
+          for line in Path('SHA256SUMS').read_text().splitlines():
+              digest, name = line.split('  ', 1)
+              path = (root / name).resolve()
+              assert path.is_relative_to(root), name
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, name
+              count += 1
+          assert count == 40, count
+          print('FE_CHECKSUMS_VALIDATED', count)
+          PY
+      - name: Run every EV-FD Python + compiled Swift synthetic test
+        shell: bash
+        run: |
+          swiftc --version
+          python -m unittest discover -s ci -p 'test_build70_*.py' -v
+      - name: macOS iOS12 source typecheck only (no IPA)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcodebuild -version
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck ci/build70_ev_fd_quarantine.swift
+      - name: Confirm production installer and trust roots remain disabled
+        shell: bash
+        run: |
+          test ! -e ../../../ci/build71_owner_approved_qa_trigger.txt
+          grep -Fq 'static let liveInstallationEnabled = false' ../../../MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' ../../../MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' ../../../MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+      - name: Ensure tests did not modify tracked files
+        working-directory: .
+        shell: bash
+        run: git diff --exit-code -- .

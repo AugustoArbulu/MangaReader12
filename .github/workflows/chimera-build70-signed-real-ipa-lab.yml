@@ -1,0 +1,93 @@
+name: WebReader Build70 CE — Real IPA Signed-v2 Cross-Language Lab, No Install
+
+# One-time laboratory verification of the ALREADY CREATED Build70 QA IPA
+# (GitHub Actions run 42705903886, artifact 13713972242). We use a TEMPORARY
+# local signing key only; this is NOT the owner's production publisher key.
+# The signed manifest is NEVER uploaded/published or enrolled in iOS.
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - '.github/workflows/chimera-build70-signed-real-ipa-lab.yml'
+      - 'ci/test_build70_real_ipa_signed_production_v2_lab.py'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: wr-build70-ce-real-ipa-signed-v2-lab
+  cancel-in-progress: true
+
+jobs:
+  real-signed-ipa-laboratory:
+    runs-on: macos-15
+    timeout-minutes: 28
+    steps:
+      - name: Checkout reviewed development branch
+        uses: actions/checkout@v4
+
+      - name: Assert Build70 source/protocol never enables automatic installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/feat/chimera-updater-phase1-protocol-audit"
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          grep -Fq 'static let productionTrustGeneration = 0' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test "$(grep -c 'CURRENT_PROJECT_VERSION = 56;' MangaReader12.xcodeproj/project.pbxproj)" -eq 2
+          echo 'PASS: installed app protection and production trust unprovisioned'
+
+      - name: Download IMMUTABLE existing Build70 owner-QA artifact (not Release)
+        uses: actions/download-artifact@v4
+        with:
+          name: WebReader-Build70-OwnerApproved-iOS12-QA-Filza
+          run-id: 42705903886
+          repository: AugustoArbulu/MangaReader12
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/wr70-ce-real-qa
+
+      - name: Select native Apple iOS 12 audit toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          swiftc --version
+          openssl version
+
+      - name: Verify exact external artifact SHA and owner-QA code signature
+        shell: bash
+        env:
+          QA_FOLDER: ${{ runner.temp }}/wr70-ce-real-qa
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root = Path(os.environ["QA_FOLDER"])
+          name = "WebReader-Build70-iOS12-adhoc.ipa"
+          original = root/name
+          sidecar = root/(name + ".sha256")
+          if not original.is_file() or original.is_symlink():
+              raise SystemExit("BLOCKED: expected regular Build70 QA IPA is unavailable")
+          got = hashlib.sha256(original.read_bytes()).hexdigest()
+          expected = "526291cc77203c3881e5f3f1c75904e8863dbde3b3bd9df7e1185c3229fb4fc1"
+          if got != expected or sidecar.read_text("ascii") != expected + "  " + name + "\n":
+              raise SystemExit("BLOCKED: Build70 download differs from owner-reviewed artifact")
+          source = json.loads((root/"WebReader-Build70-source-provenance.json").read_text())
+          if source["sourceCommit"] != "ae931abb725977a417a1fcb20b79c82af825dd55" or source["sha256"] != expected:
+              raise SystemExit("BLOCKED: Build70 artifact provenance mismatch")
+          print("PASS: immutable QA artifact SHA-256 and originating commit")
+          PY
+
+      - name: Create disposable P-256 key, sign real Build70 production-format v2 manifest and check native Swift
+        shell: bash
+        env:
+          QA_FOLDER: ${{ runner.temp }}/wr70-ce-real-qa
+        run: |
+          set -euo pipefail
+          python3 ci/test_build70_real_ipa_signed_production_v2_lab.py \
+            --ipa "$QA_FOLDER/WebReader-Build70-iOS12-adhoc.ipa" \
+            --checksum "$QA_FOLDER/WebReader-Build70-iOS12-adhoc.ipa.sha256"
+          echo 'PASS: real Build70 ZIP, Swift signed-v2 verifier and hostile inputs tested; NO installation'

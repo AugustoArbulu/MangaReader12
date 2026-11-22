@@ -25,7 +25,11 @@ assert project.count('PRODUCT_NAME = "$(TARGET_NAME)";') == 2
 versions = re.findall(r"CURRENT_PROJECT_VERSION = (\d+);", project)
 assert len(versions) == 2 and versions[0] == versions[1] and int(versions[0]) >= 54
 assert 'cell.textLabel?.text = "WebReader"' in ui
-assert f'"Build {versions[0]} • compatível com iOS 12.0"' in ui
+# The packaged QA app can be build 65/66 even though the source project
+# remains at 56. The Settings label must read Info.plist dynamically.
+assert 'forInfoDictionaryKey: "CFBundleVersion"' in ui
+assert 'cell.detailTextLabel?.text = "Build " + buildVersion +' in ui
+assert '"Build 56 • compatível com iOS 12.0"' not in ui
 assert 'title: "Repositório demo do WebReader"' in ui
 assert "WebReader-iOS12-unsigned.ipa" in workflow
 assert "WebReader-unsigned.ipa" in packager

@@ -1,0 +1,269 @@
+name: WebReader Build66 IPA Preflight Security QA
+on:
+  push:
+    branches:
+      - feat/chimera-updater-phase1-protocol-audit
+    paths:
+      - 'ci/build66_ipa_preflight.py'
+      - 'ci/test_build66_ipa_preflight.py'
+      - 'ci/build66_signed_release_preflight.py'
+      - 'ci/test_build66_signed_release_preflight.py'
+      - 'ci/build66_code_signature_gate.py'
+      - 'ci/test_build66_code_signature_gate.py'
+      - 'ci/build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_signed_release_chain.py'
+      - 'ci/build66_durable_replay_journal.py'
+      - 'ci/test_build66_durable_replay_journal.py'
+      - 'ci/build66_release_key_pinning_gate.py'
+      - 'ci/test_build66_release_key_pinning_gate.py'
+      - 'ci/build66_durable_one_shot_lab.py'
+      - 'ci/test_build66_durable_signed_release_chain.py'
+      - 'ci/build66_peer_evidence_policy.py'
+      - 'ci/test_build66_peer_evidence_policy.py'
+      - 'ci/build66_release_key_rotation_lab.py'
+      - 'ci/test_build66_release_key_rotation_lab.py'
+      - 'ci/build66_peer_capability_report.py'
+      - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/build66_requester_blind_check_policy.py'
+      - 'ci/test_build66_requester_blind_check_policy.py'
+      - 'ci/build66_ios12_physical_capability_policy.py'
+      - 'ci/test_build66_ios12_physical_capability_policy.py'
+      - 'ci/build66_manual_review_receipt.py'
+      - 'ci/test_build66_manual_review_receipt.py'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_public_github_release_parser.py'
+      - 'ci/test_chimera_build62_install_admission.py'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/test_native_webreader_update_checker.py'
+      - 'ci/test_chimera_peer_probe63.py'
+      - 'ci/webreader_update_manifest.py'
+      - 'ci/test_webreader_update_manifest.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_prepare_signed_webreader_update.py'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'ci/validate_webreader_ipa.py'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - 'ci/build66_ipa_preflight.py'
+      - 'ci/test_build66_ipa_preflight.py'
+      - 'ci/build66_signed_release_preflight.py'
+      - 'ci/test_build66_signed_release_preflight.py'
+      - 'ci/build66_code_signature_gate.py'
+      - 'ci/test_build66_code_signature_gate.py'
+      - 'ci/build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_diagnostic.py'
+      - 'ci/test_build66_one_shot_signed_release_chain.py'
+      - 'ci/build66_durable_replay_journal.py'
+      - 'ci/test_build66_durable_replay_journal.py'
+      - 'ci/build66_release_key_pinning_gate.py'
+      - 'ci/test_build66_release_key_pinning_gate.py'
+      - 'ci/build66_durable_one_shot_lab.py'
+      - 'ci/test_build66_durable_signed_release_chain.py'
+      - 'ci/build66_peer_evidence_policy.py'
+      - 'ci/test_build66_peer_evidence_policy.py'
+      - 'ci/build66_release_key_rotation_lab.py'
+      - 'ci/test_build66_release_key_rotation_lab.py'
+      - 'ci/build66_peer_capability_report.py'
+      - 'ci/test_build66_peer_capability_report.py'
+      - 'ci/build66_requester_blind_check_policy.py'
+      - 'ci/test_build66_requester_blind_check_policy.py'
+      - 'ci/build66_ios12_physical_capability_policy.py'
+      - 'ci/test_build66_ios12_physical_capability_policy.py'
+      - 'ci/build66_manual_review_receipt.py'
+      - 'ci/test_build66_manual_review_receipt.py'
+      - 'MangaReader12/Core/WebReaderGitHubReleaseParser.swift'
+      - 'MangaReader12/Core/WebReaderUpdateChecker.swift'
+      - 'MangaReader12/Core/WebReaderIPAStager.swift'
+      - 'ci/test_native_webreader_ipa_stager.py'
+      - 'ci/test_public_github_release_parser.py'
+      - 'ci/test_chimera_build62_install_admission.py'
+      - 'MangaReader12/UI/WebReaderAppUpdatesViewController.swift'
+      - 'ci/test_native_webreader_update_checker.py'
+      - 'ci/test_chimera_peer_probe63.py'
+      - 'ci/webreader_update_manifest.py'
+      - 'ci/test_webreader_update_manifest.py'
+      - 'ci/test_native_webreader_update_verifier.py'
+      - 'ci/prepare_signed_webreader_update.py'
+      - 'ci/test_prepare_signed_webreader_update.py'
+      - 'MangaReader12/Core/WebReaderUpdateManifestVerifier.swift'
+      - 'ci/validate_webreader_ipa.py'
+      - '.github/workflows/chimera-build66-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wr-build66-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-preflight-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout experimental code
+        uses: actions/checkout@v4
+      - name: Run synthetic IPA negative tests
+        run: python3 -W ignore::UserWarning -m unittest discover -s ci -p 'test_build66_ipa_preflight.py' -v
+      - name: Verify ECDSA signed manifest binds to exact IPA bytes and identity
+        run: |
+          python3 ci/test_webreader_update_manifest.py
+          python3 ci/test_prepare_signed_webreader_update.py
+          python3 -m unittest discover -s ci -p 'test_build66_signed_release_preflight.py' -v
+      - name: Check one-shot replay and expiry laboratory (never installs)
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_one_shot_diagnostic.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_one_shot_signed_release_chain.py' -v
+      - name: Assert one-shot diagnostic has no privileged API or network calls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("ci/build66_one_shot_diagnostic.py").read_text()
+          assert "installation_authorized: bool = False" in source
+          assert "installation_performed: bool = False" in source
+          assert "peer_identity_authenticated: bool = False" in source
+          for forbidden in ("import subprocess", "import socket", "socket.socket(", "os.system(", "posix_spawn(", "urllib.request", "appinst("):
+              assert forbidden not in source, forbidden
+          print("PASS: one-shot policy is nonprivileged offline preflight only")
+          PY
+      - name: Enforce durable replay, independent release key pin and crash tests
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_durable_replay_journal.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_pinning_gate.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_durable_signed_release_chain.py' -v
+      - name: Verify persistent laboratory remains nonprivileged and host-only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a = Path("ci/build66_durable_replay_journal.py").read_text()
+          b = Path("ci/build66_release_key_pinning_gate.py").read_text()
+          c = Path("ci/build66_durable_one_shot_lab.py").read_text()
+          assert "os.O_EXCL" in a and "os.fsync(directory_fd)" in a
+          assert "trusted_spki_sha256" in c and "verify_independently_pinned_v2" in c
+          assert '"installation_authorized": False' in b
+          assert "installation_authorized" not in c or "DiagnosticResult" in c
+          for source in (a, b, c):
+              for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request"):
+                  assert forbidden not in source, forbidden
+          print("PASS: phase-B key trust and durable replay are offline-only")
+          PY
+      - name: Audit unauthenticated peer evidence and dual-key rotation policy
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_peer_evidence_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_release_key_rotation_lab.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_peer_capability_report.py' -v
+      - name: Enforce no independent peer authentication or key activation claim
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          peer = Path('ci/build66_peer_evidence_policy.py').read_text()
+          rotation = Path('ci/build66_release_key_rotation_lab.py').read_text()
+          assert 'requester_authenticated: bool = False' in peer
+          assert 'running_code_identity_verified: bool = False' in peer
+          assert 'installation_authorized: bool = False' in peer
+          assert '"production_key_rotated": False' in rotation
+          assert '"installation_authorized": False' in rotation
+          for code in (peer, rotation):
+              for forbidden in ('appinst(', 'posix_spawn(', 'socket.socket(', 'import socket', 'urllib.request'):
+                  assert forbidden not in code, forbidden
+          print('PASS: peer claims and key-rotation candidates never authorize install')
+          PY
+      - name: Enforce untrusted client can only request a signed release check
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_requester_blind_check_policy.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path("ci/build66_requester_blind_check_policy.py").read_text()
+          assert 'REQUEST = b"WR-CHECK-APPROVED-RELEASE-ONLY-V1\\n"' in code
+          assert "installation_authorized: bool = False" in code
+          assert "user_install_consent_verified: bool = False" in code
+          assert "verify_independently_pinned_v2(" in code
+          for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request"):
+              assert forbidden not in code, forbidden
+          print("PASS: client cannot select arbitrary IPA or request installation")
+          PY
+      - name: Evaluate actual Chimera physical report and signed manual-review fallback
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_ios12_physical_capability_policy.py' -v
+          python3 -m unittest discover -s ci -p 'test_build66_manual_review_receipt.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              Path("ci/build66_ios12_physical_capability_policy.py"),
+              Path("ci/build66_manual_review_receipt.py"),
+          ]
+          for file in files:
+              src = file.read_text()
+              assert "installation_authorized: bool = False" in src
+              assert "installation_performed: bool = False" in src
+              for forbidden in ("appinst(", "posix_spawn(", "socket.socket(", "import socket", "urllib.request", "os.system("):
+                  assert forbidden not in src, (file, forbidden)
+          swift = Path("MangaReader12/Core/WebReaderGitHubReleaseParser.swift").read_text()
+          assert "allowedAssetNames" in swift
+          assert "selected.count == 1" in swift
+          print("PASS: physical iOS12 observation cannot authorize; manual workflow keeps installed data")
+          PY
+      - name: Ensure live installation remains disabled
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'DispatchQueue.main.async { completion(.rejected) }' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+      - name: Confirm preflight does not invoke installer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = (Path('ci/build66_ipa_preflight.py').read_text() +
+                  Path('ci/build66_signed_release_preflight.py').read_text())
+          for forbidden in ('subprocess', 'os.system', 'posix_spawn', 'appinst(', 'requests.', 'urllib.request'):
+              assert forbidden not in code, forbidden
+          print('PASS: no installation or network invocation in preflight')
+          PY
+
+  codesign-identity-host-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+      - name: Compile and run real Swift Security.framework verifier
+        run: python3 ci/test_native_webreader_update_verifier.py
+      - name: Verify native macOS code signing with ephemeral fixtures only
+        run: |
+          python3 -m unittest discover -s ci -p 'test_build66_code_signature_gate.py' -v
+      - name: Recheck isolated Darwin peer PID capability (not identity)
+        run: python3 ci/test_chimera_peer_probe63.py
+      - name: Compile and execute blocked installation path in real Swift
+        run: |
+          python3 ci/test_chimera_build62_install_admission.py
+          python3 ci/test_native_webreader_update_checker.py
+          python3 ci/test_native_webreader_ipa_stager.py
+          python3 ci/test_public_github_release_parser.py
+      - name: Verify no installer is enabled in production Swift
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+      - name: Assert code signing gate is host-only and never authorizes install
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("ci/build66_code_signature_gate.py").read_text()
+          assert 'if sys.platform != "darwin"' in source
+          assert '"installationAuthorized": False' in source
+          assert '"installationPerformed": False' in source
+          assert '"publisherAuthenticatedByCodeSignature": False' in source
+          for forbidden in ('appinst(', 'posix_spawn', 'os.system', 'urllib.request'):
+              assert forbidden not in source, forbidden
+          print("PASS: codesign fixture gate is read-only")
+          PY

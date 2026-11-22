@@ -63,7 +63,12 @@ class ComixC2Contract(unittest.TestCase):
         project = read("MangaReader12.xcodeproj/project.pbxproj")
         workflow = read(".github/workflows/build.yml")
         self.assertIn("ComixBrowserProbeViewController()", main)
-        self.assertIn("return 8", main[main.index("final class SettingsViewController"):])
+        settings = main[main.index("final class SettingsViewController"):]
+        # Build56 had 8 rows; updater's separate release screen adds row 9.
+        # The Comix manual WebView action must remain present at the same index.
+        self.assertTrue("return 8" in settings or "return 9" in settings)
+        self.assertIn("case 6:", settings)
+        self.assertIn("ComixBrowserProbeViewController()", settings)
         self.assertIn("ComixBrowserProbeViewController.swift in Sources", project)
         import re
         version_values = re.findall(r"CURRENT_PROJECT_VERSION = ([0-9]+);", project)

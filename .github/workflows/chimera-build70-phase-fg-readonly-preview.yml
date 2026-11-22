@@ -1,0 +1,49 @@
+name: WebReader Build70 FG - Read-only preview API (no IPA)
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'ci/test_build70_fg_preview_api.py'
+      - '.github/workflows/chimera-build70-phase-fg-readonly-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readonly-preview:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile real FG method in isolated synthetic Swift harness
+        run: python -m unittest discover -s ci -p 'test_build70_fg_preview_api.py' -v
+      - name: Typecheck real FG API against iOS12 SDK (no IPA)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('MangaReader12/Downloads/ChapterDownloadManager.swift').read_text()
+          extract=lambda a,b:p.split(a,1)[1].split(b,1)[0]
+          test=Path('ci/test_build70_fg_preview_api.py').read_text()
+          stub=test.split('stub=r"""',1)[1].split('"""',1)[0]
+          mgr=test.split('mgr=r"""',1)[1].split('"""',1)[0]
+          types=extract('// BEGIN BUILD70_FG_READONLY_BATCH_PREVIEW','// END BUILD70_FG_READONLY_BATCH_PREVIEW')
+          gate=extract('// BEGIN BUILD70_FF_INERT_READONLY_DELETION_BRIDGE','// END BUILD70_FF_INERT_READONLY_DELETION_BRIDGE')
+          method=extract('// BEGIN BUILD70_FG_READONLY_MANAGER_PREVIEW','// END BUILD70_FG_READONLY_MANAGER_PREVIEW')
+          Path('/tmp/wr-fg-ios12.swift').write_text(stub+gate+types+mgr+method+'\n}\n')
+          PY
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc -target arm64-apple-ios12.0 -sdk "$sdk" -typecheck /tmp/wr-fg-ios12.swift
+      - name: Safety and nondeployment
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt

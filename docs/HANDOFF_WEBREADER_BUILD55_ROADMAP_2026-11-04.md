@@ -1,5 +1,8 @@
 # WebReader — checkpoint Build 55 e roadmap Build 56+
 
+> **Complemento de 2026-11-04:** Build 56 aprovada fisicamente pelo usuário. O plano de instalador de IPA via Chimera foi incluído **como trilha paralela**, não como substituição da Build57 Downloads. Ver [Auditoria e handoff do atualizador](HANDOFF_WEBREADER_CHIMERA_UPDATER_PHASE1_2026-11-04.md). Instalação programática do appinst, helper de jailbreak e entrega via Release **ainda não validados**.
+
+
 **Atualizado em:** 2026-11-04. **Sistema-alvo:** iOS 12.5.8, deployment target 12.0. **Repositório:** `AugustoArbulu/MangaReader12`. O nome exibido é **WebReader**, mas o executável e bundle ID `com.example.MangaReader12` permanecem inalterados para preservar os dados. **Baseline:** Build 55, PR [#86](https://github.com/AugustoArbulu/MangaReader12/pull/86), merge na `main` em `9657d235b959e5647893889d863be7a82365f355` com CI verde.
 
 ## Último aceite físico

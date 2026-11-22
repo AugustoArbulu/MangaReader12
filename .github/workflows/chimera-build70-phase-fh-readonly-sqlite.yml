@@ -1,0 +1,60 @@
+name: WebReader Build70 FH - strict read-only SQLite and full iOS12 compile
+on:
+  push:
+    branches: [feat/chimera-updater-phase1-protocol-audit]
+    paths:
+      - 'MangaReader12/Database/SQLiteDatabase.swift'
+      - 'MangaReader12/Downloads/ChapterDownloadManager.swift'
+      - 'ci/test_build70_fh_strict_readonly_sqlite.py'
+      - '.github/workflows/chimera-build70-phase-fh-readonly-sqlite.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strict-readonly:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test real SQLite read-only implementation with synthetic WAL
+        run: python -m unittest discover -s ci -p 'test_build70_fh_strict_readonly_sqlite.py' -v
+      - name: Regression for inert gate and FG API
+        run: |
+          python -m unittest discover -s ci -p 'test_build70_ff_deletion_gate.py' -v
+          python -m unittest discover -s ci -p 'test_build70_fg_preview_api.py' -v
+      - name: Confirm production feature remains disabled
+        run: |
+          grep -Fq 'static let diagnosticCopyPreviewEnabled = false' MangaReader12/Downloads/ChapterDownloadManager.swift
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt
+  ios12-unsigned-compile:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned libwebp and offline icons for source compilation only
+        run: |
+          chmod +x ci/*.sh
+          python3 ci/prepare_webreader_icons.py
+          bash ci/prepare_libwebp_ios.sh
+      - name: Compile complete iOS 12 app - no signing, IPA, artifact, or deployment
+        run: |
+          xcodebuild -project MangaReader12.xcodeproj \
+            -scheme MangaReader12 -configuration Debug -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/FH-UnsignedOnly" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Confirm no installation or release authority
+        run: |
+          grep -Fq 'static let liveInstallationEnabled = false' MangaReader12/Core/WebReaderAppinstSocket.swift
+          grep -Fq 'static let productionPublicKeyX963: Data? = nil' MangaReader12/Core/WebReaderUpdateChecker.swift
+          grep -Fq 'static let independentlyProvisionedSPKISHA256: String? = nil' MangaReader12/Core/WebReaderProductionPublisherTrust.swift
+          test ! -e ci/build71_owner_approved_qa_trigger.txt

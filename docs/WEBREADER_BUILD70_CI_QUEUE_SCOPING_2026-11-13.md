@@ -1,0 +1,41 @@
+# WebReader — redução de congestionamento do CI na PR #90 (13/11/2026)
+
+## Diagnóstico fundamentado
+
+A PR #90 Draft apresenta **650 caminhos alterados**, inclusive **86 workflows**, e o HEAD anterior gerava aproximadamente **45 workflow runs** em um único commit. Os arquivos sob pull_request podem combinar com filtros paths pelo diff acumulado de toda a PR, mesmo quando o commit mais recente contém somente auditorias Python. Mais duas rotinas legadas (`build.yml` e `appinst-direct-test.yml`) tinham push não restrito, iniciando compilações macOS e uploads de **IPAs diagnósticas** por alterações sem relação com elas. Isso contribui para trabalho desnecessário. Não foi verificada a causa interna de falta de runners macOS nem a situação de cotas; **queued não é sucesso**.
+
+## Mudança na branch de trabalho, sem mudar main
+
+- `.github/workflows/appinst-direct-test.yml`: preserva workflow_dispatch e limita push a `ci/appinst_direct_probe/**`, script de embalagem, seu teste e definição do próprio workflow. **Mudanças apenas em EA–EK não geram um novo IPA de diagnóstico do appinst.** Um push com alterações na ferramenta de diagnóstico ainda o valida automaticamente.
+- `.github/workflows/build.yml`: mantém push, pull_request, workflow_dispatch e build macOS 14, mas ignora commits em que **todos** os caminhos estejam em `docs/**`, `ci/build70_e*.py`, `ci/test_build70_e*.py` e workflows fase E. Mudanças de Swift, assets, scripts nativos e o próprio build.yml continuam acionando o workflow. Jobs pull_request de uma PR Draft são pulados; ao marcar Ready for Review, podem executar normalmente; push com alterações nativas continua executando. Os builds antigos não são apagados.
+- `chimera-build70-phase-eg-cli-failclosed.yml`, `...ei-all-downloads.yml` e `...ek-partial-prefix.yml`: concurrency por workflow+branch, cancel-in-progress=true. Uma execução nova substitui a anterior do mesmo audit, sem cancelar outros workflows; a matriz **Linux + macOS** permanece, bem como todas as verificações de assinatura/instalação bloqueada.
+
+## Limites e testes
+
+`ci/test_build70_ci_scope.py` exerce sete cenários de gatilhos, escopo de paths, botão manual, matriz Linux/macOS, grupos isolados e flags de produção desabilitadas. É incluído na regressão integrada. São testes ESTÁTICOS; não comprovam cotas, latência dos runners, ou a implementação do filtro de path pelo GitHub. A conferência final depende dos futuros workflow runs no GitHub.
+
+A mudança reduz execuções futuras que não fazem sentido. Não cancela necessariamente jobs históricos enfileirados. Não cria, publica, distribui ou instala IPA71; o `ci/build71_owner_approved_qa_trigger.txt` deve seguir ausente. PR #90 continua Draft e main intacta. Uma eventual compilação de IPA diagnóstica por trabalho nativo é distinta de IPA71 de produção; não utilizar nenhum artefato de CI como autorização física de instalação.
+
+## Ajuste de concorrência manual
+
+O agrupamento de `build.yml` passou a usar `github.run_id` quando a execução foi iniciada deliberadamente via workflow_dispatch. Isso impede que um push automático posterior da mesma branch cancele o build MANUAL do proprietário. Os eventos automáticos continuam usando o identificador da PR/branch, de modo que uma execução nova cancela a anterior obsoleta. A validação estática de CI protege esta distinção; não há autorização implícita para distribuir ou instalar qualquer IPA gerada.
+
+## Revisão do evento Ready for Review (13/11/2026)
+
+O `pull_request` padrão do GitHub não inclui o evento `ready_for_review`. Sem uma declaração explícita, uma PR que deixa de ser Draft pode não disparar o build nativo ao ser promovida (até um novo synchronize). `.github/workflows/build.yml` agora declara `types: [opened, synchronize, reopened, ready_for_review]`, preserva o gate `draft == false` no job e mantém `workflow_dispatch`. O contrato estático ganhou um oitavo teste de governança. Isso não transforma a PR atual em Ready, não dispensa revisão humana e NÃO comprova que um runner macOS esteja disponível. O `paths-ignore` da PR continua sujeito ao diff acumulado; uma transição só executa se o GitHub considerar o workflow aplicável.
+
+## Escopo adicional de diagnósticos IPA legados (13/11/2026)
+
+A revisão do HEAD encontrou dois workflows **macOS-15 com push de branch sem filtros de caminhos**, apesar de serem diagnósticos antigos: `.github/workflows/chimera-oneapp.yml` (OneApp IPA) e `.github/workflows/chimera-mobile-ping.yml` (Build60 SignedQA). O commit anterior, que modificou apenas workflow geral/teste/documentação, disparou ambos, gerando novos jobs e possíveis artefatos sem necessidade. **Nenhum deles é a Build71.**
+
+Ambos agora filtram o push pelos fontes do aplicativo Xcode, scripts, helpers, testes e entitlements que efetivamente usam. Eventos apenas de auditorias Python EA–EK ou docs não os acionam. `workflow_dispatch` permanece para testes deliberados, com grupo próprio por `github.run_id`; push automático não cancela um disparo manual. O OneApp passou a ter concorrência isolada com `cancel-in-progress: true` para descartar pushes obsoletos. O Build60 manteve sua política de cancelamento por branch, separando os manuais.
+
+A regressão estática em `ci/test_build70_ci_scope.py` ganhou **dois testes**, passando de 8 para 10. Isso verifica o YAML e a política de artefatos; não comprova distribuição GitHub, disponibilidade macOS, assinatura nativa nem compatibilidade física. A inclusão do próprio YAML como entrada pode gerar **uma última execução** ao alterar essa definição; o benefício é em pushes posteriores. PR #90 segue Draft; sem acionamento de IPA71, appinst, restauração ou merge.
+
+## Draft PR: execução onerosa de workflows históricos só quando necessária (13/11/2026)
+
+A regressão integrada EA–EK finalmente concluiu em **macOS-15 e Ubuntu** com 220 testes em ambos os jobs: [run #43361661817](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43361661817). O build Debug nativo de iOS12 sem IPA também passou em [DG #43361667724](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43361667724). Isto comprova os testes desses jobs, **não a preservação dos dados físicos**. Um diagnóstico legado Build60 falhou separadamente em 2 de 14 testes com appinst FAKE: [run #43361661707](https://github.com/AugustoArbulu/MangaReader12/actions/runs/43361661707). Não classificar todo macOS como verde.
+
+O controle da fila agora mantém **38 workflows históricos** PR-safe: seus jobs ignoram eventos `pull_request` enquanto a PR está `draft=true`, evitando alocar runners macOS/Linux em diffs acumulados sem utilidade. Os eventos `push` com mudanças nos **arquivos relevantes** continuam testáveis; `workflow_dispatch` permanece para revisão humana; foi acrescentado `ready_for_review` para executar a validação quando o proprietário promover a PR. Para evitar um pico da própria alteração de YAML, o arquivo do próprio workflow foi retirado apenas de `push.paths`; mudanças em sua lógica ficam cobertas pelo teste estático de escopo, execução manual e validação na transição Ready. O build geral `build.yml` ignora alterações de escopo/YAMLs históricos para não produzir IPAs diagnósticas nesses commits, mas mantém disparos de alterações reais de Swift/compilação e a opção manual. Esta política pode ser revertida em revisão quando as filas forem recuperadas.
+
+Dois testes adicionados a `ci/test_build70_ci_scope.py` garantem guardas em **todos os jobs** dos 38 workflows, gatilho Ready, botão manual, paths de push específicos e isolamento do build geral. É uma validação textual da política; somente as execuções posteriores do GitHub podem comprovar a economia real de runners. As execuções antigas na fila não são canceladas retroativamente por essa alteração. Não houve leitura de billing/quotas da conta, nem aprovação de IPA71, publicação, appinst, restauração, merge ou acesso ao iPad.
