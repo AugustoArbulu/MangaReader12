@@ -1550,11 +1550,16 @@ final class ReaderViewController: UIViewController,
         ) { [weak self] image in
             guard let self = self,
                   renderedChapterID == self.chapter.id,
+                  self.pages.indices.contains(indexPath.item),
+                  self.pages[indexPath.item].imageUrl == page.imageUrl,
                   image.size.width > 0 else {
                 return
             }
 
-            let ratio = max(0.25, min(image.size.height / image.size.width, 8))
+            // Match the rendered image height, even for very tall strips.
+            // A shorter cell clips the part below its non-scrolling viewport.
+            let ratio = image.size.height / image.size.width
+            guard ratio.isFinite, ratio > 0 else { return }
             if self.aspectRatios[indexPath.item] != ratio {
                 self.aspectRatios[indexPath.item] = ratio
 

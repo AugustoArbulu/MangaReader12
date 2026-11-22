@@ -54,6 +54,16 @@ class WebtoonLandscapeWidthTests(unittest.TestCase):
         self.assertIn('trimMargins: displayMode == .pages && preferences.trimMargins',
                       source)
 
+    def test_webtoon_layout_uses_full_ratio_of_loaded_strip(self):
+        source = READER.read_text(encoding="utf-8")
+        callback = source.split("renderedChapterID == self.chapter.id", 1)[1].split(
+            "return cell", 1
+        )[0]
+        self.assertIn("self.pages.indices.contains(indexPath.item)", callback)
+        self.assertIn("let ratio = image.size.height / image.size.width", callback)
+        self.assertIn("guard ratio.isFinite, ratio > 0", callback)
+        self.assertIn("self.aspectRatios[indexPath.item] = ratio", callback)
+
     def test_settings_and_in_reader_controls(self):
         src = SETTINGS.read_text(encoding="utf-8")
         reader = READER.read_text(encoding="utf-8")
