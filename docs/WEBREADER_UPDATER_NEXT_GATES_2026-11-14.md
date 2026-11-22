@@ -287,3 +287,9 @@ A auditoria SHA-256 e ZIP continua anterior à entrega manual. A cópia e a leit
 O roteiro manual indica como selecionar a cópia salva em Arquivos na revisão de IPA local. Quando a tela ainda tem a IPA baixada vinculada ao lançamento atual, o formulário preenche Build e SHA-256 a partir dessa referência. A seleção do arquivo continua explícita e usa a auditoria local existente. Sem referência em memória, é possível informar Build e SHA-256 da origem manualmente. O resultado da tentativa mais recente aparece na linha de importação, inclusive se houver uma IPA anterior ainda revisada.
 
 Essa conferência verifica a cópia selecionada contra os bytes esperados. A leitura posterior pelo Filza e pelo serviço de instalação permanece fora da observação. Nenhuma instalação automática ou raiz editorial de produção foi habilitada.
+
+### Retorno físico do WebReader Teste IPA
+
+No iPad, o proprietário confirmou que conseguiu selecionar a fixture sintética Build 67 e que o menu de compartilhamento reabriu após o cancelamento, sem nova importação. O teste usou o app de QA com identidade separada, gerado na [execução 44962073447](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44962073447). A confirmação foi verbal. O texto do aviso de cancelamento não foi confirmado separadamente.
+
+O resultado valida abertura, cancelamento e nova tentativa do compartilhamento da IPA local conferida. A entrega efetiva ao Filza e os bytes consumidos pelo serviço de instalação não foram testados nessa rodada. A fixture não foi preparada para instalação.
