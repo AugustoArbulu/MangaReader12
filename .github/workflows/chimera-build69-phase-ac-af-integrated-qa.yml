@@ -250,6 +250,7 @@ jobs:
           python3 ci/test_native_webreader_release_channel_separation.py
           python3 -m unittest discover -s ci -p 'test_build70_private_qa_ipa_preflight.py' -v
           python3 ci/test_native_webreader_physical_qa_checklist.py
+          python3 ci/test_build52_image_engine.py
           python3 -m unittest discover -s ci -p 'test_reader_webtoon_landscape_width.py' -v
           python3 ci/test_native_webreader_upgrade_continuity_snapshot.py
           python3 ci/test_native_webreader_offline_page_inventory.py
