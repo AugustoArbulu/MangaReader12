@@ -187,9 +187,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
         switch sectionType(section) {
         case 1:
             return "O botão Verificar atualizações consulta seu repositório privado no GitHub, sem " +
-                "autenticação editorial. O canal assinado exige chave e pin " +
-                "conferidos independentemente; Builds privadas do Actions " +
-                "continuam manuais, sem token no aplicativo."
+                "assinatura editorial. O token de leitura fica na memória desta tela."
         case 2:
             return "O download exige sua confirmação e validação de SHA-256/IPA. " +
                 "A instalação pelo Chimera ainda está em desenvolvimento."
@@ -275,9 +273,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             }
 
         case (1, 3):
-            cell.textLabel?.text = "Abrir Builds privadas no GitHub Actions"
+            cell.textLabel?.text = "Abrir repositório privado"
             cell.detailTextLabel?.text =
-                "GitHub pode falhar no iOS 12 • use Android/PC e transfira ao Filza"
+                "Ver WebReader-Updates no navegador"
             cell.accessoryType = .disclosureIndicator
             cell.selectionStyle = .default
 
@@ -718,11 +716,9 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
             return
         }
         if selectedSection == 1, indexPath.row == 3 {
-            // Private GitHub Actions artifacts cannot be discovered without
-            // authentication. Open GitHub in the browser; NEVER collect or
-            // embed a token in iOS12 app preferences or an API request.
+            // The browser manages its own GitHub login.
             let url = URL(string:
-                "https://github.com/AugustoArbulu/MangaReader12/actions"
+                "https://github.com/AugustoArbulu/WebReader-Updates"
             )!
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             return

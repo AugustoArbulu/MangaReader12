@@ -47,9 +47,9 @@ assert "Verificar atualizações" in screen
 assert "WebReader-Updates • acesso privado pelo GitHub" in screen
 assert "instalação pelo Chimera ainda está em desenvolvimento" in screen
 assert "O botão Verificar atualizações consulta seu repositório privado" in screen
-assert "Builds privadas do Actions" in screen
+assert "O token de leitura fica na memória desta tela" in screen
 assert "Verificar canal assinado" in screen
-assert "Abrir Builds privadas no GitHub Actions" in screen
+assert "Abrir repositório privado" in screen
 assert "WebReaderProductionSignedReleaseChecker(" in screen
 assert "productionPublicKeyX963: Data? = nil" in checker
 assert "static var isConfigured: Bool { return productionPublicKeyX963 != nil }" in checker
