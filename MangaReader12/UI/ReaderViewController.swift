@@ -419,6 +419,7 @@ final class ReaderPageCell: UICollectionViewCell, UIScrollViewDelegate {
         zoomScrollView.backgroundColor = backgroundColor
         imageView.backgroundColor = backgroundColor
         errorLabel.textColor = foregroundColor
+        spinner.color = foregroundColor
         spinner.startAnimating()
 
         loader.load(page: page) { [weak self] result in
