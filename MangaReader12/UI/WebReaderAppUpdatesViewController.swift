@@ -19,7 +19,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     private var signedChannelStatus =
         "Chave editorial independente ainda não provisionada • sem requisições"
     private var checking = false
-    private var lastResult: WebReaderUpdateCheckResult = .disabled
+    private var lastResult: WebReaderUpdateCheckResult?
     private var httpsProbe: WebReaderReleaseHTTPSProbe?
     private var testingHTTPS = false
     private var httpsResults: [WebReaderHTTPSProbeResult] = []
@@ -65,7 +65,8 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     }
 
     private func sectionType(_ displayedSection: Int) -> Int {
-        return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection
+        if isIPCDiagnostic { return displayedSection == 1 ? 5 : 0 }
+        return [0, 2, 1, 3, 4, 5, 6][displayedSection]
     }
 
     private var pairingDiagnosticAvailable: Bool {
@@ -587,7 +588,10 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
     }
 
     private var statusDescription: String {
-        switch lastResult {
+        guard let result = lastResult else {
+            return "Toque para procurar uma versão mais nova do WebReader."
+        }
+        switch result {
         case .disabled:
             return "Canal de consulta desabilitado"
         case .upToDate:
@@ -1651,7 +1655,7 @@ final class WebReaderAppUpdatesViewController: UITableViewController, UIDocument
                 if let popover = activity.popoverPresentationController {
                     popover.sourceView = self.tableView
                     popover.sourceRect = self.tableView.rectForRow(
-                        at: IndexPath(row: 2, section: 2))
+                        at: IndexPath(row: 2, section: 1))
                 }
                 guard self.view.window != nil, self.presentedViewController == nil
                 else { return }

@@ -16,16 +16,16 @@ assert 'Bundle.main.bundleIdentifier == "com.example.MangaReader12.ipcprobe"' in
 assert 'return UINavigationController(' in delegate
 assert 'rootViewController: WebReaderAppUpdatesViewController()' in delegate
 assert 'window.rootViewController = makeRootController()' in delegate
-assert 'if !isIPCProbe {' in delegate
+assert 'if !isIPCProbe && !isShareQA {' in delegate
 assert 'BackgroundLibraryUpdateManager.shared.applyScheduling()' in delegate
-assert 'guard !isIPCProbe else {' in delegate
+assert 'guard !isIPCProbe, !isShareQA else {' in delegate
 assert 'completionHandler(.noData)' in delegate
 assert 'let root = makeRootController()' in delegate
 assert 'info["CFBundleIdentifier"] = "com.example.MangaReader12.ipcprobe"' in package
 assert 'info["CFBundleDisplayName"] = "WebReader IPC Test"' in package
 # The normal app added a local IPA section; isolated IPC still has exactly 2.
 assert 'return isIPCDiagnostic ? 2 : 7' in ui
-assert 'return isIPCDiagnostic && displayedSection == 1 ? 5 : displayedSection' in ui
+assert 'if isIPCDiagnostic { return displayedSection == 1 ? 5 : 0 }' in ui
 assert 'switch (sectionType(indexPath.section), indexPath.row)' in ui
 assert 'let selectedSection = sectionType(indexPath.section)' in ui
 assert 'WebReaderHelperPingProbe.run' in ui
