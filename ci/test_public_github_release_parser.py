@@ -92,12 +92,12 @@ default: fatalError("v2 ad-hoc metadata rejected")
 }
 // Personal updater readiness: actual installed Build70 baseline.
 // This is synthetic GitHub JSON only, not a produced or approved Build71 IPA.
-func installed70Candidate(_ build: Int) -> [String: Any] {
+func buildReleaseFixture(_ build: Int) -> [String: Any] {
     var release = fixture("build" + String(build))
     release["assets"] = [v2Asset(build)]
     return release
 }
-switch parse(installed70Candidate(71), installedBuild:70) {
+switch parse(buildReleaseFixture(71), installedBuild:70) {
 case .updateAvailable(let update):
     check(update.build == 71, "Build 70 must recognize only a newer Build")
     check(update.ipaURL.absoluteString ==
@@ -108,15 +108,27 @@ case .updateAvailable(let update):
           "GitHub metadata must not confer independently signed trust")
 default: fatalError("synthetic Build70 to Build71 update should be detected")
 }
-switch parse(installed70Candidate(70), installedBuild:70) {
+switch parse(buildReleaseFixture(70), installedBuild:70) {
 case .upToDate: break
 default: fatalError("same Build70 is not an update")
 }
-switch parse(installed70Candidate(69), installedBuild:70) {
+switch parse(buildReleaseFixture(69), installedBuild:70) {
 case .upToDate: break
 default: fatalError("older Build69 is not an update")
 }
-var candidateWithoutDigest = installed70Candidate(71)
+// The installed personal reader is now Build71. Exercise the exact next
+// release convention with offline metadata, including the no-repeat check.
+switch parse(buildReleaseFixture(72), installedBuild:71) {
+case .updateAvailable(let update):
+    check(update.build == 72 && update.ipaURL.lastPathComponent ==
+          "WebReader-Build72-iOS12-adhoc.ipa", "Build71 to Build72 discovery")
+default: fatalError("newer personal release should be offered")
+}
+switch parse(buildReleaseFixture(71), installedBuild:71) {
+case .upToDate: break
+default: fatalError("installed Build71 should not be offered again")
+}
+var candidateWithoutDigest = buildReleaseFixture(71)
 var candidateAsset = (candidateWithoutDigest["assets"] as! [[String: Any]])[0]
 candidateAsset["digest"] = NSNull()
 candidateWithoutDigest["assets"] = [candidateAsset]
