@@ -293,3 +293,9 @@ Essa conferência verifica a cópia selecionada contra os bytes esperados. A lei
 No iPad, o proprietário confirmou que conseguiu selecionar a fixture sintética Build 67 e que o menu de compartilhamento reabriu após o cancelamento, sem nova importação. O teste usou o app de QA com identidade separada, gerado na [execução 44962073447](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44962073447). A confirmação foi verbal. O texto do aviso de cancelamento não foi confirmado separadamente.
 
 O resultado valida abertura, cancelamento e nova tentativa do compartilhamento da IPA local conferida. A entrega efetiva ao Filza e os bytes consumidos pelo serviço de instalação não foram testados nessa rodada. A fixture não foi preparada para instalação.
+
+### Retorno físico da Build71 no modo Webtoon
+
+O proprietário reportou que a Build71 entregue para corrigir o leitor Webtoon funcionou no iPad. A [execução de QA](https://github.com/AugustoArbulu/MangaReader12/actions/runs/44968487613) gerou a IPA com Bundle ID `com.example.MangaReader12`, Build `71`, iOS mínimo `12.0` e SHA-256 `ca19ef83b79c631b14fb86522898f1baf9bc12e6e0b11ecd6abdf578f29ccaa1`.
+
+A correção usa a proporção real para a altura da célula e reduz a resolução de decodificação de tiras muito altas. O retorno indica sucesso no reteste solicitado. Ainda não há diagnóstico da causa do crash anterior, nem confirmação separada de biblioteca, progresso ou capítulos offline. A entrega foi manual e a instalação automática ficou desativada.
