@@ -79,3 +79,9 @@ These are **engineering estimates from the code structure, not verified operatio
 ## Physical QA update — 2026-10-30
 
 Build29: Webtoons.com EN and Manhwa18.net load chapter images but do not display series covers, and HotComics returns server HTTP 403. The missing covers uncovered a native CoverImageLoader HTTPClient lifetime bug; Build30 addresses the shared loader without changing the JavaScript source catalog. Retest pending. HTTP403 is not bypassed. The six remaining selected source ports are still planned.
+
+## MangaFire — avaliação para o WebReader no iOS 12
+
+O MangaFire não consta no catálogo de fontes desta revisão. Uma consulta GET a `https://mangafire.to/browse?genres_in=39` retornou HTTP 200 com uma página inicial sem cartões de obras e com uma raiz vazia preenchida pelo JavaScript do site. Uma repetição retornou HTTP 403. A rota antiga `/filter` também retornou 403 no teste. A consulta simples a `/api/titles?limit=2&page=1` retornou HTTP 403 com a mensagem `Missing token.`. Esses resultados descrevem o ambiente de teste, sem atribuir o mesmo comportamento ao iPad.
+
+A extensão [MangaFire do Keiyoushi](https://github.com/keiyoushi/extensions-source/tree/main/src/all/mangafire) usa uma integração de rede específica do Android. A Source API do WebReader v1 usa HTTP e seleção de HTML sem executar os scripts do site. A pesquisa não encontrou uma API pública documentada e utilizável que oferecesse catálogo, capítulos e páginas nessas condições. Não incluir adaptador no catálogo até validar uma via de acesso compatível. A abertura no navegador é uma opção separada cuja compatibilidade com o iOS 12 ainda não foi testada.
