@@ -36,8 +36,9 @@ class DYOwnerOnlyQATests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="wr-dy-qa-deny-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "repo"
-        self.runner = Path(self.temp.name) / "runner"
+        base = Path(self.temp.name).resolve()
+        self.root = base / "repo"
+        self.runner = base / "runner"
         self.root.mkdir()
         self.runner.mkdir()
         self.trigger = self.root / dy.TRIGGER
